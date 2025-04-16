@@ -1,0 +1,231 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:membership_id",
+ "creation": "2025-04-16 19:53:04.862430",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "information_about_the_person_section",
+  "first_name",
+  "tussenvoegsel",
+  "last_name",
+  "column_break_tuau",
+  "full_name",
+  "birth_date",
+  "preferred_pronoun",
+  "contactgegevens_section",
+  "email_adress",
+  "telephone_number",
+  "address",
+  "column_break_qqif",
+  "crm_lead_sheet",
+  "membership_details_tab",
+  "membership_information_section",
+  "membership_type",
+  "membership_status",
+  "column_break_thhe",
+  "membership_id",
+  "start_date",
+  "membership_expiration",
+  "financial_data_section",
+  "bank_account_number",
+  "incasso_mandate_id",
+  "mandate_granted_on",
+  "financial_history_tab"
+ ],
+ "fields": [
+  {
+   "fieldname": "information_about_the_person_section",
+   "fieldtype": "Section Break",
+   "label": "Information about the person"
+  },
+  {
+   "fieldname": "first_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "First name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "tussenvoegsel",
+   "fieldtype": "Data",
+   "label": "tussenvoegsel"
+  },
+  {
+   "fieldname": "last_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Last name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_tuau",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "full_name",
+   "fieldtype": "Data",
+   "label": "Full name",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "birth_date",
+   "fieldtype": "Date",
+   "label": "Birth date"
+  },
+  {
+   "fieldname": "preferred_pronoun",
+   "fieldtype": "Select",
+   "label": "Preferred pronoun",
+   "options": "he\nshe\nthey"
+  },
+  {
+   "fieldname": "contactgegevens_section",
+   "fieldtype": "Section Break",
+   "label": "Contactgegevens"
+  },
+  {
+   "fieldname": "email_adress",
+   "fieldtype": "Data",
+   "label": "Email adress",
+   "reqd": 1
+  },
+  {
+   "fieldname": "address",
+   "fieldtype": "Data",
+   "label": "Address"
+  },
+  {
+   "fieldname": "telephone_number",
+   "fieldtype": "Data",
+   "label": "Telephone number"
+  },
+  {
+   "fieldname": "membership_details_tab",
+   "fieldtype": "Tab Break",
+   "label": "Membership details"
+  },
+  {
+   "fieldname": "membership_information_section",
+   "fieldtype": "Section Break",
+   "label": "Membership information"
+  },
+  {
+   "fieldname": "membership_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Membership type",
+   "options": "Membership type",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_thhe",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "start_date",
+   "fieldtype": "Date",
+   "label": "Start date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "financial_history_tab",
+   "fieldtype": "Tab Break",
+   "label": "Financial history"
+  },
+  {
+   "fieldname": "column_break_qqif",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "crm_lead_sheet",
+   "fieldtype": "Data",
+   "label": "CRM lead sheet"
+  },
+  {
+   "fieldname": "membership_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Membership ID",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "Active",
+   "fieldname": "membership_status",
+   "fieldtype": "Select",
+   "label": "Membership status",
+   "options": "Active\nExpired\nCancelled\nSuspended\nExpelled",
+   "reqd": 1
+  },
+  {
+   "fieldname": "membership_expiration",
+   "fieldtype": "Date",
+   "label": "Membership expiration"
+  },
+  {
+   "fieldname": "financial_data_section",
+   "fieldtype": "Section Break",
+   "label": "Financial data"
+  },
+  {
+   "fieldname": "bank_account_number",
+   "fieldtype": "Data",
+   "label": "Bank account number",
+   "reqd": 1
+  },
+  {
+   "fieldname": "incasso_mandate_id",
+   "fieldtype": "Data",
+   "label": "Incasso Mandate ID"
+  },
+  {
+   "fieldname": "mandate_granted_on",
+   "fieldtype": "Date",
+   "label": "Mandate granted on"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-04-16 22:06:22.791512",
+ "modified_by": "Administrator",
+ "module": "Verenigingen",
+ "name": "Member",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Association Membership administrator",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "full_name",
+ "track_changes": 1
+}
