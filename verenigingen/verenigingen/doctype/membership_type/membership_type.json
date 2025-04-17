@@ -1,45 +1,53 @@
 {
  "actions": [],
- "allow_rename": 1,
  "autoname": "field:membership_type",
- "creation": "2025-04-16 21:11:36.710706",
+ "creation": "2017-09-18 12:56:56.343999",
  "doctype": "DocType",
+ "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "membership_type_section",
   "membership_type",
-  "contribution"
+  "amount",
+  "razorpay_plan_id",
+  "linked_item"
  ],
  "fields": [
-  {
-   "fieldname": "membership_type_section",
-   "fieldtype": "Section Break",
-   "label": "Membership Type"
-  },
   {
    "fieldname": "membership_type",
    "fieldtype": "Data",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Membership Type",
    "reqd": 1,
    "unique": 1
   },
   {
-   "fieldname": "contribution",
+   "fieldname": "amount",
    "fieldtype": "Float",
    "in_list_view": 1,
-   "label": "Contribution",
+   "label": "Amount",
    "reqd": 1
+  },
+  {
+   "fieldname": "razorpay_plan_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Razorpay Plan ID",
+   "unique": 1
+  },
+  {
+   "fieldname": "linked_item",
+   "fieldtype": "Link",
+   "label": "Linked Item",
+   "options": "Item",
+   "unique": 1
   }
  ],
- "grid_page_length": 50,
- "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-04-16 21:18:40.675432",
+ "modified": "2020-08-05 15:21:43.595745",
  "modified_by": "Administrator",
- "module": "Verenigingen",
- "name": "Membership type",
- "naming_rule": "By fieldname",
+ "module": "Non Profit",
+ "name": "Membership Type",
  "owner": "Administrator",
  "permissions": [
   {
@@ -50,15 +58,14 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "System Manager",
+   "role": "Non Profit Manager",
    "share": 1,
    "write": 1
   }
  ],
  "quick_entry": 1,
- "row_format": "Dynamic",
+ "restrict_to_domain": "Non Profit",
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": [],
  "track_changes": 1
 }
