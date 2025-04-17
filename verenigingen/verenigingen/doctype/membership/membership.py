@@ -11,7 +11,7 @@ from frappe.email import sendmail_to_system_managers
 from frappe.model.document import Document
 from frappe.utils import add_days, add_months, add_years, get_link_to_form, getdate, nowdate
 
-from non_profit.non_profit.doctype.member.member import create_member
+from verenigingen.verenigingen.doctype.member.member import create_member
 
 
 class Membership(Document):
@@ -54,7 +54,7 @@ class Membership(Document):
 
 			self.from_date = add_days(last_membership.to_date, 1)
 
-		if frappe.db.get_single_value("Non Profit Settings", "billing_cycle") == "Yearly":
+		if frappe.db.get_single_value("Verenigingen Settings", "billing_cycle") == "Yearly":
 			self.to_date = add_years(self.from_date, 1)
 		else:
 			self.to_date = add_months(self.from_date, 1)
@@ -64,7 +64,7 @@ class Membership(Document):
 			return
 		self.load_from_db()
 		self.db_set("paid", 1)
-		settings = frappe.get_doc("Non Profit Settings")
+		settings = frappe.get_doc("Verenigingen Settings")
 		if settings.allow_invoicing and settings.automate_membership_invoicing:
 			self.generate_invoice(with_payment_entry=settings.automate_membership_payment_entries, save=True)
 
@@ -82,7 +82,7 @@ class Membership(Document):
 			frappe.throw(_("No customer linked to member {0}").format(frappe.bold(self.member)))
 
 		plan = frappe.get_doc("Membership Type", self.membership_type)
-		settings = frappe.get_doc("Non Profit Settings")
+		settings = frappe.get_doc("Verenigingen Settings")
 		self.validate_membership_type_and_settings(plan, settings)
 
 		invoice = make_invoice(self, member, plan, settings)
@@ -98,7 +98,7 @@ class Membership(Document):
 		return invoice
 
 	def validate_membership_type_and_settings(self, plan, settings):
-		settings_link = get_link_to_form("Non Profit Settings", "Non Profit Settings")
+		settings_link = get_link_to_form("Verenigingen Settings", "Verenigingen Settings")
 
 		if not settings.membership_debit_account:
 			frappe.throw(_("You need to set <b>Debit Account</b> in {0}").format(settings_link))
@@ -113,7 +113,7 @@ class Membership(Document):
 	def make_payment_entry(self, settings, invoice):
 		if not settings.membership_payment_account:
 			frappe.throw(_("You need to set <b>Payment Account</b> for Membership in {0}").format(
-				get_link_to_form("Non Profit Settings", "Non Profit Settings")))
+				get_link_to_form("Verenigingen Settings", "Verenigingen Settings")))
 
 		from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
 		frappe.flags.ignore_account_permission = True
@@ -128,10 +128,10 @@ class Membership(Document):
 
 	@frappe.whitelist()
 	def send_acknowlement(self):
-		settings = frappe.get_doc("Non Profit Settings")
+		settings = frappe.get_doc("Verenigingen Settings")
 		if not settings.send_email:
 			frappe.throw(_("You need to enable <b>Send Acknowledge Email</b> in {0}").format(
-				get_link_to_form("Non Profit Settings", "Non Profit Settings")))
+				get_link_to_form("Verenigingen Settings", "Verenigingen Settings")))
 
 		member = frappe.get_doc("Member", self.member)
 		if not member.email_id:
@@ -209,7 +209,7 @@ def get_member_based_on_subscription(subscription_id, email=None, customer_id=No
 def verify_signature(data, endpoint="Membership"):
 	signature = frappe.request.headers.get("X-Razorpay-Signature")
 
-	settings = frappe.get_doc("Non Profit Settings")
+	settings = frappe.get_doc("Verenigingen Settings")
 	key = settings.get_webhook_secret(endpoint)
 
 	controller = frappe.get_doc("Razorpay Settings")
@@ -272,7 +272,7 @@ def trigger_razorpay_subscription(*args, **kwargs):
 		member.flags.ignore_mandatory = True
 		member.save()
 
-		settings = frappe.get_doc("Non Profit Settings")
+		settings = frappe.get_doc("Verenigingen Settings")
 		if settings.allow_invoicing and settings.automate_membership_invoicing:
 			membership.reload()
 			membership.generate_invoice(with_payment_entry=settings.automate_membership_payment_entries, save=True)
@@ -345,9 +345,9 @@ def process_request_data(data):
 
 
 def get_company_for_memberships():
-	company = frappe.db.get_single_value("Non Profit Settings", "company")
+	company = frappe.db.get_single_value("Verenigingen Settings", "company")
 	if not company:
-		from non_profit.non_profit.utils import get_company
+		from verenigingen.verenigingen.utils import get_company
 		company = get_company()
 	return company
 

@@ -46,7 +46,7 @@
  "links": [],
  "modified": "2020-08-05 15:21:43.595745",
  "modified_by": "Administrator",
- "module": "Non Profit",
+ "module": "Verenigingen",
  "name": "Membership Type",
  "owner": "Administrator",
  "permissions": [
@@ -58,13 +58,13 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Non Profit Manager",
+   "role": "Verenigingen Manager",
    "share": 1,
    "write": 1
   }
  ],
  "quick_entry": 1,
- "restrict_to_domain": "Non Profit",
+ "restrict_to_domain": "Verenigingen",
  "sort_field": "modified",
  "sort_order": "DESC",
  "track_changes": 1

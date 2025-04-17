@@ -6,8 +6,8 @@ from frappe.utils import add_months, nowdate
 from frappe.tests.utils import FrappeTestCase
 
 import erpnext
-from non_profit.non_profit.doctype.member.member import create_member
-from non_profit.non_profit.doctype.membership.membership import update_halted_razorpay_subscription
+from verenigingen.verenigingen.doctype.member.member import create_member
+from verenigingen.verenigingen.doctype.membership.membership import update_halted_razorpay_subscription
 
 
 class TestMembership(FrappeTestCase):
@@ -43,7 +43,7 @@ class TestMembership(FrappeTestCase):
 		make_membership(self.member, { "from_date": add_months(nowdate(), 1) })
 
 		from frappe.utils.user import add_role
-		add_role("test@example.com", "Non Profit Manager")
+		add_role("test@example.com", "Verenigingen Manager")
 		frappe.set_user("test@example.com")
 
 		# create next membership with expiry not within 30 days
@@ -73,7 +73,7 @@ class TestMembership(FrappeTestCase):
 		frappe.db.rollback()
 
 def set_config(key, value):
-	frappe.db.set_value("Non Profit Settings", None, key, value)
+	frappe.db.set_value("Verenigingen Settings", None, key, value)
 
 def make_membership(member, payload={}):
 	data = {
@@ -110,7 +110,7 @@ def setup_membership():
 	company = frappe.get_doc("Company", erpnext.get_default_company())
 
 	# update non profit settings
-	settings = frappe.get_doc("Non Profit Settings")
+	settings = frappe.get_doc("Verenigingen Settings")
 	# Enable razorpay
 	settings.enable_razorpay_for_memberships = 1
 	settings.billing_cycle = "Monthly"
@@ -131,7 +131,7 @@ def setup_membership():
 		plan.membership_type = "_rzpy_test_milythm"
 		plan.amount = 100
 		plan.razorpay_plan_id = "_rzpy_test_milythm"
-		plan.linked_item = create_item("_Test Item for Non Profit Membership").name
+		plan.linked_item = create_item("_Test Item for Verenigingen Membership").name
 		plan.insert()
 	else:
 		plan = frappe.get_doc("Membership Type", "_rzpy_test_milythm")

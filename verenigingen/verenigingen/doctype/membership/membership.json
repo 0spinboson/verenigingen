@@ -153,7 +153,7 @@
  "links": [],
  "modified": "2022-03-16 17:37:28.672916",
  "modified_by": "Administrator",
- "module": "Non Profit",
+ "module": "Verenigingen",
  "name": "Membership",
  "owner": "Administrator",
  "permissions": [
@@ -165,7 +165,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Non Profit Manager",
+   "role": "Verenigingen Manager",
    "share": 1,
    "write": 1
   },
@@ -177,12 +177,12 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Non Profit Member",
+   "role": "Verenigingen Member",
    "share": 1,
    "write": 1
   }
  ],
- "restrict_to_domain": "Non Profit",
+ "restrict_to_domain": "Verenigingen",
  "search_fields": "member, member_name",
  "sort_field": "modified",
  "sort_order": "DESC",
