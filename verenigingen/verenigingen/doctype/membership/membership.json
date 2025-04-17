@@ -1,76 +1,160 @@
 {
  "actions": [],
- "allow_rename": 1,
- "autoname": "NVV-.#####",
- "creation": "2025-04-16 22:07:22.598631",
+ "autoname": "NPO-MSH-.YYYY.-.#####",
+ "creation": "2017-09-11 11:39:18.492184",
  "doctype": "DocType",
+ "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "section_break_skzm",
   "member",
-  "full_name",
+  "member_name",
+  "membership_type",
+  "column_break_3",
+  "company",
+  "membership_status",
+  "membership_validity_section",
   "from_date",
   "to_date",
+  "column_break_8",
+  "member_since_date",
+  "payment_details",
   "paid",
-  "amended_from"
+  "currency",
+  "amount",
+  "column_break_16",
+  "invoice",
+  "payment_details_section",
+  "subscription_id",
+  "column_break_19",
+  "payment_id"
  ],
  "fields": [
   {
-   "fieldname": "section_break_skzm",
-   "fieldtype": "Section Break",
-   "label": "Membership information"
-  },
-  {
-   "fieldname": "amended_from",
-   "fieldtype": "Link",
-   "label": "Amended From",
-   "no_copy": 1,
-   "options": "Membership",
-   "print_hide": 1,
-   "read_only": 1,
-   "search_index": 1
-  },
-  {
    "fieldname": "member",
    "fieldtype": "Link",
-   "in_list_view": 1,
    "label": "Member",
-   "options": "Member",
+   "options": "Member"
+  },
+  {
+   "fieldname": "membership_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Membership Type",
+   "options": "Membership Type",
    "reqd": 1
   },
   {
-   "fieldname": "full_name",
-   "fieldtype": "Data",
-   "label": "Full name",
-   "options": "Member.full_name",
-   "read_only": 1
+   "fieldname": "column_break_3",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "membership_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Membership Status",
+   "options": "New\nCurrent\nExpired\nPending\nCancelled"
+  },
+  {
+   "fieldname": "membership_validity_section",
+   "fieldtype": "Section Break",
+   "label": "Validity"
   },
   {
    "fieldname": "from_date",
    "fieldtype": "Date",
-   "label": "From date"
+   "in_list_view": 1,
+   "label": "From",
+   "reqd": 1
   },
   {
    "fieldname": "to_date",
    "fieldtype": "Date",
-   "label": "To date"
+   "in_list_view": 1,
+   "label": "To",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_8",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "member_since_date",
+   "fieldtype": "Date",
+   "label": "Member Since"
+  },
+  {
+   "fieldname": "payment_details",
+   "fieldtype": "Section Break",
+   "label": "Payment Details"
   },
   {
    "default": "0",
    "fieldname": "paid",
    "fieldtype": "Check",
-   "label": "Paid?"
+   "label": "Paid"
+  },
+  {
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Float",
+   "label": "Amount"
+  },
+  {
+   "fieldname": "payment_details_section",
+   "fieldtype": "Section Break",
+   "label": "Payment Details"
+  },
+  {
+   "fieldname": "subscription_id",
+   "fieldtype": "Data",
+   "label": "Subscription ID"
+  },
+  {
+   "fieldname": "payment_id",
+   "fieldtype": "Data",
+   "label": "Payment ID"
+  },
+  {
+   "fieldname": "invoice",
+   "fieldtype": "Link",
+   "label": "Invoice",
+   "options": "Sales Invoice"
+  },
+  {
+   "fetch_from": "member.member_name",
+   "fieldname": "member_name",
+   "fieldtype": "Data",
+   "label": "Member Name",
+   "read_only": 1
+  },
+  {
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company",
+   "reqd": 1
+  },
+  {
+    "fieldname": "column_break_19",
+    "fieldtype": "Column Break"
+  },
+  {
+    "fieldname": "column_break_16",
+    "fieldtype": "Column Break"
   }
  ],
- "grid_page_length": 50,
  "index_web_pages_for_search": 1,
- "is_submittable": 1,
  "links": [],
- "modified": "2025-04-16 22:43:03.807631",
+ "modified": "2022-03-16 17:37:28.672916",
  "modified_by": "Administrator",
- "module": "Verenigingen",
+ "module": "Non Profit",
  "name": "Membership",
- "naming_rule": "Expression (old style)",
  "owner": "Administrator",
  "permissions": [
   {
@@ -81,9 +165,8 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "System Manager",
+   "role": "Non Profit Manager",
    "share": 1,
-   "submit": 1,
    "write": 1
   },
   {
@@ -94,15 +177,15 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Association Membership administrator",
+   "role": "Non Profit Member",
    "share": 1,
    "write": 1
   }
  ],
- "row_format": "Dynamic",
+ "restrict_to_domain": "Non Profit",
+ "search_fields": "member, member_name",
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": [],
- "title_field": "full_name",
+ "title_field": "member_name",
  "track_changes": 1
 }
