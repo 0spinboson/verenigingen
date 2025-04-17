@@ -84,6 +84,7 @@ app_license = "agpl-3.0"
 
 # before_install = "verenigingen.install.before_install"
 # after_install = "verenigingen.install.after_install"
+after_install = "verenigingen.setup.setup_verenigingen"
 
 # Uninstallation
 # ------------
@@ -147,6 +148,11 @@ app_license = "agpl-3.0"
 
 # Scheduled Tasks
 # ---------------
+scheduler_events = {
+	"daily": [
+		"verenigingen.verenigingen.doctype.membership.membership.set_expired_status",
+	],
+}
 
 # scheduler_events = {
 # 	"all": [
@@ -170,7 +176,7 @@ app_license = "agpl-3.0"
 # -------
 
 # before_tests = "verenigingen.install.before_tests"
-
+before_tests = "verenigingen.verenigingen.utils.before_tests"
 # Overriding Methods
 # ------------------------------
 #
@@ -234,7 +240,18 @@ app_license = "agpl-3.0"
 # auth_hooks = [
 # 	"verenigingen.auth.validate"
 # ]
-
+global_search_doctypes = {
+	"Verenigingen": [
+		{'doctype': 'Volunteer', 'index': 1},
+		{'doctype': 'Membership', 'index': 2},
+		{'doctype': 'Member', 'index': 3},
+		{'doctype': 'Donor', 'index': 4},
+		{'doctype': 'Chapter', 'index': 5},
+		{'doctype': 'Volunteer Type', 'index': 6},
+		{'doctype': 'Donor Type', 'index': 7},
+		{'doctype': 'Membership Type', 'index': 8}
+	]
+}
 # Automatically update python controller files with type annotations for this app.
 # export_python_type_annotations = True
 
