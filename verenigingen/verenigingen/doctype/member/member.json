@@ -178,7 +178,7 @@
    "fieldtype": "Select",
    "label": "Subscription Status",
    "options": "\nActive\nHalted"
-  }
+  },
   {
    "fieldname": "address_html",
    "fieldtype": "HTML",
