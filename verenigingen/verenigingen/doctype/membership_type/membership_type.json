@@ -8,7 +8,6 @@
  "field_order": [
   "membership_type",
   "amount",
-  "razorpay_plan_id",
   "linked_item"
  ],
  "fields": [
@@ -27,13 +26,6 @@
    "in_list_view": 1,
    "label": "Amount",
    "reqd": 1
-  },
-  {
-   "fieldname": "razorpay_plan_id",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Razorpay Plan ID",
-   "unique": 1
   },
   {
    "fieldname": "linked_item",
