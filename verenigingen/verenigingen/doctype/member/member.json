@@ -1,33 +1,39 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "field:membership_id",
+ "autoname": "naming_series:",
  "creation": "2025-04-16 19:53:04.862430",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "information_about_the_person_section",
+  "naming_series",
   "first_name",
   "tussenvoegsel",
   "last_name",
+  "membership_expiry_date",
+  "customer",
   "column_break_tuau",
   "full_name",
   "birth_date",
   "preferred_pronoun",
   "contactgegevens_section",
-  "email_adress",
+  "email_id",
+  "address-contacts",
   "telephone_number",
-  "address",
   "column_break_qqif",
-  "crm_lead_sheet",
   "membership_details_tab",
   "membership_information_section",
   "membership_type",
   "membership_status",
+  "customer_id",
+  "subscription_status",
   "column_break_thhe",
   "membership_id",
   "start_date",
   "membership_expiration",
+  "subscription_start",
+  "subscription_end",
   "financial_data_section",
   "bank_account_number",
   "incasso_mandate_id",
@@ -41,6 +47,13 @@
    "label": "Information about the person"
   },
   {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "NPO-MEM-.YYYY.-",
+   "reqd": 1
+  },
+  {
    "fieldname": "first_name",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -51,6 +64,11 @@
    "fieldname": "tussenvoegsel",
    "fieldtype": "Data",
    "label": "tussenvoegsel"
+  },
+  {
+   "fieldname": "membership_expiry_date",
+   "fieldtype": "Date",
+   "label": "Membership Expiry Date"
   },
   {
    "fieldname": "last_name",
@@ -87,12 +105,6 @@
    "label": "Contactgegevens"
   },
   {
-   "fieldname": "email_adress",
-   "fieldtype": "Data",
-   "label": "Email adress",
-   "reqd": 1
-  },
-  {
    "fieldname": "address",
    "fieldtype": "Data",
    "label": "Address"
@@ -116,9 +128,68 @@
    "fieldname": "membership_type",
    "fieldtype": "Link",
    "in_list_view": 1,
-   "label": "Membership type",
-   "options": "Membership type",
+   "label": "Membership Type",
+   "options": "Membership Type",
    "reqd": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer"
+  },
+  {
+   "fieldname": "email_id",
+   "fieldtype": "Data",
+   "label": "Email Address",
+   "options": "Email"
+  },
+  {
+   "fieldname": "subscription_id",
+   "fieldtype": "Data",
+   "label": "Subscription ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "customer_id",
+   "fieldtype": "Data",
+   "label": "Customer ID",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:!doc.__islocal;",
+   "fieldname": "address_contacts",
+   "fieldtype": "Section Break",
+   "label": "Address and Contact",
+   "options": "fa fa-map-marker"
+  },
+  {
+   "fieldname": "subscription_start",
+   "fieldtype": "Date",
+   "label": "Subscription Start "
+  },
+  {
+   "fieldname": "subscription_end",
+   "fieldtype": "Date",
+   "label": "Subscription End"
+  },
+  {
+   "fieldname": "subscription_status",
+   "fieldtype": "Select",
+   "label": "Subscription Status",
+   "options": "\nActive\nHalted"
+  }
+  {
+   "fieldname": "address_html",
+   "fieldtype": "HTML",
+   "label": "Address HTML"
+  },
+  {
+   "fetch_from": "customer.customer_name",
+   "fieldname": "customer_name",
+   "fieldtype": "Data",
+   "label": "Customer Name",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_thhe",
