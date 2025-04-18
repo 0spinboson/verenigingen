@@ -9,7 +9,7 @@ from frappe.model.document import Document
 
 class MembershipType(Document):
 	def validate(self):
-		if self.linked_item:
+		if hasattr(self, 'linked_item') and self.linked_item:
 			is_stock_item = frappe.db.get_value("Item", self.linked_item, "is_stock_item")
 			if is_stock_item:
 				frappe.throw(_("The Linked Item should be a service item"))
