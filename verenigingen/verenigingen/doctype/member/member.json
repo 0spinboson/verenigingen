@@ -11,7 +11,7 @@
   "first_name",
   "tussenvoegsel",
   "last_name",
-  "membership_expiry_date",
+  "membership_expiration_date",
   "customer",
   "column_break_tuau",
   "full_name",
@@ -31,7 +31,6 @@
   "column_break_thhe",
   "membership_id",
   "start_date",
-  "membership_expiration",
   "subscription_start",
   "subscription_end",
   "financial_data_section",
@@ -66,9 +65,9 @@
    "label": "tussenvoegsel"
   },
   {
-   "fieldname": "membership_expiry_date",
+   "fieldname": "membership_expiration_date",
    "fieldtype": "Date",
-   "label": "Membership Expiry Date"
+   "label": "Membership Expiration Date"
   },
   {
    "fieldname": "last_name",
@@ -230,11 +229,6 @@
    "label": "Membership status",
    "options": "Active\nExpired\nCancelled\nSuspended\nExpelled",
    "reqd": 1
-  },
-  {
-   "fieldname": "membership_expiration",
-   "fieldtype": "Date",
-   "label": "Membership expiration"
   },
   {
    "fieldname": "financial_data_section",
