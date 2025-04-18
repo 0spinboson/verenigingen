@@ -41,7 +41,7 @@
  ],
  "fields": [
   {
-   "fieldname": "information_about_the_person_section",
+   "fieldname": "Personalia",
    "fieldtype": "Section Break",
    "label": "Information about the person"
   },
