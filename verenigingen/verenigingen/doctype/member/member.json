@@ -93,10 +93,10 @@
    "label": "Birth date"
   },
   {
-   "fieldname": "preferred_pronoun",
+   "fieldname": "preferred_pronouns",
    "fieldtype": "Select",
    "label": "Preferred pronoun",
-   "options": "He\nShe\nThey"
+   "options": "He/Him\nShe/Her\nThey/Their"
   },
   {
    "fieldname": "contactgegevens_section",
