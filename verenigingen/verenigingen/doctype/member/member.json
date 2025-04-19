@@ -43,7 +43,7 @@
   {
    "fieldname": "Personalia",
    "fieldtype": "Section Break",
-   "label": "Information about the person"
+   "label": "Personal information about the member"
   },
   {
    "fieldname": "naming_series",
