@@ -53,12 +53,7 @@ class Membership(Document):
 				frappe.throw(_("You can only renew if your membership expires within 30 days"))
 
 			self.from_date = add_days(last_membership.to_date, 1)
-
-		if frappe.db.get_single_value("Verenigingen Settings", "billing_cycle") == "Yearly":
-			self.to_date = add_years(self.from_date, 1)
-		else:
-			self.to_date = add_months(self.from_date, 1)
-
+			
 	def on_payment_authorized(self, status_changed_to=None):
 		if status_changed_to not in ("Completed", "Authorized"):
 			return
