@@ -95,8 +95,8 @@
   {
    "fieldname": "preferred_pronouns",
    "fieldtype": "Select",
-   "label": "Preferred pronoun",
-   "options": "He/Him\nShe/Her\nThey/Their"
+   "label": "Preferred pronouns",
+   "options": "He\/Him\nShe\/Her\nThey\/Their"
   },
   {
    "fieldname": "contactgegevens_section",
