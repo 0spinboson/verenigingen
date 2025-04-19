@@ -182,7 +182,7 @@ def create_donor(payment):
 
 
 def get_company_for_donations():
-	company = frappe.db.get_single_value('Non Profit Settings', 'donation_company')
+	company = frappe.db.get_single_value('Verenigingen Settings', 'donation_company')
 	if not company:
 		from verenigingen.verenigingen.utils import get_company
 		company = get_company()
