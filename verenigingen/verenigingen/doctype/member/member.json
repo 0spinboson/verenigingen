@@ -14,7 +14,7 @@
   "membership_expiration_date",
   "customer",
   "column_break_tuau",
-  "full_name",
+  "member_name",
   "birth_date",
   "preferred_pronoun",
   "contactgegevens_section",
@@ -81,7 +81,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "full_name",
+   "fieldname": "member_name",
    "fieldtype": "Data",
    "label": "Full name",
    "read_only": 1,
@@ -291,6 +291,6 @@
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "title_field": "full_name",
+ "title_field": "member_name",
  "track_changes": 1
 }
