@@ -45,15 +45,15 @@ class Donation(Document):
 		self.create_payment_entry()
 
 	def create_payment_entry(self, date=None):
-		settings = frappe.get_doc('Verenigingen Settings')
+		settings = frappe.get_doc('Non Profit Settings')
 		if not settings.automate_donation_payment_entries:
 			return
 
 		if not settings.donation_payment_account:
 			frappe.throw(_('You need to set <b>Payment Account</b> for Donation in {0}').format(
-				get_link_to_form('Verenigingen Settings', 'Verenigingen Settings')))
+				get_link_to_form('Non Profit Settings', 'Non Profit Settings')))
 
-		from verenigingen.verenigingen.custom_doctype.payment_entry import get_donation_payment_entry
+		from non_profit.non_profit.custom_doctype.payment_entry import get_donation_payment_entry
 
 		frappe.flags.ignore_account_permission = True
 		pe = get_donation_payment_entry(dt=self.doctype, dn=self.name)
@@ -164,7 +164,7 @@ def get_donor(email):
 @frappe.whitelist()
 def create_donor(payment):
 	donor_details = frappe._dict(payment)
-	donor_type = frappe.db.get_single_value('Verenigingen Settings', 'default_donor_type')
+	donor_type = frappe.db.get_single_value('Non Profit Settings', 'default_donor_type')
 
 	donor = frappe.new_doc('Donor')
 	donor.update({
@@ -182,9 +182,9 @@ def create_donor(payment):
 
 
 def get_company_for_donations():
-	company = frappe.db.get_single_value('Verenigingen Settings', 'donation_company')
+	company = frappe.db.get_single_value('Non Profit Settings', 'donation_company')
 	if not company:
-		from verenigingen.verenigingen.utils import get_company
+		from non_profit.non_profit.utils import get_company
 		company = get_company()
 	return company
 
