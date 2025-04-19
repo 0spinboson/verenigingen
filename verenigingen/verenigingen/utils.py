@@ -20,7 +20,7 @@ def before_tests():
 	if not frappe.get_list("Company"):
 		setup_complete({
 			"currency"          :"USD",
-			"full_name"         :"Test User",
+			"member_name"       :"Test User",
 			"company_name"      :"Frappe Care LLC",
 			"timezone"          :"Europe/Amsterdam",
 			"company_abbr"      :"WP",
