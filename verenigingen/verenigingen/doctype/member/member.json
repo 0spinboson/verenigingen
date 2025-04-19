@@ -6,7 +6,7 @@
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "information_about_the_person_section",
+  "personalia",
   "naming_series",
   "first_name",
   "tussenvoegsel",
@@ -41,9 +41,9 @@
  ],
  "fields": [
   {
-   "fieldname": "Personalia",
+   "fieldname": "personalia",
    "fieldtype": "Section Break",
-   "label": "Personal information about the member"
+   "label": "Personal details"
   },
   {
    "fieldname": "naming_series",
