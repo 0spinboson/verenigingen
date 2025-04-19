@@ -13,5 +13,5 @@ class Donor(Document):
 
 	def validate(self):
 		from frappe.utils import validate_email_address
-		if self.email:
-			validate_email_address(self.email.strip(), True)
+		if self.donor_email:
+			validate_email_address(self.donor_email.strip(), True)
