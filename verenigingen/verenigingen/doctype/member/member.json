@@ -12,10 +12,11 @@
   "first_name",
   "tussenvoegsel",
   "last_name",
-  "customer",
-  "column_break_tuau",
+  "preferred_pronouns",
+  "column_break_webu",
   "member_name",
   "birth_date",
+  "customer",
   "contactgegevens_section",
   "email_id",
   "telephone_number",
@@ -39,7 +40,6 @@
   "incasso_mandate_id",
   "mandate_granted_on",
   "financial_history_tab",
-  "preferred_pronouns",
   "address",
   "subscription_id",
   "address_contacts",
@@ -78,10 +78,6 @@
    "in_list_view": 1,
    "label": "Last name",
    "reqd": 1
-  },
-  {
-   "fieldname": "column_break_tuau",
-   "fieldtype": "Column Break"
   },
   {
    "fieldname": "member_name",
@@ -140,10 +136,10 @@
    "options": "Customer"
   },
   {
+   "fetch_from": "customer.email_id",
    "fieldname": "email_id",
    "fieldtype": "Data",
-   "label": "Email Address",
-   "options": "Email"
+   "label": "Email Address"
   },
   {
    "fieldname": "subscription_id",
@@ -274,12 +270,16 @@
    "fieldtype": "Date",
    "label": "Membership End date",
    "read_only": 1
+  },
+  {
+   "fieldname": "column_break_webu",
+   "fieldtype": "Column Break"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-04-21 15:56:48.458284",
+ "modified": "2025-04-21 16:11:45.628970",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
