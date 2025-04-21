@@ -1,67 +1,17 @@
 {
  "charts": [],
- "content": "[{\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Your Shortcuts</b></span>\",\"col\":12}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Member\",\"col\":3}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Verenigingen Settings\",\"col\":3}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Membership\",\"col\":3}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Chapter\",\"col\":3}},{\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Chapter Member\",\"col\":3}},{\"type\":\"spacer\",\"data\":{\"col\":12}},{\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Reports & Masters</b></span>\",\"col\":12}},{\"type\":\"card\",\"data\":{\"card_name\":\"Loan Management\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Grant Application\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Membership\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Volunteer\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Chapter\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Donation\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Tax Exemption Certification (India)\",\"col\":4}}]",
+ "content": "[{\"id\":\"NFcjh9I8BH\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Your Shortcuts</b></span>\",\"col\":12}},{\"id\":\"sxzInK1PHL\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Member\",\"col\":3}},{\"id\":\"q6OM4R0OUa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Membership\",\"col\":3}},{\"id\":\"Eic5oNDHuQ\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Chapter\",\"col\":3}},{\"id\":\"zGoLYG0xRM\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"jMy1CTqEJS\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Reports &amp; Masters</b></span>\",\"col\":12}},{\"id\":\"oIk2CrSoAH\",\"type\":\"card\",\"data\":{\"card_name\":\"Membership\",\"col\":4}},{\"id\":\"2vHgUjgQcL\",\"type\":\"card\",\"data\":{\"card_name\":\"Volunteer\",\"col\":4}},{\"id\":\"S8Mi0T41U7\",\"type\":\"card\",\"data\":{\"card_name\":\"Chapter\",\"col\":4}},{\"id\":\"ZvroSYo9F3\",\"type\":\"card\",\"data\":{\"card_name\":\"Donation\",\"col\":4}},{\"id\":\"RKkllDSemd\",\"type\":\"card\",\"data\":{\"card_name\":\"Module Settings\",\"col\":4}}]",
  "creation": "2020-03-02 17:23:47.811421",
+ "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
  "for_user": "",
  "hide_custom": 0,
  "icon": "non-profit",
  "idx": 0,
+ "is_hidden": 0,
  "label": "Verenigingen",
  "links": [
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Membership",
-   "link_count": 0,
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Member",
-   "link_count": 0,
-   "link_to": "Member",
-   "link_type": "DocType",
-   "onboard": 1,
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Membership",
-   "link_count": 0,
-   "link_to": "Membership",
-   "link_type": "DocType",
-   "onboard": 1,
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Membership Type",
-   "link_count": 0,
-   "link_to": "Membership Type",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Verenigingen Settings",
-   "link_count": 0,
-   "link_to": "Verenigingen Settings",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
   {
    "hidden": 0,
    "is_query_report": 0,
@@ -150,15 +100,78 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Membership",
+   "link_count": 3,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Member",
+   "link_count": 0,
+   "link_to": "Member",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Membership",
+   "link_count": 0,
+   "link_to": "Membership",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Membership Type",
+   "link_count": 0,
+   "link_to": "Membership Type",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Module Settings",
+   "link_count": 1,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Verenigingen Settings",
+   "link_count": 0,
+   "link_to": "Verenigingen Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2022-05-09 17:40:50.220877",
- "modified_by": "Administrator",
+ "modified": "2025-04-21 14:23:06.374464",
+ "modified_by": "fjdh@leden.socialisten.org",
  "module": "Verenigingen",
  "name": "Verenigingen",
+ "number_cards": [],
  "owner": "Administrator",
  "parent_page": "",
  "public": 1,
+ "quick_lists": [],
  "restrict_to_domain": "Verenigingen",
  "roles": [],
  "sequence_id": 18.0,
@@ -169,11 +182,6 @@
    "type": "DocType"
   },
   {
-   "label": "Verenigingen Settings",
-   "link_to": "Verenigingen Settings",
-   "type": "DocType"
-  },
-  {
    "label": "Membership",
    "link_to": "Membership",
    "type": "DocType"
@@ -181,11 +189,6 @@
   {
    "label": "Chapter",
    "link_to": "Chapter",
-   "type": "DocType"
-  },
-  {
-   "label": "Chapter Member",
-   "link_to": "Chapter Member",
    "type": "DocType"
   }
  ],

@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "allow_import": 1,
  "allow_rename": 1,
  "autoname": "naming_series:",
  "creation": "2025-04-16 19:53:04.862430",
@@ -16,10 +17,8 @@
   "column_break_tuau",
   "member_name",
   "birth_date",
-  "preferred_pronoun",
   "contactgegevens_section",
   "email_id",
-  "address-contacts",
   "telephone_number",
   "column_break_qqif",
   "membership_details_tab",
@@ -37,7 +36,14 @@
   "bank_account_number",
   "incasso_mandate_id",
   "mandate_granted_on",
-  "financial_history_tab"
+  "financial_history_tab",
+  "preferred_pronouns",
+  "address",
+  "subscription_id",
+  "address_contacts",
+  "address_html",
+  "customer_name",
+  "crm_lead_sheet"
  ],
  "fields": [
   {
@@ -255,8 +261,8 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-04-16 22:06:22.791512",
- "modified_by": "Administrator",
+ "modified": "2025-04-20 19:40:01.513912",
+ "modified_by": "fjdh@leden.socialisten.org",
  "module": "Verenigingen",
  "name": "Member",
  "naming_rule": "By fieldname",
@@ -287,6 +293,7 @@
    "write": 1
   }
  ],
+ "route": "members",
  "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
