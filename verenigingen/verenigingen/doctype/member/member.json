@@ -12,7 +12,6 @@
   "first_name",
   "tussenvoegsel",
   "last_name",
-  "membership_expiration_date",
   "customer",
   "column_break_tuau",
   "member_name",
@@ -26,14 +25,17 @@
   "membership_type",
   "membership_status",
   "customer_id",
-  "subscription_status",
+  "membership_special_status",
+  "membership_special_status_reason",
   "column_break_thhe",
   "membership_id",
-  "start_date",
-  "subscription_start",
-  "subscription_end",
+  "membership",
+  "memb_from_date",
+  "memb_to_date",
+  "membership_history",
   "financial_data_section",
   "bank_account_number",
+  "payment_method",
   "incasso_mandate_id",
   "mandate_granted_on",
   "financial_history_tab",
@@ -71,11 +73,6 @@
    "label": "tussenvoegsel"
   },
   {
-   "fieldname": "membership_expiration_date",
-   "fieldtype": "Date",
-   "label": "Membership Expiration Date"
-  },
-  {
    "fieldname": "last_name",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -90,8 +87,7 @@
    "fieldname": "member_name",
    "fieldtype": "Data",
    "label": "Full name",
-   "read_only": 1,
-   "unique": 1
+   "read_only": 1
   },
   {
    "fieldname": "birth_date",
@@ -169,22 +165,6 @@
    "options": "fa fa-map-marker"
   },
   {
-   "fieldname": "subscription_start",
-   "fieldtype": "Date",
-   "label": "Subscription Start "
-  },
-  {
-   "fieldname": "subscription_end",
-   "fieldtype": "Date",
-   "label": "Subscription End"
-  },
-  {
-   "fieldname": "subscription_status",
-   "fieldtype": "Select",
-   "label": "Subscription Status",
-   "options": "\nActive\nHalted"
-  },
-  {
    "fieldname": "address_html",
    "fieldtype": "HTML",
    "label": "Address HTML"
@@ -199,12 +179,6 @@
   {
    "fieldname": "column_break_thhe",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "start_date",
-   "fieldtype": "Date",
-   "label": "Start date",
-   "reqd": 1
   },
   {
    "fieldname": "financial_history_tab",
@@ -256,13 +230,57 @@
    "fieldname": "mandate_granted_on",
    "fieldtype": "Date",
    "label": "Mandate granted on"
+  },
+  {
+   "fieldname": "membership_special_status",
+   "fieldtype": "Select",
+   "label": "Membership special status",
+   "options": "\nDisbarred\nBanned",
+   "reqd": 1
+  },
+  {
+   "fieldname": "membership_special_status_reason",
+   "fieldtype": "Small Text",
+   "label": "Membership special status reason"
+  },
+  {
+   "fieldname": "membership_history",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Membership history"
+  },
+  {
+   "fieldname": "payment_method",
+   "fieldtype": "Select",
+   "label": "Payment method",
+   "options": "automated payment\nmanual payment\nother"
+  },
+  {
+   "fieldname": "membership",
+   "fieldtype": "Link",
+   "label": "Membership",
+   "options": "Membership"
+  },
+  {
+   "fetch_from": "membership.from_date",
+   "fieldname": "memb_from_date",
+   "fieldtype": "Date",
+   "label": "Membership Start date",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "membership.to_date",
+   "fieldname": "memb_to_date",
+   "fieldtype": "Date",
+   "label": "Membership End date",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-04-20 19:40:01.513912",
- "modified_by": "fjdh@leden.socialisten.org",
+ "modified": "2025-04-21 15:56:48.458284",
+ "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
  "naming_rule": "By fieldname",
