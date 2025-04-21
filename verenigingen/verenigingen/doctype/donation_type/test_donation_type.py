@@ -4,5 +4,5 @@
 import unittest
 
 
-class TestDonorType(unittest.TestCase):
+class TestDonationType(unittest.TestCase):
 	pass

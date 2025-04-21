@@ -213,7 +213,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Default Donor Type",
-   "options": "Donor Type",
+   "options": "Donation Type",
    "reqd": 1
   },
   {
@@ -232,7 +232,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2021-03-11 10:43:38.124240",
+ "modified": "2025-04-21 15:05:57.342770",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Verenigingen Settings",
@@ -267,7 +267,9 @@
   }
  ],
  "quick_entry": 1,
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
+ "states": [],
  "track_changes": 1
 }
