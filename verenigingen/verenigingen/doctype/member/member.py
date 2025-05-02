@@ -19,41 +19,40 @@ class Member(Document):
 		"""Load address and contacts in `__onload`"""
 		load_address_and_contact(self)
 
+	def validate_email_type(self, email):
+		from frappe.utils import validate_email_address
+		validate_email_address(email.strip(), True)
+
+	def validate(self):
+		if self.email_id:
+			self.validate_email_type(self.email_id)
+		self.calculate_age()
+		frappe.log_error(f"Set age to static value 30", "Test Debug")
+
+		try:
+			self.set_member_name()
+		except Exception as e:
+			frappe.log_error(f"Error in validate: {str(e)}", "Member Error")
+
 	def calculate_age(self):
 		"""Calculate age based on birth_date field"""
 		try:
 			if self.birth_date:
 				today = datetime.now().date()
 				born = self.birth_date
-
-				# Calculate age
+			# Calculate age
 				age = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
-
-				# Set the age field
+			# Set the age field
 				self.age = age
+				frappe.log_error(f"Age calculated as: {age}", "Age Debug")
 			else:
 				self.age = None
+				frappe.log_error("No birth date, age set to None", "Age Debug")
 		except Exception as e:
 			frappe.log_error(f"Error calculating age: {str(e)}", "Member Error")
 
-	def validate(self):
-		if self.email_id:
-			self.validate_email_type(self.email_id)
-
-	def validate_email_type(self, email):
-		from frappe.utils import validate_email_address
-		validate_email_address(email.strip(), True)
-
-	def validate(self):
-		try:
-			frappe.log_error("validate method called", "Member Debug")
-			self.set_member_name()
-		except Exception as e:
-			frappe.log_error(f"Error in validate: {str(e)}", "Member Error")
-
 	def set_member_name(self):
 		try:
-			frappe.log_error("set_member_name method called", "Member Debug")
 
 			parts = []
 
@@ -67,7 +66,6 @@ class Member(Document):
 				parts.append(self.last_name)
 
 			self.member_name = " ".join(parts).strip()
-			frappe.log_error(f"Member name set to: {self.member_name}", "Member Debug")
 
 		except Exception as e:
 			frappe.log_error(f"Error in set_member_name: {str(e)}", "Member Error")

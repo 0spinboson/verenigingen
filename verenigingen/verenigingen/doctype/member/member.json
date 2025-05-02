@@ -18,6 +18,7 @@
   "birth_date",
   "customer",
   "age",
+  "virtual_name",
   "contactgegevens_section",
   "email_id",
   "telephone_number",
@@ -327,8 +328,7 @@
   {
    "fieldname": "age",
    "fieldtype": "Int",
-   "label": "Age",
-   "read_only": 1
+   "label": "Age"
   },
   {
    "collapsible": 1,
@@ -342,12 +342,19 @@
    "ignore_user_permissions": 1,
    "label": "User ID",
    "options": "User"
+  },
+  {
+   "fieldname": "virtual_name",
+   "fieldtype": "Data",
+   "is_virtual": 1,
+   "label": "Virtual name",
+   "options": "f\"{doc.first_name} {doc.tussenvoegsel} {doc.last_name}\""
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-05-02 20:54:18.700296",
+ "modified": "2025-05-02 21:18:09.715258",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
