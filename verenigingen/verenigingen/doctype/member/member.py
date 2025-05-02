@@ -7,11 +7,11 @@ from frappe import _
 from frappe.contacts.address_and_contact import load_address_and_contact
 from frappe.model.document import Document
 from frappe.utils import cint, get_link_to_form
+from datetime import datetime
 
 from payments.utils import get_payment_gateway_controller
 
 from verenigingen.verenigingen.doctype.membership_type.membership_type import get_membership_type
-
 
 class Member(Document):
 
@@ -19,9 +19,22 @@ class Member(Document):
 		"""Load address and contacts in `__onload`"""
 		load_address_and_contact(self)
 
-	@property
- 	def age(self):
- 		return frappe.utils.now_datetime() - self.creation
+	def calculate_age(self):
+		"""Calculate age based on birth_date field"""
+		try:
+			if self.birth_date:
+				today = datetime.now().date()
+				born = self.birth_date
+
+				# Calculate age
+				age = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+
+				# Set the age field
+				self.age = age
+			else:
+				self.age = None
+		except Exception as e:
+			frappe.log_error(f"Error calculating age: {str(e)}", "Member Error")
 
 	def validate(self):
 		if self.email_id:
