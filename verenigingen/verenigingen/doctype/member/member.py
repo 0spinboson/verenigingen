@@ -14,7 +14,7 @@ from verenigingen.verenigingen.doctype.membership_type.membership_type import ge
 
 
 class Member(Document):
-		
+
 	def onload(self):
 		"""Load address and contacts in `__onload`"""
 		load_address_and_contact(self)
@@ -34,19 +34,19 @@ class Member(Document):
             self.set_member_name()
         except Exception as e:
             frappe.log_error(f"Error in validate: {str(e)}", "Member Error")
-    
+
     def set_member_name(self):
         try:
             frappe.log_error("set_member_name method called", "Member Debug")
-            
+
             parts = []
-            
+
             if self.first_name:
                 parts.append(self.first_name)
-            
+
             if self.tussenvoegsel:
                 parts.append(self.tussenvoegsel)
-            
+
             if self.last_name:
                 parts.append(self.last_name)
 
@@ -55,9 +55,10 @@ class Member(Document):
         except Exception as e:
             frappe.log_error(f"Error in set_member_name: {str(e)}", "Member Error")
 
-   def setup_subscription(self):
+	def setup_subscription(self):
         verenigingen_settings = frappe.get_doc('Verenigingen Settings')
-	    if not verenigingen_settings.enable_razorpay_for_memberships:
+
+		if not verenigingen_settings.enable_razorpay_for_memberships:
 			frappe.throw(_('Please check Enable Razorpay for Memberships in {0} to setup subscription')).format(
 				get_link_to_form('Verenigingen Settings', 'Verenigingen Settings'))
 
