@@ -17,11 +17,14 @@
   "member_name",
   "birth_date",
   "customer",
+  "age",
   "contactgegevens_section",
   "email_id",
   "telephone_number",
   "column_break_qqif",
   "member_postal_address",
+  "user_details_section",
+  "user_id",
   "membership_details_tab",
   "membership_information_section",
   "membership_id",
@@ -320,12 +323,31 @@
    "fieldtype": "Link",
    "label": "Primary address",
    "options": "Address"
+  },
+  {
+   "fieldname": "age",
+   "fieldtype": "Int",
+   "label": "Age",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "user_details_section",
+   "fieldtype": "Section Break",
+   "label": "User details"
+  },
+  {
+   "fieldname": "user_id",
+   "fieldtype": "Link",
+   "ignore_user_permissions": 1,
+   "label": "User ID",
+   "options": "User"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-05-01 22:47:01.618583",
+ "modified": "2025-05-02 20:54:18.700296",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
