@@ -28,10 +28,36 @@ class Member(Document):
 		from frappe.utils import validate_email_address
 		validate_email_address(email.strip(), True)
 
+    def validate(self):
+        try:
+            frappe.log_error("validate method called", "Member Debug")
+            self.set_member_name()
+        except Exception as e:
+            frappe.log_error(f"Error in validate: {str(e)}", "Member Error")
+    
+    def set_member_name(self):
+        try:
+            frappe.log_error("set_member_name method called", "Member Debug")
+            
+            parts = []
+            
+            if self.first_name:
+                parts.append(self.first_name)
+            
+            if self.tussenvoegsel:
+                parts.append(self.tussenvoegsel)
+            
+            if self.last_name:
+                parts.append(self.last_name)
 
-    def setup_subscription(self):
-		verenigingen_settings = frappe.get_doc('Verenigingen Settings')
-		if not verenigingen_settings.enable_razorpay_for_memberships:
+            self.member_name = " ".join(parts).strip()
+            frappe.log_error(f"Member name set to: {self.member_name}", "Member Debug")
+        except Exception as e:
+            frappe.log_error(f"Error in set_member_name: {str(e)}", "Member Error")
+
+   def setup_subscription(self):
+        verenigingen_settings = frappe.get_doc('Verenigingen Settings')
+	    if not verenigingen_settings.enable_razorpay_for_memberships:
 			frappe.throw(_('Please check Enable Razorpay for Memberships in {0} to setup subscription')).format(
 				get_link_to_form('Verenigingen Settings', 'Verenigingen Settings'))
 
