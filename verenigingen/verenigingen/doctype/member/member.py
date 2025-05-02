@@ -27,7 +27,6 @@ class Member(Document):
 		if self.email_id:
 			self.validate_email_type(self.email_id)
 		self.calculate_age()
-		frappe.log_error(f"Set age to static value 30", "Test Debug")
 
 		try:
 			self.set_member_name()
@@ -38,8 +37,12 @@ class Member(Document):
 		"""Calculate age based on birth_date field"""
 		try:
 			if self.birth_date:
-				today = datetime.now().date()
-				born = self.birth_date
+				from datetime import datetime, date
+				today = date.today()
+				if isinstance(self.birth_date, str):
+					born = datetime.strptime(self.birth_date, '%Y-%m-%d').date()
+				else:
+					born = self.birth_date
 			# Calculate age
 				age = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
 			# Set the age field
