@@ -57,7 +57,7 @@ class Member(Document):
 			frappe.log_error(f"Error in set_member_name: {str(e)}", "Member Error")
 
 	def setup_subscription(self):
-        verenigingen_settings = frappe.get_doc('Verenigingen Settings')
+ 		verenigingen_settings = frappe.get_doc('Verenigingen Settings')
 
 		if not verenigingen_settings.enable_razorpay_for_memberships:
 			frappe.throw(_('Please check Enable Razorpay for Memberships in {0} to setup subscription')).format(
