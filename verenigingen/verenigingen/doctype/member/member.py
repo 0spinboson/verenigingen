@@ -19,6 +19,9 @@ class Member(Document):
 		"""Load address and contacts in `__onload`"""
 		load_address_and_contact(self)
 
+	@property
+ 	def age(self):
+ 		return frappe.utils.now_datetime() - self.creation
 
 	def validate(self):
 		if self.email_id:
