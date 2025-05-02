@@ -8,6 +8,8 @@
  "engine": "InnoDB",
  "field_order": [
   "volunteer_name",
+  "member",
+  "preferred_pronouns",
   "column_break_5",
   "volunteer_type",
   "email",
@@ -48,7 +50,7 @@
    "fieldname": "email",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Email",
+   "label": "Organization Email",
    "reqd": 1,
    "unique": 1
   },
@@ -116,14 +118,27 @@
    "fieldname": "note",
    "fieldtype": "Long Text",
    "label": "Note"
+  },
+  {
+   "fieldname": "member",
+   "fieldtype": "Link",
+   "label": "Member",
+   "options": "Member"
+  },
+  {
+   "fetch_from": "member.preferred_pronouns",
+   "fieldname": "preferred_pronouns",
+   "fieldtype": "Data",
+   "label": "Preferred pronouns"
   }
  ],
  "image_field": "image",
  "links": [],
- "modified": "2020-09-16 23:45:15.595952",
+ "modified": "2025-04-28 19:47:20.785140",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Volunteer",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {
@@ -141,8 +156,10 @@
  ],
  "quick_entry": 1,
  "restrict_to_domain": "Verenigingen",
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
+ "states": [],
  "title_field": "volunteer_name",
  "track_changes": 1
 }

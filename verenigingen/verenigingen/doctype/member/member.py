@@ -14,8 +14,6 @@ from verenigingen.verenigingen.doctype.membership_type.membership_type import ge
 
 
 class Member(Document):
-	def before_save(self):
-		self.member_name = f'{self.first_name} {self.tussenvoegsel or ""} {self.last_name or ""}'
 		
 	def onload(self):
 		"""Load address and contacts in `__onload`"""
@@ -30,7 +28,8 @@ class Member(Document):
 		from frappe.utils import validate_email_address
 		validate_email_address(email.strip(), True)
 
-	def setup_subscription(self):
+
+    def setup_subscription(self):
 		verenigingen_settings = frappe.get_doc('Verenigingen Settings')
 		if not verenigingen_settings.enable_razorpay_for_memberships:
 			frappe.throw(_('Please check Enable Razorpay for Memberships in {0} to setup subscription')).format(

@@ -81,7 +81,7 @@
    "fieldtype": "Select",
    "hidden": 1,
    "label": "Naming Series",
-   "options": "NPO-DTN-.YYYY.-",
+   "options": "Assoc-Dnt-.YYYY.-",
    "report_hide": 1
   },
   {
