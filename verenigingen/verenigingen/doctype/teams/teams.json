@@ -62,7 +62,7 @@
  "modified": "2025-05-03 09:15:04.699992",
  "modified_by": "Administrator",
  "module": "Verenigingen",
- "name": "Teams and Commissions",
+ "name": "Teams",
  "owner": "Administrator",
  "permissions": [
   {
@@ -90,10 +90,10 @@
   }
  ],
  "mermission_rules": [
- {
-	"role": "Team_Lead",
-	"condition": "doc.team_lead == frappe.session.user"
- }
+  {
+   "role": "Team_Lead",
+   "condition": "doc.team_lead == frappe.session.user"
+  }
  ],
  "row_format": "Dynamic",
  "sort_field": "modified",
