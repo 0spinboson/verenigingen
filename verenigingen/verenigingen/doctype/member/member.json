@@ -205,7 +205,7 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Membership ID",
-   "reqd": 1,
+   "read_only_depends_on": "eval:!doc.__islocal",
    "unique": 1
   },
   {
@@ -354,7 +354,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-05-02 21:18:09.715258",
+ "modified": "2025-05-03 20:36:13.624387",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
