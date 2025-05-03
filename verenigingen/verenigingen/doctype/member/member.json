@@ -69,7 +69,7 @@
   {
    "fieldname": "naming_series",
    "fieldtype": "Data",
-   "label": "Internal membership counter"
+   "label": "Internal membership counter",
    "options": "Assoc-Member-2025-"
   },
   {
