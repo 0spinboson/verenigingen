@@ -2,7 +2,7 @@
  "actions": [],
  "allow_import": 1,
  "allow_rename": 1,
- "autoname": "naming_series",
+ "autoname": "naming_series:",
  "creation": "2025-04-16 19:53:04.862430",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -368,11 +368,11 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-05-03 21:23:55.807266",
+ "modified": "2025-05-03 21:29:30.327673",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
- "naming_rule": "By fieldname",
+ "naming_rule": "By \"Naming Series\" field",
  "owner": "Administrator",
  "permissions": [
   {
