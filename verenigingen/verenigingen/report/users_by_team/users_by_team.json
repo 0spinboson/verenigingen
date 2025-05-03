@@ -24,7 +24,7 @@
    "wildcard_filter": 0
   },
   {
-   "fieldname": "role",
+   "fieldname": "team_role",
    "fieldtype": "Link",
    "label": "Team Role",
    "mandatory": 0,
