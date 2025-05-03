@@ -2,7 +2,7 @@
  "actions": [],
  "allow_import": 1,
  "allow_rename": 1,
- "autoname": "field:member_name",
+ "autoname": "naming_series",
  "creation": "2025-04-16 19:53:04.862430",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -70,6 +70,7 @@
    "fieldname": "naming_series",
    "fieldtype": "Data",
    "label": "Internal membership counter"
+   "options": "Assoc-Member-2025-"
   },
   {
    "fieldname": "first_name",
