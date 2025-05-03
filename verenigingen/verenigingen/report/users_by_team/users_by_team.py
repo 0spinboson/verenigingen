@@ -5,6 +5,9 @@ import frappe
 from frappe import _
 
 def execute(filters=None):
+    if filters is None:
+        filters = {}
+    
     columns = get_columns()
     data = get_data(filters)
     return columns, data
@@ -84,6 +87,30 @@ def get_data(filters):
     conditions_str = " AND ".join(conditions) if conditions else "1=1"
     
     try:
+        # First check if there are any teams and members
+        team_count = frappe.db.count('Team')
+        if team_count == 0:
+            # No teams exist, return empty data
+            return []
+            
+        # Check if Team Member Role table exists and has records
+        has_members = frappe.db.sql("""
+            SELECT COUNT(*) as count FROM `tabTeam Member Role` LIMIT 1
+        """)[0][0] > 0
+        
+        # If no members exist yet, return just teams with empty member data
+        if not has_members:
+            teams = frappe.get_all('Team', fields=['name as team', 'team_lead'])
+            for team in teams:
+                team.user = None
+                team.user_full_name = None
+                team.team_role = None
+                team.permissions_level = None
+                team.from_date = None
+                team.to_date = None
+                team.is_active = 0
+            return teams
+            
         # Build and execute the query
         query = """
             SELECT 
@@ -99,7 +126,7 @@ def get_data(filters):
             FROM 
                 `tabTeam` t
             LEFT JOIN 
-                `tabTeam Member Role` tmr ON tmr.parent = t.name
+                `tabTeam Member Role` tmr ON tmr.parent = t.name AND tmr.parenttype = 'Team'
             LEFT JOIN 
                 `tabUser` usr ON usr.name = tmr.user
             LEFT JOIN 
@@ -112,6 +139,20 @@ def get_data(filters):
         
         # Execute the query
         results = frappe.db.sql(query, values=values, as_dict=1)
+        
+        # Handle case where there are teams but no members
+        if not results and team_count > 0:
+            teams = frappe.get_all('Team', fields=['name as team', 'team_lead'])
+            for team in teams:
+                team.user = None
+                team.user_full_name = None
+                team.team_role = None
+                team.permissions_level = None
+                team.from_date = None
+                team.to_date = None
+                team.is_active = 0
+            return teams
+            
         return results
         
     except Exception as e:
@@ -120,6 +161,8 @@ def get_data(filters):
         if len(error_msg) > 100:
             error_msg = error_msg[:100] + "..."
         frappe.log_error(f"Error in users_by_team report: {error_msg}", "Report Error")
+        
+        # In case of error, return empty list to avoid halting the report
         return []
 
 def get_formatted_data(data):
