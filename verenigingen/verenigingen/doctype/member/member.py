@@ -15,22 +15,22 @@ from verenigingen.verenigingen.doctype.membership_type.membership_type import ge
 
 class Member(Document):
 
-    def before_save(self):
-        if not self.membership_id:
-            self.membership_id = self.generate_memebship_id()
+	def before_save(self):
+		if not self.membership_id:
+			self.membership_id = self.generate_memebship_id()
 
-    def generate_membership_id(self):
-        settings = frappe.get_single("Verenigingen Settings")
+	def generate_membership_id(self):
+		settings = frappe.get_single("Verenigingen Settings")
 
-        if not settings.last_membership_id:
-            settings.last_membership_id = settings.membership_id_start -1
+		if not settings.last_membership_id:
+			settings.last_membership_id = settings.membership_id_start -1
 
-        new_id = settings.last_membership_id +1
+		new_id = settings.last_membership_id +1
 
-        settings.last_membership_id = new_id
-        settings.save()
+		settings.last_membership_id = new_id
+		settings.save()
 
-        return str(new_id)
+		return str(new_id)
 
 	def onload(self):
 		"""Load address and contacts in `__onload`"""
