@@ -43,7 +43,14 @@ def get_columns():
         },
         {
             "label": "Role",
-            "fieldname": "role",
+            "fieldname": "role_name",
+            "fieldtype": "Link",
+            "options": "Team Role",
+            "width": 120
+        },
+        {
+            "label": "Permission Level",
+            "fieldname": "permissions_level",
             "fieldtype": "Data",
             "width": 120
         },
@@ -79,6 +86,10 @@ def get_data(filters):
         conditions.append("tmr.user = %(user)s")
         values["user"] = filters.get("user")
         
+    if filters.get("role"):
+        conditions.append("tmr.role = %(role)s")
+        values["role"] = filters.get("role")
+        
     if filters.get("active_only"):
         conditions.append("tmr.is_active = 1")
         
@@ -94,6 +105,10 @@ def get_data(filters):
         conditions.append("tmr.from_date <= %(to_date)s")
         values["to_date"] = filters.get("to_date")
     
+    if filters.get("permissions_level"):
+        conditions.append("tr.permissions_level = %(permissions_level)s")
+        values["permissions_level"] = filters.get("permissions_level")
+    
     conditions_str = " AND ".join(conditions)
     if conditions_str:
         conditions_str = " AND " + conditions_str
@@ -105,6 +120,8 @@ def get_data(filters):
             tmr.user,
             CONCAT(usr.first_name, ' ', IFNULL(usr.last_name, '')) as user_full_name,
             tmr.role,
+            tr.role_name,
+            tr.permissions_level,
             tmr.from_date,
             tmr.to_date,
             tmr.is_active
@@ -112,6 +129,8 @@ def get_data(filters):
             `tabTeam` team
         INNER JOIN
             `tabTeam Member Role` tmr ON tmr.parent = team.name
+        LEFT JOIN
+            `tabTeam Role` tr ON tmr.role = tr.name
         LEFT JOIN
             `tabUser` usr ON usr.name = tmr.user
         WHERE

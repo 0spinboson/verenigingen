@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"NFcjh9I8BH\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Your Shortcuts</b></span>\",\"col\":12}},{\"id\":\"sxzInK1PHL\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Member\",\"col\":3}},{\"id\":\"q6OM4R0OUa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Membership\",\"col\":3}},{\"id\":\"Eic5oNDHuQ\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Chapter\",\"col\":3}},{\"id\":\"zGoLYG0xRM\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"jMy1CTqEJS\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Reports &amp; Masters</b></span>\",\"col\":12}},{\"id\":\"oIk2CrSoAH\",\"type\":\"card\",\"data\":{\"card_name\":\"Memberships\",\"col\":4}},{\"id\":\"2vHgUjgQcL\",\"type\":\"card\",\"data\":{\"card_name\":\"Volunteering\",\"col\":4}},{\"id\":\"S8Mi0T41U7\",\"type\":\"card\",\"data\":{\"card_name\":\"Chapters\",\"col\":4}},{\"id\":\"ZvroSYo9F3\",\"type\":\"card\",\"data\":{\"card_name\":\"Donations\",\"col\":4}},{\"id\":\"XXEhdaTHF_\",\"type\":\"card\",\"data\":{\"card_name\":\"Teams and Commissions\",\"col\":4}},{\"id\":\"RKkllDSemd\",\"type\":\"card\",\"data\":{\"card_name\":\"Module Settings\",\"col\":4}}]",
+ "content": "[{\"id\":\"NFcjh9I8BH\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Your Shortcuts</b></span>\",\"col\":12}},{\"id\":\"sxzInK1PHL\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Member\",\"col\":3}},{\"id\":\"q6OM4R0OUa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Membership\",\"col\":3}},{\"id\":\"Eic5oNDHuQ\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Chapter\",\"col\":3}},{\"id\":\"zGoLYG0xRM\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"jMy1CTqEJS\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Reports &amp; Masters</b></span>\",\"col\":12}},{\"id\":\"oIk2CrSoAH\",\"type\":\"card\",\"data\":{\"card_name\":\"Memberships\",\"col\":4}},{\"id\":\"2vHgUjgQcL\",\"type\":\"card\",\"data\":{\"card_name\":\"Volunteers\",\"col\":4}},{\"id\":\"S8Mi0T41U7\",\"type\":\"card\",\"data\":{\"card_name\":\"Chapters\",\"col\":4}},{\"id\":\"ZvroSYo9F3\",\"type\":\"card\",\"data\":{\"card_name\":\"Donations\",\"col\":4}},{\"id\":\"XXEhdaTHF_\",\"type\":\"card\",\"data\":{\"card_name\":\"Teams and Commissions\",\"col\":4}},{\"id\":\"RKkllDSemd\",\"type\":\"card\",\"data\":{\"card_name\":\"Module Settings\",\"col\":4}}]",
  "creation": "2020-03-02 17:23:47.811421",
  "custom_blocks": [],
  "docstatus": 0,
@@ -109,37 +109,6 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Volunteering",
-   "link_count": 2,
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Volunteer",
-   "link_count": 0,
-   "link_to": "Volunteer",
-   "link_type": "DocType",
-   "onboard": 1,
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Volunteer Type",
-   "link_count": 0,
-   "link_to": "Volunteer Type",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
    "label": "Donations",
    "link_count": 3,
    "link_type": "DocType",
@@ -226,9 +195,40 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Volunteers",
+   "link_count": 2,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Volunteer",
+   "link_count": 0,
+   "link_to": "Volunteer",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Volunteer Type",
+   "link_count": 0,
+   "link_to": "Volunteer Type",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2025-05-03 12:50:33.080489",
+ "modified": "2025-05-03 13:55:15.247744",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Verenigingen",
