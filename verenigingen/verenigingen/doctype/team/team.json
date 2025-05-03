@@ -52,6 +52,7 @@
    "label": "Is active"
   },
   {
+   "columns": 9,
    "fieldname": "team_members",
    "fieldtype": "Table",
    "label": "Team Members",
@@ -61,7 +62,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-05-03 09:54:40.730349",
+ "modified": "2025-05-03 09:59:10.137020",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Team",
