@@ -5,7 +5,9 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "financial_settings_section",
   "enable_razorpay_for_memberships",
+  "creation_user",
   "razorpay_settings_section",
   "billing_cycle",
   "billing_frequency",
@@ -32,7 +34,7 @@
   "donation_debit_account",
   "donation_payment_account",
   "section_break_27",
-  "creation_user"
+  "volunteer_name_setting"
  ],
  "fields": [
   {
@@ -227,12 +229,23 @@
    "label": "Creation User",
    "options": "User",
    "reqd": 1
+  },
+  {
+   "fieldname": "financial_settings_section",
+   "fieldtype": "Section Break",
+   "label": "Financial settings"
+  },
+  {
+   "fieldname": "volunteer_name_setting",
+   "fieldtype": "Link",
+   "label": "Volunteer doctype name setting",
+   "options": "Volunteer"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-04-21 15:05:57.342770",
+ "modified": "2025-05-02 22:47:30.547790",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Verenigingen Settings",
