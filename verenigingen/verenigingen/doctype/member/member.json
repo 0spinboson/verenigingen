@@ -2,7 +2,7 @@
  "actions": [],
  "allow_import": 1,
  "allow_rename": 1,
- "autoname": "naming_series:",
+ "autoname": "format:Assoc-Member-{YYYY}-{MM}-{####}",
  "creation": "2025-04-16 19:53:04.862430",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -69,8 +69,7 @@
   {
    "fieldname": "naming_series",
    "fieldtype": "Data",
-   "label": "Internal membership counter",
-   "options": "Assoc-Member-{YYYY}-",
+   "label": "Internal membership ID",
    "unique": 1
   },
   {
@@ -368,7 +367,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-05-03 21:29:30.327673",
+ "modified": "2025-05-03 22:13:54.354128",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
