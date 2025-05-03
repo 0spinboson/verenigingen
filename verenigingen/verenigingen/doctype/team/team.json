@@ -1,6 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
+ "autoname": "field:team_name",
  "creation": "2025-05-02 22:52:26.918368",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -24,7 +25,8 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Team name",
-   "reqd": 1
+   "reqd": 1,
+   "unique": 1
   },
   {
    "fieldname": "desc",
@@ -59,10 +61,11 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-05-03 09:15:04.699992",
+ "modified": "2025-05-03 09:54:40.730349",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Team",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {
@@ -80,19 +83,11 @@
   {
    "create": 1,
    "email": 1,
-   "export": 0,
-   "print": 0,
    "read": 1,
    "report": 1,
    "role": "Team Lead",
    "share": 1,
    "write": 1
-  }
- ],
- "mermission_rules": [
-  {
-   "role": "Team_Lead",
-   "condition": "doc.team_lead == frappe.session.user"
   }
  ],
  "row_format": "Dynamic",
