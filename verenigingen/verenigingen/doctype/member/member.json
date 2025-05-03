@@ -2,13 +2,12 @@
  "actions": [],
  "allow_import": 1,
  "allow_rename": 1,
- "autoname": "naming_series:",
+ "autoname": "field:member_name",
  "creation": "2025-04-16 19:53:04.862430",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
   "personalia",
-  "naming_series",
   "first_name",
   "tussenvoegsel",
   "last_name",
@@ -26,6 +25,7 @@
   "member_postal_address",
   "user_details_section",
   "user_id",
+  "naming_series",
   "membership_details_tab",
   "membership_information_section",
   "membership_id",
@@ -38,6 +38,8 @@
   "memb_to_date",
   "membership_history",
   "customer_id",
+  "chapter_info_section",
+  "chapter_membership",
   "financial_data_section",
   "bank_account_number",
   "payment_method",
@@ -67,8 +69,7 @@
   {
    "fieldname": "naming_series",
    "fieldtype": "Data",
-   "label": "Internal membership counter",
-   "reqd": 1
+   "label": "Internal membership counter"
   },
   {
    "fieldname": "first_name",
@@ -93,7 +94,8 @@
    "fieldname": "member_name",
    "fieldtype": "Data",
    "label": "Full name",
-   "read_only": 1
+   "read_only": 1,
+   "unique": 1
   },
   {
    "fieldname": "birth_date",
@@ -349,12 +351,23 @@
    "is_virtual": 1,
    "label": "Virtual name",
    "options": "f\"{doc.first_name} {doc.tussenvoegsel} {doc.last_name}\""
+  },
+  {
+   "fieldname": "chapter_info_section",
+   "fieldtype": "Section Break",
+   "label": "Chapter info"
+  },
+  {
+   "fieldname": "chapter_membership",
+   "fieldtype": "Link",
+   "label": "Chapter membership",
+   "options": "Chapter"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-05-03 20:36:13.624387",
+ "modified": "2025-05-03 20:55:32.578845",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",

@@ -17,7 +17,7 @@ class Member(Document):
 
 	def before_save(self):
 		if not self.membership_id:
-			self.membership_id = self.generate_memebship_id()
+			self.membership_id = self.generate_membership_id()
 
 	def generate_membership_id(self):
 		settings = frappe.get_single("Verenigingen Settings")
