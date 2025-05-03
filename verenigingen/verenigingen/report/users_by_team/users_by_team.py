@@ -1,18 +1,26 @@
-# Copyright (c) 2023, Verenigingen and contributors
-# For license information, please see license.txt
-
 import frappe
 from frappe import _
 
 def execute(filters=None):
-    if filters is None:
+    """
+    Main execution function for the Users by Team report.
+    
+    Args:
+        filters (dict, optional): Filter criteria. Defaults to {}.
+    
+    Returns:
+        tuple: Columns definition and data for the report
+    """
+    if not filters:
         filters = {}
     
     columns = get_columns()
     data = get_data(filters)
+    
     return columns, data
 
 def get_columns():
+    """Define columns for the report"""
     return [
         {
             "label": _("Team"),
@@ -75,96 +83,85 @@ def get_columns():
     ]
 
 def get_data(filters):
-    # Start by defining conditions based on filters
+    """
+    Fetch and process data for the report based on filters
+    
+    Args:
+        filters (dict): Filter criteria
+    
+    Returns:
+        list: List of dictionaries containing report data
+    """
+    # Build conditions based on filters
     conditions = []
     values = {}
     
-    # Apply active only filter
     if filters.get("active_only"):
         conditions.append("tmr.is_active = 1")
     
-    # Convert conditions to SQL WHERE clause
-    conditions_str = " AND ".join(conditions) if conditions else "1=1"
+    # Additional filters can be added here
+    if filters.get("team"):
+        conditions.append("t.name = %(team)s")
+        values["team"] = filters.get("team")
+    
+    if filters.get("user"):
+        conditions.append("tmr.user = %(user)s")
+        values["user"] = filters.get("user")
+    
+    if filters.get("team_role"):
+        conditions.append("tmr.team_role = %(team_role)s")
+        values["team_role"] = filters.get("team_role")
+    
+    conditions_str = " AND " + " AND ".join(conditions) if conditions else ""
     
     try:
-        # First check if there are any teams and members
-        team_count = frappe.db.count('Team')
-        if team_count == 0:
-            # No teams exist, return empty data
-            return []
-            
-        # Check if Team Member Role table exists and has records
-        has_members = frappe.db.sql("""
-            SELECT COUNT(*) as count FROM `tabTeam Member Role` LIMIT 1
-        """)[0][0] > 0
+        # Verify tables exist before running query
+        tables = ["tabTeam", "tabTeam Member Role", "tabTeam Role"]
+        for table in tables:
+            if not frappe.db.table_exists(table.replace("tab", "")):
+                frappe.log_error(f"Table {table} does not exist", "Users by Team Report Error")
+                return []
         
-        # If no members exist yet, return just teams with empty member data
-        if not has_members:
-            teams = frappe.get_all('Team', fields=['name as team', 'team_lead'])
-            for team in teams:
-                team.user = None
-                team.user_full_name = None
-                team.team_role = None
-                team.permissions_level = None
-                team.from_date = None
-                team.to_date = None
-                team.is_active = 0
-            return teams
-            
-        # Build and execute the query
+        # Use safer parameterized query with proper JOIN syntax
         query = """
-            SELECT 
-                t.name as team,
-                t.team_lead,
-                tmr.user,
-                usr.full_name as user_full_name,
-                tmr.team_role,
-                tr.permissions_level,
-                tmr.from_date,
-                tmr.to_date,
-                tmr.is_active
-            FROM 
-                `tabTeam` t
-            LEFT JOIN 
-                `tabTeam Member Role` tmr ON tmr.parent = t.name AND tmr.parenttype = 'Team'
-            LEFT JOIN 
-                `tabUser` usr ON usr.name = tmr.user
-            LEFT JOIN 
-                `tabTeam Role` tr ON tr.name = tmr.team_role
-            WHERE 
-                {conditions}
-            ORDER BY 
-                t.name, tmr.user
+        SELECT
+            t.name as team,
+            t.team_lead as team_lead,
+            tmr.user as user,
+            u.full_name as user_full_name,
+            tmr.team_role as team_role,
+            tr.permissions_level as permissions_level,
+            tmr.from_date as from_date,
+            tmr.to_date as to_date,
+            tmr.is_active as is_active
+        FROM
+            `tabTeam Member Role` tmr
+        JOIN
+            `tabTeam` t ON tmr.parent = t.name
+        LEFT JOIN
+            `tabUser` u ON tmr.user = u.name
+        LEFT JOIN
+            `tabTeam Role` tr ON tmr.team_role = tr.name
+        WHERE
+            tmr.parenttype = 'Team' 
+            {conditions}
+        ORDER BY
+            t.name, tmr.user
         """.format(conditions=conditions_str)
         
-        # Execute the query
-        results = frappe.db.sql(query, values=values, as_dict=1)
-        
-        # Handle case where there are teams but no members
-        if not results and team_count > 0:
-            teams = frappe.get_all('Team', fields=['name as team', 'team_lead'])
-            for team in teams:
-                team.user = None
-                team.user_full_name = None
-                team.team_role = None
-                team.permissions_level = None
-                team.from_date = None
-                team.to_date = None
-                team.is_active = 0
-            return teams
-            
-        return results
-        
+        result = frappe.db.sql(query, values=values, as_dict=1)
+        return result
+    
     except Exception as e:
-        # More controlled error logging that won't exceed field limits
+        # Create a more compact error message to avoid length issues
         error_msg = str(e)
         if len(error_msg) > 100:
-            error_msg = error_msg[:100] + "..."
-        frappe.log_error(f"Error in users_by_team report: {error_msg}", "Report Error")
+            error_msg = error_msg[:97] + "..."
         
-        # In case of error, return empty list to avoid halting the report
+        frappe.log_error(
+            message=f"Report query error: {error_msg}",
+            title="Users by Team Report Error"
+        )
+        
+        # Return empty result instead of crashing
         return []
-
-def get_formatted_data(data):
-    # Format data for display if needed
-    return data
