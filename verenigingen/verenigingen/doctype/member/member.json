@@ -1,377 +1,325 @@
 {
- "actions": [],
- "allow_import": 1,
- "allow_rename": 1,
- "autoname": "format:Assoc-Member-{YYYY}-{MM}-{####}",
- "creation": "2025-04-16 19:53:04.862430",
+ "autoname": "field:full_name",
+ "creation": "2023-01-01 00:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "personalia",
+  "member_details_section",
+  "salutation",
   "first_name",
-  "tussenvoegsel",
+  "middle_name",
   "last_name",
-  "preferred_pronouns",
-  "column_break_webu",
-  "member_name",
+  "full_name",
+  "gender",
   "birth_date",
+  "column_break_8",
+  "email",
+  "mobile_no",
+  "phone",
+  "image",
+  "status",
+  "address_section",
+  "address_line1",
+  "address_line2",
+  "city",
+  "state",
+  "postal_code",
+  "country",
+  "column_break_19",
+  "latitude",
+  "longitude",
+  "erpnext_integration_section",
   "customer",
-  "age",
-  "virtual_name",
-  "contactgegevens_section",
-  "email_id",
-  "telephone_number",
-  "column_break_qqif",
-  "member_postal_address",
-  "user_details_section",
-  "user_id",
-  "naming_series",
-  "membership_details_tab",
-  "membership_information_section",
-  "membership_id",
-  "membership_type",
+  "create_customer_from_member",
+  "column_break_24",
+  "user",
+  "create_user_from_member",
+  "subscription_section",
+  "current_membership_details",
+  "current_membership_type",
+  "current_membership_start",
+  "current_membership_end",
+  "column_break_31",
   "membership_status",
-  "membership_special_status_reason",
-  "column_break_thhe",
-  "membership",
-  "memb_from_date",
-  "memb_to_date",
-  "membership_history",
-  "customer_id",
-  "chapter_info_section",
-  "chapter_membership",
-  "financial_data_section",
-  "bank_account_number",
-  "payment_method",
-  "incasso_mandate_id",
-  "mandate_granted_on",
-  "financial_history_tab",
-  "address",
-  "subscription_id",
-  "address_contacts",
-  "address_html",
-  "customer_name",
-  "crm_lead_sheet",
-  "volunteer_history_tab",
-  "volunteer_details_section",
-  "volunteer_name",
-  "skills",
-  "history",
-  "email_account",
-  "start_date"
+  "time_remaining",
+  "custom_fields_section",
+  "custom_field_1",
+  "custom_field_2",
+  "column_break_37",
+  "custom_field_3",
+  "custom_field_4",
+  "notes_section",
+  "notes"
  ],
  "fields": [
   {
-   "fieldname": "personalia",
+   "fieldname": "member_details_section",
    "fieldtype": "Section Break",
-   "label": "Personal details"
+   "label": "Member Details"
   },
   {
-   "fieldname": "naming_series",
-   "fieldtype": "Data",
-   "label": "Internal membership ID",
-   "unique": 1
+   "fieldname": "salutation",
+   "fieldtype": "Select",
+   "label": "Salutation",
+   "options": "Mr\nMs\nMrs\nDr\nProf"
   },
   {
    "fieldname": "first_name",
    "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "First name",
+   "label": "First Name",
    "reqd": 1
   },
   {
-   "fieldname": "tussenvoegsel",
+   "fieldname": "middle_name",
    "fieldtype": "Data",
-   "label": "tussenvoegsel"
+   "label": "Middle Name"
   },
   {
    "fieldname": "last_name",
    "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Last name",
+   "label": "Last Name",
    "reqd": 1
   },
   {
-   "fieldname": "member_name",
+   "fieldname": "full_name",
    "fieldtype": "Data",
-   "label": "Full name",
-   "read_only": 1
+   "label": "Full Name",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "gender",
+   "fieldtype": "Select",
+   "label": "Gender",
+   "options": "Male\nFemale\nOther\nPrefer not to say"
   },
   {
    "fieldname": "birth_date",
    "fieldtype": "Date",
-   "label": "Birth date"
+   "label": "Birth Date"
   },
   {
-   "fieldname": "preferred_pronouns",
-   "fieldtype": "Select",
-   "label": "Preferred pronouns",
-   "options": "He/Him\nShe/Her\nThey/Them\nOther"
+   "fieldname": "column_break_8",
+   "fieldtype": "Column Break"
   },
   {
-   "fieldname": "contactgegevens_section",
-   "fieldtype": "Section Break",
-   "label": "Contactgegevens"
-  },
-  {
-   "fieldname": "address",
+   "fieldname": "email",
    "fieldtype": "Data",
+   "label": "Email",
+   "options": "Email"
+  },
+  {
+   "fieldname": "mobile_no",
+   "fieldtype": "Data",
+   "label": "Mobile No",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "phone",
+   "fieldtype": "Data",
+   "label": "Phone",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "label": "Image"
+  },
+  {
+   "default": "Active",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Active\nInactive\nSuspended\nDeceased"
+  },
+  {
+   "fieldname": "address_section",
+   "fieldtype": "Section Break",
    "label": "Address"
   },
   {
-   "fieldname": "telephone_number",
+   "fieldname": "address_line1",
    "fieldtype": "Data",
-   "label": "Telephone number"
+   "label": "Address Line 1"
   },
   {
-   "fieldname": "membership_details_tab",
-   "fieldtype": "Tab Break",
-   "label": "Membership details"
+   "fieldname": "address_line2",
+   "fieldtype": "Data",
+   "label": "Address Line 2"
   },
   {
-   "fieldname": "membership_information_section",
-   "fieldtype": "Section Break",
-   "label": "Membership information"
+   "fieldname": "city",
+   "fieldtype": "Data",
+   "label": "City"
   },
   {
-   "fieldname": "membership_type",
+   "fieldname": "state",
+   "fieldtype": "Data",
+   "label": "State/Province"
+  },
+  {
+   "fieldname": "postal_code",
+   "fieldtype": "Data",
+   "label": "Postal Code"
+  },
+  {
+   "fieldname": "country",
    "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Membership Type",
-   "options": "Membership Type",
-   "reqd": 1
+   "label": "Country",
+   "options": "Country"
+  },
+  {
+   "fieldname": "column_break_19",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "latitude",
+   "fieldtype": "Float",
+   "label": "Latitude"
+  },
+  {
+   "fieldname": "longitude",
+   "fieldtype": "Float",
+   "label": "Longitude"
+  },
+  {
+   "fieldname": "erpnext_integration_section",
+   "fieldtype": "Section Break",
+   "label": "ERPNext Integration"
   },
   {
    "fieldname": "customer",
    "fieldtype": "Link",
-   "label": "CRM entry",
+   "label": "Customer",
    "options": "Customer"
   },
   {
-   "fetch_from": "member_postal_address.email_id",
-   "fieldname": "email_id",
-   "fieldtype": "Data",
-   "label": "Email Address",
-   "read_only": 1
+   "fieldname": "create_customer_from_member",
+   "fieldtype": "Button",
+   "label": "Create Customer"
   },
   {
-   "fieldname": "subscription_id",
-   "fieldtype": "Data",
-   "label": "Subscription ID",
-   "read_only": 1
-  },
-  {
-   "fieldname": "customer_id",
-   "fieldtype": "Data",
-   "label": "Customer ID"
-  },
-  {
-   "depends_on": "eval:!doc.__islocal;",
-   "fieldname": "address_contacts",
-   "fieldtype": "Section Break",
-   "label": "Address and Contact",
-   "options": "fa fa-map-marker"
-  },
-  {
-   "fieldname": "address_html",
-   "fieldtype": "HTML",
-   "label": "Address HTML"
-  },
-  {
-   "fetch_from": "customer.customer_name",
-   "fieldname": "customer_name",
-   "fieldtype": "Data",
-   "label": "Customer Name",
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_thhe",
+   "fieldname": "column_break_24",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "financial_history_tab",
-   "fieldtype": "Tab Break",
-   "label": "Financial history"
-  },
-  {
-   "fieldname": "column_break_qqif",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "crm_lead_sheet",
-   "fieldtype": "Data",
-   "label": "CRM lead sheet"
-  },
-  {
-   "fieldname": "membership_id",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Membership ID",
-   "read_only_depends_on": "eval:!doc.__islocal",
-   "unique": 1
-  },
-  {
-   "default": "Active",
-   "fieldname": "membership_status",
-   "fieldtype": "Select",
-   "label": "Membership status",
-   "options": "Active\nExpired\nCancelled\nSuspended\nExpelled"
-  },
-  {
-   "fieldname": "financial_data_section",
-   "fieldtype": "Section Break",
-   "label": "Financial data"
-  },
-  {
-   "fieldname": "bank_account_number",
-   "fieldtype": "Data",
-   "label": "Bank account number",
-   "reqd": 1
-  },
-  {
-   "fieldname": "incasso_mandate_id",
-   "fieldtype": "Data",
-   "label": "Mandate ID"
-  },
-  {
-   "fieldname": "mandate_granted_on",
-   "fieldtype": "Date",
-   "label": "Mandate granted on"
-  },
-  {
-   "fieldname": "membership_special_status_reason",
-   "fieldtype": "Small Text",
-   "label": "Membership notes"
-  },
-  {
-   "fieldname": "membership_history",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Membership history"
-  },
-  {
-   "fieldname": "payment_method",
-   "fieldtype": "Select",
-   "label": "Payment method",
-   "options": "automated payment\nmanual payment\nother"
-  },
-  {
-   "fieldname": "membership",
+   "fieldname": "user",
    "fieldtype": "Link",
-   "label": "Membership",
-   "options": "Membership"
-  },
-  {
-   "fetch_from": "membership.from_date",
-   "fieldname": "memb_from_date",
-   "fieldtype": "Date",
-   "label": "Membership Start date",
-   "read_only": 1
-  },
-  {
-   "fetch_from": "membership.to_date",
-   "fieldname": "memb_to_date",
-   "fieldtype": "Date",
-   "label": "Membership End date",
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_webu",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "volunteer_history_tab",
-   "fieldtype": "Tab Break",
-   "label": "Volunteer history"
-  },
-  {
-   "fieldname": "volunteer_details_section",
-   "fieldtype": "Section Break",
-   "label": "Volunteer details"
-  },
-  {
-   "fetch_from": "volunteer_account.volunteer_name",
-   "fieldname": "volunteer_name",
-   "fieldtype": "Link",
-   "label": "Volunteer account",
-   "options": "Volunteer"
-  },
-  {
-   "fieldname": "skills",
-   "fieldtype": "Link",
-   "label": "Skills",
-   "options": "Volunteer Skill"
-  },
-  {
-   "fieldname": "history",
-   "fieldtype": "Data",
-   "label": "History",
-   "read_only": 1
-  },
-  {
-   "fetch_from": "volunteer_name.email",
-   "fieldname": "email_account",
-   "fieldtype": "Data",
-   "label": "Email account",
-   "read_only": 1
-  },
-  {
-   "fieldname": "start_date",
-   "fieldtype": "Date",
-   "label": "Start date",
-   "read_only": 1
-  },
-  {
-   "fieldname": "member_postal_address",
-   "fieldtype": "Link",
-   "label": "Primary address",
-   "options": "Address"
-  },
-  {
-   "fieldname": "age",
-   "fieldtype": "Int",
-   "label": "Age"
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "user_details_section",
-   "fieldtype": "Section Break",
-   "label": "User details"
-  },
-  {
-   "fieldname": "user_id",
-   "fieldtype": "Link",
-   "ignore_user_permissions": 1,
-   "label": "User ID",
+   "label": "User",
    "options": "User"
   },
   {
-   "fieldname": "virtual_name",
-   "fieldtype": "Data",
-   "is_virtual": 1,
-   "label": "Virtual name",
-   "options": "f\"{doc.first_name} {doc.tussenvoegsel} {doc.last_name}\""
+   "fieldname": "create_user_from_member",
+   "fieldtype": "Button",
+   "label": "Create User"
   },
   {
-   "fieldname": "chapter_info_section",
+   "fieldname": "subscription_section",
    "fieldtype": "Section Break",
-   "label": "Chapter info"
+   "label": "Membership Information"
   },
   {
-   "fieldname": "chapter_membership",
+   "fieldname": "current_membership_details",
    "fieldtype": "Link",
-   "label": "Chapter membership",
-   "options": "Chapter"
+   "label": "Current Membership",
+   "options": "Membership",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "current_membership_details.membership_type",
+   "fieldname": "current_membership_type",
+   "fieldtype": "Data",
+   "label": "Membership Type",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "current_membership_details.start_date",
+   "fieldname": "current_membership_start",
+   "fieldtype": "Date",
+   "label": "Start Date",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "current_membership_details.end_date",
+   "fieldname": "current_membership_end",
+   "fieldtype": "Date",
+   "label": "End Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_31",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fetch_from": "current_membership_details.status",
+   "fieldname": "membership_status",
+   "fieldtype": "Data",
+   "label": "Membership Status",
+   "read_only": 1
+  },
+  {
+   "fieldname": "time_remaining",
+   "fieldtype": "Data",
+   "label": "Time Remaining",
+   "read_only": 1
+  },
+  {
+   "fieldname": "custom_fields_section",
+   "fieldtype": "Section Break",
+   "label": "Additional Information"
+  },
+  {
+   "fieldname": "custom_field_1",
+   "fieldtype": "Data",
+   "label": "Custom Field 1"
+  },
+  {
+   "fieldname": "custom_field_2",
+   "fieldtype": "Data",
+   "label": "Custom Field 2"
+  },
+  {
+   "fieldname": "column_break_37",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "custom_field_3",
+   "fieldtype": "Data",
+   "label": "Custom Field 3"
+  },
+  {
+   "fieldname": "custom_field_4",
+   "fieldtype": "Data",
+   "label": "Custom Field 4"
+  },
+  {
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text Editor",
+   "label": "Notes"
   }
  ],
- "grid_page_length": 50,
- "index_web_pages_for_search": 1,
- "links": [],
- "modified": "2025-05-03 22:13:54.354128",
+ "links": [
+  {
+   "group": "Memberships",
+   "link_doctype": "Membership",
+   "link_fieldname": "member"
+  },
+  {
+   "group": "Transactions",
+   "link_doctype": "Payment Entry",
+   "link_fieldname": "party",
+   "table_fieldname": "references"
+  }
+ ],
+ "modified": "2023-01-01 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
- "naming_rule": "By \"Naming Series\" field",
  "owner": "Administrator",
  "permissions": [
   {
@@ -388,22 +336,27 @@
   },
   {
    "create": 1,
-   "delete": 1,
+   "delete": 0,
    "email": 1,
    "export": 1,
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Verenigingen Manager",
+   "role": "Membership Manager",
    "share": 1,
    "write": 1
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Membership User",
+   "share": 1
   }
  ],
- "route": "members",
- "row_format": "Dynamic",
+ "search_fields": "full_name,email,mobile_no",
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": [],
- "title_field": "member_name",
+ "title_field": "full_name",
  "track_changes": 1
 }
