@@ -62,7 +62,17 @@ doctype_js = {
 
 # Jinja
 # ----------
+# Template files to be used in your app
+jinja = {
+    "methods": [
+        "verenigingen.utils.jinja_methods"
+    ],
+    "filters": [
+        "verenigingen.utils.jinja_filters"
+    ]
+}
 
+templates_path = "templates"
 # add methods and filters to jinja environment
 # jinja = {
 #	"methods": "verenigingen.utils.jinja_methods",
