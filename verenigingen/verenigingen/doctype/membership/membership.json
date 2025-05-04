@@ -89,12 +89,12 @@
    "label": "Auto Renew"
   },
   {
-   "default": "Active",
+   "default": "New",
    "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Status",
-   "options": "Draft\nPending\nActive\nExpired\nCancelled",
+   "options": "New\nPending\nActive\nExpired\nCancelled",
    "reqd": 1
   },
   {
