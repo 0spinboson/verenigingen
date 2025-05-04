@@ -1,256 +1,163 @@
-# Copyright (c) 2017, Frappe Technologies Pvt. Ltd. and contributors
-# For license information, please see license.txt
-
-
 import frappe
 from frappe import _
-from frappe.contacts.address_and_contact import load_address_and_contact
 from frappe.model.document import Document
-from frappe.utils import cint, get_link_to_form
-from datetime import datetime
-
-from payments.utils import get_payment_gateway_controller
-
-from verenigingen.verenigingen.doctype.membership_type.membership_type import get_membership_type
+from frappe.utils import getdate, today, add_days, date_diff
 
 class Member(Document):
-
-	def before_save(self):
-		if not self.membership_id:
-			self.membership_id = self.generate_membership_id()
-
-	def generate_membership_id(self):
-		settings = frappe.get_single("Verenigingen Settings")
-		if not settings.memebrship_id_start:
-			settings.memebrship_id_start = 1000
-			frappe.msgprint("Note: 'membership_id_start' was not set in Association Settings. Using default value of 1000.")
-		if not settings.last_membership_id:
-			settings.last_membership_id = settings.membership_id_start -1
-
-		new_id = settings.last_membership_id +1
-
-		settings.last_membership_id += 1
-		settings.save()
-
-		return settings.last_membership_id
-
-	def onload(self):
-		"""Load address and contacts in `__onload`"""
-		load_address_and_contact(self)
-
-	def validate_email_type(self, email):
-		from frappe.utils import validate_email_address
-		validate_email_address(email.strip(), True)
-
-	def validate(self):
-		if self.email_id:
-			self.validate_email_type(self.email_id)
-		self.calculate_age()
-
-		try:
-			self.set_member_name()
-		except Exception as e:
-			frappe.log_error(f"Error in validate: {str(e)}", "Member Error")
-
-	def calculate_age(self):
-		"""Calculate age based on birth_date field"""
-		try:
-			if self.birth_date:
-				from datetime import datetime, date
-				today = date.today()
-				if isinstance(self.birth_date, str):
-					born = datetime.strptime(self.birth_date, '%Y-%m-%d').date()
-				else:
-					born = self.birth_date
-			# Calculate age
-				age = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
-			# Set the age field
-				self.age = age
-				frappe.log_error(f"Age calculated as: {age}", "Age Debug")
-			else:
-				self.age = None
-				frappe.log_error("No birth date, age set to None", "Age Debug")
-		except Exception as e:
-			frappe.log_error(f"Error calculating age: {str(e)}", "Member Error")
-
-	def set_member_name(self):
-		try:
-
-			parts = []
-
-			if self.first_name:
-				parts.append(self.first_name)
-
-			if self.tussenvoegsel:
-				parts.append(self.tussenvoegsel)
-
-			if self.last_name:
-				parts.append(self.last_name)
-
-			self.member_name = " ".join(parts).strip()
-
-		except Exception as e:
-			frappe.log_error(f"Error in set_member_name: {str(e)}", "Member Error")
-
-	def setup_subscription(self):
-		verenigingen_settings = frappe.get_doc('Verenigingen Settings')
-
-		if not verenigingen_settings.enable_razorpay_for_memberships:
-			frappe.throw(_('Please check Enable Razorpay for Memberships in {0} to setup subscription')).format(
-				get_link_to_form('Verenigingen Settings', 'Verenigingen Settings'))
-
-		controller = get_payment_gateway_controller("Razorpay")
-		settings = controller.get_settings({})
-
-		plan_id = frappe.get_value("Membership Type", self.membership_type, "razorpay_plan_id")
-
-		if not plan_id:
-			frappe.throw(_("Please setup Razorpay Plan ID"))
-
-		subscription_details = {
-			"plan_id": plan_id,
-			"billing_frequency": cint(verenigingen_settings.billing_frequency),
-			"customer_notify": 1
-		}
-
-		args = {
-			'subscription_details': subscription_details
-		}
-
-		subscription = controller.setup_subscription(settings, **args)
-
-		return subscription
-
-	@frappe.whitelist()
-	def make_customer_and_link(self):
-		if self.customer:
-			frappe.msgprint(_("A customer is already linked to this Member"))
-
-		customer = create_customer(frappe._dict({
-			'fullname': self.member_name,
-			'email': self.email_id,
-			'phone': None
-		}))
-
-		self.customer = customer
-		self.save()
-		frappe.msgprint(_("Customer {0} has been created succesfully.").format(self.customer))
-
-
-def get_or_create_member(user_details):
-	member_list = frappe.get_all("Member", filters={'email': user_details.email, 'membership_type': user_details.plan_id})
-	if member_list and member_list[0]:
-		return member_list[0]['name']
-	else:
-		return create_member(user_details)
-
-def create_member(user_details):
-	user_details = frappe._dict(user_details)
-	member = frappe.new_doc("Member")
-	member.update({
-		"member_name": user_details.fullname,
-		"email_id": user_details.email,
-		"pan_number": user_details.pan or None,
-		"membership_type": user_details.plan_id,
-		"customer_id": user_details.customer_id or None,
-		"subscription_id": user_details.subscription_id or None,
-		"subscription_status": user_details.subscription_status or ""
-	})
-
-	member.insert(ignore_permissions=True)
-	member.customer = create_customer(user_details, member.name)
-	member.save(ignore_permissions=True)
-
-	return member
-
-def create_customer(user_details, member=None):
-	customer = frappe.new_doc("Customer")
-	customer.customer_name = user_details.fullname
-	customer.customer_type = "Individual"
-	customer.customer_group = frappe.db.get_single_value("Selling Settings", "customer_group")
-	customer.territory = frappe.db.get_single_value("Selling Settings", "territory")
-	customer.flags.ignore_mandatory = True
-	customer.insert(ignore_permissions=True)
-
-	try:
-		frappe.db.savepoint("contact_creation")
-		contact = frappe.new_doc("Contact")
-		contact.first_name = user_details.fullname
-		if user_details.mobile:
-			contact.add_phone(user_details.mobile, is_primary_phone=1, is_primary_mobile_no=1)
-		if user_details.email:
-			contact.add_email(user_details.email, is_primary=1)
-		contact.insert(ignore_permissions=True)
-
-		contact.append("links", {
-			"link_doctype": "Customer",
-			"link_name": customer.name
-		})
-
-		if member:
-			contact.append("links", {
-				"link_doctype": "Member",
-				"link_name": member
-			})
-
-		contact.save(ignore_permissions=True)
-
-	except frappe.DuplicateEntryError:
-		return customer.name
-
-	except Exception as e:
-		frappe.db.rollback(save_point="contact_creation")
-		frappe.log_error(frappe.get_traceback(), _("Contact Creation Failed"))
-		pass
-
-	return customer.name
-
-@frappe.whitelist(allow_guest=True)
-def create_member_subscription_order(user_details):
-	"""Create Member subscription and order for payment
-
-	Args:
-		user_details (TYPE): Description
-
-	Returns:
-		Dictionary: Dictionary with subscription details
-		{
-			'subscription_details': {
-										'plan_id': 'plan_EXwyxDYDCj3X4v',
-										'billing_frequency': 24,
-										'customer_notify': 1
-									},
-			'subscription_id': 'sub_EZycCvXFvqnC6p'
-		}
-	"""
-
-	user_details = frappe._dict(user_details)
-	member = get_or_create_member(user_details)
-
-	subscription = member.setup_subscription()
-
-	member.subscription_id = subscription.get('subscription_id')
-	member.save(ignore_permissions=True)
-
-	return subscription
-
-@frappe.whitelist()
-def register_member(fullname, email, rzpay_plan_id, subscription_id, pan=None, mobile=None):
-	plan = get_membership_type(rzpay_plan_id)
-	if not plan:
-		raise frappe.DoesNotExistError
-
-	member = frappe.db.exists("Member", {'email': email, 'subscription_id': subscription_id })
-	if member:
-		return member
-	else:
-		member = create_member(dict(
-			fullname=fullname,
-			email=email,
-			plan_id=plan,
-			subscription_id=subscription_id,
-			pan=pan,
-			mobile=mobile
-		))
-
-		return member.name
+    def validate(self):
+        self.validate_name()
+        self.update_full_name()
+        self.update_membership_status()
+        
+    def validate_name(self):
+        # Validate that name fields don't contain special characters
+        for field in ['first_name', 'middle_name', 'last_name']:
+            if not hasattr(self, field) or not getattr(self, field):
+                continue
+            if not getattr(self, field).isalnum() and not all(c.isalnum() or c.isspace() for c in getattr(self, field)):
+                frappe.throw(_("{0} name should not contain special characters")
+                    .format(field.replace('_', ' ').title()))
+                    
+    def update_full_name(self):
+        # Update the full name based on first, middle and last name
+        full_name = " ".join(filter(None, [self.first_name, self.middle_name, self.last_name]))
+        if self.full_name != full_name:
+            self.full_name = full_name
+            
+    def update_membership_status(self):
+        # Update the membership status section
+        active_membership = self.get_active_membership()
+        
+        if active_membership:
+            self.current_membership_details = active_membership.name
+            
+            if active_membership.end_date:
+                # Calculate time remaining until end date
+                days_left = date_diff(active_membership.end_date, getdate(today()))
+                if days_left < 0:
+                    self.time_remaining = _("Expired")
+                elif days_left == 0:
+                    self.time_remaining = _("Expires today")
+                else:
+                    # Format as days/months/years depending on length
+                    if days_left < 30:
+                        self.time_remaining = _("{0} days").format(days_left)
+                    elif days_left < 365:
+                        months = int(days_left / 30)
+                        self.time_remaining = _("{0} months").format(months)
+                    else:
+                        years = round(days_left / 365, 1)
+                        self.time_remaining = _("{0} years").format(years)
+            else:
+                # Lifetime membership
+                self.time_remaining = _("Lifetime")
+        else:
+            self.current_membership_details = None
+            self.current_membership_type = None
+            self.current_membership_start = None
+            self.current_membership_end = None
+            self.membership_status = None
+            self.time_remaining = None
+            
+    def get_active_membership(self):
+        """Get currently active membership for this member"""
+        memberships = frappe.get_all(
+            "Membership",
+            filters={
+                "member": self.name,
+                "status": "Active",
+                "docstatus": 1
+            },
+            fields=["name", "membership_type", "start_date", "end_date", "status"],
+            order_by="start_date desc"
+        )
+        
+        if memberships:
+            return frappe.get_doc("Membership", memberships[0].name)
+            
+        return None
+        
+    def on_trash(self):
+        # Check if member has any active memberships
+        active_memberships = frappe.get_all("Membership", 
+            filters={"member": self.name, "docstatus": 1, "status": ["!=", "Cancelled"]})
+        
+        if active_memberships:
+            frappe.throw(_("Cannot delete member with active memberships. Please cancel all memberships first."))
+            
+    def create_customer(self):
+        """Create a customer for this member in ERPNext"""
+        if self.customer:
+            frappe.msgprint(_("Customer {0} already exists for this member").format(self.customer))
+            return self.customer
+            
+        # Check if customer with same email already exists
+        if self.email:
+            existing_customer = frappe.db.get_value("Customer", {"email_id": self.email})
+            if existing_customer:
+                self.customer = existing_customer
+                self.save()
+                frappe.msgprint(_("Linked to existing customer {0}").format(existing_customer))
+                return existing_customer
+                
+        # Create new customer
+        customer = frappe.new_doc("Customer")
+        customer.customer_name = self.full_name
+        customer.customer_type = "Individual"
+        
+        # Set contact details
+        if self.email:
+            customer.email_id = self.email
+        if self.mobile_no:
+            customer.mobile_no = self.mobile_no
+        if self.phone:
+            customer.phone = self.phone
+            
+        # Save customer
+        customer.flags.ignore_mandatory = True
+        customer.insert(ignore_permissions=True)
+        
+        # Link customer to member
+        self.customer = customer.name
+        self.save()
+        
+        frappe.msgprint(_("Customer {0} created successfully").format(customer.name))
+        return customer.name
+        
+    def create_user(self):
+        """Create a user account for this member"""
+        if self.user:
+            frappe.msgprint(_("User {0} already exists for this member").format(self.user))
+            return self.user
+            
+        if not self.email:
+            frappe.throw(_("Email is required to create a user"))
+            
+        # Check if user already exists
+        if frappe.db.exists("User", self.email):
+            user = frappe.get_doc("User", self.email)
+            self.user = user.name
+            self.save()
+            frappe.msgprint(_("Linked to existing user {0}").format(user.name))
+            return user.name
+            
+        # Create new user
+        user = frappe.new_doc("User")
+        user.email = self.email
+        user.first_name = self.first_name
+        user.last_name = self.last_name
+        user.send_welcome_email = 1
+        user.user_type = "Website User"
+        
+        # Add role for accessing member portal
+        user.add_roles("Member")
+        
+        user.flags.ignore_permissions = True
+        user.insert()
+        
+        # Link user to member
+        self.user = user.name
+        self.save()
+        
+        frappe.msgprint(_("User {0} created successfully").format(user.name))
+        return user.name
