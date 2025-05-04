@@ -1,38 +1,78 @@
 {
- "actions": [],
- "autoname": "Assoc-Mem-.YYYY.-.#####",
- "creation": "2017-09-11 11:39:18.492184",
+ "autoname": "format:MEMB-{YY}-{MM}-{####}",
+ "creation": "2023-01-01 00:00:00.000000",
  "doctype": "DocType",
- "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "member_section",
   "member",
   "member_name",
+  "email",
+  "mobile_no",
+  "column_break_5",
   "membership_type",
-  "column_break_3",
-  "company",
-  "membership_status",
-  "membership_validity_section",
-  "from_date",
-  "to_date",
-  "column_break_8",
-  "member_since_date",
-  "payment_details",
-  "currency",
-  "amount",
-  "column_break_16",
-  "invoice",
+  "auto_renew",
+  "status",
+  "details_section",
+  "start_date",
+  "end_date",
+  "column_break_11",
+  "cancellation_date",
+  "cancelation_reason",
   "payment_details_section",
-  "subscription_id",
-  "column_break_19",
-  "payment_id"
+  "fee_amount",
+  "currency",
+  "subscription",
+  "column_break_17",
+  "payment_status",
+  "paid_amount",
+  "payment_date",
+  "payment_method",
+  "erpnext_integration_section",
+  "create_subscription",
+  "subscription_plan",
+  "column_break_24",
+  "view_subscription",
+  "amended_from"
  ],
  "fields": [
   {
+   "fieldname": "member_section",
+   "fieldtype": "Section Break",
+   "label": "Member"
+  },
+  {
    "fieldname": "member",
    "fieldtype": "Link",
+   "in_list_view": 1,
    "label": "Member",
-   "options": "Member"
+   "options": "Member",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "member.full_name",
+   "fieldname": "member_name",
+   "fieldtype": "Data",
+   "label": "Member Name",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "member.email",
+   "fieldname": "email",
+   "fieldtype": "Data",
+   "label": "Email",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "member.mobile_no",
+   "fieldname": "mobile_no",
+   "fieldtype": "Data",
+   "label": "Mobile No",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_5",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "membership_type",
@@ -43,60 +83,52 @@
    "reqd": 1
   },
   {
-   "fieldname": "column_break_3",
-   "fieldtype": "Column Break"
+   "default": "0",
+   "fieldname": "auto_renew",
+   "fieldtype": "Check",
+   "label": "Auto Renew"
   },
   {
-   "fieldname": "membership_status",
+   "default": "Active",
+   "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Membership Status",
-   "options": "New\nCurrent\nExpired\nPending\nCancelled"
+   "label": "Status",
+   "options": "Draft\nPending\nActive\nExpired\nCancelled",
+   "reqd": 1
   },
   {
-   "fieldname": "membership_validity_section",
+   "fieldname": "details_section",
    "fieldtype": "Section Break",
-   "label": "Validity"
+   "label": "Membership Period"
   },
   {
-   "fieldname": "from_date",
+   "fieldname": "start_date",
    "fieldtype": "Date",
    "in_list_view": 1,
-   "label": "From",
+   "label": "Start Date",
    "reqd": 1
   },
   {
-   "fieldname": "to_date",
+   "fieldname": "end_date",
    "fieldtype": "Date",
-   "in_list_view": 1,
-   "label": "To",
-   "reqd": 1
+   "label": "End Date"
   },
   {
-   "fieldname": "column_break_8",
+   "fieldname": "column_break_11",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "member_since_date",
+   "depends_on": "eval:doc.status=='Cancelled'",
+   "fieldname": "cancellation_date",
    "fieldtype": "Date",
-   "label": "Member Since"
+   "label": "Cancellation Date"
   },
   {
-   "fieldname": "payment_details",
-   "fieldtype": "Section Break",
-   "label": "Payment Details"
-  },
-  {
-   "fieldname": "currency",
-   "fieldtype": "Link",
-   "label": "Currency",
-   "options": "Currency"
-  },
-  {
-   "fieldname": "amount",
-   "fieldtype": "Float",
-   "label": "Amount"
+   "depends_on": "eval:doc.status=='Cancelled'",
+   "fieldname": "cancelation_reason",
+   "fieldtype": "Small Text",
+   "label": "Cancellation Reason"
   },
   {
    "fieldname": "payment_details_section",
@@ -104,54 +136,114 @@
    "label": "Payment Details"
   },
   {
-   "fieldname": "subscription_id",
-   "fieldtype": "Data",
-   "label": "Subscription ID"
+   "fetch_from": "membership_type.amount",
+   "fieldname": "fee_amount",
+   "fieldtype": "Currency",
+   "label": "Fee Amount",
+   "non_negative": 1,
+   "options": "currency"
   },
   {
-   "fieldname": "payment_id",
-   "fieldtype": "Data",
-   "label": "Payment ID"
-  },
-  {
-   "fieldname": "invoice",
+   "fetch_from": "membership_type.currency",
+   "fieldname": "currency",
    "fieldtype": "Link",
-   "label": "Invoice",
-   "options": "Sales Invoice"
+   "label": "Currency",
+   "options": "Currency"
   },
   {
-   "fetch_from": "member.member_name",
-   "fetch_if_empty": 1,
-   "fieldname": "member_name",
-   "fieldtype": "Data",
-   "label": "Member Name",
+   "fieldname": "subscription",
+   "fieldtype": "Link",
+   "label": "Subscription",
+   "options": "Subscription"
+  },
+  {
+   "fieldname": "column_break_17",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Unpaid",
+   "fieldname": "payment_status",
+   "fieldtype": "Select",
+   "label": "Payment Status",
+   "options": "Unpaid\nPaid\nOverdue\nRefunded"
+  },
+  {
+   "depends_on": "eval:doc.payment_status=='Paid' || doc.payment_status=='Refunded'",
+   "fieldname": "paid_amount",
+   "fieldtype": "Currency",
+   "label": "Paid Amount",
+   "options": "currency"
+  },
+  {
+   "depends_on": "eval:doc.payment_status=='Paid' || doc.payment_status=='Refunded'",
+   "fieldname": "payment_date",
+   "fieldtype": "Date",
+   "label": "Payment Date"
+  },
+  {
+   "depends_on": "eval:doc.payment_status=='Paid' || doc.payment_status=='Refunded'",
+   "fieldname": "payment_method",
+   "fieldtype": "Select",
+   "label": "Payment Method",
+   "options": "Bank Transfer\nDirect Debit\nCredit Card\nCash\nOther"
+  },
+  {
+   "fieldname": "erpnext_integration_section",
+   "fieldtype": "Section Break",
+   "label": "ERPNext Integration"
+  },
+  {
+   "depends_on": "eval:!doc.subscription",
+   "fieldname": "create_subscription",
+   "fieldtype": "Button",
+   "label": "Create Subscription"
+  },
+  {
+   "depends_on": "eval:!doc.subscription",
+   "fieldname": "subscription_plan",
+   "fieldtype": "Link",
+   "label": "Subscription Plan",
+   "options": "Subscription Plan"
+  },
+  {
+   "fieldname": "column_break_24",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.subscription",
+   "fieldname": "view_subscription",
+   "fieldtype": "Button",
+   "label": "View Subscription"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Membership",
+   "print_hide": 1,
    "read_only": 1
-  },
-  {
-   "fieldname": "company",
-   "fieldtype": "Link",
-   "label": "Company",
-   "options": "Company",
-   "reqd": 1
-  },
-  {
-   "fieldname": "column_break_19",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "column_break_16",
-   "fieldtype": "Column Break"
   }
  ],
- "index_web_pages_for_search": 1,
- "links": [],
- "modified": "2025-05-01 22:23:51.485464",
+ "is_submittable": 1,
+ "links": [
+  {
+   "link_doctype": "Member",
+   "link_fieldname": "name",
+   "parent_doctype": "Member",
+   "parentfield": "links",
+   "parenttype": "DocType"
+  }
+ ],
+ "modified": "2023-01-01 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Membership",
  "owner": "Administrator",
  "permissions": [
   {
+   "amend": 1,
+   "cancel": 1,
    "create": 1,
    "delete": 1,
    "email": 1,
@@ -159,29 +251,38 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Verenigingen Manager",
+   "role": "System Manager",
    "share": 1,
+   "submit": 1,
    "write": 1
   },
   {
+   "amend": 1,
+   "cancel": 1,
    "create": 1,
-   "delete": 1,
+   "delete": 0,
    "email": 1,
    "export": 1,
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Verenigingen Member",
+   "role": "Membership Manager",
    "share": 1,
+   "submit": 1,
    "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Membership User",
+   "share": 1
   }
  ],
- "restrict_to_domain": "Verenigingen",
- "row_format": "Dynamic",
- "search_fields": "member, member_name",
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": [],
  "title_field": "member_name",
  "track_changes": 1
 }
