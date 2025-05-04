@@ -2,8 +2,13 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import getdate, today, add_days, date_diff
+from frappe.contacts.address_and_contact import load_address_and_contact
 
 class Member(Document):
+    def onload(self):
+        """Load address and contacts in `__onload`"""
+        load_address_and_contact(self)
+    
     def validate(self):
         self.validate_name()
         self.update_full_name()
@@ -161,3 +166,45 @@ class Member(Document):
         
         frappe.msgprint(_("User {0} created successfully").format(user.name))
         return user.name
+        
+    def after_insert(self):
+        """Create and link address for new members if address info is provided"""
+        address_doc = self.create_address_from_data()
+        if address_doc:
+            self.address = address_doc.name
+            self.save()
+        
+    def create_address_from_data(self):
+        """Create an Address for this Member"""
+        # First check if we need to create an address
+        # We'll examine custom fields for address data in this example
+        address_data = {}
+        if hasattr(self, 'custom_field_1') and self.custom_field_1:
+            address_data["address_line1"] = self.custom_field_1
+        if hasattr(self, 'custom_field_2') and self.custom_field_2:
+            address_data["city"] = self.custom_field_2
+        if hasattr(self, 'custom_field_3') and self.custom_field_3:
+            address_data["pincode"] = self.custom_field_3
+        if hasattr(self, 'custom_field_4') and self.custom_field_4:
+            address_data["country"] = self.custom_field_4
+            
+        # If no address data provided, don't create an address
+        if not address_data:
+            return None
+            
+        address = frappe.new_doc("Address")
+        address.address_title = self.full_name
+        address.address_type = "Personal"
+        
+        # Set address fields
+        for field, value in address_data.items():
+            setattr(address, field, value)
+            
+        # Link address to member
+        address.append("links", {
+            "link_doctype": "Member",
+            "link_name": self.name
+        })
+        
+        address.insert(ignore_permissions=True)
+        return address
