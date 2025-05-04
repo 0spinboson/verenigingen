@@ -174,7 +174,55 @@ class Membership(Document):
         
         frappe.msgprint(_("Renewal Membership {0} created").format(new_membership.name))
         return new_membership.name
+
+def verify_signature(data, signature, secret_key=None):
+    """
+    Verify a signature for webhook data (for donation verification)
+    
+    Args:
+        data (dict or str): The data to verify
+        signature (str): The signature received
+        secret_key (str, optional): The secret key to use for verification. 
+                                   If not provided, will use config value.
+    
+    Returns:
+        bool: True if signature is valid, False otherwise
+    """
+    import hmac
+    import hashlib
+    import frappe
+    
+    if not secret_key:
+        # Get secret key from configuration
+        secret_key = frappe.conf.get("webhook_secret_key")
         
+        if not secret_key:
+            frappe.log_error("No webhook_secret_key found in configuration", 
+                            "Payment Signature Verification Error")
+            return False
+    
+    # Convert data to string if it's a dict
+    if isinstance(data, dict):
+        import json
+        data = json.dumps(data)
+    
+    # Convert to bytes if it's not already
+    if isinstance(data, str):
+        data = data.encode('utf-8')
+    
+    if isinstance(secret_key, str):
+        secret_key = secret_key.encode('utf-8')
+    
+    # Create signature
+    computed_signature = hmac.new(
+        secret_key,
+        data,
+        hashlib.sha256
+    ).hexdigest()
+    
+    # Compare signatures (using constant-time comparison to prevent timing attacks)
+    return hmac.compare_digest(computed_signature, signature)
+
 @frappe.whitelist()
 def create_subscription(membership_name):
     """Create a subscription from a membership"""
