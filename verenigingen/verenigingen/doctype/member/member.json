@@ -18,9 +18,13 @@
   "image",
   "status",
   "address_section",
-  "address",
+  "address_line1",
+  "address_line2",
+  "city",
+  "state",
+  "postal_code",
+  "country",
   "address_display",
-  "address_html",
   "erpnext_integration_section",
   "customer",
   "create_customer_from_member",
@@ -124,21 +128,40 @@
    "label": "Address"
   },
   {
-   "fieldname": "address",
+   "fieldname": "address_line1",
+   "fieldtype": "Data",
+   "label": "Address Line 1"
+  },
+  {
+   "fieldname": "address_line2",
+   "fieldtype": "Data",
+   "label": "Address Line 2"
+  },
+  {
+   "fieldname": "city",
+   "fieldtype": "Data",
+   "label": "City"
+  },
+  {
+   "fieldname": "state",
+   "fieldtype": "Data",
+   "label": "State/Province"
+  },
+  {
+   "fieldname": "postal_code",
+   "fieldtype": "Data",
+   "label": "Postal Code"
+  },
+  {
+   "fieldname": "country",
    "fieldtype": "Link",
-   "label": "Address",
-   "options": "Address"
+   "label": "Country",
+   "options": "Country"
   },
   {
    "fieldname": "address_display",
    "fieldtype": "Small Text",
    "label": "Address Display",
-   "read_only": 1
-  },
-  {
-   "fieldname": "address_html",
-   "fieldtype": "HTML",
-   "label": "Address HTML",
    "read_only": 1
   },
   {
@@ -273,11 +296,6 @@
    "link_doctype": "Payment Entry",
    "link_fieldname": "party",
    "table_fieldname": "references"
-  },
-  {
-   "group": "Address",
-   "link_doctype": "Address",
-   "link_fieldname": "links"
   }
  ],
  "modified": "2023-01-01 00:00:00.000000",
