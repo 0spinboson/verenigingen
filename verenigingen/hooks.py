@@ -3,8 +3,11 @@
 # Scheduler Events
 scheduler_events = {
     "daily": [
+        # Process expired memberships
         "verenigingen.verenigingen.doctype.membership.scheduler.process_expired_memberships",
+        # Send renewal reminders to members
         "verenigingen.verenigingen.doctype.membership.scheduler.send_renewal_reminders",
+        # Process auto renewals for memberships
         "verenigingen.verenigingen.doctype.membership.scheduler.process_auto_renewals"
     ],
     "monthly": [
