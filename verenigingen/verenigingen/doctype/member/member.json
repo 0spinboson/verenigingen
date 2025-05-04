@@ -5,12 +5,11 @@
  "engine": "InnoDB",
  "field_order": [
   "member_details_section",
-  "salutation",
   "first_name",
   "middle_name",
   "last_name",
   "full_name",
-  "gender",
+  "pronouns",
   "birth_date",
   "column_break_8",
   "email",
@@ -19,15 +18,9 @@
   "image",
   "status",
   "address_section",
-  "address_line1",
-  "address_line2",
-  "city",
-  "state",
-  "postal_code",
-  "country",
-  "column_break_19",
-  "latitude",
-  "longitude",
+  "address",
+  "address_display",
+  "address_html",
   "erpnext_integration_section",
   "customer",
   "create_customer_from_member",
@@ -58,12 +51,6 @@
    "label": "Member Details"
   },
   {
-   "fieldname": "salutation",
-   "fieldtype": "Select",
-   "label": "Salutation",
-   "options": "Mr\nMs\nMrs\nDr\nProf"
-  },
-  {
    "fieldname": "first_name",
    "fieldtype": "Data",
    "label": "First Name",
@@ -88,10 +75,9 @@
    "unique": 1
   },
   {
-   "fieldname": "gender",
-   "fieldtype": "Select",
-   "label": "Gender",
-   "options": "Male\nFemale\nOther\nPrefer not to say"
+   "fieldname": "pronouns",
+   "fieldtype": "Data",
+   "label": "Pronouns"
   },
   {
    "fieldname": "birth_date",
@@ -138,49 +124,22 @@
    "label": "Address"
   },
   {
-   "fieldname": "address_line1",
-   "fieldtype": "Data",
-   "label": "Address Line 1"
-  },
-  {
-   "fieldname": "address_line2",
-   "fieldtype": "Data",
-   "label": "Address Line 2"
-  },
-  {
-   "fieldname": "city",
-   "fieldtype": "Data",
-   "label": "City"
-  },
-  {
-   "fieldname": "state",
-   "fieldtype": "Data",
-   "label": "State/Province"
-  },
-  {
-   "fieldname": "postal_code",
-   "fieldtype": "Data",
-   "label": "Postal Code"
-  },
-  {
-   "fieldname": "country",
+   "fieldname": "address",
    "fieldtype": "Link",
-   "label": "Country",
-   "options": "Country"
+   "label": "Address",
+   "options": "Address"
   },
   {
-   "fieldname": "column_break_19",
-   "fieldtype": "Column Break"
+   "fieldname": "address_display",
+   "fieldtype": "Small Text",
+   "label": "Address Display",
+   "read_only": 1
   },
   {
-   "fieldname": "latitude",
-   "fieldtype": "Float",
-   "label": "Latitude"
-  },
-  {
-   "fieldname": "longitude",
-   "fieldtype": "Float",
-   "label": "Longitude"
+   "fieldname": "address_html",
+   "fieldtype": "HTML",
+   "label": "Address HTML",
+   "read_only": 1
   },
   {
    "fieldname": "erpnext_integration_section",
@@ -314,6 +273,11 @@
    "link_doctype": "Payment Entry",
    "link_fieldname": "party",
    "table_fieldname": "references"
+  },
+  {
+   "group": "Address",
+   "link_doctype": "Address",
+   "link_fieldname": "links"
   }
  ],
  "modified": "2023-01-01 00:00:00.000000",
