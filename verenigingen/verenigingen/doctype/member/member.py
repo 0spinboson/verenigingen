@@ -21,16 +21,18 @@ class Member(Document):
 
 	def generate_membership_id(self):
 		settings = frappe.get_single("Verenigingen Settings")
-
+		if not settings.memebrship_id_start:
+			settings.memebrship_id_start = 1000
+			frappe.msgprint("Note: 'membership_id_start' was not set in Association Settings. Using default value of 1000.")
 		if not settings.last_membership_id:
 			settings.last_membership_id = settings.membership_id_start -1
 
 		new_id = settings.last_membership_id +1
 
-		settings.last_membership_id = new_id
+		settings.last_membership_id += 1
 		settings.save()
 
-		return str(new_id)
+		return settings.last_membership_id
 
 	def onload(self):
 		"""Load address and contacts in `__onload`"""
