@@ -3,13 +3,13 @@ from __future__ import unicode_literals
 from . import __version__ as app_version
 
 app_name = "verenigingen"
-app_title = "Verenigingen"  # This line is required
-app_publisher = "Foppe de Haan"
+app_title = "Verenigingen"
+app_publisher = "Your Name"
 app_description = "Association Management"
 app_icon = "octicon octicon-organization"
 app_color = "blue"
-app_email = "foppe@veganisme.org"
-app_license = "AGPL-v3"
+app_email = "your-email@example.com"
+app_license = "MIT"
 
 # Includes in <head>
 # ------------------
@@ -62,7 +62,8 @@ doctype_js = {
 
 # Jinja
 # ----------
-# Template files to be used in your app
+
+# add methods and filters to jinja environment
 jinja = {
     "methods": [
         "verenigingen.utils.jinja_methods"
@@ -71,13 +72,6 @@ jinja = {
         "verenigingen.utils.jinja_filters"
     ]
 }
-
-templates_path = "templates"
-# add methods and filters to jinja environment
-# jinja = {
-#	"methods": "verenigingen.utils.jinja_methods",
-#	"filters": "verenigingen.utils.jinja_filters"
-# }
 
 # Installation
 # ------------
@@ -135,9 +129,6 @@ scheduler_events = {
         "verenigingen.verenigingen.doctype.membership.scheduler.process_expired_memberships",
         "verenigingen.verenigingen.doctype.membership.scheduler.send_renewal_reminders",
         "verenigingen.verenigingen.doctype.membership.scheduler.process_auto_renewals"
-    ],
-    "monthly": [
-        # You can add monthly batch processing for direct debit here
     ]
 }
 
@@ -209,24 +200,5 @@ fixtures = [
         "filters": [
             ["name", "=", "Membership Workflow"]
         ]
-    }
-]
-
-# Define custom roles
-role_permissions = [
-    {
-        "doctype": "Role",
-        "role_name": "Membership Manager",
-        "modules": ["Verenigingen"]
-    },
-    {
-        "doctype": "Role",
-        "role_name": "Membership User",
-        "modules": ["Verenigingen"]
-    },
-    {
-        "doctype": "Role",
-        "role_name": "Member",
-        "desk_access": 0
     }
 ]
