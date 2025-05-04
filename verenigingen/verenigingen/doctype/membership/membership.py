@@ -53,7 +53,7 @@ class Membership(Document):
                 
     def set_status(self):
         if self.docstatus == 0:
-            self.status = "Draft"
+            self.status = "New"
         elif self.docstatus == 2:
             self.status = "Cancelled"
         elif self.cancellation_date:
