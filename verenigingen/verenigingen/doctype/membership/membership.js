@@ -3,7 +3,7 @@ frappe.ui.form.on('Membership', {
         // Hide irrelevant fields in different states
         frm.trigger('toggle_fields');
         
-        // Add buttons for action
+        // Add custom buttons after document is submitted
         if (frm.doc.docstatus === 1) {
             // Add button to renew membership
             if (frm.doc.status === "Active" || frm.doc.status === "Expired") {
@@ -88,6 +88,59 @@ frappe.ui.form.on('Membership', {
                             }
                         });
                     }
+                }, __('Actions'));
+            }
+            
+            // Add button to view payment history if subscription exists
+            if (frm.doc.subscription) {
+                frm.add_custom_button(__('View Payment History'), function() {
+                    // Call method to get payment history
+                    frappe.call({
+                        method: 'verenigingen.verenigingen.doctype.membership.enhanced_subscription.get_membership_payment_history',
+                        args: {
+                            'membership_doc': frm.doc
+                        },
+                        callback: function(r) {
+                            if (r.message && r.message.length) {
+                                // Display payment history in a dialog
+                                show_payment_history_dialog(r.message);
+                            } else {
+                                frappe.msgprint(__('No payment history found for this membership.'));
+                            }
+                        }
+                    });
+                }, __('View'));
+                
+                // Add button to sync with subscription
+                frm.add_custom_button(__('Sync Payment Status'), function() {
+                    frappe.call({
+                        method: 'verenigingen.verenigingen.doctype.membership.enhanced_subscription.sync_membership_with_subscription',
+                        args: {
+                            'membership_doc': frm.doc
+                        },
+                        callback: function(r) {
+                            frm.refresh();
+                            frappe.msgprint(__('Payment status synchronized with subscription.'));
+                        }
+                    });
+                }, __('Actions'));
+            }
+            
+            // Add button to add to direct debit batch if payment method is Direct Debit
+            if (frm.doc.payment_method === 'Direct Debit' && frm.doc.payment_status === 'Unpaid') {
+                frm.add_custom_button(__('Add to Direct Debit Batch'), function() {
+                    // Call method to add to direct debit batch
+                    frappe.call({
+                        method: 'verenigingen.verenigingen.doctype.membership.enhanced_subscription.add_to_direct_debit_batch',
+                        args: {
+                            'membership_name': frm.doc.name
+                        },
+                        callback: function(r) {
+                            if (r.message) {
+                                frappe.set_route('Form', 'Direct Debit Batch', r.message);
+                            }
+                        }
+                    });
                 }, __('Actions'));
             }
         }
@@ -217,3 +270,69 @@ frappe.ui.form.on('Membership', {
         });
     }
 });
+
+// Function to display payment history in a dialog
+function show_payment_history_dialog(payment_history) {
+    // Format the payment history data for display
+    let html = '<div class="payment-history">';
+    
+    // Add table for invoices
+    html += '<table class="table table-bordered table-condensed">';
+    html += '<thead><tr>';
+    html += '<th>' + __("Invoice") + '</th>';
+    html += '<th>' + __("Date") + '</th>';
+    html += '<th>' + __("Amount") + '</th>';
+    html += '<th>' + __("Status") + '</th>';
+    html += '</tr></thead>';
+    html += '<tbody>';
+    
+    payment_history.forEach(function(ph) {
+        html += '<tr>';
+        html += '<td><a href="/app/sales-invoice/' + ph.invoice + '">' + ph.invoice + '</a></td>';
+        html += '<td>' + frappe.datetime.str_to_user(ph.date) + '</td>';
+        html += '<td>' + format_currency(ph.amount) + '</td>';
+        html += '<td>' + get_status_indicator(ph.status) + '</td>';
+        html += '</tr>';
+        
+        // Add payment entries if any
+        if (ph.payments && ph.payments.length) {
+            ph.payments.forEach(function(payment) {
+                html += '<tr class="payment-entry">';
+                html += '<td colspan="2" class="text-right">' + __("Payment Entry") + ': ';
+                html += '<a href="/app/payment-entry/' + payment.payment_entry + '">' + payment.payment_entry + '</a></td>';
+                html += '<td>' + format_currency(payment.amount) + '</td>';
+                html += '<td>' + payment.mode + '</td>';
+                html += '</tr>';
+            });
+        }
+    });
+    
+    html += '</tbody></table>';
+    html += '</div>';
+    
+    // Show dialog with payment history
+    let d = new frappe.ui.Dialog({
+        title: __('Payment History'),
+        fields: [{
+            fieldtype: 'HTML',
+            options: html
+        }]
+    });
+    
+    d.show();
+}
+
+// Helper function to format currency
+function format_currency(value) {
+    return frappe.format(value, {fieldtype: 'Currency'});
+}
+
+// Helper function to get status indicator
+function get_status_indicator(status) {
+    let color = 'gray';
+    if (status === 'Paid') color = 'green';
+    else if (status === 'Unpaid') color = 'orange';
+    else if (status === 'Overdue') color = 'red';
+    
+    return '<span class="indicator ' + color + '">' + status + '</span>';
+}
