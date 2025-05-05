@@ -28,6 +28,8 @@
   "postal_code",
   "country",
   "address_display",
+  "primary_chapter",
+  "permission_category",
   "erpnext_integration_section",
   "customer",
   "create_customer_from_member",
@@ -57,6 +59,20 @@
    "fieldtype": "Section Break",
    "label": "Member Details"
   },
+  {
+  "fieldname": "primary_chapter",
+  "fieldtype": "Link",
+  "label": "Primary Chapter",
+  "options": "Chapter"
+  },
+  {
+  "fieldname": "permission_category",
+  "fieldtype": "Select",
+  "label": "Information Visibility",
+  "options": "Public\nBoard Only\nAdmin Only",
+  "default": "Board Only",
+  "description": "Controls who can see payment and personal information"
+  }
   {
    "fieldname": "first_name",
    "fieldtype": "Data",
