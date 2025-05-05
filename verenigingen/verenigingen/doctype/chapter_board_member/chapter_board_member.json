@@ -1,6 +1,7 @@
 {
   "creation": "2025-05-05 12:00:00.000000",
   "doctype": "DocType",
+  "module": "Verenigingen",
   "editable_grid": 1,
   "engine": "InnoDB",
   "field_order": [
