@@ -14,6 +14,7 @@ frappe.ui.form.on('Member', {
                 });
             }, __('Actions'));
         }
+        
         // Add button to view chapter if member has a primary chapter
         if (frm.doc.primary_chapter) {
             frm.add_custom_button(__('View Chapter'), function() {
@@ -53,50 +54,8 @@ frappe.ui.form.on('Member', {
                 }
             }
         });
-        // Add button to view chapter if member has a primary chapter
-        if (frm.doc.primary_chapter) {
-            frm.add_custom_button(__('View Chapter'), function() {
-                frappe.set_route('Form', 'Chapter', frm.doc.primary_chapter);
-            }, __('View'));
-        }
         
-        // Add button to change primary chapter
-        frm.add_custom_button(__('Change Primary Chapter'), function() {
-            change_primary_chapter(frm);
-        }, __('Actions'));
-        
-        // Check if user is a board member of any chapter
-        frappe.call({
-            method: 'frappe.client.get_list',
-            args: {
-                doctype: 'Chapter Board Member',
-                filters: {
-                    'member': frm.doc.name,
-                    'is_active': 1
-                },
-                fields: ['parent', 'chapter_role']
-            },
-            callback: function(r) {
-                if (r.message && r.message.length) {
-                    // Show board memberships
-                    var html = '<div class="board-memberships"><h4>Board Positions</h4><ul>';
-                    
-                    r.message.forEach(function(board) {
-                        html += '<li><strong>' + board.chapter_role + '</strong> at <a href="/app/chapter/' + 
-                                board.parent + '">' + board.parent + '</a></li>';
-                    });
-                    
-                    html += '</ul></div>';
-                    
-                    $(frm.fields_dict.board_memberships_html.wrapper).html(html);
-                }
-            }
-        });
-    },
-    primary_chapter: function(frm) {
-        // Refresh when primary chapter changes
-        frm.refresh();
-    },
+        // Add button to create user
         if (!frm.doc.user && frm.doc.email) {
             frm.add_custom_button(__('Create User'), function() {
                 frm.call({
@@ -194,6 +153,11 @@ frappe.ui.form.on('Member', {
         }, __('View'));
     },
     
+    primary_chapter: function(frm) {
+        // Refresh when primary chapter changes
+        frm.refresh();
+    },
+    
     first_name: function(frm) {
         // Automatically update full name
         frm.trigger('update_full_name');
@@ -220,6 +184,7 @@ frappe.ui.form.on('Member', {
         frm.set_value('full_name', full_name);
     }
 });
+
 // Function to change primary chapter
 function change_primary_chapter(frm) {
     frappe.call({
