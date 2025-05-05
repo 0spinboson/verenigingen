@@ -31,12 +31,26 @@ frappe.ui.form.on('Member', {
         
         // Add button to create a Volunteer
         frm.add_custom_button(__('Create Volunteer'), function() {
-            frappe.new_doc('Volunteer', {
+            // First approach: Use a different method that works more reliably
+            frappe.route_options = {
                 'volunteer_name': frm.doc.full_name,
                 'member': frm.doc.name,
                 'preferred_pronouns': frm.doc.pronouns,
                 'email': frm.doc.email || ''
-            });
+            };
+            frappe.new_doc('Volunteer');
+    
+        // Alternative approach (if the above doesn't work):
+        /*
+        frappe.model.with_doctype('Volunteer', function() {
+            var doc = frappe.model.get_new_doc('Volunteer');
+            doc.volunteer_name = frm.doc.full_name;
+            doc.member = frm.doc.name;
+            doc.preferred_pronouns = frm.doc.pronouns;
+            doc.email = frm.doc.email || '';
+            frappe.ui.form.make_quick_entry('Volunteer', null, null, doc);
+        });
+        */
         }, __('Actions'));
         
         // Add button to create a new membership
