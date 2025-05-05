@@ -2,7 +2,7 @@
  "autoname": "format:Assoc-Member-{YYYY}-{MM}-{####}",
  "title_field": "full_name",
  "search_fields": "full_name,email,mobile_no",
- "show_title_field_in_link": 1
+ "show_title_field_in_link": 1,
  "creation": "2023-01-01 00:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
