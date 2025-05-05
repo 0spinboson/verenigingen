@@ -175,6 +175,67 @@ class Membership(Document):
         frappe.msgprint(_("Renewal Membership {0} created").format(new_membership.name))
         return new_membership.name
 
+def on_membership_update(doc, method=None):
+    """
+    Handler for when a membership is updated
+    This is referenced in hooks.py > doc_events
+    """
+    if doc.docstatus == 1:  # If document is submitted
+        # Update the member document to refresh status
+        if doc.member:
+            member = frappe.get_doc("Member", doc.member)
+            member.update_membership_status()
+            member.save(ignore_permissions=True)
+
+def on_membership_submit(doc, method=None):
+    """
+    Handler for when a membership is submitted
+    This is referenced in hooks.py > doc_events
+    """
+    # The main logic is already in doc.on_submit()
+    pass
+
+def on_membership_cancel(doc, method=None):
+    """
+    Handler for when a membership is cancelled
+    This is referenced in hooks.py > doc_events
+    """
+    # The main logic is already in doc.on_cancel()
+    pass
+
+def update_membership_from_subscription(doc, method=None):
+    """
+    Handler for when a subscription is updated
+    Updates the linked membership
+    This is referenced in hooks.py > doc_events
+    """
+    # Find memberships linked to this subscription
+    memberships = frappe.get_all(
+        "Membership",
+        filters={"subscription": doc.name},
+        fields=["name"]
+    )
+    
+    if not memberships:
+        return
+        
+    for membership_data in memberships:
+        membership = frappe.get_doc("Membership", membership_data.name)
+        
+        # Update membership status based on subscription
+        if doc.status == "Active":
+            if membership.status != "Active":
+                membership.status = "Active"
+                membership.save(ignore_permissions=True)
+        elif doc.status == "Cancelled":
+            if membership.status != "Cancelled":
+                membership.status = "Cancelled"
+                membership.save(ignore_permissions=True)
+        elif doc.status == "Unpaid":
+            if membership.status != "Pending":
+                membership.status = "Pending" 
+                membership.save(ignore_permissions=True)
+
 def verify_signature(data, signature, secret_key=None):
     """
     Verify a signature for webhook data (for donation verification)
