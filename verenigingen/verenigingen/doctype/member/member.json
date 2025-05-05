@@ -85,7 +85,7 @@
   "options": "Public\nBoard Only\nAdmin Only",
   "default": "Board Only",
   "description": "Controls who can see payment and personal information"
-  }
+  },
   {
    "fieldname": "first_name",
    "fieldtype": "Data",
