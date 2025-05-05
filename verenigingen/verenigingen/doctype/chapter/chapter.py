@@ -4,6 +4,7 @@
 import frappe
 from frappe import _
 from frappe.website.website_generator import WebsiteGenerator
+from frappe.utils import getdate
 
 class Chapter(WebsiteGenerator):
     # Keep existing code
