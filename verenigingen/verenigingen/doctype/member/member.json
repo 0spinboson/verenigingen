@@ -44,6 +44,8 @@
   "column_break_31",
   "membership_status",
   "time_remaining",
+  "board_memberships_section",
+  "board_memberships_html",
   "custom_fields_section",
   "custom_field_1",
   "custom_field_2",
@@ -54,6 +56,17 @@
   "notes"
  ],
  "fields": [
+  {
+  "fieldname": "board_memberships_section",
+  "fieldtype": "Section Break",
+  "label": "Board Memberships",
+  "depends_on": "eval:doc.name"
+  },
+  {
+  "fieldname": "board_memberships_html",
+  "fieldtype": "HTML",
+  "label": "Board Memberships"
+  },
   {
    "fieldname": "member_details_section",
    "fieldtype": "Section Break",
