@@ -14,7 +14,89 @@ frappe.ui.form.on('Member', {
                 });
             }, __('Actions'));
         }
+        // Add button to view chapter if member has a primary chapter
+        if (frm.doc.primary_chapter) {
+            frm.add_custom_button(__('View Chapter'), function() {
+                frappe.set_route('Form', 'Chapter', frm.doc.primary_chapter);
+            }, __('View'));
+        }
         
+        // Add button to change primary chapter
+        frm.add_custom_button(__('Change Primary Chapter'), function() {
+            change_primary_chapter(frm);
+        }, __('Actions'));
+        
+        // Check if user is a board member of any chapter
+        frappe.call({
+            method: 'frappe.client.get_list',
+            args: {
+                doctype: 'Chapter Board Member',
+                filters: {
+                    'member': frm.doc.name,
+                    'is_active': 1
+                },
+                fields: ['parent', 'chapter_role']
+            },
+            callback: function(r) {
+                if (r.message && r.message.length) {
+                    // Show board memberships
+                    var html = '<div class="board-memberships"><h4>Board Positions</h4><ul>';
+                    
+                    r.message.forEach(function(board) {
+                        html += '<li><strong>' + board.chapter_role + '</strong> at <a href="/app/chapter/' + 
+                                board.parent + '">' + board.parent + '</a></li>';
+                    });
+                    
+                    html += '</ul></div>';
+                    
+                    $(frm.fields_dict.board_memberships_html.wrapper).html(html);
+                }
+            }
+        });
+        // Add button to view chapter if member has a primary chapter
+        if (frm.doc.primary_chapter) {
+            frm.add_custom_button(__('View Chapter'), function() {
+                frappe.set_route('Form', 'Chapter', frm.doc.primary_chapter);
+            }, __('View'));
+        }
+        
+        // Add button to change primary chapter
+        frm.add_custom_button(__('Change Primary Chapter'), function() {
+            change_primary_chapter(frm);
+        }, __('Actions'));
+        
+        // Check if user is a board member of any chapter
+        frappe.call({
+            method: 'frappe.client.get_list',
+            args: {
+                doctype: 'Chapter Board Member',
+                filters: {
+                    'member': frm.doc.name,
+                    'is_active': 1
+                },
+                fields: ['parent', 'chapter_role']
+            },
+            callback: function(r) {
+                if (r.message && r.message.length) {
+                    // Show board memberships
+                    var html = '<div class="board-memberships"><h4>Board Positions</h4><ul>';
+                    
+                    r.message.forEach(function(board) {
+                        html += '<li><strong>' + board.chapter_role + '</strong> at <a href="/app/chapter/' + 
+                                board.parent + '">' + board.parent + '</a></li>';
+                    });
+                    
+                    html += '</ul></div>';
+                    
+                    $(frm.fields_dict.board_memberships_html.wrapper).html(html);
+                }
+            }
+        });
+    },
+    primary_chapter: function(frm) {
+        // Refresh when primary chapter changes
+        frm.refresh();
+    },
         if (!frm.doc.user && frm.doc.email) {
             frm.add_custom_button(__('Create User'), function() {
                 frm.call({
@@ -138,3 +220,89 @@ frappe.ui.form.on('Member', {
         frm.set_value('full_name', full_name);
     }
 });
+// Function to change primary chapter
+function change_primary_chapter(frm) {
+    frappe.call({
+        method: 'frappe.client.get_list',
+        args: {
+            doctype: 'Chapter',
+            filters: {
+                'published': 1
+            },
+            fields: ['name']
+        },
+        callback: function(r) {
+            if (!r.message || !r.message.length) {
+                frappe.msgprint(__('No active chapters found'));
+                return;
+            }
+            
+            var chapters = r.message.map(function(c) { return c.name; });
+            
+            var d = new frappe.ui.Dialog({
+                title: __('Change Primary Chapter'),
+                fields: [
+                    {
+                        label: __('New Primary Chapter'),
+                        fieldname: 'chapter',
+                        fieldtype: 'Select',
+                        options: chapters,
+                        reqd: 1,
+                        default: frm.doc.primary_chapter
+                    },
+                    {
+                        label: __('Reason for Change'),
+                        fieldname: 'reason',
+                        fieldtype: 'Small Text'
+                    }
+                ],
+                primary_action_label: __('Update'),
+                primary_action: function() {
+                    var values = d.get_values();
+                    
+                    if (values.chapter === frm.doc.primary_chapter) {
+                        frappe.msgprint(__('No change in primary chapter'));
+                        d.hide();
+                        return;
+                    }
+                    
+                    frappe.call({
+                        method: 'frappe.client.set_value',
+                        args: {
+                            doctype: 'Member',
+                            name: frm.doc.name,
+                            fieldname: 'primary_chapter',
+                            value: values.chapter
+                        },
+                        callback: function(r) {
+                            if(!r.exc) {
+                                // Log the change if a reason was provided
+                                if (values.reason) {
+                                    frappe.call({
+                                        method: 'frappe.client.insert',
+                                        args: {
+                                            doc: {
+                                                doctype: 'Comment',
+                                                comment_type: 'Info',
+                                                reference_doctype: 'Member',
+                                                reference_name: frm.doc.name,
+                                                content: __('Changed primary chapter from {0} to {1}. Reason: {2}', 
+                                                    [frm.doc.primary_chapter, values.chapter, values.reason])
+                                            }
+                                        }
+                                    });
+                                }
+                                
+                                frappe.msgprint(__('Primary chapter updated'));
+                                frm.reload_doc();
+                                d.hide();
+                            }
+                        }
+                    });
+                }
+            });
+            
+            d.show();
+        }
+    });
+}
