@@ -37,6 +37,7 @@ doctype_js = {
     "Member": "public/js/member.js",
     "Membership": "public/js/membership.js",
     "Membership Type": "public/js/membership_type.js",
+    "Direct Debit Batch": "public/js/direct_debit_batch.js",
 }
 
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
