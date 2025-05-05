@@ -1,4 +1,3 @@
-# verenigingen/verenigingen/doctype/chapter_role/chapter_role.json
 {
   "autoname": "field:role_name",
   "creation": "2025-05-05 12:00:00.000000",
