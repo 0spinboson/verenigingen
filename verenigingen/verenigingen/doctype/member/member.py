@@ -190,3 +190,92 @@ class Member(Document):
         
         frappe.msgprint(_("User {0} created successfully").format(user.name))
         return user.name
+        
+    def get_chapters(self):
+        """Get all chapters this member belongs to"""
+        chapters = []
+        
+        # Add primary chapter
+        if self.primary_chapter:
+            chapters.append({
+                "chapter": self.primary_chapter,
+                "is_primary": 1
+            })
+        
+        # Add chapters where member is in the members list
+        member_chapters = frappe.get_all(
+            "Chapter Member", 
+            filters={"user": self.user, "enabled": 1},
+            fields=["parent as chapter"]
+        )
+        
+        for mc in member_chapters:
+            if mc.chapter != self.primary_chapter:
+                chapters.append({
+                    "chapter": mc.chapter,
+                    "is_primary": 0
+                })
+        
+        # Add chapters where member is on the board
+        board_chapters = frappe.get_all(
+            "Chapter Board Member",
+            filters={"member": self.name, "is_active": 1},
+            fields=["parent as chapter"]
+        )
+        
+        for bc in board_chapters:
+            if not any(c["chapter"] == bc.chapter for c in chapters):
+                chapters.append({
+                    "chapter": bc.chapter,
+                    "is_primary": 0,
+                    "is_board": 1
+                })
+        
+        return chapters
+
+    def is_board_member(self, chapter=None):
+        """Check if member is a board member of any chapter or a specific chapter"""
+        filters = {"member": self.name, "is_active": 1}
+        
+        if chapter:
+            filters["parent"] = chapter
+        
+        return frappe.db.exists("Chapter Board Member", filters)
+    
+    def get_board_roles(self):
+        """Get all board roles for this member"""
+        board_roles = frappe.get_all(
+            "Chapter Board Member",
+            filters={"member": self.name, "is_active": 1},
+            fields=["parent as chapter", "chapter_role as role"]
+        )
+        
+        return board_roles
+    
+    def can_view_member_payments(self, view_member):
+        """Check if this member can view another member's payment info"""
+        # System managers can view all
+        if "System Manager" in frappe.get_roles(self.user):
+            return True
+            
+        # Can always view own payments
+        if self.name == view_member:
+            return True
+        
+        # Check if member is a board member with financial permissions
+        member_obj = frappe.get_doc("Member", view_member)
+        
+        # If member has set visibility to public, anyone can view
+        if member_obj.permission_category == "Public":
+            return True
+            
+        # If set to Admin Only, only system managers can view (already checked)
+        if member_obj.permission_category == "Admin Only":
+            return False
+        
+        # For Board Only, check if this member is on board with financial permissions
+        if member_obj.primary_chapter:
+            chapter = frappe.get_doc("Chapter", member_obj.primary_chapter)
+            return chapter.can_view_member_payments(self.name)
+        
+        return False
