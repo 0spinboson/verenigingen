@@ -195,3 +195,182 @@ def get_member_bank_details(member_name):
     
     # For now, return empty dict
     return {}
+@frappe.whitelist()
+def get_unpaid_membership_invoices():
+    """
+    Get all unpaid invoices related to memberships
+    Used by Direct Debit Batch for selecting invoices
+    """
+    # Get all active memberships with subscriptions
+    memberships = frappe.get_all(
+        "Membership",
+        filters={
+            "status": ["in", ["Active", "Pending"]],
+            "payment_status": "Unpaid",
+            "subscription": ["is", "set"],
+            "payment_method": "Direct Debit"
+        },
+        fields=["name", "subscription", "member", "member_name"]
+    )
+    
+    if not memberships:
+        return []
+        
+    unpaid_invoices = []
+    
+    for membership in memberships:
+        # Get unpaid invoices from subscription
+        invoices = frappe.get_all(
+            "Subscription Invoice",
+            filters={"subscription": membership.subscription},
+            fields=["invoice"],
+            order_by="creation desc"
+        )
+        
+        for invoice_info in invoices:
+            # Check if invoice is unpaid
+            invoice = frappe.get_doc("Sales Invoice", invoice_info.invoice)
+            
+            if invoice.status in ["Unpaid", "Overdue"]:
+                # Get bank details from member
+                bank_account = ""
+                iban = ""
+                mandate_reference = ""
+                
+                # Try to get bank details from member
+                # This is a placeholder - replace with your actual implementation
+                # You could store these in custom fields or in a separate doctype
+                member_doc = frappe.get_doc("Member", membership.member)
+                
+                # Example using custom fields
+                if hasattr(member_doc, 'bank_account'):
+                    bank_account = member_doc.bank_account
+                    
+                if hasattr(member_doc, 'iban'):
+                    iban = member_doc.iban
+                    
+                if hasattr(member_doc, 'mandate_reference'):
+                    mandate_reference = member_doc.mandate_reference
+                
+                # Only add invoices with bank details
+                if iban and mandate_reference:
+                    unpaid_invoices.append({
+                        "invoice": invoice.name,
+                        "membership": membership.name,
+                        "member": membership.member,
+                        "member_name": membership.member_name,
+                        "amount": invoice.grand_total,
+                        "currency": invoice.currency,
+                        "bank_account": bank_account,
+                        "iban": iban,
+                        "mandate_reference": mandate_reference
+                    })
+    
+    return unpaid_invoices
+
+@frappe.whitelist()
+def add_to_direct_debit_batch(membership_name):
+    """
+    Add a membership to a direct debit batch
+    Creates a new batch if needed
+    """
+    membership = frappe.get_doc("Membership", membership_name)
+    
+    if not membership.subscription:
+        frappe.throw(_("Membership must have a subscription to add to direct debit batch"))
+        
+    if membership.payment_status != "Unpaid":
+        frappe.throw(_("Membership is already paid"))
+        
+    if membership.payment_method != "Direct Debit":
+        frappe.throw(_("Membership payment method must be Direct Debit"))
+        
+    # Get unpaid invoices for this membership
+    invoices = []
+    subscription_invoices = frappe.get_all(
+        "Subscription Invoice",
+        filters={"subscription": membership.subscription},
+        fields=["invoice"],
+        order_by="creation desc"
+    )
+    
+    for invoice_info in subscription_invoices:
+        invoice = frappe.get_doc("Sales Invoice", invoice_info.invoice)
+        
+        if invoice.status in ["Unpaid", "Overdue"]:
+            # Get bank details
+            # Replace with your actual implementation
+            member = frappe.get_doc("Member", membership.member)
+            bank_account = getattr(member, 'bank_account', '')
+            iban = getattr(member, 'iban', '')
+            mandate_reference = getattr(member, 'mandate_reference', '')
+            
+            if not iban or not mandate_reference:
+                frappe.throw(_("Member must have bank details to be added to direct debit batch"))
+                
+            invoices.append({
+                "invoice": invoice.name,
+                "membership": membership.name,
+                "member": membership.member,
+                "member_name": membership.member_name,
+                "amount": invoice.grand_total,
+                "currency": invoice.currency,
+                "bank_account": bank_account,
+                "iban": iban,
+                "mandate_reference": mandate_reference
+            })
+            
+    if not invoices:
+        frappe.throw(_("No unpaid invoices found for this membership"))
+        
+    # Check for existing draft batch
+    batch = None
+    existing_batches = frappe.get_all(
+        "Direct Debit Batch",
+        filters={
+            "docstatus": 0,
+            "status": "Draft"
+        },
+        order_by="creation desc",
+        limit=1
+    )
+    
+    if existing_batches:
+        batch = frappe.get_doc("Direct Debit Batch", existing_batches[0].name)
+    else:
+        # Create new batch
+        batch = frappe.new_doc("Direct Debit Batch")
+        batch.batch_date = today()
+        batch.batch_description = f"Membership payments batch - {today()}"
+        batch.batch_type = "RCUR"
+        batch.currency = invoices[0]["currency"]
+        batch.status = "Draft"
+        
+    # Add invoices to batch
+    for invoice in invoices:
+        # Check if invoice already in batch
+        existing = False
+        for row in batch.invoices:
+            if row.invoice == invoice["invoice"]:
+                existing = True
+                break
+                
+        if not existing:
+            batch.append("invoices", {
+                "invoice": invoice["invoice"],
+                "membership": invoice["membership"],
+                "member": invoice["member"],
+                "member_name": invoice["member_name"],
+                "amount": invoice["amount"],
+                "currency": invoice["currency"],
+                "bank_account": invoice["bank_account"],
+                "iban": invoice["iban"],
+                "mandate_reference": invoice["mandate_reference"],
+                "status": "Pending"
+            })
+            
+    # Calculate totals
+    batch.total_amount = sum(row.amount for row in batch.invoices)
+    batch.entry_count = len(batch.invoices)
+    
+    batch.save()
