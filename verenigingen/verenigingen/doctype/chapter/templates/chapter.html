@@ -76,4 +76,47 @@
 <p style="margin: 20px 0 30px;"><a href="/verenigingen/join-chapter?name={{ name }}" class='btn btn-primary'>Join this Chapter</a></p>
 <p style="margin: 20px 0 30px;"><a href="/verenigingen/leave-chapter?name={{ name }}" class=''>Leave this Chapter</a></p>
 
-{% endblock %}
+{% if board_members %}
+<h3>Chapter Board</h3>
+<div style="margin-bottom: 30px; max-width: 600px" class="with-border">
+    <table class="table table-bordered table-condensed">
+        <thead>
+            <tr>
+                <th>Role</th>
+                <th>Name</th>
+                <th>Since</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for board_member in board_members %}
+                <tr>
+                    <td>{{ board_member.role }}</td>
+                    <td>{{ board_member.member_name }}</td>
+                    <td>{{ frappe.format_date(board_member.from_date) }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
+{% if is_board_member %}
+<div class="board-member-actions">
+    <h4>Board Member Actions</h4>
+    <p>You are currently serving as {{ board_role }} for this chapter.</p>
+    
+    <div class="btn-group">
+        <a href="/app/member?primary_chapter={{ name }}" class="btn btn-default">
+            View Chapter Members
+        </a>
+        
+        {% if frappe.utils.has_permission("Chapter", doc=name, ptype="write") %}
+        <a href="/app/chapter/{{ name }}" class="btn btn-primary">
+            Manage Chapter
+        </a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}	
+
+{% endblock %}			
