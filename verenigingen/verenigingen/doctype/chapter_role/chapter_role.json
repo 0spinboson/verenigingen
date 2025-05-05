@@ -3,6 +3,7 @@
   "creation": "2025-05-05 12:00:00.000000",
   "doctype": "DocType",
   "engine": "InnoDB",
+  "module": "Verenigingen",
   "field_order": [
     "role_name",
     "description",
