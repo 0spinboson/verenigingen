@@ -8,6 +8,7 @@
   "financial_settings_section",
   "enable_razorpay_for_memberships",
   "creation_user",
+  "tax_exempt_for_contributions",
   "razorpay_settings_section",
   "billing_cycle",
   "billing_frequency",
@@ -33,6 +34,8 @@
   "automate_donation_payment_entries",
   "donation_debit_account",
   "donation_payment_account",
+  "chapter_settings_section",
+  "national_board_chapter",
   "section_break_27",
   "membership_id_start",
   "last_membership_id"
@@ -250,6 +253,25 @@
    "fieldname": "membership_id_start",
    "fieldtype": "Int",
    "label": "Membership ID Starting Number"
+  },
+  {
+   "default": "0",
+   "description": "When enabled, a 0% VAT/BTW tax rate will be used for contributions and donations",
+   "fieldname": "tax_exempt_for_contributions",
+   "fieldtype": "Check",
+   "label": "Tax Exempt for Contributions and Donations"
+  },
+  {
+   "fieldname": "chapter_settings_section",
+   "fieldtype": "Section Break",
+   "label": "Chapter Settings"
+  },
+  {
+   "fieldname": "national_board_chapter",
+   "fieldtype": "Link",
+   "label": "National Board Chapter",
+   "options": "Chapter",
+   "description": "This chapter will be treated as the National Board with restricted access"
   }
  ],
  "index_web_pages_for_search": 1,
