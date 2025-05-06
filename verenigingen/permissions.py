@@ -6,17 +6,19 @@ def get_member_permission_query(user):
     if not user:
         user = frappe.session.user
         
-    # System Managers can access all members
-    if "System Manager" in frappe.get_roles(user):
-        return ""
-        
-    # Membership Managers and Association Managers can access all members
-    if "Membership Manager" in frappe.get_roles(user) or "Association Manager" in frappe.get_roles(user) or "Verenigingen Manager" in frappe.get_roles(user):
-        return ""
+    # Check user roles
+    user_roles = frappe.get_roles(user)
+    
+    # System Managers and Association Managers can access all members
+    if ("System Manager" in user_roles or 
+        "Membership Manager" in user_roles or 
+        "Association Manager" in user_roles or 
+        "Verenigingen Manager" in user_roles):
+        return ""  # No restrictions
         
     # Membership Users can only view members
-    if "Membership User" in frappe.get_roles(user):
-        return ""
+    if "Membership User" in user_roles:
+        return ""  # Could be restricted if needed
         
     # Board members can view chapter members
     member = frappe.db.get_value("Member", {"user": user}, "name")
@@ -43,17 +45,16 @@ def get_membership_permission_query(user):
     if not user:
         user = frappe.session.user
         
-    # System Managers can access all memberships
-    if "System Manager" in frappe.get_roles(user):
-        return ""
+    # Check user roles
+    user_roles = frappe.get_roles(user)
+    
+    # System Managers, Membership Managers, Association Managers, and Verenigingen Managers can access all memberships
+    if any(role in user_roles for role in ["System Manager", "Membership Manager", "Association Manager", "Verenigingen Manager"]):
+        return ""  # No restrictions
         
-    # Membership Managers and Association Managers can access all memberships
-    if "Membership Manager" in frappe.get_roles(user) or "Association Manager" in frappe.get_roles(user) or "Verenigingen Manager" in frappe.get_roles(user):
-        return ""
-        
-    # Membership Users can only view memberships
-    if "Membership User" in frappe.get_roles(user):
-        return ""
+    # Membership Users can view all memberships
+    if "Membership User" in user_roles:
+        return ""  # No restrictions for viewing
     
     # Board members can view chapter members' memberships
     member = frappe.db.get_value("Member", {"user": user}, "name")
