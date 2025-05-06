@@ -1,6 +1,15 @@
 import frappe
 from frappe import _
 
+def get_member_permission_query(user):
+    """Permission query for Member doctype"""
+    import frappe.log
+    if not user:
+        user = frappe.session.user
+    
+    # Debug log
+    frappe.log("Permission debug: User {0} with roles {1}".format(user, frappe.get_roles(user)))
+
 def has_member_permission(doc, user=None, permission_type=None):
     """Direct permission check for Member doctype"""
     if not user:
