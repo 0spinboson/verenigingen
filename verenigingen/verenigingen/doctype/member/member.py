@@ -279,3 +279,15 @@ class Member(Document):
             return chapter.can_view_member_payments(self.name)
         
         return False
+
+@frappe.whitelist()
+def get_board_memberships(member_name):
+    """Get board memberships for a member with proper permission handling"""
+    # Query directly using SQL to bypass permission checks
+    board_memberships = frappe.db.sql("""
+        SELECT cbm.parent, cbm.chapter_role 
+        FROM `tabChapter Board Member` cbm
+        WHERE cbm.member = %s AND cbm.is_active = 1
+    """, (member_name,), as_dict=True)
+    
+    return board_memberships
