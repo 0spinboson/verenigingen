@@ -13,7 +13,7 @@ app_license = "MIT"
 
 # Includes in <head>
 # ------------------
-
+before_request = ["verenigingen.hooks.before_request"]
 # include js, css files in header of desk.html
 # app_include_css = "/assets/verenigingen/css/verenigingen.css"
 # app_include_js = "/assets/verenigingen/js/verenigingen.js"
