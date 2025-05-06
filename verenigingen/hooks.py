@@ -90,19 +90,19 @@ after_install = "verenigingen.verenigingen.setup.execute_after_install"
 # -----------
 # Permissions evaluated in scripted ways
 
-permission_query_conditions = {
-    "Member": "verenigingen.permissions.get_member_permission_query",
-    "Membership": "verenigingen.permissions.get_membership_permission_query",
-}
+#permission_query_conditions = {
+#    "Member": "verenigingen.permissions.get_member_permission_query",
+#    "Membership": "verenigingen.permissions.get_membership_permission_query",
+#}
 
 # has_permission = {
 #	"Event": "frappe.desk.doctype.event.event.has_permission",
 # }
 
-has_permission = {
-    "Member": "verenigingen.permissions.has_member_permission",
-    "Membership": "verenigingen.permissions.has_membership_permission",
-}
+#has_permission = {
+#    "Member": "verenigingen.permissions.has_member_permission",
+#    "Membership": "verenigingen.permissions.has_membership_permission",
+#}
 
 # DocType Class
 # ---------------
