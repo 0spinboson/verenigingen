@@ -1,6 +1,7 @@
 {
+ "actions": [],
  "autoname": "format:MEMB-{YY}-{MM}-{####}",
- "creation": "2023-01-01 00:00:00.000000",
+ "creation": "2023-01-01 00:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -230,12 +231,10 @@
   {
    "link_doctype": "Member",
    "link_fieldname": "name",
-   "parent_doctype": "Member",
-   "parentfield": "links",
-   "parenttype": "DocType"
+   "parent_doctype": "Member"
   }
  ],
- "modified": "2023-01-01 00:00:00.000000",
+ "modified": "2025-05-06 20:21:52.947759",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Membership",
@@ -260,7 +259,6 @@
    "amend": 1,
    "cancel": 1,
    "create": 1,
-   "delete": 0,
    "email": 1,
    "export": 1,
    "print": 1,
@@ -279,10 +277,24 @@
    "report": 1,
    "role": "Membership User",
    "share": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Association Manager",
+   "share": 1,
+   "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
+ "states": [],
  "title_field": "member_name",
  "track_changes": 1
 }
