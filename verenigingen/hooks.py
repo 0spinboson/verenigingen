@@ -99,6 +99,11 @@ permission_query_conditions = {
 #	"Event": "frappe.desk.doctype.event.event.has_permission",
 # }
 
+has_permission = {
+    "Member": "verenigingen.permissions.has_member_permission",
+    "Membership": "verenigingen.permissions.has_membership_permission",
+}
+
 # DocType Class
 # ---------------
 # Override standard doctype classes
