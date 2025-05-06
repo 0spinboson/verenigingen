@@ -1,9 +1,7 @@
 {
+ "actions": [],
  "autoname": "format:Assoc-Member-{YYYY}-{MM}-{####}",
- "title_field": "full_name",
- "search_fields": "full_name,email,mobile_no",
- "show_title_field_in_link": 1,
- "creation": "2023-01-01 00:00:00.000000",
+ "creation": "2023-01-01 00:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
@@ -57,15 +55,15 @@
  ],
  "fields": [
   {
-  "fieldname": "board_memberships_section",
-  "fieldtype": "Section Break",
-  "label": "Board Memberships",
-  "depends_on": "eval:doc.name"
+   "depends_on": "eval:doc.name",
+   "fieldname": "board_memberships_section",
+   "fieldtype": "Section Break",
+   "label": "Board Memberships"
   },
   {
-  "fieldname": "board_memberships_html",
-  "fieldtype": "HTML",
-  "label": "Board Memberships"
+   "fieldname": "board_memberships_html",
+   "fieldtype": "HTML",
+   "label": "Board Memberships"
   },
   {
    "fieldname": "member_details_section",
@@ -73,22 +71,23 @@
    "label": "Member Details"
   },
   {
-  "fieldname": "primary_chapter",
-  "fieldtype": "Link",
-  "label": "Primary Chapter",
-  "options": "Chapter"
+   "fieldname": "primary_chapter",
+   "fieldtype": "Link",
+   "label": "Primary Chapter",
+   "options": "Chapter"
   },
   {
-  "fieldname": "permission_category",
-  "fieldtype": "Select",
-  "label": "Information Visibility",
-  "options": "Public\nBoard Only\nAdmin Only",
-  "default": "Board Only",
-  "description": "Controls who can see payment and personal information"
+   "default": "Board Only",
+   "description": "Controls who can see payment and personal information",
+   "fieldname": "permission_category",
+   "fieldtype": "Select",
+   "label": "Information Visibility",
+   "options": "Public\nBoard Only\nAdmin Only"
   },
   {
    "fieldname": "first_name",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "First Name",
    "reqd": 1
   },
@@ -100,6 +99,7 @@
   {
    "fieldname": "last_name",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Last Name",
    "reqd": 1
   },
@@ -330,7 +330,7 @@
    "table_fieldname": "references"
   }
  ],
- "modified": "2023-01-01 00:00:00.000000",
+ "modified": "2025-05-06 20:24:36.271050",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
@@ -350,7 +350,6 @@
   },
   {
    "create": 1,
-   "delete": 0,
    "email": 1,
    "export": 1,
    "print": 1,
@@ -366,10 +365,26 @@
    "read": 1,
    "role": "Membership User",
    "share": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Association Manager",
+   "share": 1,
+   "write": 1
   }
  ],
+ "row_format": "Dynamic",
  "search_fields": "full_name,email,mobile_no",
+ "show_title_field_in_link": 1,
  "sort_field": "modified",
  "sort_order": "DESC",
+ "states": [],
+ "title_field": "full_name",
  "track_changes": 1
 }
