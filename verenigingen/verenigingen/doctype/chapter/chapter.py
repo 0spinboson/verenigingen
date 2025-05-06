@@ -109,6 +109,28 @@ class Chapter(WebsiteGenerator):
         
         return context
 
+def validate_chapter_access(doc, method=None):
+    """
+    Validate whether the current user has permission to edit this chapter
+    Specifically checks if Association Managers can edit the National Board chapter
+    """
+    if frappe.session.user == "Administrator" or "System Manager" in frappe.get_roles():
+        # Administrators and System Managers can edit any chapter
+        return
+    
+    # Check if this is the National Board chapter
+    settings = frappe.get_single("Verenigingen Settings")
+    if not settings.get("national_board_chapter"):
+        # No national board defined, so no special restrictions
+        return
+    
+    if doc.name == settings.national_board_chapter:
+        # This is the National Board chapter
+        
+        # Check if the user is an Association Manager but not a Verenigingen Manager
+        if ("Association Manager" in frappe.get_roles() and 
+            "Verenigingen Manager" not in frappe.get_roles()):
+            frappe.throw(_("Association Managers cannot edit the National Board chapter. Please contact an administrator."))
 
 def get_list_context(context):
 	context.allow_guest = True
