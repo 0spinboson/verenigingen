@@ -29,27 +29,22 @@ frappe.ui.form.on('Member', {
         
         // Check if user is a board member of any chapter
         frappe.call({
-            method: 'frappe.client.get_list',
+            method: 'verenigingen.verenigingen.doctype.member.member.get_board_memberships',
             args: {
-                doctype: 'Chapter Board Member',
-                filters: {
-                    'member': frm.doc.name,
-                    'is_active': 1
-                },
-                fields: ['parent', 'chapter_role']
+                member_name: frm.doc.name
             },
             callback: function(r) {
                 if (r.message && r.message.length) {
-                    // Show board memberships
+                // Show board memberships
                     var html = '<div class="board-memberships"><h4>Board Positions</h4><ul>';
-                    
+
                     r.message.forEach(function(board) {
                         html += '<li><strong>' + board.chapter_role + '</strong> at <a href="/app/chapter/' + 
                                 board.parent + '">' + board.parent + '</a></li>';
                     });
-                    
+
                     html += '</ul></div>';
-                    
+
                     $(frm.fields_dict.board_memberships_html.wrapper).html(html);
                 }
             }
