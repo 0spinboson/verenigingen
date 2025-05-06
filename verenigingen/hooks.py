@@ -78,7 +78,7 @@ jinja = {
 # ------------
 
 # before_install = "verenigingen.install.before_install"
-# after_install = "verenigingen.install.after_install"
+after_install = "verenigingen.verenigingen.setup.execute_after_install"
 
 # Desk Notifications
 # ------------------
@@ -119,6 +119,12 @@ doc_events = {
     },
     "Subscription": {
         "on_update": "verenigingen.verenigingen.doctype.membership.membership.update_membership_from_subscription",
+    },
+    "Chapter": {
+        "validate": "verenigingen.verenigingen.doctype.chapter.chapter.validate_chapter_access",
+    },
+    "Verenigingen Settings": {
+        "on_update": "verenigingen.verenigingen.doctype.tax_exemption_handler.on_update_verenigingen_settings",
     }
 }
 
@@ -200,6 +206,12 @@ fixtures = [
         "doctype": "Workflow",
         "filters": [
             ["name", "=", "Membership Workflow"]
+        ]
+    },
+    {
+        "doctype": "Role",
+        "filters": [
+            ["name", "=", "Association Manager"]
         ]
     }
 ]
