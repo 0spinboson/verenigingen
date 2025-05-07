@@ -244,7 +244,7 @@ class Member(Document):
         user.send_welcome_email = 1
         user.user_type = "Website User"
         
-        member_role = "Member"
+        member_role = "Assocation Member"
         verenigingen_member_role = "Verenigingen Member"
     
         # Try to find a suitable role
