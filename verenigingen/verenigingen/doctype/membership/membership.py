@@ -121,48 +121,76 @@ class Membership(Document):
         """Create an ERPNext subscription for this membership"""
         # Check if member has a customer
         member = frappe.get_doc("Member", self.member)
-        
+    
         if not member.customer:
-            # Create a customer for this member
+        # Create a customer for this member
             member.create_customer()
             member.reload()
-            
+        
         if not member.customer:
             frappe.throw(_("Please create a customer for this member first"))
-            
+        
         # Create subscription
         subscription = frappe.new_doc("Subscription")
         subscription.party_type = "Customer"
         subscription.party = member.customer
-        
+    
         # Set dates
         subscription.start_date = self.start_date
         subscription.end_date = self.end_date
-        
+    
         # Add subscription plan
+        if not self.subscription_plan:
+            frappe.throw(_("Subscription Plan is required to create a subscription"))
+        
+        # Get the subscription plan details to ensure billing cycle info is available
+        plan_doc = frappe.get_doc("Subscription Plan", self.subscription_plan)
+    
         subscription_item = {
             "subscription_plan": self.subscription_plan,
             "qty": 1
         }
         subscription.append("plans", subscription_item)
-        
+    
         # Additional settings
         membership_type = frappe.get_doc("Membership Type", self.membership_type)
         if membership_type.allow_auto_renewal and self.auto_renew:
             subscription.generate_invoice_at_period_start = 1
             subscription.submit_invoice = 1
-            
-        # Save subscription
+        
+        # Save subscription - use ignore_permissions=True to bypass permissions
+        subscription.flags.ignore_permissions = True
         subscription.flags.ignore_mandatory = True
-        subscription.insert(ignore_permissions=True)
-        subscription.submit()
+    
+        # Set billing cycle explicitly if needed
+        # This addresses the NoneType error in add_to_date
+        if not hasattr(subscription, 'billing_cycle_info') or not subscription.billing_cycle_info:
+            # Set default billing cycle based on plan's billing interval
+            if hasattr(plan_doc, 'billing_interval'):
+                if plan_doc.billing_interval == 'Month':
+                    subscription.billing_interval = 'Month'
+                    subscription.billing_interval_count = 1
+                elif plan_doc.billing_interval == 'Year':
+                    subscription.billing_interval = 'Year'
+                    subscription.billing_interval_count = 1
+                else:
+                    # Default to monthly if unknown
+                    subscription.billing_interval = 'Month'
+                    subscription.billing_interval_count = 1
+    
+        try:
+            subscription.insert(ignore_permissions=True)
+            subscription.submit()
         
-        # Link subscription to membership
-        self.subscription = subscription.name
-        self.save()
+            # Link subscription to membership
+            self.subscription = subscription.name
+            self.save()
         
-        frappe.msgprint(_("Subscription {0} created successfully").format(subscription.name))
-        return subscription.name
+            frappe.msgprint(_("Subscription {0} created successfully").format(subscription.name))
+            return subscription.name
+        except Exception as e:
+            frappe.log_error(f"Error creating subscription: {str(e)}", "Membership Subscription Error")
+            frappe.throw(_("Error creating subscription: {0}").format(str(e)))
         
     def renew_membership(self):
         """Create a new membership as a renewal of the current one"""
