@@ -223,5 +223,11 @@ fixtures = [
         "filters": [
             ["name", "=", "Association Manager"]
         ]
+    },
+    {
+        "doctype": "Role",
+        "filters": [
+            ["name", "=", "Assocation Member"]
+        ]
     }
 ]
