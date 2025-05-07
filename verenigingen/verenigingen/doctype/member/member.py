@@ -218,6 +218,7 @@ class Member(Document):
         frappe.msgprint(_("Customer {0} created successfully").format(customer.name))
         return customer.name
         
+    @frappe.whitelist()
     def create_user(self):
         """Create a user account for this member"""
         if self.user:
