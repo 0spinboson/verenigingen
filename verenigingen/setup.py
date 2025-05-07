@@ -50,3 +50,19 @@ def get_custom_fields():
 		]
 	}
 	return custom_fields
+
+def execute_after_install():
+    """
+    Function executed after the app is installed
+    Sets up necessary configurations for the Verenigingen app
+    """
+    try:
+        # Execute the setup function from the root setup.py
+        setup_verenigingen()
+        
+        # Log the successful setup
+        frappe.logger().info("Verenigingen setup completed successfully")
+        
+    except Exception as e:
+        frappe.logger().error(f"Error during Verenigingen setup: {str(e)}")
+        frappe.throw(_("Error during setup: {0}").format(str(e)))
