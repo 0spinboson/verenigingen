@@ -170,25 +170,35 @@ class Member(Document):
     @frappe.whitelist()
     def create_customer(self):
         """Create a customer for this member in ERPNext"""
-        # Add ignore_permissions=True to make it work for users with limited permissions
+        # First check if a customer is already linked to this member
         if self.customer:
             frappe.msgprint(_("Customer {0} already exists for this member").format(self.customer))
             return self.customer
-            
+        
         # Check if customer with same email already exists
         if self.email:
             existing_customer = frappe.db.get_value("Customer", {"email_id": self.email})
             if existing_customer:
                 self.customer = existing_customer
-                self.save(ignore_permissions=True)  # Add ignore_permissions=True
+                self.save(ignore_permissions=True)
                 frappe.msgprint(_("Linked to existing customer {0}").format(existing_customer))
                 return existing_customer
-                
-        # Create new customer
+    
+        # Check if customer with same name already exists
+        if self.full_name:
+            existing_customer = frappe.db.get_value("Customer", {"customer_name": self.full_name})
+            if existing_customer:
+                # Confirm before linking
+                self.customer = existing_customer
+                self.save(ignore_permissions=True)
+                frappe.msgprint(_("Linked to existing customer {0} with matching name").format(existing_customer))
+                return existing_customer
+            
+        # Create new customer if no match found
         customer = frappe.new_doc("Customer")
         customer.customer_name = self.full_name
         customer.customer_type = "Individual"
-        
+    
         # Set contact details
         if self.email:
             customer.email_id = self.email
@@ -196,15 +206,15 @@ class Member(Document):
             customer.mobile_no = self.mobile_no
         if self.phone:
             customer.phone = self.phone
-            
+        
         # Save customer
         customer.flags.ignore_mandatory = True
-        customer.insert(ignore_permissions=True)  # Add ignore_permissions=True
-        
+        customer.insert(ignore_permissions=True)
+    
         # Link customer to member
         self.customer = customer.name
-        self.save(ignore_permissions=True)  # Add ignore_permissions=True
-        
+        self.save(ignore_permissions=True)
+    
         frappe.msgprint(_("Customer {0} created successfully").format(customer.name))
         return customer.name
         
