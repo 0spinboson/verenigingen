@@ -148,6 +148,11 @@ class Membership(Document):
             
     def create_subscription_from_membership(self):
         """Create an ERPNext subscription for this membership"""
+        # Import necessary modules
+        import frappe
+        from frappe import _
+        from frappe.utils import getdate, today, add_to_date, nowdate, flt
+    
         # Check if member has a customer
         member = frappe.get_doc("Member", self.member)
     
@@ -159,57 +164,89 @@ class Membership(Document):
         if not member.customer:
             frappe.throw(_("Please create a customer for this member first"))
     
-        # IMPORTANT: Patch the add_to_date function BEFORE creating subscription
-        import frappe.utils.data
+        # Create subscription
+        subscription = frappe.new_doc("Subscription")
+        subscription.party_type = "Customer"
+        subscription.party = member.customer
+    
+        # Set dates
+        subscription.start_date = getdate(self.start_date)
+        if self.end_date:
+            subscription.end_date = getdate(self.end_date)
+    
+        # Add subscription plan
+        if not self.subscription_plan:
+            frappe.throw(_("Subscription Plan is required to create a subscription"))
+    
+        plan_doc = frappe.get_doc("Subscription Plan", self.subscription_plan)
+
+        # Explicitly set billing cycle information
+        if hasattr(plan_doc, 'billing_interval'):
+            subscription.billing_interval = plan_doc.billing_interval
+            subscription.billing_interval_count = plan_doc.billing_interval_count or 1
+       else:
+            # Default billing information
+            subscription.billing_interval = 'Month'
+            subscription.billing_interval_count = 1
+        
+            # Try to set based on membership duration
+            if self.end_date and self.start_date:
+                # Calculate months between start and end dates
+                from dateutil.relativedelta import relativedelta
+                start = getdate(self.start_date)
+                end = getdate(self.end_date)
+                diff = relativedelta(end, start)
+                total_months = diff.years * 12 + diff.months
+            
+                if total_months == 0:
+                    total_months = 1  # Minimum 1 month
+            
+                if total_months % 12 == 0 and total_months > 0:
+                    # Annual billing
+                    subscription.billing_interval = "Year"
+                    subscription.billing_interval_count = total_months // 12
+                else:
+                    # Monthly billing
+                    subscription.billing_interval = "Month"
+                    subscription.billing_interval_count = total_months
+    
+        # Add plan to subscription
+        subscription_item = {
+            "subscription_plan": self.subscription_plan,
+            "qty": 1
+        }
+        subscription.append("plans", subscription_item)
+    
+        # Additional settings
+        membership_type = frappe.get_doc("Membership Type", self.membership_type)
+        if membership_type.allow_auto_renewal and self.auto_renew:
+            subscription.generate_invoice_at_period_start = 1
+            subscription.submit_invoice = 1
+    
+        # Save subscription - use ignore_permissions=True to bypass permissions
+        subscription.flags.ignore_permissions = True
+        subscription.flags.ignore_mandatory = True
+    
+        # IMPORTANT: Patch the add_to_date function to handle None kwargs
         original_add_to_date = frappe.utils.data.add_to_date
     
         def safe_add_to_date(date=None, **kwargs):
             if kwargs is None:
-                # Log the error but prevent it from crashing
-                frappe.logger().error("add_to_date called with None kwargs - replacing with empty dict")
-                kwargs = {}
+                frappe.log_error("add_to_date called with None kwargs - replacing with empty dict", 
+                             "Subscription Creation Debug")
+                kwargs = {}  # Replace None with empty dict to prevent error
             return original_add_to_date(date=date, **kwargs)
     
         # Replace with patched version
         frappe.utils.data.add_to_date = safe_add_to_date
     
         try:
-            # Create subscription
-            subscription = frappe.new_doc("Subscription")
-            subscription.party_type = "Customer"
-            subscription.party = member.customer
-        
-            # Set dates
-            subscription.start_date = getdate(self.start_date)
-            if self.end_date:
-                subscription.end_date = getdate(self.end_date)
-        
-            # Add subscription plan
-            if not self.subscription_plan:
-                frappe.throw(_("Subscription Plan is required to create a subscription"))
-        
-            plan_doc = frappe.get_doc("Subscription Plan", self.subscription_plan)
-        
-            # Explicitly set billing cycle information
-            subscription.billing_interval = getattr(plan_doc, 'billing_interval', 'Month')
-            subscription.billing_interval_count = getattr(plan_doc, 'billing_interval_count', 1)
-        
-            # Add plan to subscription
-            subscription_item = {
-                "subscription_plan": self.subscription_plan,
-                "qty": 1
-            }
-            subscription.append("plans", subscription_item)
-        
-            # Additional settings
-            membership_type = frappe.get_doc("Membership Type", self.membership_type)
-            if membership_type.allow_auto_renewal and self.auto_renew:
-                subscription.generate_invoice_at_period_start = 1
-                subscription.submit_invoice = 1
-        
-            # Save subscription
-            subscription.flags.ignore_permissions = True
-            subscription.flags.ignore_mandatory = True
+            # Handle billing_cycle_info if needed
+            if hasattr(subscription, 'billing_cycle_info') and subscription.billing_cycle_info is None:
+                subscription.billing_cycle_info = {
+                    'billing_interval': subscription.billing_interval,
+                    'billing_interval_count': subscription.billing_interval_count
+                }
         
             # Try to insert and submit the subscription
             subscription.insert(ignore_permissions=True)
@@ -223,9 +260,14 @@ class Membership(Document):
             return subscription.name
     
         except Exception as e:
-            frappe.log_error(f"Error creating subscription: {str(e)}", "Membership Subscription Error")
+            error_details = (f"Error details: start_date={getattr(subscription, 'start_date', None)}, "
+                           f"billing_interval={getattr(subscription, 'billing_interval', None)}, "
+                           f"billing_interval_count={getattr(subscription, 'billing_interval_count', None)}")
+        
+            frappe.log_error(f"Error creating subscription: {str(e)}\n{error_details}", 
+                          "Membership Subscription Error")
             frappe.throw(_("Error creating subscription: {0}").format(str(e)))
-    
+        
         finally:
             # IMPORTANT: Restore original function
             frappe.utils.data.add_to_date = original_add_to_date
