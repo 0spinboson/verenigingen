@@ -78,7 +78,7 @@ jinja = {
 # ------------
 
 # before_install = "verenigingen.install.before_install"
-after_install = "verenigingen.verenigingen.setup.execute_after_install"
+after_install = "verenigingen.setup.execute_after_install"
 
 # Desk Notifications
 # ------------------
