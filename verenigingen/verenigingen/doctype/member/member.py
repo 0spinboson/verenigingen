@@ -15,7 +15,54 @@ class Member(Document):
         # Create customer if not already linked
         if not self.customer and self.email:
             self.create_customer()
+    def on_load(self):
+    """Load payment history when the document is loaded"""
+    if self.customer:
+        self.load_payment_history()
+
+    def load_payment_history(self):
+        """Load payment history for this member"""
+        if not self.customer:
+            return
         
+        # Clear existing payment history
+        self.payment_history = []
+    
+        # Get payment entries for this customer
+        payment_entries = frappe.get_all(
+            "Payment Entry",
+            filters={
+                "party_type": "Customer",
+                "party": self.customer
+            },
+            fields=["name", "posting_date", "payment_type", "paid_amount", 
+                "mode_of_payment", "status", "reference_no", "reference_date"],
+            order_by="posting_date desc"
+        )
+    
+        # Add payment entries to child table
+        for entry in payment_entries:
+            # Get reference documents
+            references = frappe.get_all(
+                "Payment Entry Reference",
+                filters={"parent": entry.name},
+                fields=["reference_doctype", "reference_name"]
+            )
+        
+            ref_doctype = references[0].reference_doctype if references else None
+            ref_name = references[0].reference_name if references else None
+        
+            self.append("payment_history", {
+                "payment_entry": entry.name,
+                "posting_date": entry.posting_date,
+                "amount": entry.paid_amount,
+                "payment_type": entry.payment_type,
+                "mode_of_payment": entry.mode_of_payment,
+                "status": entry.status,
+                "reference_doctype": ref_doctype,
+                "reference_name": ref_name
+            })
+    
     def validate_name(self):
         # Validate that name fields don't contain special characters
         for field in ['first_name', 'middle_name', 'last_name']:
