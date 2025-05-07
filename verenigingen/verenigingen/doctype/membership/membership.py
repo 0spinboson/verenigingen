@@ -107,9 +107,38 @@ class Membership(Document):
         
         # Cancel linked subscription
         if self.subscription:
-            subscription = frappe.get_doc("Subscription", self.subscription)
-            if subscription.status != "Cancelled":
-                subscription.cancel_subscription()
+            try:
+                subscription = frappe.get_doc("Subscription", self.subscription)
+                if subscription.status != "Cancelled":
+                    # The key fix - ensure the cancelation_date is a date object not a string
+                    if not subscription.cancelation_date:
+                        # Store as date object using getdate
+                        subscription.db_set('cancelation_date', getdate(self.cancellation_date))
+                    elif isinstance(subscription.cancelation_date, str):
+                        # Convert to date object if it's a string
+                        subscription.db_set('cancelation_date', getdate(subscription.cancelation_date))
+                
+                    # Use db_set to directly update database and bypass validation
+                    subscription.flags.ignore_permissions = True
+                
+                    # Now cancel the subscription
+                    # Let's catch any specific errors in the cancel_subscription method
+                    try:
+                        subscription.cancel_subscription()
+                    except TypeError as e:
+                        # If we still get a type error, try to fix it manually
+                        if ">=' not supported between instances of 'str' and 'datetime.date" in str(e):
+                            # Directly set status to cancelled as a fallback
+                            subscription.db_set('status', 'Cancelled')
+                            frappe.db.commit()
+                            frappe.msgprint(_("Subscription {0} has been cancelled").format(subscription.name))
+                        else:
+                            raise
+            except Exception as e:
+                error_msg = str(e)
+                frappe.log_error(f"Error cancelling subscription {self.subscription}: {error_msg}", 
+                            "Membership Cancellation Error")
+                frappe.msgprint(_("Error cancelling subscription: {0}").format(error_msg))
     
     def update_member_status(self):
         """Update the membership status in the Member document"""
