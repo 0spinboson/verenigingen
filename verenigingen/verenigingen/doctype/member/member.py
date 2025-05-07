@@ -346,3 +346,24 @@ def get_board_memberships(member_name):
     """, (member_name,), as_dict=True)
     
     return board_memberships
+@frappe.whitelist()
+def update_member_payment_history(doc, method=None):
+    """Update payment history for member when a payment entry is modified"""
+    if doc.party_type != "Customer":
+        return
+        
+    # Find member linked to this customer
+    members = frappe.get_all(
+        "Member",
+        filters={"customer": doc.party},
+        fields=["name"]
+    )
+    
+    # Update payment history for each member
+    for member_doc in members:
+        try:
+            member = frappe.get_doc("Member", member_doc.name)
+            member.load_payment_history()
+            member.save(ignore_permissions=True)
+        except Exception as e:
+            frappe.log_error(f"Failed to update payment history for Member {member_doc.name}: {str(e)}")
