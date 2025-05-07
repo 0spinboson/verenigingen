@@ -9,6 +9,9 @@ class Member(Document):
         self.update_full_name()
         self.update_membership_status()
         self.update_address_display()
+        # Automatically create/link customer if not already done
+        if not self.customer and self.email:
+            self.create_customer()
         
     def validate_name(self):
         # Validate that name fields don't contain special characters
