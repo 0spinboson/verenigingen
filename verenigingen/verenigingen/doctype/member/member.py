@@ -16,9 +16,9 @@ class Member(Document):
         if not self.customer and self.email:
             self.create_customer()
     def on_load(self):
-    """Load payment history when the document is loaded"""
-    if self.customer:
-        self.load_payment_history()
+        """Load payment history when the document is loaded"""
+        if self.customer:
+            self.load_payment_history()
 
     def load_payment_history(self):
         """Load payment history for this member"""
