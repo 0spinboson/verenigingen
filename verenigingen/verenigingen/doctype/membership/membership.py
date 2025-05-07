@@ -262,7 +262,7 @@ class Membership(Document):
                 return subscription.name
             
             except Exception as e:
-               frappe.db.rollback()
+                frappe.db.rollback()
                 raise e
             
         except Exception as e:
