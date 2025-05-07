@@ -147,43 +147,18 @@ class Membership(Document):
             member.save()  # This will trigger the update_membership_status method
             
     def create_subscription_from_membership(self):
-        import frappe.utils.data
-        original_add_to_date = frappe.utils.data.add_to_date
-
-        def patched_add_to_date(date=None, **kwargs):
-            if kwargs is None:
-                frappe.log_error(f"add_to_date called with None kwargs. Date: {date}", 
-                               "Subscription Creation Debug")
-                kwargs = {}  # Replace None with empty dict to prevent error
-            return original_add_to_date(date=date, **kwargs)
-
-        # Replace with patched version
-        frappe.utils.data.add_to_date = patched_add_to_date
-
-        try:
-            # Your existing subscription creation code
-            subscription.insert(ignore_permissions=True)
-            subscription.submit()
-        except Exception as e:
-            frappe.log_error(f"Error in subscription creation: {str(e)}", 
-                           "Subscription Creation Error")
-            raise
-        finally:
-            # Restore original function
-            frappe.utils.data.add_to_date = original_add_to_date
-    
         """Create an ERPNext subscription for this membership"""
         # Check if member has a customer
         member = frappe.get_doc("Member", self.member)
     
         if not member.customer:
-        # Create a customer for this member
+            # Create a customer for this member
             member.create_customer()
             member.reload()
-        
+    
         if not member.customer:
             frappe.throw(_("Please create a customer for this member first"))
-        
+    
         # Create subscription
         subscription = frappe.new_doc("Subscription")
         subscription.party_type = "Customer"
@@ -197,29 +172,20 @@ class Membership(Document):
         # Add subscription plan
         if not self.subscription_plan:
             frappe.throw(_("Subscription Plan is required to create a subscription"))
-        
+    
         plan_doc = frappe.get_doc("Subscription Plan", self.subscription_plan)
-
-        frappe.logger().debug(f"Plan details: {plan_doc.name}, billing_interval: {getattr(plan_doc, 'billing_interval', 'Not set')}, billing_interval_count: {getattr(plan_doc, 'billing_interval_count', 'Not set')}")
-
-        # Explicitly set billing cycle information
-        # This is critical to avoid the NoneType error
+    
+        # Explicitly set billing cycle information - IMPORTANT FIX
         subscription.billing_interval = getattr(plan_doc, 'billing_interval', 'Month')
         subscription.billing_interval_count = getattr(plan_doc, 'billing_interval_count', 1)
-
-        if hasattr(subscription, 'billing_cycle_info') and subscription.billing_cycle_info is None:
-            # Create a proper billing_cycle_info dictionary
-            subscription.billing_cycle_info = {
-                'billing_interval': subscription.billing_interval or 'Month',
-                'billing_interval_count': subscription.billing_interval_count or 1
-            }
     
-        # Ensure these are never None
+        # Ensure these are never None - IMPORTANT FIX
         if not subscription.billing_interval:
             subscription.billing_interval = 'Month'
         if not subscription.billing_interval_count:
             subscription.billing_interval_count = 1
     
+        # Add plan to subscription
         subscription_item = {
             "subscription_plan": self.subscription_plan,
             "qty": 1
@@ -231,48 +197,50 @@ class Membership(Document):
         if membership_type.allow_auto_renewal and self.auto_renew:
             subscription.generate_invoice_at_period_start = 1
             subscription.submit_invoice = 1
-        
-        # Save subscription - use ignore_permissions=True to bypass permissions
+    
+        # Save subscription
         subscription.flags.ignore_permissions = True
         subscription.flags.ignore_mandatory = True
     
-        # Set billing cycle explicitly if needed
-        # This addresses the NoneType error in add_to_date
-        if not hasattr(subscription, 'billing_cycle_info') or not subscription.billing_cycle_info:
-            # Set default billing cycle based on plan's billing interval
-            if hasattr(plan_doc, 'billing_interval'):
-                if plan_doc.billing_interval == 'Month':
-                    subscription.billing_interval = 'Month'
-                    subscription.billing_interval_count = 1
-                elif plan_doc.billing_interval == 'Year':
-                    subscription.billing_interval = 'Year'
-                    subscription.billing_interval_count = 1
-                else:
-                    # Default to monthly if unknown
-                    subscription.billing_interval = 'Month'
-                    subscription.billing_interval_count = 1
+        # CRITICAL FIX: Manually calculate and set next_billing_date
+        if hasattr(subscription, 'next_billing_date'):
+            from frappe.utils import add_months
+            if subscription.billing_interval == 'Month':
+                subscription.next_billing_date = add_months(subscription.start_date, 
+                                                     subscription.billing_interval_count)
+            elif subscription.billing_interval == 'Year':
+                subscription.next_billing_date = add_months(subscription.start_date, 
+                                                     subscription.billing_interval_count * 12)
+            else:
+                # For other intervals, default to monthly
+                subscription.next_billing_date = add_months(subscription.start_date, 1)
+    
+        # IMPORTANT: Set a default billing_cycle_info if it's needed
+        if hasattr(subscription, 'billing_cycle_info') and subscription.billing_cycle_info is None:
+            subscription.billing_cycle_info = {
+                'billing_interval': subscription.billing_interval,
+                'billing_interval_count': subscription.billing_interval_count
+            }
     
         try:
             subscription.insert(ignore_permissions=True)
             subscription.submit()
-        
+    
             # Link subscription to membership
             self.subscription = subscription.name
             self.save()
-        
+    
             frappe.msgprint(_("Subscription {0} created successfully").format(subscription.name))
             return subscription.name
-        except TypeError as e:
-            if "add_to_date()" in str(e):
-                # Enhanced error message for this specific case
-                error_msg = f"Error in add_to_date: billing_interval={getattr(subscription, 'billing_interval', None)}, billing_interval_count={getattr(subscription, 'billing_interval_count', None)}. Original error: {str(e)}"
-                frappe.log_error(error_msg, "Membership Subscription Creation Error")
-                frappe.throw(_("Error creating subscription: {0}").format(error_msg))
-            else:
-                raise
         except Exception as e:
-            frappe.log_error(f"Error creating subscription: {str(e)}", "Membership Subscription Error")
-            frappe.throw(_("Error creating subscription: {0}").format(str(e)))
+            error_details = (f"Error details: start_date={getattr(subscription, 'start_date', None)}, "
+                            f"next_billing_date={getattr(subscription, 'next_billing_date', None)}, "
+                            f"billing_interval={getattr(subscription, 'billing_interval', None)}, "
+                            f"billing_interval_count={getattr(subscription, 'billing_interval_count', None)}")
+        
+                frappe.log_error(f"Error creating subscription: {str(e)}\n{error_details}", 
+                           "Membership Subscription Error")
+                frappe.throw(_("Error creating subscription: {0}").format(str(e)))
         
     def renew_membership(self):
         """Create a new membership as a renewal of the current one"""
