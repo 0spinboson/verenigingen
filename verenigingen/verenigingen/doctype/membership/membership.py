@@ -136,8 +136,9 @@ class Membership(Document):
         subscription.party = member.customer
     
         # Set dates
-        subscription.start_date = self.start_date
-        subscription.end_date = self.end_date
+        subscription.start_date = getdate(self.start_date)
+        if self.end_date:
+            subscription.end_date = getdate(self.end_date)
     
         # Add subscription plan
         if not self.subscription_plan:
