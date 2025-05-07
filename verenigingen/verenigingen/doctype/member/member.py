@@ -184,15 +184,34 @@ class Member(Document):
                 frappe.msgprint(_("Linked to existing customer {0}").format(existing_customer))
                 return existing_customer
     
-        # Check if customer with same name already exists
+        # For duplicate name detection, we need a more sophisticated approach
         if self.full_name:
-            existing_customer = frappe.db.get_value("Customer", {"customer_name": self.full_name})
-            if existing_customer:
-                # Confirm before linking
-                self.customer = existing_customer
+            # Get all customers with similar names
+            similar_name_customers = frappe.get_all(
+                "Customer",
+                filters=[
+                    ["customer_name", "like", f"%{self.full_name}%"]
+                ],
+                fields=["name", "customer_name", "email_id", "mobile_no"]
+            )
+        
+            # Check if any match by exact name
+            exact_name_match = next((c for c in similar_name_customers if c.customer_name.lower() == self.full_name.lower()), None)
+            if exact_name_match:
+                self.customer = exact_name_match.name
                 self.save(ignore_permissions=True)
-                frappe.msgprint(_("Linked to existing customer {0} with matching name").format(existing_customer))
-                return existing_customer
+                frappe.msgprint(_("Linked to existing customer {0} with exact name match").format(exact_name_match.name))
+                return exact_name_match.name
+        
+            # If no exact match but we have similar names, prompt the user
+            if similar_name_customers:
+                # Log similar customers for review
+                customer_list = "\n".join([f"- {c.customer_name} ({c.name})" for c in similar_name_customers[:5]])
+                frappe.msgprint(
+                    _("Found similar customer names. Please review and link manually if appropriate:") + 
+                    f"\n{customer_list}" +
+                    (_("\n(Showing first 5 of {0} matches)").format(len(similar_name_customers)) if len(similar_name_customers) > 5 else "")
+                )
             
         # Create new customer if no match found
         customer = frappe.new_doc("Customer")
