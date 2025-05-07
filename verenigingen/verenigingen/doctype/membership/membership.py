@@ -199,7 +199,7 @@ class Membership(Document):
                 next_month = start_date.month + 1
                 next_year = start_date.year + (next_month - 1) // 12
                 next_month = ((next_month - 1) % 12) + 1
-               next_day = min(start_date.day, [31, 29 if next_year % 4 == 0 and (next_year % 100 != 0 or next_year % 400 == 0) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][next_month - 1])
+                next_day = min(start_date.day, [31, 29 if next_year % 4 == 0 and (next_year % 100 != 0 or next_year % 400 == 0) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][next_month - 1])
                 next_date = datetime(next_year, next_month, next_day).date()
         
             # Create subscription
