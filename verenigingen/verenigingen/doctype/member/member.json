@@ -79,7 +79,7 @@
   "label": "Payment History",
   "options": "Member Payment History",
   "read_only": 1
-  }
+  },
   {
    "fieldname": "member_details_section",
    "fieldtype": "Section Break",
