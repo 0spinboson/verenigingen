@@ -14,6 +14,15 @@ frappe.ui.form.on('Member', {
                 });
             }, __('Actions'));
         }
+        if (frm.doc.customer) {
+            frm.add_custom_button(__('Payment History'), function() {
+                frappe.route_options = {
+                    'party_type': 'Customer',
+                    'party': frm.doc.customer
+                };
+                frappe.set_route('List', 'Payment Entry');
+            }, __('View'));
+        }
         
         // Add button to view chapter if member has a primary chapter
         if (frm.doc.primary_chapter) {
