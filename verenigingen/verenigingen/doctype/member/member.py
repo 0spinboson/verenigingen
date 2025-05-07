@@ -114,8 +114,10 @@ class Member(Document):
         if active_memberships:
             frappe.throw(_("Cannot delete member with active memberships. Please cancel all memberships first."))
             
+    @frappe.whitelist()
     def create_customer(self):
         """Create a customer for this member in ERPNext"""
+        # Add ignore_permissions=True to make it work for users with limited permissions
         if self.customer:
             frappe.msgprint(_("Customer {0} already exists for this member").format(self.customer))
             return self.customer
@@ -125,7 +127,7 @@ class Member(Document):
             existing_customer = frappe.db.get_value("Customer", {"email_id": self.email})
             if existing_customer:
                 self.customer = existing_customer
-                self.save()
+                self.save(ignore_permissions=True)  # Add ignore_permissions=True
                 frappe.msgprint(_("Linked to existing customer {0}").format(existing_customer))
                 return existing_customer
                 
@@ -144,11 +146,11 @@ class Member(Document):
             
         # Save customer
         customer.flags.ignore_mandatory = True
-        customer.insert(ignore_permissions=True)
+        customer.insert(ignore_permissions=True)  # Add ignore_permissions=True
         
         # Link customer to member
         self.customer = customer.name
-        self.save()
+        self.save(ignore_permissions=True)  # Add ignore_permissions=True
         
         frappe.msgprint(_("Customer {0} created successfully").format(customer.name))
         return customer.name
