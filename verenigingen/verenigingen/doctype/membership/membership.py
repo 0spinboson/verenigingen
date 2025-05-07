@@ -207,10 +207,10 @@ class Membership(Document):
             from frappe.utils import add_months
             if subscription.billing_interval == 'Month':
                 subscription.next_billing_date = add_months(subscription.start_date, 
-                                                     subscription.billing_interval_count)
+                                                         subscription.billing_interval_count)
             elif subscription.billing_interval == 'Year':
                 subscription.next_billing_date = add_months(subscription.start_date, 
-                                                     subscription.billing_interval_count * 12)
+                                                         subscription.billing_interval_count * 12)
             else:
                 # For other intervals, default to monthly
                 subscription.next_billing_date = add_months(subscription.start_date, 1)
@@ -238,9 +238,9 @@ class Membership(Document):
                             f"billing_interval={getattr(subscription, 'billing_interval', None)}, "
                             f"billing_interval_count={getattr(subscription, 'billing_interval_count', None)}")
         
-                frappe.log_error(f"Error creating subscription: {str(e)}\n{error_details}", 
+            frappe.log_error(f"Error creating subscription: {str(e)}\n{error_details}", 
                            "Membership Subscription Error")
-                frappe.throw(_("Error creating subscription: {0}").format(str(e)))
+            frappe.throw(_("Error creating subscription: {0}").format(str(e)))
         
     def renew_membership(self):
         """Create a new membership as a renewal of the current one"""
