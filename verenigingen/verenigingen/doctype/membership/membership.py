@@ -147,7 +147,7 @@ class Membership(Document):
             member.save()  # This will trigger the update_membership_status method
             
     def create_subscription_from_membership(self):
-        """Create an ERPNext subscription for this membership"""
+    """Create an ERPNext subscription for this membership"""
         # Check if member has a customer
         member = frappe.get_doc("Member", self.member)
     
@@ -158,47 +158,49 @@ class Membership(Document):
     
         if not member.customer:
             frappe.throw(_("Please create a customer for this member first"))
-
+    
+        # IMPORTANT: Patch the add_to_date function BEFORE creating subscription
         import frappe.utils.data
         original_add_to_date = frappe.utils.data.add_to_date
-
+    
         def safe_add_to_date(date=None, **kwargs):
             if kwargs is None:
                 # Log the error but prevent it from crashing
                 frappe.logger().error("add_to_date called with None kwargs - replacing with empty dict")
                 kwargs = {}
             return original_add_to_date(date=date, **kwargs)
-        
-        frappe.utils.data.add_to_date = safe_add_to_date
-        try:
     
-           # Create subscription
+        # Replace with patched version
+        frappe.utils.data.add_to_date = safe_add_to_date
+    
+        try:
+            # Create subscription
             subscription = frappe.new_doc("Subscription")
             subscription.party_type = "Customer"
             subscription.party = member.customer
-    
+        
             # Set dates
             subscription.start_date = getdate(self.start_date)
             if self.end_date:
                 subscription.end_date = getdate(self.end_date)
-    
+        
             # Add subscription plan
             if not self.subscription_plan:
                 frappe.throw(_("Subscription Plan is required to create a subscription"))
-    
+        
             plan_doc = frappe.get_doc("Subscription Plan", self.subscription_plan)
-    
+        
             # Explicitly set billing cycle information
             subscription.billing_interval = getattr(plan_doc, 'billing_interval', 'Month')
             subscription.billing_interval_count = getattr(plan_doc, 'billing_interval_count', 1)
-
+        
             # Add plan to subscription
             subscription_item = {
                 "subscription_plan": self.subscription_plan,
                 "qty": 1
             }
             subscription.append("plans", subscription_item)
-
+        
             # Additional settings
             membership_type = frappe.get_doc("Membership Type", self.membership_type)
             if membership_type.allow_auto_renewal and self.auto_renew:
