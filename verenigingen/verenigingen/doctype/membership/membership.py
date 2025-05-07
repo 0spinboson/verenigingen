@@ -147,7 +147,7 @@ class Membership(Document):
             member.save()  # This will trigger the update_membership_status method
             
     def create_subscription_from_membership(self):
-    """Create an ERPNext subscription for this membership"""
+        """Create an ERPNext subscription for this membership"""
         # Check if member has a customer
         member = frappe.get_doc("Member", self.member)
     
