@@ -9,7 +9,10 @@ class Member(Document):
         self.update_full_name()
         self.update_membership_status()
         self.update_address_display()
-        # Automatically create/link customer if not already done
+
+    def after_insert(self):
+        """Create linked entities after member is created"""
+        # Create customer if not already linked
         if not self.customer and self.email:
             self.create_customer()
         
