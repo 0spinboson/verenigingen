@@ -130,7 +130,7 @@ doc_events = {
     },
     "Verenigingen Settings": {
         "on_update": "verenigingen.verenigingen.doctype.tax_exemption_handler.on_update_verenigingen_settings",
-    }
+    },
     "Payment Entry": {
         "on_submit": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history",
         "on_cancel": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history",
