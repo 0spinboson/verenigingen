@@ -244,15 +244,24 @@ class Member(Document):
         user.send_welcome_email = 1
         user.user_type = "Website User"
         
-        # Add role for accessing member portal
-        user.add_roles("Member")
+        member_role = "Member"
+        verenigingen_member_role = "Verenigingen Member"
+    
+        # Try to find a suitable role
+        if frappe.db.exists("Role", member_role):
+            user.append("roles", {"role": member_role})
+        elif frappe.db.exists("Role", verenigingen_member_role):
+            user.append("roles", {"role": verenigingen_member_role})
+        else:
+            # No appropriate role found, create a message but continue
+            frappe.msgprint(_("Warning: Could not find Member role to assign to user. Creating user without roles."))
         
         user.flags.ignore_permissions = True
-        user.insert()
+        user.insert(ignore_permissions=True)
         
         # Link user to member
         self.user = user.name
-        self.save()
+        self.save(ignore_permissions=True)
         
         frappe.msgprint(_("User {0} created successfully").format(user.name))
         return user.name
