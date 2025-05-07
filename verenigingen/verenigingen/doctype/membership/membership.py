@@ -147,6 +147,31 @@ class Membership(Document):
             member.save()  # This will trigger the update_membership_status method
             
     def create_subscription_from_membership(self):
+        import frappe.utils.data
+        original_add_to_date = frappe.utils.data.add_to_date
+
+        def patched_add_to_date(date=None, **kwargs):
+            if kwargs is None:
+                frappe.log_error(f"add_to_date called with None kwargs. Date: {date}", 
+                               "Subscription Creation Debug")
+                kwargs = {}  # Replace None with empty dict to prevent error
+            return original_add_to_date(date=date, **kwargs)
+
+        # Replace with patched version
+        frappe.utils.data.add_to_date = patched_add_to_date
+
+        try:
+            # Your existing subscription creation code
+            subscription.insert(ignore_permissions=True)
+            subscription.submit()
+        except Exception as e:
+            frappe.log_error(f"Error in subscription creation: {str(e)}", 
+                           "Subscription Creation Error")
+            raise
+        finally:
+            # Restore original function
+            frappe.utils.data.add_to_date = original_add_to_date
+    
         """Create an ERPNext subscription for this membership"""
         # Check if member has a customer
         member = frappe.get_doc("Member", self.member)
