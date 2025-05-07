@@ -73,7 +73,27 @@ class Membership(Document):
     def on_submit(self):
         # Update member's current membership
         self.update_member_status()
+        frappe.logger().debug(f"Before submit - Status: {self.status}, Cancellation Date: {self.cancellation_date}")
         
+        self.cancellation_date = None
+
+        # Set proper status
+        if self.fee_amount and flt(self.fee_amount) > 0:
+            if self.payment_status not in ["Paid", "Refunded"]:
+                self.status = "Pending"
+            else:
+                self.status = "Active"
+        else:
+            self.status = "Active"
+        # Force update to database
+        self.db_set('status', self.status)
+        self.db_set('cancellation_date', None)
+
+        frappe.logger().debug(f"After submit fixes - Status: {self.status}, Cancellation Date: {self.cancellation_date}")
+    
+        # Update member's current membership
+        self.update_member_status()
+
         # Link to subscription if configured
         if not self.subscription and self.subscription_plan:
             self.create_subscription_from_membership()
