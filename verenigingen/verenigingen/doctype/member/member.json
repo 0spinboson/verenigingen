@@ -42,6 +42,8 @@
   "column_break_31",
   "membership_status",
   "time_remaining",
+  "payment_history_section",
+  "payment_history",
   "board_memberships_section",
   "board_memberships_html",
   "custom_fields_section",
@@ -65,6 +67,19 @@
    "fieldtype": "HTML",
    "label": "Board Memberships"
   },
+  {
+  "fieldname": "payment_history_section",
+  "fieldtype": "Section Break",
+  "label": "Payment History",
+  "depends_on": "eval:doc.customer"
+  },
+  {
+  "fieldname": "payment_history",
+  "fieldtype": "Table",
+  "label": "Payment History",
+  "options": "Member Payment History",
+  "read_only": 1
+  }
   {
    "fieldname": "member_details_section",
    "fieldtype": "Section Break",
