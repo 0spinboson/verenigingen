@@ -143,8 +143,38 @@ class Membership(Document):
         if not self.subscription_plan:
             frappe.throw(_("Subscription Plan is required to create a subscription"))
         
-        # Get the subscription plan details to ensure billing cycle info is available
         plan_doc = frappe.get_doc("Subscription Plan", self.subscription_plan)
+
+        # Explicitly set billing cycle information
+        # This is critical to avoid the NoneType error
+        if hasattr(plan_doc, 'billing_interval'):
+            subscription.billing_interval = plan_doc.billing_interval
+            subscription.billing_interval_count = plan_doc.billing_interval_count or 1
+        else:
+            # Default billing information based on membership duration
+            if self.end_date and self.start_date:
+                # Calculate months between start and end dates
+                from dateutil.relativedelta import relativedelta
+                start = getdate(self.start_date)
+                end = getdate(self.end_date)
+                diff = relativedelta(end, start)
+                total_months = diff.years * 12 + diff.months
+            
+                if total_months == 0:
+                    total_months = 1  # Minimum 1 month
+                
+                if total_months % 12 == 0 and total_months > 0:
+                    # Annual billing
+                    subscription.billing_interval = "Year"
+                    subscription.billing_interval_count = total_months // 12
+                else:
+                    # Monthly billing
+                    subscription.billing_interval = "Month"
+                    subscription.billing_interval_count = total_months
+            else:
+                # Default to annual if no dates specified
+                subscription.billing_interval = "Year"
+                subscription.billing_interval_count = 1
     
         subscription_item = {
             "subscription_plan": self.subscription_plan,
