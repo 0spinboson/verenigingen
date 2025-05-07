@@ -14,14 +14,24 @@ frappe.ui.form.on('Member', {
                 });
             }, __('Actions'));
         }
+        // In the refresh function in member.js
         if (frm.doc.customer) {
-            frm.add_custom_button(__('Payment History'), function() {
-                frappe.route_options = {
-                    'party_type': 'Customer',
-                    'party': frm.doc.customer
-                };
-                frappe.set_route('List', 'Payment Entry');
+            // Your existing buttons that require customer to be set
+            frm.add_custom_button(__('Customer'), function() {
+                frappe.set_route('Form', 'Customer', frm.doc.customer);
             }, __('View'));
+    
+            // Add the new button in the same condition block
+            frm.add_custom_button(__('Refresh Payment History'), function() {
+                frappe.call({
+                    method: "load_payment_history",
+                    doc: frm.doc,
+                    callback: function() {
+                        frm.refresh_field("payment_history");
+                        frappe.show_alert(__("Payment history refreshed"));
+                    }
+                });
+            }, __('Actions'));
         }
         
         // Add button to view chapter if member has a primary chapter
