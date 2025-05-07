@@ -181,6 +181,13 @@ class Membership(Document):
         # This is critical to avoid the NoneType error
         subscription.billing_interval = getattr(plan_doc, 'billing_interval', 'Month')
         subscription.billing_interval_count = getattr(plan_doc, 'billing_interval_count', 1)
+
+        if hasattr(subscription, 'billing_cycle_info') and subscription.billing_cycle_info is None:
+            # Create a proper billing_cycle_info dictionary
+            subscription.billing_cycle_info = {
+                'billing_interval': subscription.billing_interval or 'Month',
+                'billing_interval_count': subscription.billing_interval_count or 1
+            }
     
         # Ensure these are never None
         if not subscription.billing_interval:
