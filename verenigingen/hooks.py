@@ -90,10 +90,10 @@ after_install = "verenigingen.setup.execute_after_install"
 # -----------
 # Permissions evaluated in scripted ways
 
-#permission_query_conditions = {
-#    "Member": "verenigingen.permissions.get_member_permission_query",
-#    "Membership": "verenigingen.permissions.get_membership_permission_query",
-#}
+permission_query_conditions = {
+    "Member": "verenigingen.permissions.get_member_permission_query",
+    "Membership": "verenigingen.permissions.get_membership_permission_query",
+}
 
 # has_permission = {
 #	"Event": "frappe.desk.doctype.event.event.has_permission",
@@ -130,6 +130,11 @@ doc_events = {
     },
     "Verenigingen Settings": {
         "on_update": "verenigingen.verenigingen.doctype.tax_exemption_handler.on_update_verenigingen_settings",
+    }
+    "Payment Entry": {
+        "on_submit": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history",
+        "on_cancel": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history",
+        "on_trash": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history"
     }
 }
 
