@@ -184,7 +184,7 @@ class Membership(Document):
         if hasattr(plan_doc, 'billing_interval'):
             subscription.billing_interval = plan_doc.billing_interval
             subscription.billing_interval_count = plan_doc.billing_interval_count or 1
-       else:
+        else:
             # Default billing information
             subscription.billing_interval = 'Month'
             subscription.billing_interval_count = 1
