@@ -5,6 +5,12 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "section_break_27",
+  "member_id_start",
+  "last_member_id",
+  "chapter_settings_section",
+  "national_board_chapter",
+  "organization_email_domain",
   "financial_settings_section",
   "enable_razorpay_for_memberships",
   "creation_user",
@@ -33,12 +39,7 @@
   "column_break_22",
   "automate_donation_payment_entries",
   "donation_debit_account",
-  "donation_payment_account",
-  "chapter_settings_section",
-  "national_board_chapter",
-  "section_break_27",
-  "member_id_start",
-  "last_member_id"
+  "donation_payment_account"
  ],
  "fields": [
   {
@@ -264,20 +265,26 @@
   {
    "fieldname": "chapter_settings_section",
    "fieldtype": "Section Break",
-   "label": "Chapter Settings"
+   "label": "Organization Settings"
   },
   {
+   "description": "This chapter will be treated as the National Board with restricted access",
    "fieldname": "national_board_chapter",
    "fieldtype": "Link",
    "label": "National Board Chapter",
-   "options": "Chapter",
-   "description": "This chapter will be treated as the National Board with restricted access"
+   "options": "Chapter"
+  },
+  {
+   "description": "Domain to use for organization email addresses (e.g., members.union.org)",
+   "fieldname": "organization_email_domain",
+   "fieldtype": "Data",
+   "label": "Organization Email Domain"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-05-03 20:47:50.385911",
+ "modified": "2025-05-08 21:22:21.633697",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Verenigingen Settings",

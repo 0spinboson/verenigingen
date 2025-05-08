@@ -83,30 +83,44 @@ frappe.ui.form.on('Member', {
                 });
             }, __('Actions'));
         }
-        
-        // Add button to create a Volunteer
+	
         frm.add_custom_button(__('Create Volunteer'), function() {
-            // First approach: Use a different method that works more reliably
-            frappe.route_options = {
-                'volunteer_name': frm.doc.full_name,
-                'member': frm.doc.name,
-                'preferred_pronouns': frm.doc.pronouns,
-                'email': frm.doc.email || ''
-            };
-            frappe.new_doc('Volunteer');
-    
-        // Alternative approach (if the above doesn't work):
-        /*
-        frappe.model.with_doctype('Volunteer', function() {
-            var doc = frappe.model.get_new_doc('Volunteer');
-            doc.volunteer_name = frm.doc.full_name;
-            doc.member = frm.doc.name;
-            doc.preferred_pronouns = frm.doc.pronouns;
-            doc.email = frm.doc.email || '';
-            frappe.ui.form.make_quick_entry('Volunteer', null, null, doc);
+        // First get the email domain from settings
+        frappe.call({
+            method: 'frappe.client.get_value',
+            args: {
+                doctype: 'Verenigingen Settings',
+                fieldname: 'organization_email_domain'
+            },
+            callback: function(r) {
+                // Default domain if not set
+                const domain = r.message && r.message.organization_email_domain 
+                    ? r.message.organization_email_domain 
+                    : 'example.org';
+            
+                // Generate organization email based on full name
+                // Replace spaces with dots and convert to lowercase
+                const nameForEmail = frm.doc.full_name 
+                    ? frm.doc.full_name.replace(/\s+/g, '.').toLowerCase()
+                    : '';
+            
+                // Construct organization email
+                const orgEmail = nameForEmail ? `${nameForEmail}@${domain}` : '';
+            
+                // Set route options for creating volunteer
+                frappe.route_options = {
+                    'volunteer_name': frm.doc.full_name,
+                    'member': frm.doc.name,
+                    'preferred_pronouns': frm.doc.pronouns,
+                    'email': orgEmail,  // Organization email
+                     'personal_email': frm.doc.email || ''  // Personal email from member
+                };
+            
+                // Create new volunteer doc
+                frappe.new_doc('Volunteer');
+            }
         });
-        */
-        }, __('Actions'));
+    }, __('Actions'));
         
         // Add button to create a new membership
         frm.add_custom_button(__('Create Membership'), function() {

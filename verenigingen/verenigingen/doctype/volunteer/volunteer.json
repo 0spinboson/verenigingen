@@ -9,6 +9,7 @@
  "field_order": [
   "volunteer_name",
   "member",
+  "personal_email",
   "preferred_pronouns",
   "column_break_5",
   "volunteer_type",
@@ -130,11 +131,17 @@
    "fieldname": "preferred_pronouns",
    "fieldtype": "Data",
    "label": "Preferred pronouns"
+  },
+  {
+   "fieldname": "personal_email",
+   "fieldtype": "Data",
+   "label": "Personal Email",
+   "options": "Email"
   }
  ],
  "image_field": "image",
  "links": [],
- "modified": "2025-04-28 19:47:20.785140",
+ "modified": "2025-05-08 21:18:23.583666",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Volunteer",

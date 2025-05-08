@@ -62,7 +62,7 @@
   {
    "fieldname": "board_memberships_html",
    "fieldtype": "HTML",
-   "label": "Chapter Board and Team Memberships"
+   "label": "Board and Team Memberships"
   },
   {
    "depends_on": "eval:doc.customer",
@@ -332,7 +332,7 @@
    "table_fieldname": "references"
   }
  ],
- "modified": "2025-05-08 20:54:20.034530",
+ "modified": "2025-05-08 21:05:56.817239",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
