@@ -6,7 +6,6 @@
  "engine": "InnoDB",
  "field_order": [
   "member_details_section",
-  "member_id",
   "first_name",
   "middle_name",
   "last_name",
@@ -19,16 +18,11 @@
   "phone",
   "image",
   "status",
+  "member_id",
+  "age",
   "address_section",
-  "address_line1",
-  "address_line2",
-  "city",
-  "state",
-  "postal_code",
-  "country",
+  "primary_address",
   "address_display",
-  "primary_chapter",
-  "permission_category",
   "erpnext_integration_section",
   "customer",
   "create_customer_from_member",
@@ -43,10 +37,12 @@
   "column_break_31",
   "membership_status",
   "time_remaining",
-  "payment_history_section",
-  "payment_history",
+  "primary_chapter",
+  "permission_category",
   "board_memberships_section",
   "board_memberships_html",
+  "payment_history_section",
+  "payment_history",
   "custom_fields_section",
   "custom_field_1",
   "custom_field_2",
@@ -61,18 +57,18 @@
    "depends_on": "eval:doc.name",
    "fieldname": "board_memberships_section",
    "fieldtype": "Section Break",
-   "label": "Board Memberships"
+   "label": "Board and Team Memberships"
   },
   {
    "fieldname": "board_memberships_html",
    "fieldtype": "HTML",
-   "label": "Board Memberships"
+   "label": "Chapter Board and Team Memberships"
   },
   {
-  "fieldname": "payment_history_section",
-  "fieldtype": "Section Break",
-  "label": "Payment History",
-  "depends_on": "eval:doc.customer"
+   "depends_on": "eval:doc.customer",
+   "fieldname": "payment_history_section",
+   "fieldtype": "Section Break",
+   "label": "Payment History"
   },
   {
    "fieldname": "member_id",
@@ -83,11 +79,11 @@
    "unique": 1
   },
   {
-  "fieldname": "payment_history",
-  "fieldtype": "Table",
-  "label": "Payment History",
-  "options": "Member Payment History",
-  "read_only": 1
+   "fieldname": "payment_history",
+   "fieldtype": "Table",
+   "label": "Payment History",
+   "options": "Member Payment History",
+   "read_only": 1
   },
   {
    "fieldname": "member_details_section",
@@ -136,8 +132,9 @@
   },
   {
    "fieldname": "pronouns",
-   "fieldtype": "Data",
-   "label": "Pronouns"
+   "fieldtype": "Select",
+   "label": "Pronouns",
+   "options": "She/her\nHe/him\nThey/them"
   },
   {
    "fieldname": "birth_date",
@@ -176,43 +173,12 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "Active\nInactive\nSuspended\nDeceased"
+   "options": "Active\nExpired\nSuspended\nBanned\nDeceased"
   },
   {
    "fieldname": "address_section",
    "fieldtype": "Section Break",
    "label": "Address"
-  },
-  {
-   "fieldname": "address_line1",
-   "fieldtype": "Data",
-   "label": "Address Line 1"
-  },
-  {
-   "fieldname": "address_line2",
-   "fieldtype": "Data",
-   "label": "Address Line 2"
-  },
-  {
-   "fieldname": "city",
-   "fieldtype": "Data",
-   "label": "City"
-  },
-  {
-   "fieldname": "state",
-   "fieldtype": "Data",
-   "label": "State/Province"
-  },
-  {
-   "fieldname": "postal_code",
-   "fieldtype": "Data",
-   "label": "Postal Code"
-  },
-  {
-   "fieldname": "country",
-   "fieldtype": "Link",
-   "label": "Country",
-   "options": "Country"
   },
   {
    "fieldname": "address_display",
@@ -339,6 +305,18 @@
    "fieldname": "notes",
    "fieldtype": "Text Editor",
    "label": "Notes"
+  },
+  {
+   "fieldname": "age",
+   "fieldtype": "Int",
+   "label": "Age",
+   "read_only": 1
+  },
+  {
+   "fieldname": "primary_address",
+   "fieldtype": "Link",
+   "label": "Primary address",
+   "options": "Address"
   }
  ],
  "links": [
@@ -354,10 +332,11 @@
    "table_fieldname": "references"
   }
  ],
- "modified": "2025-05-06 20:24:36.271050",
+ "modified": "2025-05-08 20:54:20.034530",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
+ "naming_rule": "Expression",
  "owner": "Administrator",
  "permissions": [
   {
