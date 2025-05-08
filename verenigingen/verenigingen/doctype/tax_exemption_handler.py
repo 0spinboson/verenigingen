@@ -11,11 +11,14 @@ def handle_tax_exemption():
     
     # Check for existing 0% tax template
     tax_template_name = "Tax Exempt - 0%"
-    if not frappe.db.exists("Sales Taxes and Charges Template", tax_template_name):
-        # Create the tax template
-        create_tax_exempt_template(tax_template_name)
+    if frappe.db.exists("Sales Taxes and Charges Template", tax_template_name):
+        # Template already exists, no need to create it again
+        return
     
-    print(f"Tax exemption enabled, using tax template: {tax_template_name}")
+    # Create the tax template only if it doesn't exist
+    create_tax_exempt_template(tax_template_name)
+    
+    frappe.msgprint(_("Created tax exempt template: {0}").format(tax_template_name))
 
 def create_tax_exempt_template(template_name):
     """Create a 0% tax template for tax-exempt contributions and donations"""
@@ -27,7 +30,7 @@ def create_tax_exempt_template(template_name):
             company = frappe.defaults.get_global_default('company')
         
         if not company:
-            print("No company found, skipping tax template creation")
+            frappe.msgprint(_("No company found, skipping tax template creation"))
             return
         
         # Create tax template
@@ -46,9 +49,9 @@ def create_tax_exempt_template(template_name):
         })
         
         tax_template.save()
-        print(f"Created tax exempt template: {template_name}")
     except Exception as e:
-        print(f"Error creating tax exempt template: {str(e)}")
+        frappe.log_error(f"Error creating tax exempt template: {str(e)}", 
+                       "Tax Exemption Handler Error")
 
 def get_tax_account(company):
     """Get appropriate tax account for the company"""
