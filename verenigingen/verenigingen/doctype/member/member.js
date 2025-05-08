@@ -69,6 +69,30 @@ frappe.ui.form.on('Member', {
             }
         });
 
+        // Setup Address buttons and display
+        frm.add_custom_button(__('New Address'), function() {
+            frappe.new_doc('Address', {
+                address_title: frm.doc.full_name,
+                address_type: 'Personal',
+                links: [{
+                    link_doctype: 'Member',
+                    link_name: frm.doc.name
+                }]
+            });
+        }, __('Actions'));
+        if (frm.doc.address) {
+            frm.add_custom_button(__('Address'), function() {
+                frappe.set_route('Form', 'Address', frm.doc.address);
+            }, __('View'));
+        }
+        // Refresh Address HTML
+        if (frm.doc.__onload && frm.doc.__onload.addr_list) {
+            let addr_html = frappe.render_template('address_list', {
+                addr_list: frm.doc.__onload.addr_list
+            });
+            $(frm.fields_dict['address_html'].wrapper).html(addr_html);
+        }
+
         // Add button to create user
         if (!frm.doc.user && frm.doc.email) {
             frm.add_custom_button(__('Create User'), function() {
@@ -210,7 +234,23 @@ frappe.ui.form.on('Member', {
         ].filter(Boolean).join(' ');
         
         frm.set_value('full_name', full_name);
-    }
+    },
+
+    address: function(frm) {
+        // Fetch address details when address is selected
+        if (frm.doc.address) {
+            frappe.call({
+                method: 'frappe.contacts.doctype.address.address.get_address_display',
+                args: {
+                    "address_dict": frm.doc.address
+                },
+                callback: function(r) {
+                    if (r.message) {
+                        frm.set_value('address_display', r.message);
+                    }
+                }
+            });
+        }
 });
 
 // Function to change primary chapter
