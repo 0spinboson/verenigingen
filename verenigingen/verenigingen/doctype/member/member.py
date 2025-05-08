@@ -25,7 +25,6 @@ class Member(Document):
         self.validate_name()
         self.update_full_name()
         self.update_membership_status()
-        self.update_address_display()
 
     def after_insert(self):
         """Create linked entities after member is created"""
@@ -94,34 +93,6 @@ class Member(Document):
         full_name = " ".join(filter(None, [self.first_name, self.middle_name, self.last_name]))
         if self.full_name != full_name:
             self.full_name = full_name
-            
-    def update_address_display(self):
-        # Format and set the address display
-        address_parts = []
-        if self.address_line1:
-            address_parts.append(self.address_line1)
-        if self.address_line2:
-            address_parts.append(self.address_line2)
-            
-        city_state = []
-        if self.city:
-            city_state.append(self.city)
-        if self.state:
-            city_state.append(self.state)
-        if city_state:
-            address_parts.append(", ".join(city_state))
-            
-        if self.postal_code:
-            address_parts.append(self.postal_code)
-        if self.country:
-            # Get country name if country code is provided
-            if frappe.db.exists("Country", self.country):
-                country_name = frappe.db.get_value("Country", self.country, "country_name")
-                address_parts.append(country_name)
-            else:
-                address_parts.append(self.country)
-                
-        self.address_display = "\n".join(address_parts)
             
     def update_membership_status(self):
         # Update the membership status section
