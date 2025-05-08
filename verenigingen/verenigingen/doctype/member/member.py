@@ -4,6 +4,23 @@ from frappe.model.document import Document
 from frappe.utils import getdate, today, add_days, date_diff
 
 class Member(Document):
+    def before_save(self):
+        if not self.membership_id:
+            self.membership_id = self.generate_membership_id()
+
+    def generate_membership_id(self):
+        settings = frappe.get_single("Verenigingen Settings")
+
+        if not settings.last_membership_id:
+            settings.last_membership_id = settings.membership_id_start -1
+
+        new_id = settings.last_membership_id +1
+
+        settings.last_membership_id = new_id
+        settings.save()
+
+        return str(new_id)
+    
     def validate(self):
         self.validate_name()
         self.update_full_name()
