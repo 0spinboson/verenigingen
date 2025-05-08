@@ -25,12 +25,35 @@ class Member(Document):
         self.validate_name()
         self.update_full_name()
         self.update_membership_status()
+        self.calculate_age()
 
     def after_insert(self):
         """Create linked entities after member is created"""
         # Create customer if not already linked
         if not self.customer and self.email:
             self.create_customer()
+
+    def calculate_age(self):
+        """Calculate age based on birth_date field"""
+        try:
+            if self.birth_date:
+                from datetime import datetime, date
+                today = date.today()
+                if isinstance(self.birth_date, str):
+                    born = datetime.strptime(self.birth_date, '%Y-%m-%d').date()
+                else:
+                    born = self.birth_date
+            # Calculate age
+                age = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+            # Set the age field
+                self.age = age
+                frappe.log_error(f"Age calculated as: {age}", "Age Debug")
+            else:
+                self.age = None
+                frappe.log_error("No birth date, age set to None", "Age Debug")
+        except Exception as e:
+            frappe.log_error(f"Error calculating age: {str(e)}", "Member Error")
+
     def on_load(self):
         """Load payment history when the document is loaded"""
         if self.customer:
