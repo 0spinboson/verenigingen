@@ -69,30 +69,6 @@ frappe.ui.form.on('Member', {
             }
         });
 
-        // Setup Address buttons and display
-        frm.add_custom_button(__('New Address'), function() {
-            frappe.new_doc('Address', {
-                address_title: frm.doc.full_name,
-                address_type: 'Personal',
-                links: [{
-                    link_doctype: 'Member',
-                    link_name: frm.doc.name
-                }]
-            });
-        }, __('Actions'));
-        if (frm.doc.address) {
-            frm.add_custom_button(__('Address'), function() {
-                frappe.set_route('Form', 'Address', frm.doc.address);
-            }, __('View'));
-        }
-        // Refresh Address HTML
-        if (frm.doc.__onload && frm.doc.__onload.addr_list) {
-            let addr_html = frappe.render_template('address_list', {
-                addr_list: frm.doc.__onload.addr_list
-            });
-            $(frm.fields_dict['address_html'].wrapper).html(addr_html);
-        }
-
         // Add button to create user
         if (!frm.doc.user && frm.doc.email) {
             frm.add_custom_button(__('Create User'), function() {
@@ -162,13 +138,6 @@ frappe.ui.form.on('Member', {
             frappe.set_route('List', 'Membership', {'member': frm.doc.name});
         }, __('View'));
         
-        // Add button to view linked customer
-        if (frm.doc.customer) {
-            frm.add_custom_button(__('Customer'), function() {
-                frappe.set_route('Form', 'Customer', frm.doc.customer);
-            }, __('View'));
-        }
-        
         // Add button to view linked user
         if (frm.doc.user) {
             frm.add_custom_button(__('User'), function() {
@@ -210,21 +179,10 @@ frappe.ui.form.on('Member', {
         frm.refresh();
     },
     
-    first_name: function(frm) {
-        // Automatically update full name
-        frm.trigger('update_full_name');
+    ['first_name', 'middle_name', 'last_name'].forEach(field => {
+            frm.fields_dict[field].df.onchange = () => frm.trigger('update_full_name');
+        });
     },
-    
-    middle_name: function(frm) {
-        // Automatically update full name
-        frm.trigger('update_full_name');
-    },
-    
-    last_name: function(frm) {
-        // Automatically update full name
-        frm.trigger('update_full_name');
-    },
-    
     update_full_name: function(frm) {
         // Build full name from components
         let full_name = [
@@ -232,25 +190,9 @@ frappe.ui.form.on('Member', {
             frm.doc.middle_name,
             frm.doc.last_name
         ].filter(Boolean).join(' ');
-        
-        frm.set_value('full_name', full_name);
-    },
 
-    address: function(frm) {
-        // Fetch address details when address is selected
-        if (frm.doc.address) {
-            frappe.call({
-                method: 'frappe.contacts.doctype.address.address.get_address_display',
-                args: {
-                    "address_dict": frm.doc.address
-                },
-                callback: function(r) {
-                    if (r.message) {
-                        frm.set_value('address_display', r.message);
-                    }
-                }
-            });
-        }
+        frm.set_value('full_name', full_name);
+    }
 });
 
 // Function to change primary chapter
