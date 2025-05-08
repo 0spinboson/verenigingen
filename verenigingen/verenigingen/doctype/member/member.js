@@ -69,24 +69,6 @@ frappe.ui.form.on('Member', {
             }
         });
 
-	if (frm.doc.primary_address) {
-            frm.call({
-                method: 'verenigingen.verenigingen.doctype.member.member.get_address_display',
-                args: {
-                    address_name: frm.doc.primary_address
-                },
-                callback: function(r) {
-                    if (r.message) {
-                        // Render the address display
-                        $(frm.fields_dict.address_html_display.wrapper).html(r.message);
-                    }
-                }
-            });
-        } else {
-            // Clear the HTML if no address is set
-            $(frm.fields_dict.address_html_display.wrapper).html('');
-        }
-
         // Add button to create user
         if (!frm.doc.user && frm.doc.email) {
             frm.add_custom_button(__('Create User'), function() {
@@ -208,7 +190,6 @@ frappe.ui.form.on('Member', {
             frm.doc.middle_name,
             frm.doc.last_name
         ].filter(Boolean).join(' ');
-
         frm.set_value('full_name', full_name);
     }
 });
@@ -298,8 +279,4 @@ function change_primary_chapter(frm) {
             d.show();
         }
     });
-}
-// Update address display when primary_address field changes
-primary_address: function(frm) {
-    frm.trigger('refresh');
 }
