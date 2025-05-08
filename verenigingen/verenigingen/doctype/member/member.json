@@ -6,6 +6,7 @@
  "engine": "InnoDB",
  "field_order": [
   "member_details_section",
+  "member_id",
   "first_name",
   "middle_name",
   "last_name",
@@ -72,6 +73,14 @@
   "fieldtype": "Section Break",
   "label": "Payment History",
   "depends_on": "eval:doc.customer"
+  },
+  {
+   "fieldname": "member_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Member ID",
+   "read_only_depends_on": "eval:!doc.__islocal",
+   "unique": 1
   },
   {
   "fieldname": "payment_history",
