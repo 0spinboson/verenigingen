@@ -191,15 +191,9 @@ class Member(Document):
         if self.customer:
             frappe.msgprint(_("Customer {0} already exists for this member").format(self.customer))
             return self.customer
-        
-        # Check if customer with same email already exists
-        if self.email:
-            existing_customer = frappe.db.get_value("Customer", {"email_id": self.email})
-            if existing_customer:
-                self.customer = existing_customer
-                self.save(ignore_permissions=True)
-                frappe.msgprint(_("Linked to existing customer {0}").format(existing_customer))
-                return existing_customer
+    
+        # REMOVED: The check for customer with same email already exists
+        # We want each member to have their own unique customer
     
         # For duplicate name detection, we need a more sophisticated approach
         if self.full_name:
@@ -211,30 +205,33 @@ class Member(Document):
                 ],
                 fields=["name", "customer_name", "email_id", "mobile_no"]
             )
-        
+    
             # Check if any match by exact name
             exact_name_match = next((c for c in similar_name_customers if c.customer_name.lower() == self.full_name.lower()), None)
             if exact_name_match:
-                self.customer = exact_name_match.name
-                self.save(ignore_permissions=True)
-                frappe.msgprint(_("Linked to existing customer {0} with exact name match").format(exact_name_match.name))
-                return exact_name_match.name
-        
+                # Don't automatically link - just inform the user
+                customer_info = f"Name: {exact_name_match.name}, Email: {exact_name_match.email_id or 'N/A'}"
+                frappe.msgprint(
+                    _("Found existing customer with same name: {0}").format(customer_info) +
+                    _("\nCreating a new customer for this member. If you want to link to the existing customer instead, please do so manually.")
+                )
+    
             # If no exact match but we have similar names, prompt the user
-            if similar_name_customers:
+            elif similar_name_customers:
                 # Log similar customers for review
                 customer_list = "\n".join([f"- {c.customer_name} ({c.name})" for c in similar_name_customers[:5]])
                 frappe.msgprint(
-                    _("Found similar customer names. Please review and link manually if appropriate:") + 
+                    _("Found similar customer names. Please review:") + 
                     f"\n{customer_list}" +
-                    (_("\n(Showing first 5 of {0} matches)").format(len(similar_name_customers)) if len(similar_name_customers) > 5 else "")
+                    (_("\n(Showing first 5 of {0} matches)").format(len(similar_name_customers)) if len(similar_name_customers) > 5 else "") +
+                    _("\nCreating a new customer for this member.")
                 )
-            
-        # Create new customer if no match found
+        
+        # Create new customer if no match found or if matches were found but we're proceeding with a new customer
         customer = frappe.new_doc("Customer")
         customer.customer_name = self.full_name
         customer.customer_type = "Individual"
-    
+
         # Set contact details
         if self.email:
             customer.email_id = self.email
@@ -242,17 +239,19 @@ class Member(Document):
             customer.mobile_no = self.mobile_no
         if self.phone:
             customer.phone = self.phone
-        
+
         # Save customer
         customer.flags.ignore_mandatory = True
         customer.insert(ignore_permissions=True)
-    
+
         # Link customer to member
         self.customer = customer.name
         self.save(ignore_permissions=True)
-    
+
         frappe.msgprint(_("Customer {0} created successfully").format(customer.name))
         return customer.name
+
+    
         
     @frappe.whitelist()
     def create_user(self):
@@ -402,6 +401,7 @@ def get_board_memberships(member_name):
     """, (member_name,), as_dict=True)
     
     return board_memberships
+
 @frappe.whitelist()
 def update_member_payment_history(doc, method=None):
     """Update payment history for member when a payment entry is modified"""
