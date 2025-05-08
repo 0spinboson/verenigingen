@@ -16,9 +16,8 @@
   "email",
   "image",
   "address_contacts",
-  "address_html",
+  "address",
   "column_break_9",
-  "contact_html",
   "volunteer_availability_and_skills_details",
   "availability",
   "availability_timeslot",
@@ -71,18 +70,8 @@
    "options": "fa fa-map-marker"
   },
   {
-   "fieldname": "address_html",
-   "fieldtype": "HTML",
-   "label": "Address HTML"
-  },
-  {
    "fieldname": "column_break_9",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "contact_html",
-   "fieldtype": "HTML",
-   "label": "Contact HTML"
   },
   {
    "fieldname": "volunteer_availability_and_skills_details",
@@ -127,21 +116,30 @@
    "options": "Member"
   },
   {
-   "fetch_from": "member.preferred_pronouns",
+   "fetch_from": "member.pronouns",
    "fieldname": "preferred_pronouns",
    "fieldtype": "Data",
-   "label": "Preferred pronouns"
+   "label": "Preferred pronouns",
+   "read_only": 1
   },
   {
+   "fetch_from": "member.email",
    "fieldname": "personal_email",
    "fieldtype": "Data",
    "label": "Personal Email",
-   "options": "Email"
+   "options": "Email",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "member.primary_address",
+   "fieldname": "address",
+   "fieldtype": "Data",
+   "label": "Address"
   }
  ],
  "image_field": "image",
  "links": [],
- "modified": "2025-05-08 21:18:23.583666",
+ "modified": "2025-05-08 21:36:45.116940",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Volunteer",

@@ -25,10 +25,8 @@
   "address_display",
   "erpnext_integration_section",
   "customer",
-  "create_customer_from_member",
   "column_break_24",
   "user",
-  "create_user_from_member",
   "subscription_section",
   "current_membership_details",
   "current_membership_type",
@@ -181,9 +179,10 @@
    "label": "Address"
   },
   {
+   "fetch_from": "primary_address.address_line1",
    "fieldname": "address_display",
-   "fieldtype": "Small Text",
-   "label": "Address Display",
+   "fieldtype": "HTML",
+   "label": "Address Details",
    "read_only": 1
   },
   {
@@ -198,11 +197,6 @@
    "options": "Customer"
   },
   {
-   "fieldname": "create_customer_from_member",
-   "fieldtype": "Button",
-   "label": "Create Customer"
-  },
-  {
    "fieldname": "column_break_24",
    "fieldtype": "Column Break"
   },
@@ -211,11 +205,6 @@
    "fieldtype": "Link",
    "label": "User",
    "options": "User"
-  },
-  {
-   "fieldname": "create_user_from_member",
-   "fieldtype": "Button",
-   "label": "Create User"
   },
   {
    "fieldname": "subscription_section",
@@ -332,7 +321,7 @@
    "table_fieldname": "references"
   }
  ],
- "modified": "2025-05-08 21:05:56.817239",
+ "modified": "2025-05-08 22:07:58.094437",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
