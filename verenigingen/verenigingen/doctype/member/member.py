@@ -5,18 +5,18 @@ from frappe.utils import getdate, today, add_days, date_diff
 
 class Member(Document):
     def before_save(self):
-        if not self.membership_id:
-            self.membership_id = self.generate_membership_id()
+        if not self.member_id:
+            self.member_id = self.generate_member_id()
 
     def generate_membership_id(self):
         settings = frappe.get_single("Verenigingen Settings")
 
-        if not settings.last_membership_id:
-            settings.last_membership_id = settings.membership_id_start -1
+        if not settings.last_member_id:
+            settings.last_member_id = settings.member_id_start -1
 
-        new_id = settings.last_membership_id +1
+        new_id = settings.last_member_id +1
 
-        settings.last_membership_id = new_id
+        settings.last_member_id = new_id
         settings.save()
 
         return str(new_id)
