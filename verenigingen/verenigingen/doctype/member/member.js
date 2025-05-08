@@ -68,7 +68,7 @@ frappe.ui.form.on('Member', {
                 }
             }
         });
-
+        
         // Add button to create user
         if (!frm.doc.user && frm.doc.email) {
             frm.add_custom_button(__('Create User'), function() {
@@ -138,6 +138,13 @@ frappe.ui.form.on('Member', {
             frappe.set_route('List', 'Membership', {'member': frm.doc.name});
         }, __('View'));
         
+        // Add button to view linked customer
+        if (frm.doc.customer) {
+            frm.add_custom_button(__('Customer'), function() {
+                frappe.set_route('Form', 'Customer', frm.doc.customer);
+            }, __('View'));
+        }
+        
         // Add button to view linked user
         if (frm.doc.user) {
             frm.add_custom_button(__('User'), function() {
@@ -172,17 +179,13 @@ frappe.ui.form.on('Member', {
                 }
             });
         }, __('View'));
-    },
-    
-    primary_chapter: function(frm) {
-        // Refresh when primary chapter changes
-        frm.refresh();
-    },
-    
-    ['first_name', 'middle_name', 'last_name'].forEach(field => {
+
+        // Attach triggers to name fields dynamically
+        ['first_name', 'middle_name', 'last_name'].forEach(field => {
             frm.fields_dict[field].df.onchange = () => frm.trigger('update_full_name');
         });
     },
+    
     update_full_name: function(frm) {
         // Build full name from components
         let full_name = [
@@ -190,6 +193,7 @@ frappe.ui.form.on('Member', {
             frm.doc.middle_name,
             frm.doc.last_name
         ].filter(Boolean).join(' ');
+        
         frm.set_value('full_name', full_name);
     }
 });
