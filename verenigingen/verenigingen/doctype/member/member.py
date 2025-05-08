@@ -8,7 +8,7 @@ class Member(Document):
         if not self.member_id:
             self.member_id = self.generate_member_id()
 
-    def generate_membership_id(self):
+    def generate_member_id(self):
         settings = frappe.get_single("Verenigingen Settings")
 
         if not settings.last_member_id:
