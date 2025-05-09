@@ -608,3 +608,34 @@ def process_membership_statuses():
                           "Membership Status Update Error")
     
     return True
+def update_membership_from_subscription(doc, method=None):
+    """
+    Handler for when a subscription is updated
+    Updates the linked membership
+    """
+    # Find memberships linked to this subscription
+    memberships = frappe.get_all(
+        "Membership",
+        filters={"subscription": doc.name},
+        fields=["name"]
+    )
+    
+    if not memberships:
+        return
+        
+    for membership_data in memberships:
+        membership = frappe.get_doc("Membership", membership_data.name)
+        
+        # Update membership status based on subscription
+        if doc.status == "Active":
+            if membership.status != "Active":
+                membership.status = "Active"
+                membership.save(ignore_permissions=True)
+        elif doc.status == "Cancelled":
+            if membership.status != "Cancelled":
+                membership.status = "Cancelled"
+                membership.save(ignore_permissions=True)
+        elif doc.status == "Unpaid":
+            if membership.status != "Pending":
+                membership.status = "Pending" 
+                membership.save(ignore_permissions=True)
