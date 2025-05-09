@@ -147,13 +147,12 @@ class Membership(Document):
             member.save()  # This will trigger the update_membership_status method
             
     def create_subscription_from_membership(self, options=None):
-        """Create an ERPNext subscription for this membership"""
-        # Import necessary modules
+        """Create an ERPNext subscription for this membership with additional options"""
         import frappe
         from frappe import _
-        from frappe.utils import getdate, today, nowdate, flt, add_days, add_months
-        from datetime import datetime, timedelta
-
+        from frappe.utils import getdate, add_days, add_months
+    
+        # Initialize options with defaults if none provided
         if not options:
             options = {}
     
@@ -173,63 +172,27 @@ class Membership(Document):
             if not self.subscription_plan:
                 frappe.throw(_("Subscription Plan is required to create a subscription"))
         
-            plan_doc = frappe.get_doc("Subscription Plan", self.subscription_plan)
+            # Safely get the plan document
+            try:
+                plan_doc = frappe.get_doc("Subscription Plan", self.subscription_plan)
+            except Exception as e:
+                frappe.log_error(f"Error fetching subscription plan: {str(e)}", 
+                              "Membership Subscription Error")
+                frappe.throw(_("Invalid Subscription Plan: {0}").format(self.subscription_plan))
         
-            # Calculate next billing date directly instead of relying on Subscription logic
-            start_date = getdate(self.start_date)
-        
-            # Set the billing interval and count
-            billing_interval = getattr(plan_doc, 'billing_interval', 'Month')
-            billing_interval_count = getattr(plan_doc, 'billing_interval_count', 1)
-        
-            # Calculate next_billing_date manually
-            if billing_interval == "Day":
-                next_date = add_days(start_date, billing_interval_count)
-            elif billing_interval == "Week":
-                next_date = add_days(start_date, billing_interval_count * 7)
-            elif billing_interval == "Month":
-                next_date = add_months(start_date, billing_interval_count)
-            elif billing_interval == "Year":
-                next_date = add_months(start_date, billing_interval_count * 12)
-            else:
-                # Default to 1 month if unknown interval
-                next_date = add_months(start_date, 1)
-        
-            # Create subscription
+            # Start creating the subscription
             subscription = frappe.new_doc("Subscription")
+        
+            # Set basic subscription properties
             subscription.party_type = "Customer"
             subscription.party = member.customer
-            subscription.start_date = start_date
-            subscription.next_billing_date = next_date
+            subscription.start_date = getdate(self.start_date)
         
-            # Set end date if defined in membership
+            # Set the end date if defined in membership
             if self.end_date:
                 subscription.end_date = getdate(self.end_date)
         
-            # Set billing information explicitly
-            subscription.billing_interval = billing_interval
-            subscription.billing_interval_count = billing_interval_count
-        
-            # Create billing_cycle_info dictionary explicitly
-            if hasattr(subscription, 'billing_cycle_info'):
-                subscription.billing_cycle_info = {
-                    'billing_interval': billing_interval,
-                   'billing_interval_count': billing_interval_count
-                }
-        
-            # Add subscription plan
-            subscription_item = {
-                "subscription_plan": self.subscription_plan,
-                "qty": 1
-            }
-            subscription.append("plans", subscription_item)
-        
-            # Additional settings
-            membership_type = frappe.get_doc("Membership Type", self.membership_type)
-            if membership_type.allow_auto_renewal and self.auto_renew:
-                subscription.generate_invoice_at_period_start = 1
-                subscription.submit_invoice = 1
-
+            # Add requested options
             subscription.follow_calendar_months = 1 if options.get('follow_calendar_months') else 0
             subscription.generate_invoice_at_period_start = 1 if options.get('generate_invoice_at_period_start') else 0
             subscription.generate_new_invoices_past_due_date = 1 if options.get('generate_new_invoices_past_due_date') else 0
@@ -238,8 +201,76 @@ class Membership(Document):
             if options.get('days_until_due'):
                 subscription.days_until_due = options.get('days_until_due')
         
-            # Bypass validation and directly set required fields
-            subscription.flags.ignore_permissions = True
+            # Safely add the subscription plan
+            # First check if the plans child table exists in the DocType
+            if 'plans' in [d.fieldname for d in frappe.get_meta("Subscription").get_table_fields()]:
+                # Use append for plans table
+                subscription.append("plans", {
+                    "subscription_plan": self.subscription_plan,
+                    "qty": 1
+                })
+            else:
+                # Older versions might use a different approach
+               frappe.throw(_("The Subscription DocType structure has changed. Please update your app."))
+        
+            # Set additional auto-renewal settings if applicable
+            membership_type = frappe.get_doc("Membership Type", self.membership_type)
+            if membership_type.allow_auto_renewal and self.auto_renew:
+                subscription.generate_invoice_at_period_start = 1
+                subscription.submit_invoice = 1
+        
+            # Calculate next billing date using plan details if available
+            try:
+                # Get billing interval from plan
+                billing_interval = getattr(plan_doc, 'billing_interval', None)
+                billing_interval_count = getattr(plan_doc, 'billing_interval_count', None)
+            
+                # If the plan doesn't have these attributes, check if they're in another location
+                if not billing_interval:
+                    if hasattr(plan_doc, 'billing_interval_unit'):
+                        billing_interval = plan_doc.billing_interval_unit
+                    else:
+                        # Default to monthly
+                        billing_interval = "Month"
+            
+                if not billing_interval_count:
+                    if hasattr(plan_doc, 'billing_interval_value'):
+                        billing_interval_count = plan_doc.billing_interval_value
+                    else:
+                        # Default to 1
+                        billing_interval_count = 1
+            
+                # Set these values in the subscription
+                subscription.billing_interval = billing_interval
+                subscription.billing_interval_count = billing_interval_count
+            
+                # Calculate next billing date
+                start_date = getdate(self.start_date)
+                if billing_interval == "Day":
+                    next_date = add_days(start_date, billing_interval_count)
+                elif billing_interval == "Week":
+                    next_date = add_days(start_date, billing_interval_count * 7)
+                elif billing_interval == "Month":
+                    next_date = add_months(start_date, billing_interval_count)
+                elif billing_interval == "Year":
+                    next_date = add_months(start_date, billing_interval_count * 12)
+                else:
+                    # Default to 1 month if unknown interval
+                    next_date = add_months(start_date, 1)
+            
+                subscription.next_billing_date = next_date
+            
+            except Exception as e:
+                # If there's an error in calculating the next billing date,
+                # log it but continue with default next month
+                frappe.log_error(f"Error calculating next billing date: {str(e)}", 
+                              "Membership Subscription Error")
+                subscription.next_billing_date = add_months(getdate(self.start_date), 1)
+        
+            # For debugging
+            frappe.logger().debug(f"Creating subscription with plan: {self.subscription_plan}")
+            frappe.logger().debug(f"Plan details: {vars(plan_doc)}")
+            frappe.logger().debug(f"Subscription object: {vars(subscription)}")
         
             # Insert the subscription
             subscription.insert(ignore_permissions=True)
@@ -250,10 +281,10 @@ class Membership(Document):
             # Link subscription to membership
             self.subscription = subscription.name
             self.save()
-        
+            
             frappe.msgprint(_("Subscription {0} created successfully").format(subscription.name))
             return subscription.name
-            
+        
         except Exception as e:
             error_details = f"Error details: Subscription Plan: {self.subscription_plan}"
             frappe.log_error(f"Error creating subscription: {str(e)}\n{error_details}", 
