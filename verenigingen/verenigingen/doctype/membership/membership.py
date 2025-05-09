@@ -174,7 +174,11 @@ class Membership(Document):
         
             # Safely get the plan document
             try:
+                frappe.logger().debug(f"Fetching subscription plan: {self.subscription_plan}")
                 plan_doc = frappe.get_doc("Subscription Plan", self.subscription_plan)
+                frappe.logger().debug(f"Plan doc retrieved with name: {plan_doc.name}")
+                frappe.logger().debug(f"Plan interval: {getattr(plan_doc, 'billing_interval', 'Not found')}")
+                frappe.logger().debug(f"Plan interval count: {getattr(plan_doc, 'billing_interval_count', 'Not found')}")
             except Exception as e:
                 frappe.log_error(f"Error fetching subscription plan: {str(e)}", 
                               "Membership Subscription Error")
@@ -434,14 +438,23 @@ def verify_signature(data, signature, secret_key=None):
 @frappe.whitelist()
 def create_subscription(membership_name, options=None):
     """Create a subscription from a membership with additional options"""
-    membership = frappe.get_doc("Membership", membership_name)
-    
-    # Parse options if provided as string
-    if options and isinstance(options, str):
-        import json
-        options = json.loads(options)
-    
-    return membership.create_subscription_from_membership(options)
+    try:
+        frappe.logger().debug(f"create_subscription called with membership_name={membership_name}, options={options}")
+        
+        membership = frappe.get_doc("Membership", membership_name)
+        
+        # Parse options if provided as string
+        if options and isinstance(options, str):
+            import json
+            options = json.loads(options)
+            frappe.logger().debug(f"Parsed options from string: {options}")
+        
+        result = membership.create_subscription_from_membership(options)
+        frappe.logger().debug(f"create_subscription_from_membership returned: {result}")
+        return result
+    except Exception as e:
+        frappe.logger().error(f"Error in create_subscription: {str(e)}", exc_info=True)
+        raise
         
 @frappe.whitelist()
 def renew_membership(membership_name):
