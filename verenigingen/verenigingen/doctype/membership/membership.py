@@ -458,7 +458,22 @@ def create_subscription(membership_name, options=None):
                 'submit_invoice': 1,
                 'days_until_due': 30
             }
+            frappe.logger().debug(f"Using default options: {options}")
         
+        # Check if subscription already exists
+        if membership.subscription:
+            frappe.logger().warning(f"Membership {membership_name} already has subscription {membership.subscription}")
+            return membership.subscription
+            
+        # Ensure subscription plan is set
+        if not membership.subscription_plan:
+            frappe.logger().error(f"Membership {membership_name} has no subscription plan set")
+            frappe.throw(_("Subscription Plan is required to create a subscription"))
+            
+        # Log what we're about to do
+        frappe.logger().debug(f"Creating subscription with plan {membership.subscription_plan} for membership {membership_name}")
+        
+        # Create the subscription
         result = membership.create_subscription_from_membership(options)
         frappe.logger().debug(f"create_subscription_from_membership returned: {result}")
         return result
