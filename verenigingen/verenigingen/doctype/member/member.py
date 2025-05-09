@@ -47,7 +47,6 @@ class Member(Document):
                 age = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
             # Set the age field
                 self.age = age
-                frappe.log_error(f"Age calculated as: {age}", "Age Debug")
             else:
                 self.age = None
                 frappe.log_error("No birth date, age set to None", "Age Debug")
