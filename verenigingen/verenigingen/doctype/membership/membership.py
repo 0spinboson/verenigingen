@@ -151,7 +151,7 @@ class Membership(Document):
         # Import necessary modules
         import frappe
         from frappe import _
-        from frappe.utils import getdate, today, nowdate, flt
+        from frappe.utils import getdate, today, nowdate, flt, add_days, add_months
         from datetime import datetime, timedelta
 
         if not options:
@@ -177,7 +177,6 @@ class Membership(Document):
         
             # Calculate next billing date directly instead of relying on Subscription logic
             start_date = getdate(self.start_date)
-            next_date = None
         
             # Set the billing interval and count
             billing_interval = getattr(plan_doc, 'billing_interval', 'Month')
@@ -185,25 +184,16 @@ class Membership(Document):
         
             # Calculate next_billing_date manually
             if billing_interval == "Day":
-                next_date = start_date + timedelta(days=billing_interval_count)
+                next_date = add_days(start_date, billing_interval_count)
             elif billing_interval == "Week":
-                next_date = start_date + timedelta(weeks=billing_interval_count)
+                next_date = add_days(start_date, billing_interval_count * 7)
             elif billing_interval == "Month":
-                # Use a reliable method to add months
-                next_month = start_date.month + billing_interval_count
-                next_year = start_date.year + (next_month - 1) // 12
-                next_month = ((next_month - 1) % 12) + 1
-                next_day = min(start_date.day, [31, 29 if next_year % 4 == 0 and (next_year % 100 != 0 or next_year % 400 == 0) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][next_month - 1])
-                next_date = datetime(next_year, next_month, next_day).date()
+                next_date = add_months(start_date, billing_interval_count)
             elif billing_interval == "Year":
-                next_date = datetime(start_date.year + billing_interval_count, start_date.month, start_date.day).date()
+                next_date = add_months(start_date, billing_interval_count * 12)
             else:
                 # Default to 1 month if unknown interval
-                next_month = start_date.month + 1
-                next_year = start_date.year + (next_month - 1) // 12
-                next_month = ((next_month - 1) % 12) + 1
-                next_day = min(start_date.day, [31, 29 if next_year % 4 == 0 and (next_year % 100 != 0 or next_year % 400 == 0) else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][next_month - 1])
-                next_date = datetime(next_year, next_month, next_day).date()
+                next_date = add_months(start_date, 1)
         
             # Create subscription
             subscription = frappe.new_doc("Subscription")
@@ -239,49 +229,30 @@ class Membership(Document):
             if membership_type.allow_auto_renewal and self.auto_renew:
                 subscription.generate_invoice_at_period_start = 1
                 subscription.submit_invoice = 1
-            # Apply requested options
-            if options.get('follow_calendar_months'):
-                subscription.follow_calendar_months = options.get('follow_calendar_months')
-            
-            if options.get('generate_invoice_at_period_start'):
-               subscription.generate_invoice_at_period_start = options.get('generate_invoice_at_period_start')
-            
-            if options.get('generate_new_invoices_past_due_date'):
-                subscription.generate_new_invoices_past_due_date = options.get('generate_new_invoices_past_due_date')
-            
-            if options.get('submit_invoice'):
-                subscription.submit_invoice = options.get('submit_invoice')
-            
+
+            subscription.follow_calendar_months = 1 if options.get('follow_calendar_months') else 0
+            subscription.generate_invoice_at_period_start = 1 if options.get('generate_invoice_at_period_start') else 0
+            subscription.generate_new_invoices_past_due_date = 1 if options.get('generate_new_invoices_past_due_date') else 0
+            subscription.submit_invoice = 1 if options.get('submit_invoice') else 0
+        
             if options.get('days_until_due'):
                 subscription.days_until_due = options.get('days_until_due')
         
             # Bypass validation and directly set required fields
             subscription.flags.ignore_permissions = True
-            subscription.flags.ignore_mandatory = True
-            subscription.flags.ignore_validate = True  # Add this flag to bypass validation
         
-            # Insert without running standard validations
-            frappe.db.begin()
-            try:
-                # Use db_insert to bypass most validation
-                subscription.insert(ignore_permissions=True, ignore_mandatory=True)
-            
-                # Use db_set to update the status directly instead of submitting
-                subscription.db_set('status', 'Active')
-                subscription.db_set('docstatus', 1)  # Mark as submitted
-            
-                frappe.db.commit()
-            
-                # Link subscription to membership
-                self.subscription = subscription.name
-                self.save()
-            
-                frappe.msgprint(_("Subscription {0} created successfully").format(subscription.name))
-                return subscription.name
-            
-            except Exception as e:
-                frappe.db.rollback()
-                raise e
+            # Insert the subscription
+            subscription.insert(ignore_permissions=True)
+        
+            # Submit the subscription
+            subscription.submit()
+        
+            # Link subscription to membership
+            self.subscription = subscription.name
+            self.save()
+        
+            frappe.msgprint(_("Subscription {0} created successfully").format(subscription.name))
+            return subscription.name
             
         except Exception as e:
             error_details = f"Error details: Subscription Plan: {self.subscription_plan}"
