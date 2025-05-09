@@ -453,7 +453,7 @@ def create_subscription_directly(membership, options=None):
     """Create an ERPNext subscription for this membership with additional options"""
     import frappe
     from frappe import _
-    from frappe.utils import getdate, add_days, add_months
+    from frappe.utils import getdate, add_days, add_months, nowdate
     
     # Debug the function call
     frappe.logger().debug(f"create_subscription_directly called with options={options}")
@@ -478,6 +478,9 @@ def create_subscription_directly(membership, options=None):
         if not membership.subscription_plan:
             frappe.throw(_("Subscription Plan is required to create a subscription"))
         
+        # Get plan details
+        plan = frappe.get_doc("Subscription Plan", membership.subscription_plan)
+        
         # Create subscription with minimal required fields
         subscription = frappe.new_doc("Subscription")
         
@@ -490,14 +493,41 @@ def create_subscription_directly(membership, options=None):
         if membership.end_date:
             subscription.end_date = getdate(membership.end_date)
         
-        # Set next billing date (1 month from start by default)
-        subscription.next_billing_date = add_months(getdate(membership.start_date), 1)
+        # Set billing interval properties based on plan
+        # These must be set properly for ERPNext's subscription logic to work
+        # Default to monthly if not specified
+        interval_unit = getattr(plan, 'billing_interval', getattr(plan, 'billing_interval_unit', 'Month'))
+        interval_count = getattr(plan, 'billing_interval_count', getattr(plan, 'billing_interval_value', 1))
         
-        # Set billing interval defaults
-        subscription.billing_interval = "Month"
-        subscription.billing_interval_count = 1
+        subscription.billing_interval = interval_unit
+        subscription.billing_interval_count = interval_count
         
-        # Explicitly add requested options
+        # Set current invoice dates - this is critical for ERPNext's subscription handling
+        subscription.current_invoice_start = getdate(membership.start_date)
+        
+        # Calculate current invoice end based on start date and billing interval
+        if interval_unit == "Day":
+            invoice_end = add_days(subscription.current_invoice_start, interval_count)
+        elif interval_unit == "Week":
+            invoice_end = add_days(subscription.current_invoice_start, interval_count * 7)
+        elif interval_unit == "Month":
+            invoice_end = add_months(subscription.current_invoice_start, interval_count)
+        elif interval_unit == "Year":
+            invoice_end = add_months(subscription.current_invoice_start, interval_count * 12)
+        else:
+            # Default to monthly
+            invoice_end = add_months(subscription.current_invoice_start, 1)
+            
+        # Adjust for calendar months if requested
+        if options.get('follow_calendar_months'):
+            # If follow_calendar_months is enabled, adjust the end date to end of month
+            invoice_end = getdate(invoice_end)
+            invoice_end = getdate(f"{invoice_end.year}-{invoice_end.month}-{frappe.utils.get_last_day(invoice_end)}")
+        
+        subscription.current_invoice_end = invoice_end
+        subscription.next_billing_date = add_days(invoice_end, 1)
+        
+        # Set additional options requested
         subscription.follow_calendar_months = 1 if options.get('follow_calendar_months') else 0
         subscription.generate_invoice_at_period_start = 1 if options.get('generate_invoice_at_period_start') else 0
         subscription.generate_new_invoices_past_due_date = 1 if options.get('generate_new_invoices_past_due_date') else 0
@@ -506,33 +536,23 @@ def create_subscription_directly(membership, options=None):
         if options.get('days_until_due'):
             subscription.days_until_due = options.get('days_until_due')
         
-        # Safely add the subscription plan
-        table_fields = [d.fieldname for d in frappe.get_meta("Subscription").get_table_fields()]
-        
-        if 'plans' in table_fields:
-            # Check if the plans table exists
-            try:
-                # Use append for plans table - basic required fields only
-                subscription.append("plans", {
-                    "subscription_plan": membership.subscription_plan,
-                    "qty": 1
-                })
-            except Exception as e:
-                frappe.log_error(
-                    f"Error appending plan to subscription: {str(e)}", 
-                    "Membership Subscription Error"
-                )
-                raise
-        else:
-            frappe.throw(_("The Subscription DocType structure has changed. Please update your app."))
+        # Add plans table entry
+        subscription.append("plans", {
+            "subscription_plan": membership.subscription_plan,
+            "qty": 1
+        })
         
         # For debugging
-        frappe.logger().debug(f"About to insert subscription with minimal fields")
-        frappe.logger().debug(f"Subscription dict: {subscription.as_dict()}")
+        frappe.logger().debug(f"About to insert subscription with fields:")
+        frappe.logger().debug(f"- start_date: {subscription.start_date}")
+        frappe.logger().debug(f"- billing_interval: {subscription.billing_interval}")
+        frappe.logger().debug(f"- billing_interval_count: {subscription.billing_interval_count}")
+        frappe.logger().debug(f"- current_invoice_start: {subscription.current_invoice_start}")
+        frappe.logger().debug(f"- current_invoice_end: {subscription.current_invoice_end}")
+        frappe.logger().debug(f"- next_billing_date: {subscription.next_billing_date}")
         
-        # Insert with ignore_mandatory to bypass validation issues
-        subscription.flags.ignore_mandatory = True
-        subscription.insert(ignore_permissions=True, ignore_mandatory=True)
+        # Insert the subscription
+        subscription.insert(ignore_permissions=True)
         
         # Log success
         frappe.logger().debug(f"Subscription inserted with ID: {subscription.name}")
@@ -551,4 +571,4 @@ def create_subscription_directly(membership, options=None):
         error_details = f"Error details: Subscription Plan: {membership.subscription_plan}"
         frappe.log_error(f"Error creating subscription: {str(e)}\n{error_details}", 
                       "Membership Subscription Error")
-        raise
+        frappe.throw(_("Error creating subscription: {0}").format(str(e)))
