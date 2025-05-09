@@ -396,29 +396,22 @@ def renew_membership(membership_name):
     """Renew a membership and return the new membership doc"""
     membership = frappe.get_doc("Membership", membership_name)
     return membership.renew_membership()
+
 @frappe.whitelist()
 def create_subscription(membership_name, options=None):
-    """Create a subscription from a membership with additional options"""
+    """Create a subscription for a membership with the specified options"""
+    import frappe
+    from frappe import _
+    from frappe.utils import getdate
+    
     try:
-        frappe.logger().debug(f"create_subscription called with membership_name={membership_name}, options={options}")
-        
         # Parse options if provided as string
         if options and isinstance(options, str):
             import json
-            try:
-                options = json.loads(options)
-                frappe.logger().debug(f"Parsed options from string: {options}")
-            except json.JSONDecodeError:
-                frappe.logger().error(f"Error parsing options JSON: {options}")
-                options = {
-                    'follow_calendar_months': 1,
-                    'generate_invoice_at_period_start': 1,
-                    'generate_new_invoices_past_due_date': 1,
-                    'submit_invoice': 1,
-                    'days_until_due': 30
-                }
-                frappe.logger().debug(f"Using default options instead: {options}")
-        elif not options:
+            options = json.loads(options)
+        
+        # Get default options if none provided
+        if not options:
             options = {
                 'follow_calendar_months': 1,
                 'generate_invoice_at_period_start': 1,
@@ -426,140 +419,42 @@ def create_subscription(membership_name, options=None):
                 'submit_invoice': 1,
                 'days_until_due': 30
             }
-            frappe.logger().debug(f"No options provided, using defaults: {options}")
-        
-        # Get the membership    
+            
+        # Get the membership
         membership = frappe.get_doc("Membership", membership_name)
         
         # Check if subscription already exists
         if membership.subscription:
-            frappe.logger().warning(f"Membership {membership_name} already has subscription {membership.subscription}")
             return membership.subscription
-            
-        # Ensure subscription plan is set
+        
+        # Ensure there's a subscription plan
         if not membership.subscription_plan:
-            frappe.logger().error(f"Membership {membership_name} has no subscription plan set")
-            frappe.throw(_("Subscription Plan is required to create a subscription"))
+            frappe.throw(_("Please select a Subscription Plan first"))
             
-        # Call the create_subscription_directly function instead of a method on the membership object
-        result = create_subscription_directly(membership, options)
-        frappe.logger().debug(f"create_subscription_directly returned: {result}")
-        return result
-    except Exception as e:
-        frappe.logger().error(f"Error in create_subscription: {str(e)}", exc_info=True)
-        raise
-
-def create_subscription_directly(membership, options=None):
-    """Create an ERPNext subscription for this membership with additional options"""
-    import frappe
-    from frappe import _
-    from frappe.utils import getdate, add_days, add_months, nowdate
-    import datetime
-    
-    # Debug the function call
-    frappe.logger().debug(f"create_subscription_directly called with options={options}")
-    
-    # Initialize options with defaults if none provided
-    if not options:
-        options = {}
-    
-    # Check if member has a customer
-    member = frappe.get_doc("Member", membership.member)
-    
-    if not member.customer:
-        # Create a customer for this member
-        member.create_customer()
-        member.reload()
-    
-    if not member.customer:
-        frappe.throw(_("Please create a customer for this member first"))
-    
-    try:
-        # Get subscription plan details
-        if not membership.subscription_plan:
-            frappe.throw(_("Subscription Plan is required to create a subscription"))
-        
-        # Get the subscription plan
-        plan = frappe.get_doc("Subscription Plan", membership.subscription_plan)
-        
-        # Get the membership type to understand the subscription period
-        membership_type = frappe.get_doc("Membership Type", membership.membership_type)
-        
-        # Set basic subscription settings
-        start_date = getdate(membership.start_date)
-        
-        # Calculate end date based on membership type if not already set
-        if membership.end_date:
-            end_date = getdate(membership.end_date)
-        else:
-            # Calculate based on membership type
-            if membership_type.subscription_period == "Monthly":
-                end_date = add_months(start_date, 1)
-            elif membership_type.subscription_period == "Quarterly":
-                end_date = add_months(start_date, 3)
-            elif membership_type.subscription_period == "Biannual":
-                end_date = add_months(start_date, 6)
-            elif membership_type.subscription_period == "Annual":
-                end_date = add_months(start_date, 12)
-            elif membership_type.subscription_period == "Custom" and membership_type.subscription_period_in_months:
-                end_date = add_months(start_date, membership_type.subscription_period_in_months)
-            else:
-                # Default to annual
-                end_date = add_months(start_date, 12)
-                
-            # Subtract 1 day to make it inclusive
-            end_date = add_days(end_date, -1)
-        
-        # Make sure end date is after start date
-        if end_date <= start_date:
-            end_date = add_days(start_date, 1)  # Simple fix: make end date 1 day after start date
-        
-        # For monthly billing with follow_calendar_months, we need billing_interval=Month
-        billing_interval = "Month"
-        
-        # Determine billing interval count based on membership type
-        if membership_type.subscription_period == "Monthly":
-            billing_interval_count = 1
-        elif membership_type.subscription_period == "Quarterly":
-            billing_interval_count = 3
-        elif membership_type.subscription_period == "Biannual":
-            billing_interval_count = 6
-        elif membership_type.subscription_period == "Annual":
-            billing_interval_count = 12
-        elif membership_type.subscription_period == "Custom" and membership_type.subscription_period_in_months:
-            billing_interval_count = membership_type.subscription_period_in_months
-        else:
-            # Default to monthly
-            billing_interval_count = 1
+        # Check if member has a customer
+        member = frappe.get_doc("Member", membership.member)
+        if not member.customer:
+            member.create_customer()
+            member.reload()
             
-        # Create the subscription with minimal fields
+        if not member.customer:
+            frappe.throw(_("Please create a customer for this member first"))
+            
+        # Create a subscription
         subscription = frappe.new_doc("Subscription")
+        
+        # Set required fields
         subscription.party_type = "Customer"
         subscription.party = member.customer
-        subscription.start_date = start_date
-        subscription.end_date = end_date
+        subscription.start_date = getdate(membership.start_date)
         
-        # Set custom billing period parameters
-        # If the original plan has different billing interval, override it
-        if hasattr(plan, 'billing_interval') and plan.billing_interval != billing_interval:
-            # Try to update the plan
-            try:
-                original_interval = plan.billing_interval
-                original_count = plan.billing_interval_count
-                
-                plan.billing_interval = billing_interval
-                
-                # Adjust count if changing from Year to Month
-                if original_interval == "Year":
-                    plan.billing_interval_count = original_count * 12
-                    
-                plan.save()
-                frappe.logger().debug(f"Updated plan billing interval from {original_interval} to {billing_interval}")
-            except Exception as e:
-                frappe.logger().error(f"Error updating plan: {str(e)}")
-                # Proceed with original plan settings
+        # Add the plan
+        subscription.append("plans", {
+            "subscription_plan": membership.subscription_plan,
+            "qty": 1
+        })
         
-        # Set subscription options
+        # Set options
         subscription.follow_calendar_months = 1 if options.get('follow_calendar_months') else 0
         subscription.generate_invoice_at_period_start = 1 if options.get('generate_invoice_at_period_start') else 0
         subscription.generate_new_invoices_past_due_date = 1 if options.get('generate_new_invoices_past_due_date') else 0
@@ -567,40 +462,17 @@ def create_subscription_directly(membership, options=None):
         
         if options.get('days_until_due'):
             subscription.days_until_due = options.get('days_until_due')
-            
-        # Add the plan to the subscription
-        subscription.append("plans", {
-            "subscription_plan": membership.subscription_plan,
-            "qty": 1
-        })
         
-        # DEBUG log all critical values
-        frappe.logger().debug(f"Creating subscription with:")
-        frappe.logger().debug(f"- start_date: {subscription.start_date}")
-        frappe.logger().debug(f"- end_date: {subscription.end_date}")
-        frappe.logger().debug(f"- plan: {membership.subscription_plan}")
-        frappe.logger().debug(f"- plan billing_interval: {getattr(plan, 'billing_interval', 'Not set')}")
-        frappe.logger().debug(f"- plan billing_interval_count: {getattr(plan, 'billing_interval_count', 'Not set')}")
-        frappe.logger().debug(f"- follow_calendar_months: {subscription.follow_calendar_months}")
-        
-        # Insert the subscription
-        subscription.insert(ignore_permissions=True)
-        
-        # Log success
-        frappe.logger().debug(f"Subscription inserted with ID: {subscription.name}")
-        
-        # Submit the subscription
+        # Save and submit
+        subscription.insert()
         subscription.submit()
         
-        # Link subscription to membership
+        # Link to membership
         membership.subscription = subscription.name
         membership.save()
         
-        frappe.msgprint(_("Subscription {0} created successfully").format(subscription.name))
         return subscription.name
         
     except Exception as e:
-        error_details = f"Error details: Subscription Plan: {membership.subscription_plan}"
-        frappe.log_error(f"Error creating subscription: {str(e)}\n{error_details}", 
-                         "Membership Subscription Error")
+        frappe.log_error(f"Error creating subscription: {str(e)}", "Subscription Error")
         frappe.throw(_("Error creating subscription: {0}").format(str(e)))
