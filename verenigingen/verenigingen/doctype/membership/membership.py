@@ -282,6 +282,36 @@ class Membership(Document):
                           "Membership Subscription Error")
             raise
 
+# Filter for link field to show only subscriptions associated with the current member
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_subscription_query(doctype, txt, searchfield, start, page_len, filters):
+    member = filters.get('member')
+    
+    if not member:
+        # If called from the form, try to get member from doc
+        if filters.get('doctype') == 'Membership' and filters.get('name'):
+            member_doc = frappe.get_doc('Membership', filters.get('name'))
+            member = member_doc.member
+            
+    if not member:
+        return []
+        
+    # Get customer linked to this member
+    customer = frappe.db.get_value('Member', member, 'customer')
+    
+    if not customer:
+        return []
+        
+    return frappe.db.sql("""
+        SELECT name, billing_status
+        FROM `tabSubscription`
+        WHERE party_type = 'Customer' 
+        AND party = %s
+        AND name LIKE %s
+        ORDER BY creation DESC
+    """, (customer, "%" + txt + "%"))
+
 def on_membership_update(doc, method=None):
     """
     Handler for when a membership is updated
