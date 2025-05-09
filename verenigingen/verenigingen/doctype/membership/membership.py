@@ -402,8 +402,6 @@ def create_subscription(membership_name, options=None):
     try:
         frappe.logger().debug(f"create_subscription called with membership_name={membership_name}, options={options}")
         
-        membership = frappe.get_doc("Membership", membership_name)
-        
         # Parse options if provided as string
         if options and isinstance(options, str):
             import json
@@ -429,11 +427,128 @@ def create_subscription(membership_name, options=None):
                 'days_until_due': 30
             }
             frappe.logger().debug(f"No options provided, using defaults: {options}")
+        
+        # Get the membership    
+        membership = frappe.get_doc("Membership", membership_name)
+        
+        # Check if subscription already exists
+        if membership.subscription:
+            frappe.logger().warning(f"Membership {membership_name} already has subscription {membership.subscription}")
+            return membership.subscription
             
-        # Create the subscription
-        result = membership.create_subscription_from_membership(options)
-        frappe.logger().debug(f"create_subscription_from_membership returned: {result}")
+        # Ensure subscription plan is set
+        if not membership.subscription_plan:
+            frappe.logger().error(f"Membership {membership_name} has no subscription plan set")
+            frappe.throw(_("Subscription Plan is required to create a subscription"))
+            
+        # Call the create_subscription_directly function instead of a method on the membership object
+        result = create_subscription_directly(membership, options)
+        frappe.logger().debug(f"create_subscription_directly returned: {result}")
         return result
     except Exception as e:
         frappe.logger().error(f"Error in create_subscription: {str(e)}", exc_info=True)
+        raise
+
+def create_subscription_directly(membership, options=None):
+    """Create an ERPNext subscription for this membership with additional options"""
+    import frappe
+    from frappe import _
+    from frappe.utils import getdate, add_days, add_months
+    
+    # Debug the function call
+    frappe.logger().debug(f"create_subscription_directly called with options={options}")
+    
+    # Initialize options with defaults if none provided
+    if not options:
+        options = {}
+    
+    # Check if member has a customer
+    member = frappe.get_doc("Member", membership.member)
+    
+    if not member.customer:
+        # Create a customer for this member
+        member.create_customer()
+        member.reload()
+    
+    if not member.customer:
+        frappe.throw(_("Please create a customer for this member first"))
+    
+    try:
+        # Get subscription plan details
+        if not membership.subscription_plan:
+            frappe.throw(_("Subscription Plan is required to create a subscription"))
+        
+        # Create subscription with minimal required fields
+        subscription = frappe.new_doc("Subscription")
+        
+        # Set basic subscription properties
+        subscription.party_type = "Customer"
+        subscription.party = member.customer
+        subscription.start_date = getdate(membership.start_date)
+        
+        # Set the end date if defined in membership
+        if membership.end_date:
+            subscription.end_date = getdate(membership.end_date)
+        
+        # Set next billing date (1 month from start by default)
+        subscription.next_billing_date = add_months(getdate(membership.start_date), 1)
+        
+        # Set billing interval defaults
+        subscription.billing_interval = "Month"
+        subscription.billing_interval_count = 1
+        
+        # Explicitly add requested options
+        subscription.follow_calendar_months = 1 if options.get('follow_calendar_months') else 0
+        subscription.generate_invoice_at_period_start = 1 if options.get('generate_invoice_at_period_start') else 0
+        subscription.generate_new_invoices_past_due_date = 1 if options.get('generate_new_invoices_past_due_date') else 0
+        subscription.submit_invoice = 1 if options.get('submit_invoice') else 0
+        
+        if options.get('days_until_due'):
+            subscription.days_until_due = options.get('days_until_due')
+        
+        # Safely add the subscription plan
+        table_fields = [d.fieldname for d in frappe.get_meta("Subscription").get_table_fields()]
+        
+        if 'plans' in table_fields:
+            # Check if the plans table exists
+            try:
+                # Use append for plans table - basic required fields only
+                subscription.append("plans", {
+                    "subscription_plan": membership.subscription_plan,
+                    "qty": 1
+                })
+            except Exception as e:
+                frappe.log_error(
+                    f"Error appending plan to subscription: {str(e)}", 
+                    "Membership Subscription Error"
+                )
+                raise
+        else:
+            frappe.throw(_("The Subscription DocType structure has changed. Please update your app."))
+        
+        # For debugging
+        frappe.logger().debug(f"About to insert subscription with minimal fields")
+        frappe.logger().debug(f"Subscription dict: {subscription.as_dict()}")
+        
+        # Insert with ignore_mandatory to bypass validation issues
+        subscription.flags.ignore_mandatory = True
+        subscription.insert(ignore_permissions=True, ignore_mandatory=True)
+        
+        # Log success
+        frappe.logger().debug(f"Subscription inserted with ID: {subscription.name}")
+        
+        # Now submit the subscription
+        subscription.submit()
+        
+        # Link subscription to membership
+        membership.subscription = subscription.name
+        membership.save()
+        
+        frappe.msgprint(_("Subscription {0} created successfully").format(subscription.name))
+        return subscription.name
+        
+    except Exception as e:
+        error_details = f"Error details: Subscription Plan: {membership.subscription_plan}"
+        frappe.log_error(f"Error creating subscription: {str(e)}\n{error_details}", 
+                      "Membership Subscription Error")
         raise
