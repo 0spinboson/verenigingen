@@ -146,13 +146,16 @@ class Membership(Document):
             member = frappe.get_doc("Member", self.member)
             member.save()  # This will trigger the update_membership_status method
             
-    def create_subscription_from_membership(self):
+    def create_subscription_from_membership(self, options=None):
         """Create an ERPNext subscription for this membership"""
         # Import necessary modules
         import frappe
         from frappe import _
         from frappe.utils import getdate, today, nowdate, flt
         from datetime import datetime, timedelta
+
+        if not options:
+            options = {}
     
         # Check if member has a customer
         member = frappe.get_doc("Member", self.member)
@@ -236,6 +239,21 @@ class Membership(Document):
             if membership_type.allow_auto_renewal and self.auto_renew:
                 subscription.generate_invoice_at_period_start = 1
                 subscription.submit_invoice = 1
+            # Apply requested options
+            if options.get('follow_calendar_months'):
+                subscription.follow_calendar_months = options.get('follow_calendar_months')
+            
+            if options.get('generate_invoice_at_period_start'):
+               subscription.generate_invoice_at_period_start = options.get('generate_invoice_at_period_start')
+            
+            if options.get('generate_new_invoices_past_due_date'):
+                subscription.generate_new_invoices_past_due_date = options.get('generate_new_invoices_past_due_date')
+            
+            if options.get('submit_invoice'):
+                subscription.submit_invoice = options.get('submit_invoice')
+            
+            if options.get('days_until_due'):
+                subscription.days_until_due = options.get('days_until_due')
         
             # Bypass validation and directly set required fields
             subscription.flags.ignore_permissions = True
@@ -412,10 +430,16 @@ def verify_signature(data, signature, secret_key=None):
     return hmac.compare_digest(computed_signature, signature)
 
 @frappe.whitelist()
-def create_subscription(membership_name):
-    """Create a subscription from a membership"""
+def create_subscription(membership_name, options=None):
+    """Create a subscription from a membership with additional options"""
     membership = frappe.get_doc("Membership", membership_name)
-    return membership.create_subscription_from_membership()
+    
+    # Parse options if provided as string
+    if options and isinstance(options, str):
+        import json
+        options = json.loads(options)
+    
+    return membership.create_subscription_from_membership(options)
         
 @frappe.whitelist()
 def renew_membership(membership_name):
