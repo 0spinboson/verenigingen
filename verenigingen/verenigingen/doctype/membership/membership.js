@@ -1,5 +1,7 @@
 frappe.ui.form.on('Membership', {
     refresh: function(frm) {
+        console.log("Refresh function called");
+        
         // Hide irrelevant fields in different states
         frm.trigger('toggle_fields');
         
@@ -49,7 +51,9 @@ frappe.ui.form.on('Membership', {
             
             // Add button to create subscription if not already linked
             if (!frm.doc.subscription && frm.doc.status === "Active") {
+                console.log("Adding Create Subscription button");
                 frm.add_custom_button(__('Create Subscription'), function() {
+                    console.log("Create Subscription button clicked");
                     if (!frm.doc.subscription_plan) {
                         frappe.prompt({
                             fieldtype: 'Link',
@@ -59,16 +63,77 @@ frappe.ui.form.on('Membership', {
                             reqd: 1
                         }, 
                         function(values) {
+                            console.log("Subscription plan selected:", values.subscription_plan);
                             frm.set_value('subscription_plan', values.subscription_plan);
                             frm.save().then(() => {
-                                // Call the standard create_subscription function instead of directly calling the server
-                                frm.trigger('create_subscription');
+                                // Call the server directly with our options
+                                console.log("Calling create_subscription with options");
+                                frappe.call({
+                                    method: 'verenigingen.verenigingen.doctype.membership.membership.create_subscription',
+                                    args: {
+                                        'membership_name': frm.doc.name,
+                                        'options': {
+                                            'follow_calendar_months': 1,
+                                            'generate_invoice_at_period_start': 1,
+                                            'generate_new_invoices_past_due_date': 1,
+                                            'submit_invoice': 1,
+                                            'days_until_due': 30
+                                        }
+                                    },
+                                    callback: function(r) {
+                                        console.log("create_subscription response:", r);
+                                        if (r.message) {
+                                            frm.refresh();
+                                            frappe.msgprint(__('Subscription created successfully.'));
+                                        }
+                                    },
+                                    error: function(r) {
+                                        console.error("Error creating subscription:", r);
+                                        // Display detailed error message
+                                        let error_msg = r.message || __('An error occurred while creating the subscription.');
+                                        frappe.msgprint({
+                                            title: __('Error'),
+                                            indicator: 'red',
+                                            message: error_msg
+                                        });
+                                    }
+                                });
                             });
                         }, 
                         __('Select Subscription Plan'));
                     } else {
-                        // Call the standard create_subscription function
-                        frm.trigger('create_subscription');
+                        // Call the server directly with our options
+                        console.log("Calling create_subscription with options");
+                        frappe.call({
+                            method: 'verenigingen.verenigingen.doctype.membership.membership.create_subscription',
+                            args: {
+                                'membership_name': frm.doc.name,
+                                'options': {
+                                    'follow_calendar_months': 1,
+                                    'generate_invoice_at_period_start': 1,
+                                    'generate_new_invoices_past_due_date': 1,
+                                    'submit_invoice': 1,
+                                    'days_until_due': 30
+                                }
+                            },
+                            callback: function(r) {
+                                console.log("create_subscription response:", r);
+                                if (r.message) {
+                                    frm.refresh();
+                                    frappe.msgprint(__('Subscription created successfully.'));
+                                }
+                            },
+                            error: function(r) {
+                                console.error("Error creating subscription:", r);
+                                // Display detailed error message
+                                let error_msg = r.message || __('An error occurred while creating the subscription.');
+                                frappe.msgprint({
+                                    title: __('Error'),
+                                    indicator: 'red',
+                                    message: error_msg
+                                });
+                            }
+                        });
                     }
                 }, __('Actions'));
             }
@@ -232,7 +297,9 @@ frappe.ui.form.on('Membership', {
         }
     },
     
+    // Handler for the built-in button
     create_subscription: function(frm) {
+        console.log("create_subscription event triggered");
         // Validate required fields
         if (!frm.doc.subscription_plan) {
             frappe.throw(__('Please select a Subscription Plan first'));
