@@ -177,7 +177,7 @@ class Membership(Document):
         frappe.msgprint(_("Renewal Membership {0} created").format(new_membership.name))
         return new_membership.name
 
-def create_subscription_from_membership(self, options=None):
+    def create_subscription_from_membership(self, options=None):
         """Create an ERPNext subscription for this membership with additional options"""
         import frappe
         from frappe import _
