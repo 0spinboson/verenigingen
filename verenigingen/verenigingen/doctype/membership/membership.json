@@ -1,305 +1,508 @@
-{
- "actions": [],
- "autoname": "format:MEMB-{YY}-{MM}-{####}",
- "creation": "2023-01-01 00:00:00",
- "doctype": "DocType",
- "engine": "InnoDB",
- "field_order": [
-  "member_section",
-  "member",
-  "member_name",
-  "email",
-  "mobile_no",
-  "column_break_5",
-  "membership_type",
-  "auto_renew",
-  "status",
-  "details_section",
-  "start_date",
-  "end_date",
-  "column_break_11",
-  "cancellation_date",
-  "cancelation_reason",
-  "payment_details_section",
-  "fee_amount",
-  "currency",
-  "subscription",
-  "column_break_17",
-  "payment_status",
-  "paid_amount",
-  "payment_date",
-  "payment_method",
-  "erpnext_integration_section",
-  "create_subscription",
-  "subscription_plan",
-  "column_break_24",
-  "view_subscription",
-  "amended_from"
- ],
- "fields": [
-  {
-   "fieldname": "member_section",
-   "fieldtype": "Section Break",
-   "label": "Member"
-  },
-  {
-   "fieldname": "member",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Member",
-   "options": "Member",
-   "reqd": 1
-  },
-  {
-   "fetch_from": "member.full_name",
-   "fieldname": "member_name",
-   "fieldtype": "Data",
-   "label": "Member Name",
-   "read_only": 1
-  },
-  {
-   "fetch_from": "member.email",
-   "fieldname": "email",
-   "fieldtype": "Data",
-   "label": "Email",
-   "read_only": 1
-  },
-  {
-   "fetch_from": "member.mobile_no",
-   "fieldname": "mobile_no",
-   "fieldtype": "Data",
-   "label": "Mobile No",
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_5",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "membership_type",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Membership Type",
-   "options": "Membership Type",
-   "reqd": 1
-  },
-  {
-   "default": "0",
-   "fieldname": "auto_renew",
-   "fieldtype": "Check",
-   "label": "Auto Renew"
-  },
-  {
-   "default": "New",
-   "fieldname": "status",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "Status",
-   "options": "New\nPending\nActive\nExpired\nCancelled",
-   "reqd": 1
-  },
-  {
-   "fieldname": "details_section",
-   "fieldtype": "Section Break",
-   "label": "Membership Period"
-  },
-  {
-   "fieldname": "start_date",
-   "fieldtype": "Date",
-   "in_list_view": 1,
-   "label": "Start Date",
-   "reqd": 1
-  },
-  {
-   "fieldname": "end_date",
-   "fieldtype": "Date",
-   "label": "End Date"
-  },
-  {
-   "fieldname": "column_break_11",
-   "fieldtype": "Column Break"
-  },
-  {
-   "depends_on": "eval:doc.status=='Cancelled'",
-   "fieldname": "cancellation_date",
-   "fieldtype": "Date",
-   "label": "Cancellation Date"
-  },
-  {
-   "depends_on": "eval:doc.status=='Cancelled'",
-   "fieldname": "cancelation_reason",
-   "fieldtype": "Small Text",
-   "label": "Cancellation Reason"
-  },
-  {
-   "fieldname": "payment_details_section",
-   "fieldtype": "Section Break",
-   "label": "Payment Details"
-  },
-  {
-   "fetch_from": "membership_type.amount",
-   "fieldname": "fee_amount",
-   "fieldtype": "Currency",
-   "label": "Fee Amount",
-   "non_negative": 1,
-   "options": "currency"
-  },
-  {
-   "fetch_from": "membership_type.currency",
-   "fieldname": "currency",
-   "fieldtype": "Link",
-   "label": "Currency",
-   "options": "Currency"
-  },
-  {
-   "fieldname": "subscription",
-   "fieldtype": "Link",
-   "label": "Subscription",
-   "options": "Subscription",
-   "get_query": {
-     "filters": [
-       ["Subscription", "party", "=", "eval:doc.member"]
-     ]
-   }
-  },
-  {
-   "fieldname": "column_break_17",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "Unpaid",
-   "fieldname": "payment_status",
-   "fieldtype": "Select",
-   "label": "Payment Status",
-   "options": "Unpaid\nPaid\nOverdue\nRefunded"
-  },
-  {
-   "depends_on": "eval:doc.payment_status=='Paid' || doc.payment_status=='Refunded'",
-   "fieldname": "paid_amount",
-   "fieldtype": "Currency",
-   "label": "Paid Amount",
-   "options": "currency"
-  },
-  {
-   "depends_on": "eval:doc.payment_status=='Paid' || doc.payment_status=='Refunded'",
-   "fieldname": "payment_date",
-   "fieldtype": "Date",
-   "label": "Payment Date"
-  },
-  {
-   "depends_on": "eval:doc.payment_status=='Paid' || doc.payment_status=='Refunded'",
-   "fieldname": "payment_method",
-   "fieldtype": "Select",
-   "label": "Payment Method",
-   "options": "Bank Transfer\nDirect Debit\nCredit Card\nCash\nOther"
-  },
-  {
-   "fieldname": "erpnext_integration_section",
-   "fieldtype": "Section Break",
-   "label": "ERPNext Integration"
-  },
-  {
-   "depends_on": "eval:!doc.subscription",
-   "fieldname": "create_subscription",
-   "fieldtype": "Button",
-   "label": "Create Subscription"
-  },
-  {
-   "depends_on": "eval:!doc.subscription",
-   "fieldname": "subscription_plan",
-   "fieldtype": "Link",
-   "label": "Subscription Plan",
-   "options": "Subscription Plan"
-  },
-  {
-   "fieldname": "column_break_24",
-   "fieldtype": "Column Break"
-  },
-  {
-   "depends_on": "eval:doc.subscription",
-   "fieldname": "view_subscription",
-   "fieldtype": "Button",
-   "label": "View Subscription"
-  },
-  {
-   "fieldname": "amended_from",
-   "fieldtype": "Link",
-   "label": "Amended From",
-   "no_copy": 1,
-   "options": "Membership",
-   "print_hide": 1,
-   "read_only": 1
-  }
- ],
- "is_submittable": 1,
- "links": [
-  {
-   "link_doctype": "Member",
-   "link_fieldname": "name",
-   "parent_doctype": "Member"
-  }
- ],
- "modified": "2025-05-06 20:21:52.947759",
- "modified_by": "Administrator",
- "module": "Verenigingen",
- "name": "Membership",
- "owner": "Administrator",
- "permissions": [
-  {
-   "amend": 1,
-   "cancel": 1,
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "submit": 1,
-   "write": 1
-  },
-  {
-   "amend": 1,
-   "cancel": 1,
-   "create": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Membership Manager",
-   "share": 1,
-   "submit": 1,
-   "write": 1
-  },
-  {
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Membership User",
-   "share": 1
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Association Manager",
-   "share": 1,
-   "write": 1
-  }
- ],
- "row_format": "Dynamic",
- "sort_field": "modified",
- "sort_order": "DESC",
- "states": [],
- "title_field": "member_name",
- "track_changes": 1
-}
+import frappe
+from frappe import _
+from frappe.model.document import Document
+from frappe.utils import getdate, today, date_diff, add_to_date, nowdate, flt
+
+class Membership(Document):
+    def validate(self):
+        self.validate_dates()
+        self.validate_membership_type()
+        self.set_status()
+        
+    def validate_dates(self):
+        # Ensure start date is before end date
+        if self.end_date and getdate(self.start_date) > getdate(self.end_date):
+            frappe.throw(_("Start Date cannot be after End Date"))
+            
+        # If no end date is set, check if the membership type has a duration
+        if not self.end_date and self.membership_type:
+            membership_type = frappe.get_doc("Membership Type", self.membership_type)
+            
+            if membership_type.subscription_period != "Lifetime":
+                # Set end date based on subscription period
+                months = self.get_months_from_period(membership_type.subscription_period, 
+                                                  membership_type.subscription_period_in_months)
+                
+                if months:
+                    self.end_date = add_to_date(self.start_date, months=months)
+    
+    def get_months_from_period(self, period, custom_months=None):
+        period_months = {
+            "Monthly": 1,
+            "Quarterly": 3,
+            "Biannual": 6,
+            "Annual": 12,
+            "Lifetime": 0,
+            "Custom": custom_months or 0
+        }
+        
+        return period_months.get(period, 0)
+                
+    def validate_membership_type(self):
+        # Check if membership type exists and is active
+        if self.membership_type:
+            membership_type = frappe.get_doc("Membership Type", self.membership_type)
+            
+            if not membership_type.is_active:
+                frappe.throw(_("Membership Type {0} is inactive").format(self.membership_type))
+                
+            # Set fee amount if not already set
+            if not self.fee_amount and membership_type.amount:
+                self.fee_amount = membership_type.amount
+                self.currency = membership_type.currency
+                
+    def set_status(self):
+        if self.docstatus == 0:
+            self.status = "New"
+        elif self.docstatus == 2:
+            self.status = "Cancelled"
+        elif self.cancellation_date:
+            self.status = "Cancelled"
+        elif self.end_date and getdate(self.end_date) < getdate(today()):
+            self.status = "Expired"
+        else:
+            # Check if payment is made, if required
+            if self.fee_amount and flt(self.fee_amount) > 0:
+                if self.payment_status not in ["Paid", "Refunded"]:
+                    self.status = "Pending"
+                else:
+                    self.status = "Active"
+            else:
+                self.status = "Active"
+                
+    def on_submit(self):
+        # Update member's current membership
+        self.update_member_status()
+        frappe.logger().debug(f"Before submit - Status: {self.status}, Cancellation Date: {self.cancellation_date}")
+        
+        self.cancellation_date = None
+
+        # Set proper status
+        if self.fee_amount and flt(self.fee_amount) > 0:
+            if self.payment_status not in ["Paid", "Refunded"]:
+                self.status = "Pending"
+            else:
+                self.status = "Active"
+        else:
+            self.status = "Active"
+        # Force update to database
+        self.db_set('status', self.status)
+        self.db_set('cancellation_date', None)
+
+        frappe.logger().debug(f"After submit fixes - Status: {self.status}, Cancellation Date: {self.cancellation_date}")
+    
+        # Update member's current membership
+        self.update_member_status()
+
+        # Link to subscription if configured
+        if not self.subscription and self.subscription_plan:
+            self.create_subscription_from_membership()
+    
+    def on_cancel(self):
+        self.status = "Cancelled"
+        self.cancellation_date = self.cancellation_date or nowdate()
+        
+        # Update member status
+        self.update_member_status()
+        
+        # Cancel linked subscription
+        if self.subscription:
+            try:
+                subscription = frappe.get_doc("Subscription", self.subscription)
+                if subscription.status != "Cancelled":
+                    # The key fix - ensure the cancelation_date is a date object not a string
+                    if not subscription.cancelation_date:
+                        # Store as date object using getdate
+                        subscription.db_set('cancelation_date', getdate(self.cancellation_date))
+                    elif isinstance(subscription.cancelation_date, str):
+                        # Convert to date object if it's a string
+                        subscription.db_set('cancelation_date', getdate(subscription.cancelation_date))
+                
+                    # Use db_set to directly update database and bypass validation
+                    subscription.flags.ignore_permissions = True
+                
+                    # Now cancel the subscription
+                    # Let's catch any specific errors in the cancel_subscription method
+                    try:
+                        subscription.cancel_subscription()
+                    except TypeError as e:
+                        # If we still get a type error, try to fix it manually
+                        if ">=' not supported between instances of 'str' and 'datetime.date" in str(e):
+                            # Directly set status to cancelled as a fallback
+                            subscription.db_set('status', 'Cancelled')
+                            frappe.db.commit()
+                            frappe.msgprint(_("Subscription {0} has been cancelled").format(subscription.name))
+                        else:
+                            raise
+            except Exception as e:
+                error_msg = str(e)
+                frappe.log_error(f"Error cancelling subscription {self.subscription}: {error_msg}", 
+                            "Membership Cancellation Error")
+                frappe.msgprint(_("Error cancelling subscription: {0}").format(error_msg))
+    
+    def update_member_status(self):
+        """Update the membership status in the Member document"""
+        if self.member:
+            member = frappe.get_doc("Member", self.member)
+            member.save()  # This will trigger the update_membership_status method
+
+    def renew_membership(self):
+        """Create a new membership as a renewal of the current one"""
+        # Calculate new dates
+        new_start_date = self.end_date or today()
+        
+        # Get duration from membership type
+        membership_type = frappe.get_doc("Membership Type", self.membership_type)
+        months = self.get_months_from_period(membership_type.subscription_period, 
+                                          membership_type.subscription_period_in_months)
+        
+        new_end_date = None
+        if months:
+            new_end_date = add_to_date(new_start_date, months=months)
+            
+        # Create new membership
+        new_membership = frappe.new_doc("Membership")
+        new_membership.member = self.member
+        new_membership.membership_type = self.membership_type
+        new_membership.start_date = new_start_date
+        new_membership.end_date = new_end_date
+        new_membership.auto_renew = self.auto_renew
+        new_membership.fee_amount = self.fee_amount
+        new_membership.currency = self.currency
+        new_membership.subscription_plan = self.subscription_plan
+        
+        # Save as draft
+        new_membership.insert(ignore_permissions=True)
+        
+        frappe.msgprint(_("Renewal Membership {0} created").format(new_membership.name))
+        return new_membership.name
+
+    def create_subscription_from_membership(self, options=None):
+        """Create an ERPNext subscription for this membership with additional options"""
+        import frappe
+        from frappe import _
+        from frappe.utils import getdate, add_days, add_months
+        import json
+        
+        # Debug the function call
+        frappe.logger().debug(f"create_subscription_from_membership called with options={options}")
+        
+        # Initialize options with defaults if none provided
+        if not options:
+            options = {}
+        
+        # Check if member has a customer
+        member = frappe.get_doc("Member", self.member)
+        
+        if not member.customer:
+            # Create a customer for this member
+            member.create_customer()
+            member.reload()
+        
+        if not member.customer:
+            frappe.throw(_("Please create a customer for this member first"))
+        
+        try:
+            # Get subscription plan details
+            if not self.subscription_plan:
+                frappe.throw(_("Subscription Plan is required to create a subscription"))
+            
+            # Create subscription with minimal required fields
+            subscription = frappe.new_doc("Subscription")
+            
+            # Set basic subscription properties
+            subscription.party_type = "Customer"
+            subscription.party = member.customer
+            subscription.start_date = getdate(self.start_date)
+            
+            # Set the end date if defined in membership
+            if self.end_date:
+                subscription.end_date = getdate(self.end_date)
+            
+            # Set next billing date (1 month from start by default)
+            subscription.next_billing_date = add_months(getdate(self.start_date), 1)
+            
+            # Set billing interval defaults
+            subscription.billing_interval = "Month"
+            subscription.billing_interval_count = 1
+            
+            # Explicitly add requested options
+            subscription.follow_calendar_months = 1 if options.get('follow_calendar_months') else 0
+            subscription.generate_invoice_at_period_start = 1 if options.get('generate_invoice_at_period_start') else 0
+            subscription.generate_new_invoices_past_due_date = 1 if options.get('generate_new_invoices_past_due_date') else 0
+            subscription.submit_invoice = 1 if options.get('submit_invoice') else 0
+            
+            if options.get('days_until_due'):
+                subscription.days_until_due = options.get('days_until_due')
+            
+            # Safely add the subscription plan
+            table_fields = [d.fieldname for d in frappe.get_meta("Subscription").get_table_fields()]
+            
+            if 'plans' in table_fields:
+                # Check if the plans table exists
+                try:
+                    # Use append for plans table - basic required fields only
+                    subscription.append("plans", {
+                        "subscription_plan": self.subscription_plan,
+                        "qty": 1
+                    })
+                except Exception as e:
+                    frappe.log_error(
+                        f"Error appending plan to subscription: {str(e)}", 
+                        "Membership Subscription Error"
+                    )
+                    raise
+            else:
+                frappe.throw(_("The Subscription DocType structure has changed. Please update your app."))
+            
+            # For debugging
+            frappe.logger().debug(f"About to insert subscription with minimal fields")
+            frappe.logger().debug(f"Subscription dict: {subscription.as_dict()}")
+            
+            # Insert with ignore_mandatory to bypass validation issues
+            subscription.flags.ignore_mandatory = True
+            subscription.insert(ignore_permissions=True, ignore_mandatory=True)
+            
+            # Log success
+            frappe.logger().debug(f"Subscription inserted with ID: {subscription.name}")
+            
+            # Now submit the subscription
+            subscription.submit()
+            
+            # Link subscription to membership
+            self.subscription = subscription.name
+            self.save()
+            
+            frappe.msgprint(_("Subscription {0} created successfully").format(subscription.name))
+            return subscription.name
+            
+        except Exception as e:
+            error_details = f"Error details: Subscription Plan: {self.subscription_plan}"
+            frappe.log_error(f"Error creating subscription: {str(e)}\n{error_details}", 
+                          "Membership Subscription Error")
+            raise
+
+# Filter for link field to show only subscriptions associated with the current member
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_subscription_query(doctype, txt, searchfield, start, page_len, filters):
+    member = filters.get('member')
+    
+    if not member:
+        # If called from the form, try to get member from doc
+        if filters.get('doctype') == 'Membership' and filters.get('name'):
+            member_doc = frappe.get_doc('Membership', filters.get('name'))
+            member = member_doc.member
+            
+    if not member:
+        return []
+        
+    # Get customer linked to this member
+    customer = frappe.db.get_value('Member', member, 'customer')
+    
+    if not customer:
+        return []
+        
+    return frappe.db.sql("""
+        SELECT name, billing_status
+        FROM `tabSubscription`
+        WHERE party_type = 'Customer' 
+        AND party = %s
+        AND name LIKE %s
+        ORDER BY creation DESC
+    """, (customer, "%" + txt + "%"))
+
+def on_membership_update(doc, method=None):
+    """
+    Handler for when a membership is updated
+    This is referenced in hooks.py > doc_events
+    """
+    if doc.docstatus == 1:  # If document is submitted
+        # Update the member document to refresh status
+        if doc.member:
+            member = frappe.get_doc("Member", doc.member)
+            member.update_membership_status()
+            member.save(ignore_permissions=True)
+
+def on_membership_submit(doc, method=None):
+    """
+    Handler for when a membership is submitted
+    This is referenced in hooks.py > doc_events
+    """
+    # The main logic is already in doc.on_submit()
+    pass
+
+def on_membership_cancel(doc, method=None):
+    """
+    Handler for when a membership is cancelled
+    This is referenced in hooks.py > doc_events
+    """
+    # The main logic is already in doc.on_cancel()
+    pass
+
+def update_membership_from_subscription(doc, method=None):
+    """
+    Handler for when a subscription is updated
+    Updates the linked membership
+    This is referenced in hooks.py > doc_events
+    """
+    # Find memberships linked to this subscription
+    memberships = frappe.get_all(
+        "Membership",
+        filters={"subscription": doc.name},
+        fields=["name"]
+    )
+    
+    if not memberships:
+        return
+        
+    for membership_data in memberships:
+        membership = frappe.get_doc("Membership", membership_data.name)
+        
+        # Update membership status based on subscription
+        if doc.status == "Active":
+            if membership.status != "Active":
+                membership.status = "Active"
+                membership.save(ignore_permissions=True)
+        elif doc.status == "Cancelled":
+            if membership.status != "Cancelled":
+                membership.status = "Cancelled"
+                membership.save(ignore_permissions=True)
+        elif doc.status == "Unpaid":
+            if membership.status != "Pending":
+                membership.status = "Pending" 
+                membership.save(ignore_permissions=True)
+
+def verify_signature(data, signature, secret_key=None):
+    """
+    Verify a signature for webhook data (for donation verification)
+    
+    Args:
+        data (dict or str): The data to verify
+        signature (str): The signature received
+        secret_key (str, optional): The secret key to use for verification. 
+                                   If not provided, will use config value.
+    
+    Returns:
+        bool: True if signature is valid, False otherwise
+    """
+    import hmac
+    import hashlib
+    import frappe
+    
+    if not secret_key:
+        # Get secret key from configuration
+        secret_key = frappe.conf.get("webhook_secret_key")
+        
+        if not secret_key:
+            frappe.log_error("No webhook_secret_key found in configuration", 
+                            "Payment Signature Verification Error")
+            return False
+    
+    # Convert data to string if it's a dict
+    if isinstance(data, dict):
+        import json
+        data = json.dumps(data)
+    
+    # Convert to bytes if it's not already
+    if isinstance(data, str):
+        data = data.encode('utf-8')
+    
+    if isinstance(secret_key, str):
+        secret_key = secret_key.encode('utf-8')
+    
+    # Create signature
+    computed_signature = hmac.new(
+        secret_key,
+        data,
+        hashlib.sha256
+    ).hexdigest()
+    
+    # Compare signatures (using constant-time comparison to prevent timing attacks)
+    return hmac.compare_digest(computed_signature, signature)
+
+@frappe.whitelist()
+def renew_membership(membership_name):
+    """Renew a membership and return the new membership doc"""
+    membership = frappe.get_doc("Membership", membership_name)
+    return membership.renew_membership()
+
+@frappe.whitelist()
+def create_subscription(membership_name, options=None):
+    """Create a subscription for a membership with the specified options"""
+    import frappe
+    from frappe import _
+    from frappe.utils import getdate
+    
+    try:
+        # Parse options if provided as string
+        if options and isinstance(options, str):
+            import json
+            options = json.loads(options)
+        
+        # Get default options if none provided
+        if not options:
+            options = {
+                'follow_calendar_months': 1,
+                'generate_invoice_at_period_start': 1,
+                'generate_new_invoices_past_due_date': 1,
+                'submit_invoice': 1,
+                'days_until_due': 30
+            }
+            
+        # Get the membership
+        membership = frappe.get_doc("Membership", membership_name)
+        
+        # Check if subscription already exists
+        if membership.subscription:
+            return membership.subscription
+        
+        # Ensure there's a subscription plan
+        if not membership.subscription_plan:
+            frappe.throw(_("Please select a Subscription Plan first"))
+            
+        # Check if member has a customer
+        member = frappe.get_doc("Member", membership.member)
+        if not member.customer:
+            member.create_customer()
+            member.reload()
+            
+        if not member.customer:
+            frappe.throw(_("Please create a customer for this member first"))
+            
+        # Create a subscription
+        subscription = frappe.new_doc("Subscription")
+        
+        # Set required fields
+        subscription.party_type = "Customer"
+        subscription.party = member.customer
+        subscription.start_date = getdate(membership.start_date)
+        
+        # Add the plan
+        subscription.append("plans", {
+            "subscription_plan": membership.subscription_plan,
+            "qty": 1
+        })
+        
+        # Set options
+        subscription.follow_calendar_months = 1 if options.get('follow_calendar_months') else 0
+        subscription.generate_invoice_at_period_start = 1 if options.get('generate_invoice_at_period_start') else 0
+        subscription.generate_new_invoices_past_due_date = 1 if options.get('generate_new_invoices_past_due_date') else 0
+        subscription.submit_invoice = 1 if options.get('submit_invoice') else 0
+        
+        if options.get('days_until_due'):
+            subscription.days_until_due = options.get('days_until_due')
+        
+        # Save and submit
+        subscription.insert()
+        subscription.submit()
+        
+        # Link to membership
+        membership.subscription = subscription.name
+        membership.save()
+        
+        return subscription.name
+        
+    except Exception as e:
+        frappe.log_error(f"Error creating subscription: {str(e)}", "Subscription Error")
+        frappe.throw(_("Error creating subscription: {0}").format(str(e)))
