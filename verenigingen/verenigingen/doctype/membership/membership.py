@@ -479,60 +479,87 @@ def create_subscription_directly(membership, options=None):
         if not membership.subscription_plan:
             frappe.throw(_("Subscription Plan is required to create a subscription"))
         
-        # Get plan details
+        # Get the subscription plan
         plan = frappe.get_doc("Subscription Plan", membership.subscription_plan)
         
-        # Create subscription with minimal required fields
-        subscription = frappe.new_doc("Subscription")
+        # Get the membership type to understand the subscription period
+        membership_type = frappe.get_doc("Membership Type", membership.membership_type)
         
-        # Set basic subscription properties
-        subscription.party_type = "Customer"
-        subscription.party = member.customer
-        subscription.start_date = getdate(membership.start_date)
-        
-        # Set the end date if defined in membership
-        if membership.end_date:
-            subscription.end_date = getdate(membership.end_date)
-        
-        # Set billing interval properties based on plan
-        # These must be set properly for ERPNext's subscription logic to work
-        # Default to monthly if not specified
-        interval_unit = getattr(plan, 'billing_interval', getattr(plan, 'billing_interval_unit', 'Month'))
-        interval_count = getattr(plan, 'billing_interval_count', getattr(plan, 'billing_interval_value', 1))
-        
-        subscription.billing_interval = interval_unit
-        subscription.billing_interval_count = interval_count
-        
-        # Set current invoice dates - this is critical for ERPNext's subscription handling
-        subscription.current_invoice_start = getdate(membership.start_date)
-        
-        # Calculate current invoice end based on start date and billing interval
+        # Set basic subscription settings
         start_date = getdate(membership.start_date)
         
-        if interval_unit == "Day":
-            invoice_end = add_days(start_date, interval_count)
-        elif interval_unit == "Week":
-            invoice_end = add_days(start_date, interval_count * 7)
-        elif interval_unit == "Month":
-            invoice_end = add_months(start_date, interval_count)
-        elif interval_unit == "Year":
-            invoice_end = add_months(start_date, interval_count * 12)
+        # Calculate end date based on membership type if not already set
+        if membership.end_date:
+            end_date = getdate(membership.end_date)
+        else:
+            # Calculate based on membership type
+            if membership_type.subscription_period == "Monthly":
+                end_date = add_months(start_date, 1)
+            elif membership_type.subscription_period == "Quarterly":
+                end_date = add_months(start_date, 3)
+            elif membership_type.subscription_period == "Biannual":
+                end_date = add_months(start_date, 6)
+            elif membership_type.subscription_period == "Annual":
+                end_date = add_months(start_date, 12)
+            elif membership_type.subscription_period == "Custom" and membership_type.subscription_period_in_months:
+                end_date = add_months(start_date, membership_type.subscription_period_in_months)
+            else:
+                # Default to annual
+                end_date = add_months(start_date, 12)
+                
+            # Subtract 1 day to make it inclusive
+            end_date = add_days(end_date, -1)
+        
+        # Make sure end date is after start date
+        if end_date <= start_date:
+            end_date = add_days(start_date, 1)  # Simple fix: make end date 1 day after start date
+        
+        # For monthly billing with follow_calendar_months, we need billing_interval=Month
+        billing_interval = "Month"
+        
+        # Determine billing interval count based on membership type
+        if membership_type.subscription_period == "Monthly":
+            billing_interval_count = 1
+        elif membership_type.subscription_period == "Quarterly":
+            billing_interval_count = 3
+        elif membership_type.subscription_period == "Biannual":
+            billing_interval_count = 6
+        elif membership_type.subscription_period == "Annual":
+            billing_interval_count = 12
+        elif membership_type.subscription_period == "Custom" and membership_type.subscription_period_in_months:
+            billing_interval_count = membership_type.subscription_period_in_months
         else:
             # Default to monthly
-            invoice_end = add_months(start_date, 1)
+            billing_interval_count = 1
             
-        # Adjust for calendar months if requested
-        if options.get('follow_calendar_months'):
-            # If follow_calendar_months is enabled, adjust the end date to end of month
-            # Get the last day of the month for the calculated end date
-            from calendar import monthrange
-            last_day = monthrange(invoice_end.year, invoice_end.month)[1]
-            invoice_end = datetime.date(invoice_end.year, invoice_end.month, last_day)
+        # Create the subscription with minimal fields
+        subscription = frappe.new_doc("Subscription")
+        subscription.party_type = "Customer"
+        subscription.party = member.customer
+        subscription.start_date = start_date
+        subscription.end_date = end_date
         
-        subscription.current_invoice_end = invoice_end
-        subscription.next_billing_date = add_days(invoice_end, 1)
+        # Set custom billing period parameters
+        # If the original plan has different billing interval, override it
+        if hasattr(plan, 'billing_interval') and plan.billing_interval != billing_interval:
+            # Try to update the plan
+            try:
+                original_interval = plan.billing_interval
+                original_count = plan.billing_interval_count
+                
+                plan.billing_interval = billing_interval
+                
+                # Adjust count if changing from Year to Month
+                if original_interval == "Year":
+                    plan.billing_interval_count = original_count * 12
+                    
+                plan.save()
+                frappe.logger().debug(f"Updated plan billing interval from {original_interval} to {billing_interval}")
+            except Exception as e:
+                frappe.logger().error(f"Error updating plan: {str(e)}")
+                # Proceed with original plan settings
         
-        # Set additional options requested
+        # Set subscription options
         subscription.follow_calendar_months = 1 if options.get('follow_calendar_months') else 0
         subscription.generate_invoice_at_period_start = 1 if options.get('generate_invoice_at_period_start') else 0
         subscription.generate_new_invoices_past_due_date = 1 if options.get('generate_new_invoices_past_due_date') else 0
@@ -540,21 +567,21 @@ def create_subscription_directly(membership, options=None):
         
         if options.get('days_until_due'):
             subscription.days_until_due = options.get('days_until_due')
-        
-        # Add plans table entry
+            
+        # Add the plan to the subscription
         subscription.append("plans", {
             "subscription_plan": membership.subscription_plan,
             "qty": 1
         })
         
-        # For debugging
-        frappe.logger().debug(f"About to insert subscription with fields:")
+        # DEBUG log all critical values
+        frappe.logger().debug(f"Creating subscription with:")
         frappe.logger().debug(f"- start_date: {subscription.start_date}")
-        frappe.logger().debug(f"- billing_interval: {subscription.billing_interval}")
-        frappe.logger().debug(f"- billing_interval_count: {subscription.billing_interval_count}")
-        frappe.logger().debug(f"- current_invoice_start: {subscription.current_invoice_start}")
-        frappe.logger().debug(f"- current_invoice_end: {subscription.current_invoice_end}")
-        frappe.logger().debug(f"- next_billing_date: {subscription.next_billing_date}")
+        frappe.logger().debug(f"- end_date: {subscription.end_date}")
+        frappe.logger().debug(f"- plan: {membership.subscription_plan}")
+        frappe.logger().debug(f"- plan billing_interval: {getattr(plan, 'billing_interval', 'Not set')}")
+        frappe.logger().debug(f"- plan billing_interval_count: {getattr(plan, 'billing_interval_count', 'Not set')}")
+        frappe.logger().debug(f"- follow_calendar_months: {subscription.follow_calendar_months}")
         
         # Insert the subscription
         subscription.insert(ignore_permissions=True)
@@ -562,7 +589,7 @@ def create_subscription_directly(membership, options=None):
         # Log success
         frappe.logger().debug(f"Subscription inserted with ID: {subscription.name}")
         
-        # Now submit the subscription
+        # Submit the subscription
         subscription.submit()
         
         # Link subscription to membership
@@ -575,5 +602,5 @@ def create_subscription_directly(membership, options=None):
     except Exception as e:
         error_details = f"Error details: Subscription Plan: {membership.subscription_plan}"
         frappe.log_error(f"Error creating subscription: {str(e)}\n{error_details}", 
-                      "Membership Subscription Error")
+                         "Membership Subscription Error")
         frappe.throw(_("Error creating subscription: {0}").format(str(e)))
