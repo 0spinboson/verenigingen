@@ -257,25 +257,52 @@ frappe.ui.form.on('Membership', {
             return;
         }
         
-        frappe.call({
-            method: 'verenigingen.verenigingen.doctype.membership.membership.create_subscription',
-            args: {
-                'membership_name': frm.doc.name,
-                'options': {
-                    'follow_calendar_months': 1,
-                    'generate_invoice_at_period_start': 1,
-                    'generate_new_invoices_past_due_date': 1,
-                    'submit_invoice': 1,
-                    'days_until_due': 27
-                }
-            },
-            callback: function(r) {
-                if (r.message) {
-                    frm.refresh();
-                    frappe.msgprint(__('Subscription created successfully.'));
-                }
-            }
-        });
+        // Show a loading indicator
+        frappe.ui.form.set_busy(frm);
+        
+        // First, let's verify the subscription plan exists and is valid
+        frappe.db.get_doc('Subscription Plan', frm.doc.subscription_plan)
+            .then(plan => {
+                // Plan exists, proceed with creating subscription
+                frappe.call({
+                    method: 'verenigingen.verenigingen.doctype.membership.membership.create_subscription',
+                    args: {
+                        'membership_name': frm.doc.name,
+                        'options': {
+                            'follow_calendar_months': 1,
+                            'generate_invoice_at_period_start': 1,
+                            'generate_new_invoices_past_due_date': 1,
+                            'submit_invoice': 1,
+                            'days_until_due': 30
+                        }
+                    },
+                    callback: function(r) {
+                        frappe.ui.form.unset_busy(frm);
+                        if (r.message) {
+                            frm.refresh();
+                            frappe.msgprint(__('Subscription created successfully.'));
+                        }
+                    },
+                    error: function(r) {
+                        frappe.ui.form.unset_busy(frm);
+                        // Display detailed error message
+                        let error_msg = r.message || __('An error occurred while creating the subscription.');
+                        frappe.msgprint({
+                            title: __('Error'),
+                            indicator: 'red',
+                            message: error_msg
+                        });
+                    }
+                });
+            })
+            .catch(err => {
+                frappe.ui.form.unset_busy(frm);
+                frappe.msgprint({
+                    title: __('Invalid Subscription Plan'),
+                    indicator: 'red',
+                    message: __('The selected subscription plan is invalid or not found. Please select a valid plan.')
+                });
+            });
     }
 });
 
