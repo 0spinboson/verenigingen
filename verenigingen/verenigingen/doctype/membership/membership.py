@@ -608,6 +608,19 @@ def process_membership_statuses():
                           "Membership Status Update Error")
     
     return True
+
+def on_submit(doc, method=None):
+    """
+    Hook function for on_submit event
+    """
+    pass  # The class method is already called automatically
+
+def on_cancel(doc, method=None):
+    """
+    Hook function for on_cancel event
+    """
+    pass  # The class method is already called automatically
+
 def update_membership_from_subscription(doc, method=None):
     """
     Handler for when a subscription is updated
