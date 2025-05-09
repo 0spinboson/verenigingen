@@ -16,23 +16,26 @@
   "status",
   "details_section",
   "start_date",
-  "end_date",
+  "renewal_date",
+  "membership_period",
   "column_break_11",
   "cancellation_date",
-  "cancelation_reason",
-  "payment_details_section",
-  "fee_amount",
-  "currency",
-  "subscription",
+  "cancellation_reason",
+  "cancellation_type",
+  "payment_overview_section",
+  "payment_frequency",
+  "payment_amount",
+  "next_payment_date",
+  "payment_method",
   "column_break_17",
   "payment_status",
-  "paid_amount",
-  "payment_date",
-  "payment_method",
-  "erpnext_integration_section",
-  "create_subscription",
+  "last_payment_date",
+  "view_payments",
+  "subscription_section",
+  "subscription",
   "subscription_plan",
   "column_break_24",
+  "create_subscription",
   "view_subscription",
   "amended_from"
  ],
@@ -90,13 +93,13 @@
    "label": "Auto Renew"
   },
   {
-   "default": "New",
+   "default": "Draft",
    "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Status",
-   "options": "New\nPending\nActive\nExpired\nCancelled",
-   "reqd": 1
+   "options": "Draft\nActive\nPending\nInactive\nExpired\nCancelled",
+   "read_only": 1
   },
   {
    "fieldname": "details_section",
@@ -111,56 +114,73 @@
    "reqd": 1
   },
   {
-   "fieldname": "end_date",
+   "fieldname": "renewal_date",
    "fieldtype": "Date",
-   "label": "End Date"
+   "label": "Renewal Date",
+   "reqd": 1,
+   "description": "Date when the membership should be renewed"
+  },
+  {
+   "fieldname": "membership_period",
+   "fieldtype": "Select",
+   "label": "Membership Period",
+   "options": "Monthly\nQuarterly\nBiannual\nAnnual\nLifetime\nCustom",
+   "fetch_from": "membership_type.subscription_period",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_11",
    "fieldtype": "Column Break"
   },
   {
-   "depends_on": "eval:doc.status=='Cancelled'",
    "fieldname": "cancellation_date",
    "fieldtype": "Date",
    "label": "Cancellation Date"
   },
   {
-   "depends_on": "eval:doc.status=='Cancelled'",
-   "fieldname": "cancelation_reason",
+   "fieldname": "cancellation_reason",
    "fieldtype": "Small Text",
    "label": "Cancellation Reason"
   },
   {
-   "fieldname": "payment_details_section",
+   "fieldname": "cancellation_type",
+   "fieldtype": "Select",
+   "label": "Cancellation Type",
+   "options": "Immediate\nEnd of Period",
+   "depends_on": "eval:doc.cancellation_date"
+  },
+  {
+   "fieldname": "payment_overview_section",
    "fieldtype": "Section Break",
-   "label": "Payment Details"
+   "label": "Payment Overview"
   },
   {
-   "fetch_from": "membership_type.amount",
-   "fieldname": "fee_amount",
+   "fieldname": "payment_frequency",
+   "fieldtype": "Select",
+   "label": "Payment Frequency",
+   "options": "Monthly\nQuarterly\nBiannual\nAnnual\nLifetime\nCustom",
+   "fetch_from": "membership_type.subscription_period",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payment_amount",
    "fieldtype": "Currency",
-   "label": "Fee Amount",
-   "non_negative": 1,
-   "options": "currency"
+   "label": "Payment Amount",
+   "options": "currency",
+   "fetch_from": "membership_type.amount",
+   "read_only": 1
   },
   {
-   "fetch_from": "membership_type.currency",
-   "fieldname": "currency",
-   "fieldtype": "Link",
-   "label": "Currency",
-   "options": "Currency"
+   "fieldname": "next_payment_date",
+   "fieldtype": "Date",
+   "label": "Next Payment Date",
+   "read_only": 1
   },
   {
-   "fieldname": "subscription",
-   "fieldtype": "Link",
-   "label": "Subscription",
-   "options": "Subscription",
-   "get_query": {
-     "filters": [
-       ["Subscription", "party", "=", "eval:doc.member"]
-     ]
-   }
+   "fieldname": "payment_method",
+   "fieldtype": "Select",
+   "label": "Payment Method",
+   "options": "Bank Transfer\nDirect Debit\nCredit Card\nCash\nOther"
   },
   {
    "fieldname": "column_break_17",
@@ -171,49 +191,50 @@
    "fieldname": "payment_status",
    "fieldtype": "Select",
    "label": "Payment Status",
-   "options": "Unpaid\nPaid\nOverdue\nRefunded"
+   "options": "Unpaid\nPaid\nOverdue\nRefunded",
+   "read_only": 1
   },
   {
-   "depends_on": "eval:doc.payment_status=='Paid' || doc.payment_status=='Refunded'",
-   "fieldname": "paid_amount",
-   "fieldtype": "Currency",
-   "label": "Paid Amount",
-   "options": "currency"
-  },
-  {
-   "depends_on": "eval:doc.payment_status=='Paid' || doc.payment_status=='Refunded'",
-   "fieldname": "payment_date",
+   "fieldname": "last_payment_date",
    "fieldtype": "Date",
-   "label": "Payment Date"
+   "label": "Last Payment Date",
+   "read_only": 1
   },
   {
-   "depends_on": "eval:doc.payment_status=='Paid' || doc.payment_status=='Refunded'",
-   "fieldname": "payment_method",
-   "fieldtype": "Select",
-   "label": "Payment Method",
-   "options": "Bank Transfer\nDirect Debit\nCredit Card\nCash\nOther"
-  },
-  {
-   "fieldname": "erpnext_integration_section",
-   "fieldtype": "Section Break",
-   "label": "ERPNext Integration"
-  },
-  {
-   "depends_on": "eval:!doc.subscription",
-   "fieldname": "create_subscription",
+   "fieldname": "view_payments",
    "fieldtype": "Button",
-   "label": "Create Subscription"
+   "label": "View Payment History",
+   "depends_on": "eval:doc.docstatus==1 && doc.subscription"
   },
   {
-   "depends_on": "eval:!doc.subscription",
+   "fieldname": "subscription_section",
+   "fieldtype": "Section Break",
+   "label": "Subscription Details"
+  },
+  {
+   "fieldname": "subscription",
+   "fieldtype": "Link",
+   "label": "Subscription",
+   "options": "Subscription",
+   "get_query": "verenigingen.verenigingen.doctype.membership.membership.get_subscription_query",
+   "read_only": 1
+  },
+  {
    "fieldname": "subscription_plan",
    "fieldtype": "Link",
    "label": "Subscription Plan",
-   "options": "Subscription Plan"
+   "options": "Subscription Plan",
+   "fetch_from": "membership_type.subscription_plan"
   },
   {
    "fieldname": "column_break_24",
    "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:!doc.subscription && doc.docstatus==1",
+   "fieldname": "create_subscription",
+   "fieldtype": "Button",
+   "label": "Create Subscription"
   },
   {
    "depends_on": "eval:doc.subscription",
