@@ -293,7 +293,6 @@ frappe.ui.form.on('Membership', {
             });
     }
 });
-});
 
 // Function to display payment history in a dialog
 function show_payment_history_dialog(payment_history) {
