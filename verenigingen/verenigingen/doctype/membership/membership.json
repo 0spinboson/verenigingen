@@ -155,7 +155,12 @@
    "fieldname": "subscription",
    "fieldtype": "Link",
    "label": "Subscription",
-   "options": "Subscription"
+   "options": "Subscription",
+   "get_query": {
+    "filters": [
+      ["Subscription", "party", "=", "eval:doc.member"]
+    ]
+   }
   },
   {
    "fieldname": "column_break_17",
