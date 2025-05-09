@@ -118,9 +118,8 @@ has_permission = {
 
 doc_events = {
     "Membership": {
-        "on_update": "verenigingen.verenigingen.doctype.membership.membership.on_membership_update",
-        "on_submit": "verenigingen.verenigingen.doctype.membership.membership.on_membership_submit",
-        "on_cancel": "verenigingen.verenigingen.doctype.membership.membership.on_membership_cancel",
+        "on_submit": "verenigingen.verenigingen.doctype.membership.membership.on_submit",
+        "on_cancel": "verenigingen.verenigingen.doctype.membership.membership.on_cancel",
     },
     "Subscription": {
         "on_update": "verenigingen.verenigingen.doctype.membership.membership.update_membership_from_subscription",
