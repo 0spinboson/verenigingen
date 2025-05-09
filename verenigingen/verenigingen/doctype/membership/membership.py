@@ -454,6 +454,7 @@ def create_subscription_directly(membership, options=None):
     import frappe
     from frappe import _
     from frappe.utils import getdate, add_days, add_months, nowdate
+    import datetime
     
     # Debug the function call
     frappe.logger().debug(f"create_subscription_directly called with options={options}")
@@ -506,23 +507,27 @@ def create_subscription_directly(membership, options=None):
         subscription.current_invoice_start = getdate(membership.start_date)
         
         # Calculate current invoice end based on start date and billing interval
+        start_date = getdate(membership.start_date)
+        
         if interval_unit == "Day":
-            invoice_end = add_days(subscription.current_invoice_start, interval_count)
+            invoice_end = add_days(start_date, interval_count)
         elif interval_unit == "Week":
-            invoice_end = add_days(subscription.current_invoice_start, interval_count * 7)
+            invoice_end = add_days(start_date, interval_count * 7)
         elif interval_unit == "Month":
-            invoice_end = add_months(subscription.current_invoice_start, interval_count)
+            invoice_end = add_months(start_date, interval_count)
         elif interval_unit == "Year":
-            invoice_end = add_months(subscription.current_invoice_start, interval_count * 12)
+            invoice_end = add_months(start_date, interval_count * 12)
         else:
             # Default to monthly
-            invoice_end = add_months(subscription.current_invoice_start, 1)
+            invoice_end = add_months(start_date, 1)
             
         # Adjust for calendar months if requested
         if options.get('follow_calendar_months'):
             # If follow_calendar_months is enabled, adjust the end date to end of month
-            invoice_end = getdate(invoice_end)
-            invoice_end = getdate(f"{invoice_end.year}-{invoice_end.month}-{frappe.utils.get_last_day(invoice_end)}")
+            # Get the last day of the month for the calculated end date
+            from calendar import monthrange
+            last_day = monthrange(invoice_end.year, invoice_end.month)[1]
+            invoice_end = datetime.date(invoice_end.year, invoice_end.month, last_day)
         
         subscription.current_invoice_end = invoice_end
         subscription.next_billing_date = add_days(invoice_end, 1)
