@@ -12,6 +12,7 @@
   "full_name",
   "pronouns",
   "birth_date",
+  "age",
   "column_break_8",
   "email",
   "mobile_no",
@@ -19,7 +20,7 @@
   "image",
   "status",
   "member_id",
-  "age",
+  "member_since",
   "address_section",
   "primary_address",
   "address_display",
@@ -306,6 +307,11 @@
    "fieldtype": "Link",
    "label": "Primary address",
    "options": "Address"
+  },
+  {
+   "fieldname": "member_since",
+   "fieldtype": "Data",
+   "label": "Member since"
   }
  ],
  "links": [
@@ -321,7 +327,7 @@
    "table_fieldname": "references"
   }
  ],
- "modified": "2025-05-08 22:07:58.094437",
+ "modified": "2025-05-09 18:32:30.036153",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
