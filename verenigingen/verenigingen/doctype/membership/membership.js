@@ -260,7 +260,14 @@ frappe.ui.form.on('Membership', {
         frappe.call({
             method: 'verenigingen.verenigingen.doctype.membership.membership.create_subscription',
             args: {
-                'membership_name': frm.doc.name
+                'membership_name': frm.doc.name,
+                'options': {
+                    'follow_calendar_months': 1,
+                    'generate_invoice_at_period_start': 1,
+                    'generate_new_invoices_past_due_date': 1,
+                    'submit_invoice': 1,
+                    'days_until_due': 30
+                }
             },
             callback: function(r) {
                 if (r.message) {
