@@ -157,9 +157,9 @@
    "label": "Subscription",
    "options": "Subscription",
    "get_query": {
-    "filters": [
-      ["Subscription", "party", "=", "eval:doc.member"]
-    ]
+     "filters": [
+       ["Subscription", "party", "=", "eval:doc.member"]
+     ]
    }
   },
   {
