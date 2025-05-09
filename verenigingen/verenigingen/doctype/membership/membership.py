@@ -448,6 +448,16 @@ def create_subscription(membership_name, options=None):
             import json
             options = json.loads(options)
             frappe.logger().debug(f"Parsed options from string: {options}")
+            
+        # If no options provided, use some defaults
+        if not options:
+            options = {
+                'follow_calendar_months': 1,
+                'generate_invoice_at_period_start': 1,
+                'generate_new_invoices_past_due_date': 1,
+                'submit_invoice': 1,
+                'days_until_due': 30
+            }
         
         result = membership.create_subscription_from_membership(options)
         frappe.logger().debug(f"create_subscription_from_membership returned: {result}")
@@ -455,7 +465,6 @@ def create_subscription(membership_name, options=None):
     except Exception as e:
         frappe.logger().error(f"Error in create_subscription: {str(e)}", exc_info=True)
         raise
-        
 @frappe.whitelist()
 def renew_membership(membership_name):
     """Renew a membership and return the new membership doc"""
