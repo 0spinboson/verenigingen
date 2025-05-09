@@ -266,12 +266,13 @@ frappe.ui.form.on('Membership', {
                     'generate_invoice_at_period_start': 1,
                     'generate_new_invoices_past_due_date': 1,
                     'submit_invoice': 1,
-                    'days_until_due': 30
+                    'days_until_due': 27
                 }
             },
             callback: function(r) {
                 if (r.message) {
                     frm.refresh();
+                    frappe.msgprint(__('Subscription created successfully.'));
                 }
             }
         });
