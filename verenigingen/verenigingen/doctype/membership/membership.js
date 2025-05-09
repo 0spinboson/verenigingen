@@ -61,32 +61,14 @@ frappe.ui.form.on('Membership', {
                         function(values) {
                             frm.set_value('subscription_plan', values.subscription_plan);
                             frm.save().then(() => {
-                                frappe.call({
-                                    method: 'verenigingen.verenigingen.doctype.membership.membership.create_subscription',
-                                    args: {
-                                        'membership_name': frm.doc.name
-                                    },
-                                    callback: function(r) {
-                                        if (r.message) {
-                                            frm.refresh();
-                                        }
-                                    }
-                                });
+                                // Call the standard create_subscription function instead of directly calling the server
+                                frm.trigger('create_subscription');
                             });
                         }, 
                         __('Select Subscription Plan'));
                     } else {
-                        frappe.call({
-                            method: 'verenigingen.verenigingen.doctype.membership.membership.create_subscription',
-                            args: {
-                                'membership_name': frm.doc.name
-                            },
-                            callback: function(r) {
-                                if (r.message) {
-                                    frm.refresh();
-                                }
-                            }
-                        });
+                        // Call the standard create_subscription function
+                        frm.trigger('create_subscription');
                     }
                 }, __('Actions'));
             }
@@ -257,24 +239,29 @@ frappe.ui.form.on('Membership', {
             return;
         }
         
+        // Enhanced options
+        const options = {
+            'follow_calendar_months': 1,
+            'generate_invoice_at_period_start': 1,
+            'generate_new_invoices_past_due_date': 1,
+            'submit_invoice': 1,
+            'days_until_due': 30
+        };
+        
         // Show a loading indicator
         frappe.ui.form.set_busy(frm);
         
         // First, let's verify the subscription plan exists and is valid
         frappe.db.get_doc('Subscription Plan', frm.doc.subscription_plan)
             .then(plan => {
+                console.log("Creating subscription with plan:", plan.name);
+                
                 // Plan exists, proceed with creating subscription
                 frappe.call({
                     method: 'verenigingen.verenigingen.doctype.membership.membership.create_subscription',
                     args: {
                         'membership_name': frm.doc.name,
-                        'options': {
-                            'follow_calendar_months': 1,
-                            'generate_invoice_at_period_start': 1,
-                            'generate_new_invoices_past_due_date': 1,
-                            'submit_invoice': 1,
-                            'days_until_due': 30
-                        }
+                        'options': options
                     },
                     callback: function(r) {
                         frappe.ui.form.unset_busy(frm);
@@ -297,6 +284,7 @@ frappe.ui.form.on('Membership', {
             })
             .catch(err => {
                 frappe.ui.form.unset_busy(frm);
+                console.error("Error verifying plan:", err);
                 frappe.msgprint({
                     title: __('Invalid Subscription Plan'),
                     indicator: 'red',
@@ -304,6 +292,7 @@ frappe.ui.form.on('Membership', {
                 });
             });
     }
+});
 });
 
 // Function to display payment history in a dialog
