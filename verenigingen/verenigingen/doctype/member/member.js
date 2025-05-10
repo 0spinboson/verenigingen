@@ -282,7 +282,22 @@ frappe.ui.form.on('Member', {
         
         frm.set_value('full_name', full_name);
     },
-    
+    payment_method: function(frm) {
+        // Show/hide bank details based on payment method
+        const is_direct_debit = frm.doc.payment_method === 'Direct Debit';
+        frm.toggle_display(['bank_details_section'], is_direct_debit);
+        frm.toggle_reqd(['sepa_mandate'], is_direct_debit);
+        
+        // Auto-populate bank details from SEPA mandate
+        if (is_direct_debit && frm.doc.sepa_mandate) {
+            frappe.db.get_doc('SEPA Mandate', frm.doc.sepa_mandate)
+                .then(mandate => {
+                    frm.set_value('iban', mandate.iban);
+                    frm.set_value('bic', mandate.bic);
+                    frm.set_value('bank_account_name', mandate.account_holder_name);
+                });
+        }
+    },
     default_sepa_mandate: function(frm) {
         // When default mandate is changed, update the table
         if (frm.doc.default_sepa_mandate) {
@@ -486,22 +501,4 @@ function mark_as_paid(frm) {
     });
     
     dialog.show();
-}
-
-// Update the payment_method trigger:
-payment_method: function(frm) {
-    // Show/hide bank details based on payment method
-    const is_direct_debit = frm.doc.payment_method === 'Direct Debit';
-    frm.toggle_display(['bank_details_section'], is_direct_debit);
-    frm.toggle_reqd(['sepa_mandate'], is_direct_debit);
-    
-    // Auto-populate bank details from SEPA mandate
-    if (is_direct_debit && frm.doc.sepa_mandate) {
-        frappe.db.get_doc('SEPA Mandate', frm.doc.sepa_mandate)
-            .then(mandate => {
-                frm.set_value('iban', mandate.iban);
-                frm.set_value('bic', mandate.bic);
-                frm.set_value('bank_account_name', mandate.account_holder_name);
-            });
-    }
 }
