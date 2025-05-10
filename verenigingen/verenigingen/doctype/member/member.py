@@ -540,3 +540,24 @@ def get_default_sepa_mandate(self):
         return active_mandates[0].name
     
     return None
+
+@frappe.whitelist()
+def check_sepa_mandate_status(member):
+    """Check SEPA mandate status for dashboard indicators"""
+    member_doc = frappe.get_doc("Member", member)
+    active_mandates = member_doc.get_active_sepa_mandates()
+    
+    result = {
+        "has_active_mandate": bool(active_mandates),
+        "expiring_soon": False
+    }
+    
+    # Check if any mandate is expiring within 30 days
+    for mandate in active_mandates:
+        if mandate.expiry_date:
+            days_to_expiry = frappe.utils.date_diff(mandate.expiry_date, frappe.utils.today())
+            if 0 < days_to_expiry <= 30:
+                result["expiring_soon"] = True
+                break
+    
+    return result
