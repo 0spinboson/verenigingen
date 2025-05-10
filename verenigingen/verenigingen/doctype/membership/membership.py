@@ -98,14 +98,15 @@ class Membership(Document):
         if not self.unpaid_amount:
             self.unpaid_amount = 0
             
-        # Make sure next_payment_date is set
-        if not self.next_payment_date:
-            self.next_payment_date = self.start_date
+        # Initialize next_billing_date to start_date if not set
+        if not self.next_billing_date:
+            self.next_billing_date = self.start_date
             
-        # Set cancellation date to null if not set
-        self.cancellation_date = None
-        self.cancellation_reason = None
-        self.cancellation_type = None
+        # Clear cancellation fields if not set
+        if not self.cancellation_date:
+            self.cancellation_date = None
+            self.cancellation_reason = None
+            self.cancellation_type = None
 
         # Update status properly
         self.set_status()
@@ -113,7 +114,7 @@ class Membership(Document):
         # Force update to database
         self.db_set('status', self.status)
         self.db_set('unpaid_amount', self.unpaid_amount)
-        self.db_set('next_payment_date', self.next_payment_date)
+        self.db_set('next_billing_date', self.next_billing_date)
         self.db_set('cancellation_date', None)
         self.db_set('cancellation_reason', None)
         self.db_set('cancellation_type', None)
@@ -191,10 +192,10 @@ class Membership(Document):
             
         subscription = frappe.get_doc("Subscription", self.subscription)
         
-        # Update next payment date
+        # Update next billing date (not next payment date)
         if subscription.next_billing_date:
-            self.next_payment_date = subscription.next_billing_date
-            self.db_set('next_payment_date', subscription.next_billing_date)
+            self.next_billing_date = subscription.next_billing_date
+            self.db_set('next_billing_date', subscription.next_billing_date)
         
         # Get invoices linked to this subscription
         invoices = frappe.get_all(
@@ -254,9 +255,9 @@ class Membership(Document):
         new_membership.subscription_plan = self.subscription_plan
         
         # Copy SEPA mandate details
-        new_membership.sepa_mandate_id = self.sepa_mandate_id
-        new_membership.mandate_start_date = self.mandate_start_date
-        new_membership.mandate_expiry_date = self.mandate_expiry_date
+        new_membership.sepa_mandate = self.sepa_mandate
+        new_membership.mandate_reference = self.mandate_reference
+        new_membership.mandate_status = self.mandate_status
         
         # The renewal date will be calculated automatically in validate()
         # which includes the 1-year minimum logic
@@ -330,8 +331,22 @@ class Membership(Document):
             subscription.billing_interval = billing_interval
             subscription.billing_interval_count = billing_interval_count
             
-            # Set next billing date
-            subscription.next_billing_date = add_months(getdate(self.start_date), 1)
+            # Calculate the correct next billing date
+            # For first billing, it could be different from the membership period
+            if membership_type.subscription_period == "Monthly":
+                subscription.next_billing_date = add_months(getdate(self.start_date), 1)
+            elif membership_type.subscription_period == "Quarterly":
+                subscription.next_billing_date = add_months(getdate(self.start_date), 3)
+            elif membership_type.subscription_period == "Biannual":
+                subscription.next_billing_date = add_months(getdate(self.start_date), 6)
+            elif membership_type.subscription_period == "Annual":
+                subscription.next_billing_date = add_months(getdate(self.start_date), 12)
+            elif membership_type.subscription_period == "Custom":
+                subscription.next_billing_date = add_months(getdate(self.start_date), 
+                                                          membership_type.subscription_period_in_months)
+            else:
+                # Default to monthly for lifetime or unspecified
+                subscription.next_billing_date = add_months(getdate(self.start_date), 1)
             
             # Explicitly add requested options
             subscription.follow_calendar_months = 1 if options.get('follow_calendar_months') else 0
@@ -357,9 +372,9 @@ class Membership(Document):
             self.subscription = subscription.name
             self.db_set('subscription', subscription.name)
             
-            # Sync next payment date
-            self.next_payment_date = subscription.next_billing_date
-            self.db_set('next_payment_date', subscription.next_billing_date)
+            # Sync next billing date
+            self.next_billing_date = subscription.next_billing_date
+            self.db_set('next_billing_date', subscription.next_billing_date)
             
             frappe.msgprint(_("Subscription {0} created successfully").format(subscription.name))
             return subscription.name
