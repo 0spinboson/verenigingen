@@ -477,16 +477,30 @@ class Member(Document):
         return False
 
     def validate_payment_method(self):
-        """Validate payment method requirements"""
-        if self.payment_method == "Direct Debit":
-            if not self.sepa_mandate:
-                frappe.throw(_("SEPA Mandate is required for Direct Debit payment method"))
+        """Validate payment method and related fields"""
+        # Check if payment_method exists (it might be on Membership, not Member)
+        if not hasattr(self, 'payment_method'):
+            # payment_method field doesn't exist on Member doctype
+            # Check if we need to validate payment methods from memberships instead
+            memberships = frappe.get_all(
+                "Membership",
+                filters={"member": self.name, "status": ["!=", "Cancelled"]},
+                fields=["name", "payment_method"]
+            )
             
-            # Validate SEPA mandate is active
-            if self.sepa_mandate:
-                mandate = frappe.get_doc("SEPA Mandate", self.sepa_mandate)
-                if mandate.status != "Active":
-                    frappe.throw(_("Selected SEPA Mandate is not active"))
+            # If there are memberships with Direct Debit, check for SEPA mandate
+            for membership in memberships:
+                if membership.payment_method == "Direct Debit":
+                    # Check if member has SEPA mandate fields
+                    if not hasattr(self, 'sepa_mandate') or not self.sepa_mandate:
+                        frappe.msgprint(
+                            _("Member {0} has a membership with Direct Debit payment method but no active SEPA mandate.")
+                            .format(self.name),
+                            indicator='yellow'
+                        )
+                    break
+            
+            return
     
     def set_payment_reference(self):
         """Generate a unique payment reference for this membership"""
