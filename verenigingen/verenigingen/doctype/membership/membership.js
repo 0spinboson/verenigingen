@@ -135,6 +135,11 @@ frappe.ui.form.on('Membership', {
         
         // Make renewal_date read-only - it's calculated based on start_date and membership_type
         frm.set_df_property('renewal_date', 'read_only', 1);
+        
+        // Display next billing date information
+        if (frm.doc.next_billing_date) {
+            frm.set_intro(__('Next billing date: {0}', [frappe.datetime.str_to_user(frm.doc.next_billing_date)]), 'blue');
+        }
     },
     
     toggle_fields: function(frm) {
@@ -144,6 +149,9 @@ frappe.ui.form.on('Membership', {
         
         frm.toggle_display(['cancellation_date', 'cancellation_reason', 'cancellation_type'], is_cancelled);
         frm.toggle_display(['last_payment_date'], has_paid);
+        
+        // Show next billing date when subscription exists
+        frm.toggle_display(['next_billing_date'], frm.doc.subscription);
     },
     
     membership_type: function(frm) {
@@ -218,7 +226,7 @@ frappe.ui.form.on('Membership', {
     payment_method: function(frm) {
         // Show/hide mandate fields based on payment method
         const is_direct_debit = frm.doc.payment_method === 'Direct Debit';
-        frm.toggle_reqd(['sepa_mandate_id', 'mandate_start_date'], is_direct_debit);
+        frm.toggle_reqd(['sepa_mandate'], is_direct_debit);
     },
     
     // Hook for create_subscription button
