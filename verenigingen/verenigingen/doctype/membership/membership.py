@@ -35,8 +35,21 @@ class Membership(Document):
             if membership_type.subscription_period != "Lifetime":
                 months = self.get_months_from_period(membership_type.subscription_period, 
                                                   membership_type.subscription_period_in_months)
+                
+                # Ensure minimum 1-year membership period
+                if months and months < 12:
+                    months = 12
+                    frappe.msgprint(_("Note: Membership type has a period less than 1 year. Due to the mandatory minimum period, the renewal date is set to 1 year from start date."), 
+                                  indicator='yellow')
+                
                 if months:
                     self.renewal_date = add_to_date(self.start_date, months=months)
+            else:
+                # For lifetime memberships, still set a minimum 1-year initial period
+                # This allows the 1-year cancellation rule to be enforced
+                self.renewal_date = add_to_date(self.start_date, months=12)
+                frappe.msgprint(_("Note: Although this is a lifetime membership, a 1-year minimum commitment period still applies."), 
+                              indicator='info')
     
     def get_months_from_period(self, period, custom_months=None):
         period_months = {
@@ -245,7 +258,8 @@ class Membership(Document):
         new_membership.mandate_start_date = self.mandate_start_date
         new_membership.mandate_expiry_date = self.mandate_expiry_date
         
-        # Set renewal date in validate
+        # The renewal date will be calculated automatically in validate()
+        # which includes the 1-year minimum logic
         new_membership.validate()
         
         # Save as draft
