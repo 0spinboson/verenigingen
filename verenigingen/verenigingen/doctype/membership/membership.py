@@ -387,7 +387,10 @@ class Membership(Document):
             
             # Set options from provided parameters
             subscription.follow_calendar_months = options.get('follow_calendar_months', 0)
-            subscription.generate_invoice_at_period_start = options.get('generate_invoice_at_period_start', 0)
+            if options.get('generate_invoice_at_period_start', 0):
+                subscription.generate_invoice_at = "Beginning of the current subscription period"
+            else:
+                subscription.generate_invoice_at = "End of the current subscription period"
             subscription.generate_new_invoices_past_due_date = options.get('generate_new_invoices_past_due_date', 0)
             subscription.submit_invoice = options.get('submit_invoice', 0)
             
