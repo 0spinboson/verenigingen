@@ -185,6 +185,7 @@ class Membership(Document):
             member = frappe.get_doc("Member", self.member)
             member.save()  # This will trigger the update_membership_status method
     
+
     def sync_payment_details_from_subscription(self):
         """Sync payment details from linked subscription"""
         if not self.subscription:
@@ -192,10 +193,11 @@ class Membership(Document):
             
         subscription = frappe.get_doc("Subscription", self.subscription)
         
-        # Update next billing date (not next payment date)
-        if subscription.next_billing_date:
-            self.next_billing_date = subscription.next_billing_date
-            self.db_set('next_billing_date', subscription.next_billing_date)
+        # Update next billing date based on current_invoice_end
+        # The subscription doesn't have next_billing_date, but we can use current_invoice_end
+        if subscription.current_invoice_end:
+            self.next_billing_date = subscription.current_invoice_end
+            self.db_set('next_billing_date', subscription.current_invoice_end)
         
         # Get invoices linked to this subscription
         invoices = frappe.get_all(
@@ -427,10 +429,9 @@ class Membership(Document):
             self.subscription = subscription.name
             self.db_set('subscription', subscription.name)
             
-            # Sync next billing date
-            if hasattr(subscription, 'current_invoice_end'):
-                self.next_billing_date = subscription.current_invoice_end
-                self.db_set('next_billing_date', subscription.current_invoice_end)
+            if subscription.current_invoice_end:
+            self.next_billing_date = subscription.current_invoice_end
+            self.db_set('next_billing_date', subscription.current_invoice_end)
             
             frappe.msgprint(_("Subscription {0} created successfully").format(subscription.name))
             return subscription.name
