@@ -186,6 +186,7 @@ class Membership(Document):
             member.save()  # This will trigger the update_membership_status method
     
 
+
     def sync_payment_details_from_subscription(self):
         """Sync payment details from linked subscription"""
         if not self.subscription:
@@ -193,8 +194,8 @@ class Membership(Document):
             
         subscription = frappe.get_doc("Subscription", self.subscription)
         
-        # Update next billing date based on current_invoice_end
-        # The subscription doesn't have next_billing_date, but we can use current_invoice_end
+        # Update next billing date (use current_invoice_end instead of next_billing_date)
+        # IMPORTANT: 'next_billing_date' field does not exist in ERPNext Subscription doctype
         if subscription.current_invoice_end:
             self.next_billing_date = subscription.current_invoice_end
             self.db_set('next_billing_date', subscription.current_invoice_end)
