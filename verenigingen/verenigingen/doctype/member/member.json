@@ -37,6 +37,7 @@
   "sepa_andates",
   "default_sepa_mandate",
   "bank_details_section",
+  "payment_method",
   "iban",
   "bic",
   "bank_account_name",
@@ -128,6 +129,12 @@
   "label": "IBAN",
   "length": 34,
   "mandatory_depends_on": "eval:doc.payment_method=='Direct Debit'"
+  },
+  {
+   "fieldname": "payment_method",
+   "fieldtype": "Select",
+   "label": "Payment Method",
+   "options": "Bank Transfer\nDirect Debit\nCredit Card\nCash\nOther"
   },
   {
   "fieldname": "bic",
