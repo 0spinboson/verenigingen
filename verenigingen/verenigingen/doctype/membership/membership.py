@@ -742,3 +742,33 @@ def verify_signature(data, signature, secret_key=None):
     ).hexdigest()
     # Compare signatures (using constant-time comparison to prevent timing attacks)
     return hmac.compare_digest(computed_signature, signature)
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_member_sepa_mandates(doctype, txt, searchfield, start, page_len, filters):
+    """Get SEPA mandates for a specific member"""
+    member = filters.get('member')
+    
+    if not member:
+        # Try to get member from membership document
+        if filters.get('doctype') == 'Membership' and filters.get('name'):
+            membership = frappe.get_doc('Membership', filters.get('name'))
+            member = membership.member
+    
+    if not member:
+        return []
+    
+    # Get active SEPA mandates for this member
+    return frappe.db.sql("""
+        SELECT 
+            sm.name,
+            sm.mandate_id,
+            sm.status
+        FROM `tabSEPA Mandate` sm
+        WHERE 
+            sm.member = %s
+            AND sm.status = 'Active'
+            AND sm.used_for_memberships = 1
+            AND (sm.name LIKE %s OR sm.mandate_id LIKE %s)
+        ORDER BY sm.creation DESC
+    """, (member, "%" + txt + "%", "%" + txt + "%"))
