@@ -162,7 +162,10 @@ frappe.ui.form.on('Membership', {
             frappe.db.get_doc('Membership Type', frm.doc.membership_type)
                 .then(membership_type => {
                     if (membership_type.subscription_period === 'Lifetime') {
-                        frm.set_value('renewal_date', null);
+                        // For lifetime memberships, still set a minimum 1-year initial period
+                        let renewal_date = frappe.datetime.add_months(frm.doc.start_date, 12);
+                        frm.set_value('renewal_date', renewal_date);
+                        frappe.msgprint(__('Note: Although this is a lifetime membership, a 1-year minimum commitment period still applies.'));
                     } else {
                         let months = 0;
                         
@@ -183,6 +186,12 @@ frappe.ui.form.on('Membership', {
                             case 'Custom':
                                 months = membership_type.subscription_period_in_months || 0;
                                 break;
+                        }
+                        
+                        // Ensure minimum 1-year membership period
+                        if (months > 0 && months < 12) {
+                            frappe.msgprint(__('Note: Membership type has a period less than 1 year. Due to the mandatory minimum period, the renewal date is set to 1 year from start date.'));
+                            months = 12;
                         }
                         
                         if (months > 0) {
