@@ -17,26 +17,26 @@
   "details_section",
   "start_date",
   "renewal_date",
-  "membership_period",
   "column_break_11",
   "cancellation_date",
   "cancellation_reason",
   "cancellation_type",
-  "payment_overview_section",
-  "payment_frequency",
-  "payment_amount",
-  "next_payment_date",
+  "mandate_section",
+  "sepa_mandate_id",
+  "mandate_start_date",
+  "mandate_expiry_date", 
+  "column_break_mandate",
   "payment_method",
-  "column_break_17",
-  "payment_status",
+  "unpaid_amount",
   "last_payment_date",
-  "view_payments",
+  "next_payment_date",
   "subscription_section",
   "subscription",
   "subscription_plan",
   "column_break_24",
   "create_subscription",
   "view_subscription",
+  "view_payments",
   "amended_from"
  ],
  "fields": [
@@ -117,16 +117,8 @@
    "fieldname": "renewal_date",
    "fieldtype": "Date",
    "label": "Renewal Date",
-   "reqd": 1,
-   "description": "Date when the membership should be renewed"
-  },
-  {
-   "fieldname": "membership_period",
-   "fieldtype": "Select",
-   "label": "Membership Period",
-   "options": "Monthly\nQuarterly\nBiannual\nAnnual\nLifetime\nCustom",
-   "fetch_from": "membership_type.subscription_period",
-   "read_only": 1
+   "read_only": 1,
+   "description": "Calculated based on start date and membership type"
   },
   {
    "fieldname": "column_break_11",
@@ -150,31 +142,30 @@
    "depends_on": "eval:doc.cancellation_date"
   },
   {
-   "fieldname": "payment_overview_section",
+   "fieldname": "mandate_section",
    "fieldtype": "Section Break",
-   "label": "Payment Overview"
+   "label": "SEPA Mandate & Payment Details"
   },
   {
-   "fieldname": "payment_frequency",
-   "fieldtype": "Select",
-   "label": "Payment Frequency",
-   "options": "Monthly\nQuarterly\nBiannual\nAnnual\nLifetime\nCustom",
-   "fetch_from": "membership_type.subscription_period",
-   "read_only": 1
+   "fieldname": "sepa_mandate_id",
+   "fieldtype": "Data",
+   "label": "SEPA Mandate ID",
+   "description": "Unique identifier for the SEPA Direct Debit mandate"
   },
   {
-   "fieldname": "payment_amount",
-   "fieldtype": "Currency",
-   "label": "Payment Amount",
-   "options": "currency",
-   "fetch_from": "membership_type.amount",
-   "read_only": 1
-  },
-  {
-   "fieldname": "next_payment_date",
+   "fieldname": "mandate_start_date",
    "fieldtype": "Date",
-   "label": "Next Payment Date",
-   "read_only": 1
+   "label": "Mandate Start Date"
+  },
+  {
+   "fieldname": "mandate_expiry_date",
+   "fieldtype": "Date",
+   "label": "Mandate Expiry Date",
+   "description": "Optional - leave blank for open-ended mandates"
+  },
+  {
+   "fieldname": "column_break_mandate",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "payment_method",
@@ -183,16 +174,11 @@
    "options": "Bank Transfer\nDirect Debit\nCredit Card\nCash\nOther"
   },
   {
-   "fieldname": "column_break_17",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "Unpaid",
-   "fieldname": "payment_status",
-   "fieldtype": "Select",
-   "label": "Payment Status",
-   "options": "Unpaid\nPaid\nOverdue\nRefunded",
-   "read_only": 1
+   "fieldname": "unpaid_amount",
+   "fieldtype": "Currency",
+   "label": "Unpaid Amount",
+   "read_only": 1,
+   "description": "Total amount of unpaid invoices"
   },
   {
    "fieldname": "last_payment_date",
@@ -201,10 +187,10 @@
    "read_only": 1
   },
   {
-   "fieldname": "view_payments",
-   "fieldtype": "Button",
-   "label": "View Payment History",
-   "depends_on": "eval:doc.docstatus==1 && doc.subscription"
+   "fieldname": "next_payment_date",
+   "fieldtype": "Date",
+   "label": "Next Payment Date",
+   "read_only": 1
   },
   {
    "fieldname": "subscription_section",
@@ -217,7 +203,6 @@
    "label": "Subscription",
    "options": "Subscription",
    "get_query": "verenigingen.verenigingen.doctype.membership.membership.get_subscription_query",
-   "read_only": 1
   },
   {
    "fieldname": "subscription_plan",
@@ -241,6 +226,12 @@
    "fieldname": "view_subscription",
    "fieldtype": "Button",
    "label": "View Subscription"
+  },
+  {
+   "fieldname": "view_payments",
+   "fieldtype": "Button",
+   "label": "View Payment History",
+   "depends_on": "eval:doc.docstatus==1 && doc.subscription"
   },
   {
    "fieldname": "amended_from",

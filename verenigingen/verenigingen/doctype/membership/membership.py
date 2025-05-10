@@ -1,29 +1,40 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import getdate, today, date_diff, add_to_date, nowdate, flt
+from frappe.utils import getdate, today, date_diff, add_to_date, nowdate, flt, add_months
 
 class Membership(Document):
     def validate(self):
         self.validate_dates()
         self.validate_membership_type()
-        self.set_membership_details()
+        self.set_renewal_date()  # Calculate renewal date based on start date and membership type
         self.set_status()
         
     def validate_dates(self):
-        # Ensure start date is before renewal date
-        if self.renewal_date and getdate(self.start_date) > getdate(self.renewal_date):
-            frappe.throw(_("Start Date cannot be after Renewal Date"))
+        # If cancellation date is set, check if it's at least 1 year after start date
+        # but allow exceptions for admins and unsubmitted memberships
+        if self.cancellation_date and self.start_date and self.docstatus == 1:
+            min_membership_period = add_months(getdate(self.start_date), 12)
+            if getdate(self.cancellation_date) < min_membership_period:
+                # Check if user is an admin
+                is_admin = "System Manager" in frappe.get_roles(frappe.session.user)
             
-        # If no renewal date is set, calculate it based on membership type
-        if not self.renewal_date and self.membership_type:
+                if is_admin:
+                    # Show warning but allow cancellation
+                    frappe.msgprint(_("Warning: Membership is being cancelled before the minimum 1-year period. This is allowed for administrators only."), 
+                                   indicator='yellow', alert=True)
+                else:
+                    frappe.throw(_("Cancellation is only allowed after a minimum membership period of 1 year"))
+
+    def set_renewal_date(self):
+        """Calculate renewal date based on membership type and start date"""
+        if self.membership_type and self.start_date:
             membership_type = frappe.get_doc("Membership Type", self.membership_type)
             
+            # Get duration from membership type
             if membership_type.subscription_period != "Lifetime":
-                # Set renewal date based on subscription period
                 months = self.get_months_from_period(membership_type.subscription_period, 
-                                                    membership_type.subscription_period_in_months)
-                
+                                                  membership_type.subscription_period_in_months)
                 if months:
                     self.renewal_date = add_to_date(self.start_date, months=months)
     
@@ -46,28 +57,9 @@ class Membership(Document):
             
             if not membership_type.is_active:
                 frappe.throw(_("Membership Type {0} is inactive").format(self.membership_type))
-    
-    def set_membership_details(self):
-        """Set membership details from membership type"""
-        if self.membership_type:
-            membership_type = frappe.get_doc("Membership Type", self.membership_type)
-            
-            # Set payment details
-            self.payment_amount = membership_type.amount
-            self.currency = membership_type.currency
-            self.membership_period = membership_type.subscription_period
-            self.payment_frequency = membership_type.subscription_period
-            
-            # Set subscription plan if linked
-            if membership_type.subscription_plan:
-                self.subscription_plan = membership_type.subscription_plan
-            
-            # Set auto_renew based on membership type settings
-            if membership_type.allow_auto_renewal:
-                self.auto_renew = membership_type.allow_auto_renewal
                 
     def set_status(self):
-        """Set the status based on dates, payment status, and cancellation"""
+        """Set the status based on dates, payment amount, and cancellation"""
         if self.docstatus == 0:
             self.status = "Draft"
         elif self.docstatus == 2:
@@ -75,15 +67,12 @@ class Membership(Document):
         elif self.cancellation_date and getdate(self.cancellation_date) <= getdate(today()):
             # Membership is cancelled
             self.status = "Cancelled"
-        elif self.payment_status == "Overdue":
-            # Payment is overdue - membership inactive
+        elif self.unpaid_amount and flt(self.unpaid_amount) > 0:
+            # Has unpaid invoices - membership inactive
             self.status = "Inactive"
         elif self.renewal_date and getdate(self.renewal_date) < getdate(today()):
             # Past renewal date - membership expired
             self.status = "Expired"
-        elif self.payment_status == "Unpaid" and getdate(self.start_date) <= getdate(today()):
-            # Started but unpaid - pending
-            self.status = "Pending"
         else:
             # All good - active membership
             self.status = "Active"
@@ -92,9 +81,9 @@ class Membership(Document):
         # Update member's current membership
         self.update_member_status()
         
-        # Ensure proper dates and status at submission
-        if not self.payment_status:
-            self.payment_status = "Unpaid"
+        # Make sure unpaid_amount is set if not already
+        if not self.unpaid_amount:
+            self.unpaid_amount = 0
             
         # Make sure next_payment_date is set
         if not self.next_payment_date:
@@ -110,7 +99,7 @@ class Membership(Document):
         
         # Force update to database
         self.db_set('status', self.status)
-        self.db_set('payment_status', self.payment_status)
+        self.db_set('unpaid_amount', self.unpaid_amount)
         self.db_set('next_payment_date', self.next_payment_date)
         self.db_set('cancellation_date', None)
         self.db_set('cancellation_reason', None)
@@ -123,17 +112,33 @@ class Membership(Document):
         if not self.subscription and self.subscription_plan:
             self.create_subscription_from_membership()
             
-            # Sync next payment date from subscription
+            # Sync payment details from subscription
             self.sync_payment_details_from_subscription()
     
     def on_cancel(self):
         """Handle when membership is cancelled directly (not the same as member cancellation)"""
+        # Check if membership is submitted (docstatus == 1) before enforcing the 1-year rule
+        if self.docstatus == 1 and getdate(self.start_date):
+            min_membership_period = add_months(getdate(self.start_date), 12)
+            current_date = getdate(today())
+        
+            if current_date < min_membership_period:
+                # Check if user is an admin
+                is_admin = "System Manager" in frappe.get_roles(frappe.session.user)
+            
+                if is_admin:
+                    # Show warning but allow cancellation
+                    frappe.msgprint(_("Warning: Membership is being cancelled before the minimum 1-year period. This is allowed for administrators only."), 
+                                  indicator='yellow', alert=True)
+                else:
+                    frappe.throw(_("Membership cannot be cancelled before 1 year from start date"))
+                
         self.status = "Cancelled"
         self.cancellation_date = self.cancellation_date or nowdate()
-        
+    
         # Update member status
         self.update_member_status()
-        
+    
         # Cancel linked subscription
         if self.subscription:
             try:
@@ -141,10 +146,10 @@ class Membership(Document):
                 if subscription.status != "Cancelled":
                     # Set cancelation date
                     subscription.db_set('cancelation_date', getdate(self.cancellation_date))
-                
+            
                     # Use db_set to directly update database and bypass validation
                     subscription.flags.ignore_permissions = True
-                
+            
                     # Now cancel the subscription
                     try:
                         subscription.cancel_subscription()
@@ -158,7 +163,8 @@ class Membership(Document):
                 frappe.log_error(f"Error cancelling subscription {self.subscription}: {error_msg}", 
                             "Membership Cancellation Error")
                 frappe.msgprint(_("Error cancelling subscription: {0}").format(error_msg))
-    
+
+
     def update_member_status(self):
         """Update the membership status in the Member document"""
         if self.member:
@@ -185,25 +191,36 @@ class Membership(Document):
             order_by="creation desc"
         )
         
-        if invoices:
-            # Get the latest invoice
-            latest_invoice = frappe.get_doc("Sales Invoice", invoices[0].invoice)
+        if not invoices:
+            return
             
-            # Update payment status
-            if latest_invoice.status == "Paid":
-                self.payment_status = "Paid"
-                self.last_payment_date = latest_invoice.posting_date
-                self.db_set('payment_status', "Paid")
-                self.db_set('last_payment_date', latest_invoice.posting_date)
-            elif latest_invoice.status == "Overdue":
-                self.payment_status = "Overdue"
-                self.db_set('payment_status', "Overdue")
-            elif latest_invoice.status == "Return":
-                self.payment_status = "Refunded"
-                self.db_set('payment_status', "Refunded")
-            else:
-                self.payment_status = "Unpaid"
-                self.db_set('payment_status', "Unpaid")
+        # Calculate unpaid amount
+        unpaid_amount = 0
+        payment_date = None
+        
+        for invoice_info in invoices:
+            try:
+                invoice = frappe.get_doc("Sales Invoice", invoice_info.invoice)
+                
+                # Add to unpaid amount if unpaid or overdue
+                if invoice.status in ["Unpaid", "Overdue"]:
+                    unpaid_amount += flt(invoice.outstanding_amount)
+                
+                # Get latest payment date
+                if invoice.status == "Paid" and (not payment_date or getdate(invoice.posting_date) > getdate(payment_date)):
+                    payment_date = invoice.posting_date
+            except Exception as e:
+                frappe.log_error(f"Error processing invoice {invoice_info.invoice}: {str(e)}", 
+                              "Membership Payment Sync Error")
+        
+        # Update unpaid amount
+        self.unpaid_amount = unpaid_amount
+        self.db_set('unpaid_amount', unpaid_amount)
+        
+        # Update last payment date if found
+        if payment_date:
+            self.last_payment_date = payment_date
+            self.db_set('last_payment_date', payment_date)
         
         # Update status based on changes
         self.set_status()
@@ -214,27 +231,22 @@ class Membership(Document):
         # Calculate new dates
         new_start_date = self.renewal_date or today()
         
-        # Get duration from membership type
-        membership_type = frappe.get_doc("Membership Type", self.membership_type)
-        months = self.get_months_from_period(membership_type.subscription_period, 
-                                          membership_type.subscription_period_in_months)
-        
-        new_renewal_date = None
-        if months:
-            new_renewal_date = add_to_date(new_start_date, months=months)
-            
         # Create new membership
         new_membership = frappe.new_doc("Membership")
         new_membership.member = self.member
         new_membership.membership_type = self.membership_type
         new_membership.start_date = new_start_date
-        new_membership.renewal_date = new_renewal_date
         new_membership.auto_renew = self.auto_renew
-        new_membership.payment_amount = self.payment_amount
-        new_membership.payment_frequency = self.payment_frequency
-        new_membership.currency = self.currency
-        new_membership.subscription_plan = self.subscription_plan
         new_membership.payment_method = self.payment_method
+        new_membership.subscription_plan = self.subscription_plan
+        
+        # Copy SEPA mandate details
+        new_membership.sepa_mandate_id = self.sepa_mandate_id
+        new_membership.mandate_start_date = self.mandate_start_date
+        new_membership.mandate_expiry_date = self.mandate_expiry_date
+        
+        # Set renewal date in validate
+        new_membership.validate()
         
         # Save as draft
         new_membership.insert(ignore_permissions=True)
@@ -281,6 +293,9 @@ class Membership(Document):
             if self.renewal_date:
                 subscription.end_date = getdate(self.renewal_date)
             
+            # Get membership type for billing interval
+            membership_type = frappe.get_doc("Membership Type", self.membership_type)
+            
             # Determine billing interval based on membership period
             interval_map = {
                 "Monthly": "Month",
@@ -291,8 +306,11 @@ class Membership(Document):
                 "Custom": "Month"
             }
             
-            billing_interval = interval_map.get(self.membership_period, "Month")
+            billing_interval = interval_map.get(membership_type.subscription_period, "Month")
             billing_interval_count = 1
+            
+            if membership_type.subscription_period == "Custom":
+                billing_interval_count = membership_type.subscription_period_in_months
             
             # Set billing details
             subscription.billing_interval = billing_interval
@@ -338,6 +356,48 @@ class Membership(Document):
                           "Membership Subscription Error")
             raise
 
+# Hook functions for doc_events (outside the class)
+def on_submit(doc, method=None):
+    """
+    This is called when a membership document is submitted.
+    It simply calls the document's on_submit method.
+    """
+    # The class already has on_submit method, so this is just a passthrough
+    pass
+
+def on_cancel(doc, method=None):
+    """
+    This is called when a membership document is cancelled.
+    It simply calls the document's on_cancel method.
+    """
+    # The class already has on_cancel method, so this is just a passthrough
+    pass
+
+def update_membership_from_subscription(doc, method=None):
+    """
+    Handler for when a subscription is updated
+    Updates the linked membership
+    """
+    # Find memberships linked to this subscription
+    memberships = frappe.get_all(
+        "Membership",
+        filters={"subscription": doc.name},
+        fields=["name"]
+    )
+    
+    if not memberships:
+        return
+        
+    for membership_data in memberships:
+        try:
+            membership = frappe.get_doc("Membership", membership_data.name)
+            
+            # Update membership status and payment details
+            membership.sync_payment_details_from_subscription()
+        except Exception as e:
+            frappe.log_error(f"Error updating membership {membership_data.name} from subscription: {str(e)}", 
+                          "Membership Update Error")
+
 @frappe.whitelist()
 def get_subscription_query(doctype, txt, searchfield, start, page_len, filters):
     """Filter subscriptions to only show ones related to the current member"""
@@ -379,6 +439,25 @@ def cancel_membership(membership_name, cancellation_date=None, cancellation_reas
         cancellation_date = nowdate()
         
     membership = frappe.get_doc("Membership", membership_name)
+    
+    # For unsubmitted memberships, allow immediate cancellation without restrictions
+    if membership.docstatus == 0:
+        frappe.msgprint(_("Draft membership can be cancelled without restrictions"))
+        return membership.name
+    
+    # Check 1-year minimum period for submitted memberships
+    if membership.docstatus == 1:
+        min_membership_period = add_months(getdate(membership.start_date), 12)
+        if getdate(cancellation_date) < min_membership_period:
+            # Check if user is an admin
+            is_admin = "System Manager" in frappe.get_roles(frappe.session.user)
+            
+            if is_admin:
+                # Show warning but allow cancellation
+                frappe.msgprint(_("Warning: Membership is being cancelled before the minimum 1-year period. This is allowed for administrators only."), 
+                              indicator='yellow', alert=True)
+            else:
+                frappe.throw(_("Cancellation is only allowed after a minimum membership period of 1 year"))
     
     # Set cancellation details
     membership.cancellation_date = cancellation_date
@@ -487,6 +566,7 @@ def show_payment_history(membership_name):
             "invoice": invoice.name,
             "date": invoice.posting_date,
             "amount": invoice.grand_total,
+            "outstanding": invoice.outstanding_amount,
             "status": invoice.status,
             "payments": payment_entries
         })
@@ -587,12 +667,12 @@ def process_membership_statuses():
                     frappe.logger().info(f"Marked membership {membership.name} as Expired")
             
             # Check if payment is overdue and update status
-            elif membership.payment_status == "Overdue" and membership.status != "Inactive":
+            elif membership.unpaid_amount and flt(membership.unpaid_amount) > 0 and membership.status != "Inactive":
                 membership.status = "Inactive"
                 membership.flags.ignore_validate_update_after_submit = True
                 membership.save()
                 
-                frappe.logger().info(f"Marked membership {membership.name} as Inactive due to overdue payment")
+                frappe.logger().info(f"Marked membership {membership.name} as Inactive due to unpaid amount")
             
             # Check cancellations with end-of-period dates that have now been reached
             elif membership.cancellation_date and membership.cancellation_type == "End of Period":
@@ -606,49 +686,45 @@ def process_membership_statuses():
         except Exception as e:
             frappe.log_error(f"Error processing membership status for {membership_info.name}: {str(e)}", 
                           "Membership Status Update Error")
-    
+
     return True
 
-def on_submit(doc, method=None):
-    """
-    Hook function for on_submit event
-    """
-    pass  # The class method is already called automatically
+def verify_signature(data, signature, secret_key=None):
 
-def on_cancel(doc, method=None):
     """
-    Hook function for on_cancel event
+    Verify a signature for webhook data (for donation verification)
+    Args:
+        data (dict or str): The data to verify
+        signature (str): The signature received
+        secret_key (str, optional): The secret key to use for verification.
+                                   If not provided, will use config value.
+    Returns:
+        bool: True if signature is valid, False otherwise
     """
-    pass  # The class method is already called automatically
-
-def update_membership_from_subscription(doc, method=None):
-    """
-    Handler for when a subscription is updated
-    Updates the linked membership
-    """
-    # Find memberships linked to this subscription
-    memberships = frappe.get_all(
-        "Membership",
-        filters={"subscription": doc.name},
-        fields=["name"]
-    )
-    
-    if not memberships:
-        return
-        
-    for membership_data in memberships:
-        membership = frappe.get_doc("Membership", membership_data.name)
-        
-        # Update membership status based on subscription
-        if doc.status == "Active":
-            if membership.status != "Active":
-                membership.status = "Active"
-                membership.save(ignore_permissions=True)
-        elif doc.status == "Cancelled":
-            if membership.status != "Cancelled":
-                membership.status = "Cancelled"
-                membership.save(ignore_permissions=True)
-        elif doc.status == "Unpaid":
-            if membership.status != "Pending":
-                membership.status = "Pending" 
-                membership.save(ignore_permissions=True)
+    import hmac
+    import hashlib
+    import frappe
+    if not secret_key:
+        # Get secret key from configuration
+        secret_key = frappe.conf.get("webhook_secret_key")
+        if not secret_key:
+            frappe.log_error("No webhook_secret_key found in configuration",
+                            "Payment Signature Verification Error")
+            return False
+    # Convert data to string if it's a dict
+    if isinstance(data, dict):
+        import json
+        data = json.dumps(data)
+    # Convert to bytes if it's not already
+    if isinstance(data, str):
+        data = data.encode('utf-8')
+    if isinstance(secret_key, str):
+        secret_key = secret_key.encode('utf-8')
+    # Create signature
+    computed_signature = hmac.new(
+        secret_key,
+        data,
+        hashlib.sha256
+    ).hexdigest()
+    # Compare signatures (using constant-time comparison to prevent timing attacks)
+    return hmac.compare_digest(computed_signature, signature)

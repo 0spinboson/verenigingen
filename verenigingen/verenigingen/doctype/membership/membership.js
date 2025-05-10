@@ -30,11 +30,24 @@ frappe.ui.form.on('Membership', {
                 }, __('Actions'));
             }
             
-            // Add button to cancel membership (improved version)
+            // Add button to cancel membership
             if (frm.doc.status === "Active" || frm.doc.status === "Pending" || frm.doc.status === "Inactive") {
-                frm.add_custom_button(__('Cancel Membership'), function() {
-                    show_cancellation_dialog(frm);
-                }, __('Actions')).addClass('btn-danger');
+                // Calculate 1 year after start date to validate cancellation
+                const startDate = frappe.datetime.str_to_obj(frm.doc.start_date);
+                const minCancellationDate = frappe.datetime.add_months(startDate, 12);
+                const today = frappe.datetime.get_today();
+                
+                // Only allow cancellation if 1 year has passed
+                if (frappe.datetime.str_to_obj(today) >= minCancellationDate) {
+                    frm.add_custom_button(__('Cancel Membership'), function() {
+                        show_cancellation_dialog(frm);
+                    }, __('Actions')).addClass('btn-danger');
+                } else {
+                    // Show disabled button with tooltip
+                    frm.add_custom_button(__('Cancel Membership'), function() {
+                        frappe.msgprint(__('Membership cannot be cancelled before 1 year from start date'));
+                    }, __('Actions')).addClass('btn-default');
+                }
             }
             
             // Add custom button to create subscription if not already linked
@@ -44,9 +57,9 @@ frappe.ui.form.on('Membership', {
                 }, __('Actions'));
             }
             
-            // Add button to view payment history if subscription exists
+            // Add button to sync payment details if subscription exists
             if (frm.doc.subscription) {
-                frm.add_custom_button(__('Sync Payment Status'), function() {
+                frm.add_custom_button(__('Sync Payment Details'), function() {
                     frappe.call({
                         method: 'verenigingen.verenigingen.doctype.membership.membership.sync_membership_payments',
                         args: {
@@ -54,7 +67,7 @@ frappe.ui.form.on('Membership', {
                         },
                         callback: function(r) {
                             frm.refresh();
-                            frappe.msgprint(__('Payment status synchronized with subscription.'));
+                            frappe.msgprint(__('Payment details synchronized with subscription.'));
                         }
                     });
                 }, __('Actions'));
@@ -81,7 +94,7 @@ frappe.ui.form.on('Membership', {
             }
             
             // Add button to add to direct debit batch if payment method is Direct Debit
-            if (frm.doc.payment_method === 'Direct Debit' && frm.doc.payment_status === 'Unpaid') {
+            if (frm.doc.payment_method === 'Direct Debit' && frm.doc.unpaid_amount > 0) {
                 frm.add_custom_button(__('Add to Direct Debit Batch'), function() {
                     // Call method to add to direct debit batch
                     frappe.call({
@@ -119,29 +132,66 @@ frappe.ui.form.on('Membership', {
                 return false;
             };
         }
+        
+        // Make renewal_date read-only - it's calculated based on start_date and membership_type
+        frm.set_df_property('renewal_date', 'read_only', 1);
     },
     
     toggle_fields: function(frm) {
         // Hide/show fields based on status
         const is_cancelled = frm.doc.status === 'Cancelled';
-        const has_paid = frm.doc.payment_status === 'Paid' || frm.doc.payment_status === 'Refunded';
+        const has_paid = frm.doc.last_payment_date;
         
         frm.toggle_display(['cancellation_date', 'cancellation_reason', 'cancellation_type'], is_cancelled);
         frm.toggle_display(['last_payment_date'], has_paid);
     },
     
     membership_type: function(frm) {
-        // Load fee details from membership type
-        if (frm.doc.membership_type) {
+        // Recalculate renewal date when membership type changes
+        frm.trigger('calculate_renewal_date');
+    },
+    
+    start_date: function(frm) {
+        // Recalculate renewal date when start date changes
+        frm.trigger('calculate_renewal_date');
+    },
+    
+    calculate_renewal_date: function(frm) {
+        // Calculate renewal date based on membership type and start date
+        if (frm.doc.membership_type && frm.doc.start_date) {
             frappe.db.get_doc('Membership Type', frm.doc.membership_type)
                 .then(membership_type => {
-                    // Set fee amount if not already set
-                    frm.set_value('payment_amount', membership_type.amount);
-                    frm.set_value('currency', membership_type.currency);
-                    
-                    // Set membership period
-                    frm.set_value('membership_period', membership_type.subscription_period);
-                    frm.set_value('payment_frequency', membership_type.subscription_period);
+                    if (membership_type.subscription_period === 'Lifetime') {
+                        frm.set_value('renewal_date', null);
+                    } else {
+                        let months = 0;
+                        
+                        // Calculate months based on period
+                        switch(membership_type.subscription_period) {
+                            case 'Monthly':
+                                months = 1;
+                                break;
+                            case 'Quarterly':
+                                months = 3;
+                                break;
+                            case 'Biannual':
+                                months = 6;
+                                break;
+                            case 'Annual':
+                                months = 12;
+                                break;
+                            case 'Custom':
+                                months = membership_type.subscription_period_in_months || 0;
+                                break;
+                        }
+                        
+                        if (months > 0) {
+                            let renewal_date = frappe.datetime.add_months(frm.doc.start_date, months);
+                            // Subtract 1 day to make it inclusive
+                            renewal_date = frappe.datetime.add_days(renewal_date, -1);
+                            frm.set_value('renewal_date', renewal_date);
+                        }
+                    }
                     
                     // Set subscription plan if linked
                     if (membership_type.subscription_plan) {
@@ -152,57 +202,17 @@ frappe.ui.form.on('Membership', {
                     if (membership_type.allow_auto_renewal) {
                         frm.set_value('auto_renew', membership_type.allow_auto_renewal);
                     }
-                    
-                    // Calculate renewal date if not set
-                    if (!frm.doc.renewal_date && frm.doc.start_date) {
-                        if (membership_type.subscription_period === 'Lifetime') {
-                            frm.set_value('renewal_date', null);
-                        } else {
-                            let months = 0;
-                            
-                            // Calculate months based on period
-                            switch(membership_type.subscription_period) {
-                                case 'Monthly':
-                                    months = 1;
-                                    break;
-                                case 'Quarterly':
-                                    months = 3;
-                                    break;
-                                case 'Biannual':
-                                    months = 6;
-                                    break;
-                                case 'Annual':
-                                    months = 12;
-                                    break;
-                                case 'Custom':
-                                    months = membership_type.subscription_period_in_months || 0;
-                                    break;
-                            }
-                            
-                            if (months > 0) {
-                                let renewal_date = frappe.datetime.add_months(frm.doc.start_date, months);
-                                // Subtract 1 day to make it inclusive
-                                renewal_date = frappe.datetime.add_days(renewal_date, -1);
-                                frm.set_value('renewal_date', renewal_date);
-                            }
-                        }
-                    }
                 });
         }
     },
     
-    start_date: function(frm) {
-        // Recalculate renewal date when start date changes
-        if (frm.doc.membership_type && frm.doc.start_date) {
-            frm.trigger('membership_type');
-        }
+    payment_method: function(frm) {
+        // Show/hide mandate fields based on payment method
+        const is_direct_debit = frm.doc.payment_method === 'Direct Debit';
+        frm.toggle_reqd(['sepa_mandate_id', 'mandate_start_date'], is_direct_debit);
     },
     
-    payment_status: function(frm) {
-        frm.trigger('toggle_fields');
-    },
-    
-    // Keep the original handler but it will be bypassed by our direct approach
+    // Hook for create_subscription button
     create_subscription: function(frm) {
         createSubscriptionWithOptions(frm);
     }
@@ -228,7 +238,7 @@ function createSubscriptionWithOptions(frm) {
     // Show a loading indicator
     frappe.msgprint(__('Creating subscription with enhanced options... Please wait.'));
     
-    // Directly call the server API
+    // Call the server API
     frappe.call({
         method: 'verenigingen.verenigingen.doctype.membership.membership.create_subscription',
         args: {
@@ -256,6 +266,18 @@ function createSubscriptionWithOptions(frm) {
 // Function to display cancellation dialog
 function show_cancellation_dialog(frm) {
     const today = frappe.datetime.get_today();
+    
+    // Calculate 1 year after start date
+    const startDate = frappe.datetime.str_to_obj(frm.doc.start_date);
+    const minCancellationDate = frappe.datetime.add_months(startDate, 12);
+    
+    // Enforce 1 year minimum
+    if (frappe.datetime.str_to_obj(today) < minCancellationDate) {
+        const minDateStr = frappe.datetime.obj_to_str(minCancellationDate);
+        frappe.msgprint(__('Membership cannot be cancelled before {0}', [minDateStr]));
+        return;
+    }
+    
     const dialog = new frappe.ui.Dialog({
         title: __('Cancel Membership'),
         fields: [
@@ -284,6 +306,12 @@ function show_cancellation_dialog(frm) {
         ],
         primary_action_label: __('Cancel Membership'),
         primary_action: function(values) {
+            // Validate the cancellation date is after 1 year minimum
+            if (frappe.datetime.str_to_obj(values.cancellation_date) < minCancellationDate) {
+                frappe.msgprint(__('Cancellation date must be at least 1 year after the start date.'));
+                return;
+            }
+            
             frappe.call({
                 method: 'verenigingen.verenigingen.doctype.membership.membership.cancel_membership',
                 args: {
@@ -316,6 +344,7 @@ function show_payment_history_dialog(payment_history) {
     html += '<th>' + __("Invoice") + '</th>';
     html += '<th>' + __("Date") + '</th>';
     html += '<th>' + __("Amount") + '</th>';
+    html += '<th>' + __("Outstanding") + '</th>';
     html += '<th>' + __("Status") + '</th>';
     html += '</tr></thead>';
     html += '<tbody>';
@@ -325,6 +354,7 @@ function show_payment_history_dialog(payment_history) {
         html += '<td><a href="/app/sales-invoice/' + ph.invoice + '">' + ph.invoice + '</a></td>';
         html += '<td>' + frappe.datetime.str_to_user(ph.date) + '</td>';
         html += '<td>' + format_currency(ph.amount) + '</td>';
+        html += '<td>' + format_currency(ph.outstanding) + '</td>';
         html += '<td>' + get_status_indicator(ph.status) + '</td>';
         html += '</tr>';
         
@@ -335,6 +365,7 @@ function show_payment_history_dialog(payment_history) {
                 html += '<td colspan="2" class="text-right">' + __("Payment Entry") + ': ';
                 html += '<a href="/app/payment-entry/' + payment.payment_entry + '">' + payment.payment_entry + '</a></td>';
                 html += '<td>' + format_currency(payment.amount) + '</td>';
+                html += '<td></td>'; // No outstanding for payments
                 html += '<td>' + payment.mode + '</td>';
                 html += '</tr>';
             });
