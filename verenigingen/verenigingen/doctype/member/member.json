@@ -24,18 +24,17 @@
   "address_section",
   "primary_address",
   "address_display",
-  "erpnext_integration_section",
-  "customer",
-  "column_break_24",
-  "user",
+  "board_memberships_section",
+  "board_memberships_html",
+  "notes_section",
+  "notes",
+  "membership_data_tab",
   "subscription_section",
   "current_membership_details",
   "current_membership_type",
   "current_membership_start",
   "current_membership_end",
-  "sepa_mandates_section",
-  "sepa_andates",
-  "default_sepa_mandate",
+  "financial_details_tab",
   "bank_details_section",
   "payment_method",
   "iban",
@@ -52,18 +51,23 @@
   "time_remaining",
   "primary_chapter",
   "permission_category",
-  "board_memberships_section",
-  "board_memberships_html",
+  "sepa_mandates_section",
+  "sepa_mandates",
+  "default_sepa_mandate",
   "payment_history_section",
   "payment_history",
+  "technical_stuff_tab",
+  "erpnext_integration_section",
+  "customer",
+  "column_break_24",
+  "user",
+  "miscellaneous_tab",
   "custom_fields_section",
   "custom_field_1",
   "custom_field_2",
   "column_break_37",
   "custom_field_3",
-  "custom_field_4",
-  "notes_section",
-  "notes"
+  "custom_field_4"
  ],
  "fields": [
   {
@@ -92,23 +96,23 @@
    "unique": 1
   },
   {
-  "fieldname": "sepa_mandates_section",
-  "fieldtype": "Section Break",
-  "label": "SEPA Mandates",
-  "depends_on": "eval:doc.name"
+   "depends_on": "eval:doc.name",
+   "fieldname": "sepa_mandates_section",
+   "fieldtype": "Section Break",
+   "label": "SEPA Mandates"
   },
   {
-  "fieldname": "sepa_mandates",
-  "fieldtype": "Table",
-  "label": "SEPA Mandates",
-  "options": "Member SEPA Mandate Link"
+   "fieldname": "sepa_mandates",
+   "fieldtype": "Table",
+   "label": "SEPA Mandates",
+   "options": "Member SEPA Mandate Link"
   },
   {
-  "fieldname": "default_sepa_mandate",
-  "fieldtype": "Link",
-  "label": "Default SEPA Mandate",
-  "options": "SEPA Mandate",
-  "description": "Default mandate for new memberships/donations"
+   "description": "Default mandate for new memberships/donations",
+   "fieldname": "default_sepa_mandate",
+   "fieldtype": "Link",
+   "label": "Default SEPA Mandate",
+   "options": "SEPA Mandate"
   },
   {
    "fieldname": "payment_history",
@@ -118,17 +122,17 @@
    "read_only": 1
   },
   {
-  "fieldname": "bank_details_section",
-  "fieldtype": "Section Break",
-  "label": "Bank Details",
-  "depends_on": "eval:doc.payment_method=='Direct Debit'"
+   "depends_on": "eval:doc.payment_method=='Direct Debit'",
+   "fieldname": "bank_details_section",
+   "fieldtype": "Section Break",
+   "label": "Bank Details"
   },
   {
-  "fieldname": "iban",
-  "fieldtype": "Data",
-  "label": "IBAN",
-  "length": 34,
-  "mandatory_depends_on": "eval:doc.payment_method=='Direct Debit'"
+   "fieldname": "iban",
+   "fieldtype": "Data",
+   "label": "IBAN",
+   "length": 34,
+   "mandatory_depends_on": "eval:doc.payment_method=='Direct Debit'"
   },
   {
    "fieldname": "payment_method",
@@ -137,53 +141,53 @@
    "options": "Bank Transfer\nDirect Debit\nCredit Card\nCash\nOther"
   },
   {
-  "fieldname": "bic",
-  "fieldtype": "Data",
-  "label": "BIC/SWIFT",
-  "length": 11
+   "fieldname": "bic",
+   "fieldtype": "Data",
+   "label": "BIC/SWIFT",
+   "length": 11
   },
   {
-  "fieldname": "bank_account_name",
-  "fieldtype": "Data",
-  "label": "Account Holder Name"
+   "fieldname": "bank_account_name",
+   "fieldtype": "Data",
+   "label": "Account Holder Name"
   },
   {
-  "fieldname": "payment_reference",
-  "fieldtype": "Data",
-  "label": "Payment Reference",
-  "read_only": 1
+   "fieldname": "payment_reference",
+   "fieldtype": "Data",
+   "label": "Payment Reference",
+   "read_only": 1
   },
   {
-  "fieldname": "column_break_bank",
-  "fieldtype": "Column Break"
+   "fieldname": "column_break_bank",
+   "fieldtype": "Column Break"
   },
   {
-  "fieldname": "payment_status",
-  "fieldtype": "Select",
-  "label": "Payment Status",
-  "options": "Unpaid\nPending\nPaid\nFailed\nRefunded\nOverdue",
-  "default": "Unpaid",
-  "read_only": 1
+   "default": "Unpaid",
+   "fieldname": "payment_status",
+   "fieldtype": "Select",
+   "label": "Payment Status",
+   "options": "Unpaid\nPending\nPaid\nFailed\nRefunded\nOverdue",
+   "read_only": 1
   },
   {
-  "fieldname": "payment_date",
-  "fieldtype": "Date",
-  "label": "Payment Date",
-  "read_only": 1
+   "fieldname": "payment_date",
+   "fieldtype": "Date",
+   "label": "Payment Date",
+   "read_only": 1
   },
   {
-  "fieldname": "payment_amount",
-  "fieldtype": "Currency",
-  "label": "Payment Amount",
-  "options": "currency",
-  "read_only": 1
+   "fieldname": "payment_amount",
+   "fieldtype": "Currency",
+   "label": "Payment Amount",
+   "options": "currency",
+   "read_only": 1
   },
   {
-  "fieldname": "paid_amount",
-  "fieldtype": "Currency", 
-  "label": "Paid Amount",
-  "options": "currency",
-  "read_only": 1
+   "fieldname": "paid_amount",
+   "fieldtype": "Currency",
+   "label": "Paid Amount",
+   "options": "currency",
+   "read_only": 1
   },
   {
    "fieldname": "member_details_section",
@@ -413,6 +417,26 @@
    "fieldname": "member_since",
    "fieldtype": "Data",
    "label": "Member since"
+  },
+  {
+   "fieldname": "membership_data_tab",
+   "fieldtype": "Tab Break",
+   "label": "Membership data"
+  },
+  {
+   "fieldname": "financial_details_tab",
+   "fieldtype": "Tab Break",
+   "label": "Financial details"
+  },
+  {
+   "fieldname": "technical_stuff_tab",
+   "fieldtype": "Tab Break",
+   "label": "Technical stuff"
+  },
+  {
+   "fieldname": "miscellaneous_tab",
+   "fieldtype": "Tab Break",
+   "label": "Miscellaneous"
   }
  ],
  "links": [
@@ -428,7 +452,7 @@
    "table_fieldname": "references"
   }
  ],
- "modified": "2025-05-09 18:32:30.036153",
+ "modified": "2025-05-10 23:07:37.226436",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
