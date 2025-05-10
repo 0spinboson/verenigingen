@@ -26,7 +26,7 @@ class Member(Document):
         self.update_full_name()
         self.update_membership_status()
         self.calculate_age()
-        
+        self.validate_payment_method()
         self.set_payment_reference()
         self.validate_bank_details()
         self.sync_payment_amount()
@@ -104,7 +104,33 @@ class Member(Document):
                 "reference_doctype": ref_doctype,
                 "reference_name": ref_name
             })
-    
+
+    def validate_payment_method(self):
+        """Validate payment method and related fields"""
+        # Check if payment_method exists (it might be on Membership, not Member)
+        if not hasattr(self, 'payment_method'):
+            # payment_method field doesn't exist on Member doctype
+            # Check if we need to validate payment methods from memberships instead
+            memberships = frappe.get_all(
+                "Membership",
+                filters={"member": self.name, "status": ["!=", "Cancelled"]},
+                fields=["name", "payment_method"]
+            )
+            
+            # If there are memberships with Direct Debit, check for SEPA mandate
+            for membership in memberships:
+                if membership.payment_method == "Direct Debit":
+                    # Check if member has SEPA mandate fields
+                    if not hasattr(self, 'sepa_mandate') or not self.sepa_mandate:
+                        frappe.msgprint(
+                            _("Member {0} has a membership with Direct Debit payment method but no active SEPA mandate.")
+                            .format(self.name),
+                            indicator='yellow'
+                        )
+                    break
+            
+            return
+
     def validate_name(self):
         # Validate that name fields don't contain special characters
         for field in ['first_name', 'middle_name', 'last_name']:
