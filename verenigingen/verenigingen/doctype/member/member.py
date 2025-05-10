@@ -333,9 +333,7 @@ class Member(Document):
         self.save(ignore_permissions=True)
 
         frappe.msgprint(_("Customer {0} created successfully").format(customer.name))
-        return customer.name
-
-    
+        return customer.name   
         
     @frappe.whitelist()
     def create_user(self):
@@ -507,39 +505,6 @@ def update_member_payment_history(doc, method=None):
             member.save(ignore_permissions=True)
         except Exception as e:
             frappe.log_error(f"Failed to update payment history for Member {member_doc.name}: {str(e)}")
-
-def get_active_sepa_mandates(self):
-    """Get all active SEPA mandates for this member"""
-    return frappe.get_all(
-        "SEPA Mandate",
-        filters={
-            "member": self.name,
-            "status": "Active",
-            "is_active": 1
-        },
-        fields=["name", "mandate_id", "status", "expiry_date"]
-    )
-
-def get_default_sepa_mandate(self):
-    """Get the default SEPA mandate for this member"""
-    mandates = frappe.get_all(
-        "Member SEPA Mandate Link",
-        filters={
-            "parent": self.name,
-            "is_default": 1
-        },
-        fields=["sepa_mandate"]
-    )
-    
-    if mandates:
-        return mandates[0].sepa_mandate
-    
-    # If no default, try to get the first active mandate
-    active_mandates = self.get_active_sepa_mandates()
-    if active_mandates:
-        return active_mandates[0].name
-    
-    return None
 
 @frappe.whitelist()
 def check_sepa_mandate_status(member):
