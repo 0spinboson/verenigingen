@@ -465,7 +465,7 @@ class Member(Document):
         if member_obj.permission_category == "Admin Only":
             return False
         
-        # For Board Only, check if this member is on board with financial permissions
+# For Board Only, check if this member is on board with financial permissions
         if member_obj.primary_chapter:
             chapter = frappe.get_doc("Chapter", member_obj.primary_chapter)
             return chapter.can_view_member_payments(self.name)
