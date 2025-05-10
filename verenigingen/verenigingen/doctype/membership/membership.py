@@ -430,8 +430,8 @@ class Membership(Document):
             self.db_set('subscription', subscription.name)
             
             if subscription.current_invoice_end:
-            self.next_billing_date = subscription.current_invoice_end
-            self.db_set('next_billing_date', subscription.current_invoice_end)
+                self.next_billing_date = subscription.current_invoice_end
+                self.db_set('next_billing_date', subscription.current_invoice_end)
             
             frappe.msgprint(_("Subscription {0} created successfully").format(subscription.name))
             return subscription.name
