@@ -168,6 +168,97 @@ class Member(Document):
             return frappe.get_doc("Membership", memberships[0].name)
             
         return None
+
+    # Add these methods to the Member class in member.py
+    
+    def get_active_sepa_mandates(self):
+        """Get all active SEPA mandates for this member"""
+        return frappe.get_all(
+            "SEPA Mandate",
+            filters={
+                "member": self.name,
+                "status": "Active",
+                "is_active": 1
+            },
+            fields=["name", "mandate_id", "status", "expiry_date", "used_for_memberships", "used_for_donations"]
+        )
+    
+    def get_default_sepa_mandate(self):
+        """Get the default SEPA mandate for this member"""
+        if self.default_sepa_mandate:
+            try:
+                mandate = frappe.get_doc("SEPA Mandate", self.default_sepa_mandate)
+                if mandate.status == "Active" and mandate.is_active:
+                    return mandate
+            except frappe.DoesNotExistError:
+                # Clear invalid reference
+                self.default_sepa_mandate = None
+                self.save(ignore_permissions=True)
+        
+        # If no valid default, try to find one from the linked mandates
+        for link in self.sepa_mandates:
+            if link.is_default and link.sepa_mandate:
+                try:
+                    mandate = frappe.get_doc("SEPA Mandate", link.sepa_mandate)
+                    if mandate.status == "Active" and mandate.is_active:
+                        self.default_sepa_mandate = mandate.name
+                        self.save(ignore_permissions=True)
+                        return mandate
+                except frappe.DoesNotExistError:
+                    continue
+        
+        # If still no default, get the first active mandate
+        active_mandates = self.get_active_sepa_mandates()
+        if active_mandates:
+            self.default_sepa_mandate = active_mandates[0].name
+            self.save(ignore_permissions=True)
+            return frappe.get_doc("SEPA Mandate", active_mandates[0].name)
+        
+        return None
+    
+    def has_active_sepa_mandate(self, purpose="memberships"):
+        """Check if member has an active SEPA mandate for a specific purpose"""
+        filters = {
+            "member": self.name,
+            "status": "Active",
+            "is_active": 1
+        }
+        
+        if purpose == "memberships":
+            filters["used_for_memberships"] = 1
+        elif purpose == "donations":
+            filters["used_for_donations"] = 1
+        
+        return frappe.db.exists("SEPA Mandate", filters)
+    
+    @frappe.whitelist()
+    def create_sepa_mandate(self):
+        """Create a new SEPA mandate for this member"""
+        mandate = frappe.new_doc("SEPA Mandate")
+        mandate.member = self.name
+        mandate.member_name = self.full_name
+        mandate.account_holder_name = self.full_name
+        mandate.sign_date = frappe.utils.today()
+        
+        # Set as default if no other mandate exists
+        if not self.default_sepa_mandate:
+            mandate.used_for_memberships = 1
+            mandate.used_for_donations = 1
+        
+        mandate.insert()
+        
+        # Add to member's mandate links
+        self.append("sepa_mandates", {
+            "sepa_mandate": mandate.name,
+            "is_default": not bool(self.default_sepa_mandate)
+        })
+        
+        if not self.default_sepa_mandate:
+            self.default_sepa_mandate = mandate.name
+        
+        self.save()
+        
+        return mandate.name
         
     def on_trash(self):
         # Check if member has any active memberships
