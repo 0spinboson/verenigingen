@@ -22,14 +22,12 @@
   "cancellation_reason",
   "cancellation_type",
   "mandate_section",
-  "sepa_mandate_id",
-  "mandate_start_date",
-  "mandate_expiry_date", 
+  "sepa_mandate",
+  "mandate_reference",
+  "mandate_status",
   "column_break_mandate",
   "payment_method",
   "unpaid_amount",
-  "last_payment_date",
-  "next_payment_date",
   "subscription_section",
   "subscription",
   "subscription_plan",
@@ -147,51 +145,44 @@
    "label": "SEPA Mandate & Payment Details"
   },
   {
-   "fieldname": "sepa_mandate_id",
-   "fieldtype": "Data",
-   "label": "SEPA Mandate ID",
-   "description": "Unique identifier for the SEPA Direct Debit mandate"
-  },
-  {
-   "fieldname": "mandate_start_date",
-   "fieldtype": "Date",
-   "label": "Mandate Start Date"
-  },
-  {
-   "fieldname": "mandate_expiry_date",
-   "fieldtype": "Date",
-   "label": "Mandate Expiry Date",
-   "description": "Optional - leave blank for open-ended mandates"
-  },
-  {
-   "fieldname": "column_break_mandate",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "payment_method",
-   "fieldtype": "Select",
-   "label": "Payment Method",
-   "options": "Bank Transfer\nDirect Debit\nCredit Card\nCash\nOther"
-  },
-  {
-   "fieldname": "unpaid_amount",
-   "fieldtype": "Currency",
-   "label": "Unpaid Amount",
-   "read_only": 1,
-   "description": "Total amount of unpaid invoices"
-  },
-  {
-   "fieldname": "last_payment_date",
-   "fieldtype": "Date",
-   "label": "Last Payment Date",
-   "read_only": 1
-  },
-  {
-   "fieldname": "next_payment_date",
-   "fieldtype": "Date",
-   "label": "Next Payment Date",
-   "read_only": 1
-  },
+  "fieldname": "sepa_mandate",
+  "fieldtype": "Link",
+  "label": "SEPA Mandate",
+  "options": "SEPA Mandate",
+  "get_query": "verenigingen.verenigingen.doctype.membership.membership.get_member_sepa_mandates",
+  "description": "Select from member's active SEPA mandates"
+},
+{
+  "fetch_from": "sepa_mandate.mandate_id",
+  "fieldname": "mandate_reference",
+  "fieldtype": "Data",
+  "label": "Mandate Reference",
+  "read_only": 1
+},
+{
+  "fetch_from": "sepa_mandate.status",
+  "fieldname": "mandate_status",
+  "fieldtype": "Data",
+  "label": "Mandate Status",
+  "read_only": 1
+},
+{
+  "fieldname": "column_break_mandate",
+  "fieldtype": "Column Break"
+},
+{
+  "fieldname": "payment_method",
+  "fieldtype": "Select",
+  "label": "Payment Method",
+  "options": "Bank Transfer\nDirect Debit\nCredit Card\nCash\nOther"
+},
+{
+  "fieldname": "unpaid_amount",
+  "fieldtype": "Currency",
+  "label": "Balance",
+  "read_only": 1,
+  "description": "Total amount of unpaid invoices"
+},
   {
    "fieldname": "subscription_section",
    "fieldtype": "Section Break",
