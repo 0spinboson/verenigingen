@@ -7,6 +7,7 @@ class Membership(Document):
     def validate(self):
         self.validate_dates()
         self.validate_membership_type()
+        self.validate_payment_method()
         self.set_renewal_date()  # Calculate renewal date based on start date and membership type
         self.set_status()
         
@@ -62,7 +63,7 @@ class Membership(Document):
         }
         
         return period_months.get(period, 0)
-                
+
     def validate_membership_type(self):
         # Check if membership type exists and is active
         if self.membership_type:
@@ -70,7 +71,33 @@ class Membership(Document):
             
             if not membership_type.is_active:
                 frappe.throw(_("Membership Type {0} is inactive").format(self.membership_type))
-                
+
+    def validate_payment_method(self):
+        """Validate payment method and related fields"""
+        # Check if payment_method exists (it might be on Membership, not Member)
+        if not hasattr(self, 'payment_method'):
+            # payment_method field doesn't exist on Member doctype
+            # Check if we need to validate payment methods from memberships instead
+            memberships = frappe.get_all(
+                "Membership",
+                filters={"member": self.name, "status": ["!=", "Cancelled"]},
+                fields=["name", "payment_method"]
+            )
+            
+            # If there are memberships with Direct Debit, check for SEPA mandate
+            for membership in memberships:
+                if membership.payment_method == "Direct Debit":
+                    # Check if member has SEPA mandate fields
+                    if not hasattr(self, 'sepa_mandate') or not self.sepa_mandate:
+                        frappe.msgprint(
+                            _("Member {0} has a membership with Direct Debit payment method but no active SEPA mandate.")
+                            .format(self.name),
+                            indicator='yellow'
+                        )
+                    break
+            
+            return
+
     def set_status(self):
         """Set the status based on dates, payment amount, and cancellation"""
         if self.docstatus == 0:
