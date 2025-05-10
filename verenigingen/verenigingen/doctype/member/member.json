@@ -33,6 +33,9 @@
   "current_membership_type",
   "current_membership_start",
   "current_membership_end",
+  "SEPA Mandates",
+  "SEPA Mandates",
+  "Default SEPA Mandate",
   "column_break_31",
   "membership_status",
   "time_remaining",
@@ -76,6 +79,25 @@
    "label": "Member ID",
    "read_only_depends_on": "eval:!doc.__islocal",
    "unique": 1
+  },
+  {
+  "fieldname": "sepa_mandates_section",
+  "fieldtype": "Section Break",
+  "label": "SEPA Mandates",
+  "depends_on": "eval:doc.name"
+  },
+  {
+  "fieldname": "sepa_mandates",
+  "fieldtype": "Table",
+  "label": "SEPA Mandates",
+  "options": "Member SEPA Mandate Link"
+  },
+  {
+  "fieldname": "default_sepa_mandate",
+  "fieldtype": "Link",
+  "label": "Default SEPA Mandate",
+  "options": "SEPA Mandate",
+  "description": "Default mandate for new memberships/donations"
   },
   {
    "fieldname": "payment_history",
