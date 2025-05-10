@@ -270,6 +270,7 @@ class Membership(Document):
         return new_membership.name
 
 
+
     def create_subscription_from_membership(self, options=None):
         """Create an ERPNext subscription for this membership with additional options"""
         import frappe
@@ -380,7 +381,11 @@ class Membership(Document):
             
             # Calculate the correct current invoice end date
             if billing_interval == "Month":
-                subscription.current_invoice_end = add_months(subscription.start_date, billing_interval_count) - 1
+                # Add months and then subtract one day to get the end of the period
+                subscription.current_invoice_end = add_days(
+                    add_months(subscription.start_date, billing_interval_count), 
+                    -1
+                )
             else:
                 # This shouldn't happen with our interval mapping, but handle it anyway
                 subscription.current_invoice_end = subscription.end_date
