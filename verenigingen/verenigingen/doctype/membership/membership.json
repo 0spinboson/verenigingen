@@ -17,17 +17,20 @@
   "details_section",
   "start_date",
   "renewal_date",
+  "next_billing_date",
   "column_break_11",
   "cancellation_date",
   "cancellation_reason",
   "cancellation_type",
+  "payment_details_section",
+  "last_payment_date",
+  "unpaid_amount",
+  "column_break_payment",
+  "payment_method",
   "mandate_section",
   "sepa_mandate",
   "mandate_reference",
   "mandate_status",
-  "column_break_mandate",
-  "payment_method",
-  "unpaid_amount",
   "subscription_section",
   "subscription",
   "subscription_plan",
@@ -116,7 +119,14 @@
    "fieldtype": "Date",
    "label": "Renewal Date",
    "read_only": 1,
-   "description": "Calculated based on start date and membership type"
+   "description": "Calculated based on start date and membership type (minimum 1 year)"
+  },
+  {
+   "fieldname": "next_billing_date",
+   "fieldtype": "Date",
+   "label": "Next Billing Date",
+   "read_only": 1,
+   "description": "Next subscription billing date (may differ from renewal date during first year)"
   },
   {
    "fieldname": "column_break_11",
@@ -140,49 +150,60 @@
    "depends_on": "eval:doc.cancellation_date"
   },
   {
-   "fieldname": "mandate_section",
+   "fieldname": "payment_details_section",
    "fieldtype": "Section Break",
-   "label": "SEPA Mandate & Payment Details"
+   "label": "Payment Details"
   },
   {
-  "fieldname": "sepa_mandate",
-  "fieldtype": "Link",
-  "label": "SEPA Mandate",
-  "options": "SEPA Mandate",
-  "get_query": "verenigingen.verenigingen.doctype.membership.membership.get_member_sepa_mandates",
-  "description": "Select from member's active SEPA mandates"
-},
-{
-  "fetch_from": "sepa_mandate.mandate_id",
-  "fieldname": "mandate_reference",
-  "fieldtype": "Data",
-  "label": "Mandate Reference",
-  "read_only": 1
-},
-{
-  "fetch_from": "sepa_mandate.status",
-  "fieldname": "mandate_status",
-  "fieldtype": "Data",
-  "label": "Mandate Status",
-  "read_only": 1
-},
-{
-  "fieldname": "column_break_mandate",
-  "fieldtype": "Column Break"
-},
-{
-  "fieldname": "payment_method",
-  "fieldtype": "Select",
-  "label": "Payment Method",
-  "options": "Bank Transfer\nDirect Debit\nCredit Card\nCash\nOther"
-},
-{
-  "fieldname": "unpaid_amount",
-  "fieldtype": "Currency",
-  "label": "Balance",
-  "read_only": 1,
-  "description": "Total amount of unpaid invoices"
-},
+   "fieldname": "last_payment_date",
+   "fieldtype": "Date",
+   "label": "Last Payment Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "unpaid_amount",
+   "fieldtype": "Currency",
+   "label": "Balance",
+   "read_only": 1,
+   "description": "Total amount of unpaid invoices"
+  },
+  {
+   "fieldname": "column_break_payment",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "payment_method",
+   "fieldtype": "Select",
+   "label": "Payment Method",
+   "options": "Bank Transfer\nDirect Debit\nCredit Card\nCash\nOther"
+  },
+  {
+   "fieldname": "mandate_section",
+   "fieldtype": "Section Break",
+   "label": "SEPA Mandate"
+  },
+  {
+   "fieldname": "sepa_mandate",
+   "fieldtype": "Link",
+   "label": "SEPA Mandate",
+   "options": "SEPA Mandate",
+   "get_query": "verenigingen.verenigingen.doctype.membership.membership.get_member_sepa_mandates",
+   "description": "Select from member's active SEPA mandates"
+  },
+  {
+   "fetch_from": "sepa_mandate.mandate_id",
+   "fieldname": "mandate_reference",
+   "fieldtype": "Data",
+   "label": "Mandate Reference",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "sepa_mandate.status",
+   "fieldname": "mandate_status",
+   "fieldtype": "Data",
+   "label": "Mandate Status",
+   "read_only": 1
+  },
   {
    "fieldname": "subscription_section",
    "fieldtype": "Section Break",
