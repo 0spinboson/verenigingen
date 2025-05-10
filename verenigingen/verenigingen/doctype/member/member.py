@@ -549,9 +549,12 @@ class Member(Document):
     
     def sync_payment_amount(self):
         """Sync payment amount from membership type"""
-        if self.membership_type and not self.payment_amount:
-            membership_type = frappe.get_doc("Membership Type", self.membership_type)
-            self.payment_amount = membership_type.amount
+        if hasattr(self, 'payment_amount') and not self.payment_amount:
+            # Get active membership
+            active_membership = self.get_active_membership()
+            if active_membership and active_membership.membership_type:
+                membership_type = frappe.get_doc("Membership Type", active_membership.membership_type)
+                self.payment_amount = membership_type.amount
     
     def create_payment_entry(self, payment_date=None, amount=None):
         """Create a payment entry for this membership"""
