@@ -204,7 +204,7 @@ class Membership(Document):
         invoices = frappe.get_all(
             "Subscription Invoice",
             filters={"subscription": subscription.name},
-            fields=["invoice", "status", "creation"],
+            fields=["invoice", "creation"],
             order_by="creation desc"
         )
         
