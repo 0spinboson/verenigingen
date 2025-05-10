@@ -25,8 +25,6 @@
   "payment_details_section",
   "last_payment_date",
   "unpaid_amount",
-  "column_break_payment",
-  "payment_method",
   "mandate_section",
   "sepa_mandate",
   "mandate_reference",
@@ -170,12 +168,6 @@
   {
    "fieldname": "column_break_payment",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "payment_method",
-   "fieldtype": "Select",
-   "label": "Payment Method",
-   "options": "Bank Transfer\nDirect Debit\nCredit Card\nCash\nOther"
   },
   {
    "fieldname": "mandate_section",
