@@ -234,7 +234,7 @@ frappe.ui.form.on('Member', {
         if (!frm.is_new()) {
             // Check if member has active SEPA mandates
             frappe.call({
-                method: 'vereiningen.verenigingen.doctype.member.member.check_sepa_mandate_status',
+                method: 'verenigingen.verenigingen.doctype.member.member.check_sepa_mandate_status',
                 args: {
                     member: frm.doc.name
                 },
