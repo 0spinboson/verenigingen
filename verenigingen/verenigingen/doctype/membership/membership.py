@@ -185,8 +185,6 @@ class Membership(Document):
             member = frappe.get_doc("Member", self.member)
             member.save()  # This will trigger the update_membership_status method
     
-
-
     def sync_payment_details_from_subscription(self):
         """Sync payment details from linked subscription"""
         if not self.subscription:
@@ -195,29 +193,23 @@ class Membership(Document):
         subscription = frappe.get_doc("Subscription", self.subscription)
         
         # Update next billing date (use current_invoice_end instead of next_billing_date)
-        # IMPORTANT: 'next_billing_date' field does not exist in ERPNext Subscription doctype
         if subscription.current_invoice_end:
             self.next_billing_date = subscription.current_invoice_end
             self.db_set('next_billing_date', subscription.current_invoice_end)
         
-        # Get invoices linked to this subscription
-        invoices = frappe.get_all(
-            "Subscription Invoice",
-            filters={"subscription": subscription.name},
-            fields=["invoice", "creation"],
-            order_by="creation desc"
-        )
-        
-        if not invoices:
+        # Get invoices from the subscription's child table
+        if not subscription.invoices:
             return
             
         # Calculate unpaid amount
         unpaid_amount = 0
         payment_date = None
         
-        for invoice_info in invoices:
+        for invoice_ref in subscription.invoices:
             try:
-                invoice = frappe.get_doc("Sales Invoice", invoice_info.invoice)
+                # Determine invoice type based on party type
+                invoice_type = invoice_ref.document_type or ("Sales Invoice" if subscription.party_type == "Customer" else "Purchase Invoice")
+                invoice = frappe.get_doc(invoice_type, invoice_ref.invoice)
                 
                 # Add to unpaid amount if unpaid or overdue
                 if invoice.status in ["Unpaid", "Overdue"]:
@@ -227,7 +219,7 @@ class Membership(Document):
                 if invoice.status == "Paid" and (not payment_date or getdate(invoice.posting_date) > getdate(payment_date)):
                     payment_date = invoice.posting_date
             except Exception as e:
-                frappe.log_error(f"Error processing invoice {invoice_info.invoice}: {str(e)}", 
+                frappe.log_error(f"Error processing invoice {invoice_ref.invoice}: {str(e)}", 
                               "Membership Payment Sync Error")
         
         # Update unpaid amount
