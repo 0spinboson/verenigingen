@@ -1,7 +1,21 @@
 frappe.ui.form.on('Member', {
     refresh: function(frm) {
         // Add buttons to create customer and user
-     
+        if (frm.doc.docstatus === 1) {
+            // Add payment processing button
+            if (frm.doc.payment_status !== 'Paid') {
+                frm.add_custom_button(__('Process Payment'), function() {
+                    process_payment(frm);
+                }, __('Actions'));
+            }
+            
+            // Add mark as paid button
+            if (frm.doc.payment_status !== 'Paid') {
+                frm.add_custom_button(__('Mark as Paid'), function() {
+                    mark_as_paid(frm);
+                }, __('Actions'));
+            }
+        }            
         if (!frm.doc.customer) {
             frm.add_custom_button(__('Create Customer'), function() {
                 frm.call({
@@ -433,4 +447,58 @@ function change_primary_chapter(frm) {
             d.show();
         }
     });
+}
+
+function process_payment(frm) {
+    frappe.call({
+        method: 'process_payment',
+        doc: frm.doc,
+        callback: function(r) {
+            if (r.message) {
+                frm.reload_doc();
+                frappe.msgprint(__('Payment processing initiated'));
+            }
+        }
+    });
+}
+
+function mark_as_paid(frm) {
+    const dialog = new frappe.ui.Dialog({
+        title: __('Mark as Paid'),
+        fields: [
+            {
+                fieldname: 'payment_date',
+                fieldtype: 'Date',
+                label: __('Payment Date'),
+                default: frappe.datetime.get_today(),
+                reqd: 1
+            },
+            {
+                fieldname: 'amount',
+                fieldtype: 'Currency',
+                label: __('Amount'),
+                default: frm.doc.payment_amount,
+                reqd: 1
+            }
+        ],
+        primary_action_label: __('Mark as Paid'),
+        primary_action: function(values) {
+            frappe.call({
+                method: 'mark_as_paid',
+                doc: frm.doc,
+                args: {
+                    payment_date: values.payment_date,
+                    amount: values.amount
+                },
+                callback: function(r) {
+                    if (r.message) {
+                        dialog.hide();
+                        frm.reload_doc();
+                    }
+                }
+            });
+        }
+    });
+    
+    dialog.show();
 }
