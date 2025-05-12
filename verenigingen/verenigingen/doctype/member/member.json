@@ -37,6 +37,16 @@
   "financial_details_tab",
   "payment_method_section",
   "payment_method",
+  "bank_details_section",
+  "iban",
+  "bic",
+  "bank_account_name",
+  "payment_reference",
+  "column_break_bank",
+  "payment_status",
+  "payment_date",
+  "payment_amount",
+  "paid_amount",
   "column_break_31",
   "membership_status",
   "time_remaining",
@@ -110,6 +120,73 @@
    "fieldtype": "Table",
    "label": "Payment History",
    "options": "Member Payment History",
+   "read_only": 1
+  },
+  {
+   "fieldname": "bank_details_section",
+   "fieldtype": "Section Break",
+   "label": "Bank Details"
+  },
+  {
+   "fieldname": "iban",
+   "fieldtype": "Data",
+   "label": "IBAN",
+   "length": 34,
+   "mandatory_depends_on": "eval:doc.payment_method=='Direct Debit'"
+  },
+  {
+   "fieldname": "payment_method",
+   "fieldtype": "Select",
+   "label": "Payment Method",
+   "options": "Bank Transfer\nDirect Debit\nCredit Card\nCash\nOther"
+  },
+  {
+   "fieldname": "bic",
+   "fieldtype": "Data",
+   "label": "BIC/SWIFT",
+   "length": 11
+  },
+  {
+   "fieldname": "bank_account_name",
+   "fieldtype": "Data",
+   "label": "Account Holder Name"
+  },
+  {
+   "fieldname": "payment_reference",
+   "fieldtype": "Data",
+   "label": "Payment Reference",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_bank",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Unpaid",
+   "fieldname": "payment_status",
+   "fieldtype": "Select",
+   "label": "Payment Status",
+   "options": "Unpaid\nPending\nPaid\nFailed\nRefunded\nOverdue",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payment_date",
+   "fieldtype": "Date",
+   "label": "Payment Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payment_amount",
+   "fieldtype": "Currency",
+   "label": "Payment Amount",
+   "options": "currency",
+   "read_only": 1
+  },
+  {
+   "fieldname": "paid_amount",
+   "fieldtype": "Currency",
+   "label": "Paid Amount",
+   "options": "currency",
    "read_only": 1
   },
   {
