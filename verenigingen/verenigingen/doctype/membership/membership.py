@@ -124,6 +124,13 @@ class Membership(Document):
 
         # Link to subscription if configured
         if not self.subscription and self.subscription_plan:
+            options = {
+            'follow_calendar_months': 1,
+                'generate_invoice_at_period_start': 1,  # Beginning of period
+                'generate_new_invoices_past_due_date': 1,  # Generate even if past due
+                'submit_invoice': 1,  # Submit invoices
+                'days_until_due': 18
+            }
             self.create_subscription_from_membership()
             
             # Sync payment details from subscription
