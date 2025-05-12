@@ -249,7 +249,7 @@ function createSubscriptionWithOptions(frm) {
         'generate_invoice_at_period_start': 1,
         'generate_new_invoices_past_due_date': 1,
         'submit_invoice': 1,
-        'days_until_due': 30
+        'days_until_due': 18
     };
     
     // Show a loading indicator
