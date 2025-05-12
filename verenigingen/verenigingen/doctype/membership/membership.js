@@ -205,7 +205,7 @@ frappe.ui.form.on('Membership', {
                         if (months > 0) {
                             let renewal_date = frappe.datetime.add_months(frm.doc.start_date, months);
                             // Subtract 1 day to make it inclusive
-                            renewal_date = frappe.datetime.add_days(renewal_date, -1);
+                            renewal_date = frappe.datetime.add_days(renewal_date);
                             frm.set_value('renewal_date', renewal_date);
                         }
                     }
