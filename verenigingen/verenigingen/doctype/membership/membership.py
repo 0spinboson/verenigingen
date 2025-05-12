@@ -378,8 +378,7 @@ class Membership(Document):
             if billing_interval == "Month":
                 # Add months and then subtract one day to get the end of the period
                 subscription.current_invoice_end = add_days(
-                    add_months(subscription.start_date, billing_interval_count), 
-                    -1
+                    add_months(subscription.start_date, billing_interval_count)
                 )
             else:
                 # This shouldn't happen with our interval mapping, but handle it anyway
