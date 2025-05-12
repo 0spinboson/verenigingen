@@ -355,3 +355,32 @@ def generate_btw_report(start_date, end_date):
             report_data["total"] += flt(invoice.base_grand_total)
     
     return report_data
+
+def apply_tax_exemption_from_source(doc, method=None):
+    """
+    Automatically apply tax exemption based on the source document
+    """
+    if doc.exempt_from_tax:
+        return
+        
+    # Skip if taxes already applied and not a new document
+    if doc.taxes and not doc.is_new():
+        return
+    
+    # Apply exemption based on source
+    handler = DutchTaxExemptionHandler()
+    
+    # For membership-related invoices
+    if hasattr(doc, 'membership') and doc.membership:
+        exemption_type = frappe.db.get_value("Membership", doc.membership, "btw_exemption_type") or "EXEMPT_MEMBERSHIP"
+        handler.apply_exemption_to_invoice(doc, exemption_type)
+    
+    # For donation-related invoices
+    elif hasattr(doc, 'donation') and doc.donation:
+        exemption_type = frappe.db.get_value("Donation", doc.donation, "btw_exemption_type") or "EXEMPT_FUNDRAISING"
+        handler.apply_exemption_to_invoice(doc, exemption_type)
+    
+    # Use default exemption for verenigingen-created invoices if tax exempt is enabled
+    elif frappe.db.get_single_value("Verenigingen Settings", "tax_exempt_for_contributions"):
+        default_exemption = frappe.db.get_single_value("Verenigingen Settings", "default_tax_exemption_type") or "EXEMPT_MEMBERSHIP"
+        handler.apply_exemption_to_invoice(doc, default_exemption)
