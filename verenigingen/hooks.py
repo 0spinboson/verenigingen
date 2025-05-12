@@ -93,6 +93,7 @@ after_install = "verenigingen.setup.execute_after_install"
 permission_query_conditions = {
     "Member": "verenigingen.permissions.get_member_permission_query",
     "Membership": "verenigingen.permissions.get_membership_permission_query",
+    "Chapter": "verenigingen.verenigingen.doctype.chapter.chapter.get_chapter_permission_query_conditions"
 }
 
 # has_permission = {
