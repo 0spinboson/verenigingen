@@ -136,6 +136,14 @@ doc_events = {
         "on_cancel": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history",
         "on_trash": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history"
     }
+    "Verenigingen Settings": {
+        "on_update": "verenigingen.verenigingen.utils.dutch_tax_handler.setup_dutch_tax_exemption"
+    },
+    "Sales Invoice": {
+        "before_validate": [
+            "verenigingen.verenigingen.utils.dutch_tax_handler.apply_tax_exemption_from_source"
+        ]
+    }
 }
 
 # Scheduled Tasks
