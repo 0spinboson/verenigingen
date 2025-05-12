@@ -125,11 +125,11 @@ class Membership(Document):
         # Link to subscription if configured
         if not self.subscription and self.subscription_plan:
             options = {
-            'follow_calendar_months': 1,
+            'follow_calendar_months': 0,
                 'generate_invoice_at_period_start': 1,  # Beginning of period
                 'generate_new_invoices_past_due_date': 1,  # Generate even if past due
                 'submit_invoice': 1,  # Submit invoices
-                'days_until_due': 18
+                'days_until_due': 27
             }
             self.create_subscription_from_membership()
             
@@ -389,26 +389,25 @@ class Membership(Document):
             # Calculate the correct current invoice end date
             if billing_interval == "Month":
                 # Add months and then subtract one day to get the end of the period
-                subscription.current_invoice_end = add_days(
+                subscription.current_invoice_end = add_
                     add_months(subscription.start_date, billing_interval_count)
-                )
             else:
                 # This shouldn't happen with our interval mapping, but handle it anyway
                 subscription.current_invoice_end = subscription.end_date
             
             # Set options from provided parameters
             subscription.follow_calendar_months = options.get('follow_calendar_months', 0)
-            if options.get('generate_invoice_at_period_start', 0):
+            if options.get('generate_invoice_at_period_start', 1):
                 subscription.generate_invoice_at = "Beginning of the current subscription period"
             else:
                 subscription.generate_invoice_at = "End of the current subscription period"
             subscription.generate_new_invoices_past_due_date = options.get('generate_new_invoices_past_due_date', 0)
-            subscription.submit_invoice = options.get('submit_invoice', 0)
+            subscription.submit_invoice = options.get('submit_invoice', 1)
             
             if options.get('days_until_due'):
-                subscription.days_until_due = options.get('days_until_due', 30)
+                subscription.days_until_due = options.get('days_until_due', 27)
             else:
-                subscription.days_until_due = 30
+                subscription.days_until_due = 27
             
             # Add the subscription plan
             subscription.append("plans", {
