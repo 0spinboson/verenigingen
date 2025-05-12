@@ -275,7 +275,12 @@ class Membership(Document):
         
         # Initialize options with defaults if none provided
         if not options:
-            options = {}
+            options = {
+                'follow_calendar_months': 1,
+                'generate_invoice_at_period_start': 1,  # Beginning of period
+                'generate_new_invoices_past_due_date': 1,  # Generate even if past due
+                'submit_invoice': 1  # Submit invoices
+            }
         
         # Check if member has a customer
         member = frappe.get_doc("Member", self.member)
