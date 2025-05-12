@@ -135,7 +135,7 @@ doc_events = {
         "on_submit": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history",
         "on_cancel": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history",
         "on_trash": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history"
-    }
+    },
     "Verenigingen Settings": {
         "on_update": "verenigingen.verenigingen.utils.dutch_tax_handler.setup_dutch_tax_exemption"
     },
