@@ -849,3 +849,61 @@ def get_member_sepa_mandates(doctype, txt, searchfield, start, page_len, filters
             AND (sm.name LIKE %s OR sm.mandate_id LIKE %s)
         ORDER BY sm.creation DESC
     """, (member, "%" + txt + "%", "%" + txt + "%"))
+
+# Add to verenigingen/verenigingen/doctype/membership/membership.py
+
+def sync_payment_details_from_subscription(self):
+    """Sync payment details from linked subscription"""
+    if not self.subscription:
+        return
+        
+    try:
+        subscription = frappe.get_doc("Subscription", self.subscription)
+        
+        # Update next billing date
+        if subscription.current_invoice_end:
+            self.next_billing_date = subscription.current_invoice_end
+            self.db_set('next_billing_date', subscription.current_invoice_end)
+        
+        # Get invoices from the subscription
+        if not subscription.invoices:
+            return
+            
+        # Calculate unpaid amount and find latest payment date
+        unpaid_amount = 0
+        payment_date = None
+        
+        for invoice_ref in subscription.invoices:
+            try:
+                # Determine invoice type based on party type
+                invoice_type = invoice_ref.document_type or ("Sales Invoice" if subscription.party_type == "Customer" else "Purchase Invoice")
+                invoice = frappe.get_doc(invoice_type, invoice_ref.invoice)
+                
+                # Add to unpaid amount if unpaid or overdue
+                if invoice.status in ["Unpaid", "Overdue"]:
+                    unpaid_amount += flt(invoice.outstanding_amount)
+                
+                # Get latest payment date
+                if invoice.status == "Paid" and (not payment_date or getdate(invoice.posting_date) > getdate(payment_date)):
+                    payment_date = invoice.posting_date
+            except Exception as e:
+                frappe.log_error(f"Error processing invoice {invoice_ref.invoice}: {str(e)}", 
+                              "Membership Payment Sync Error")
+        
+        # Update unpaid amount
+        self.unpaid_amount = unpaid_amount
+        self.db_set('unpaid_amount', unpaid_amount)
+        
+        # Update last payment date if found
+        if payment_date:
+            self.last_payment_date = payment_date
+            self.db_set('last_payment_date', payment_date)
+        
+        # Update status based on changes
+        self.set_status()
+        self.db_set('status', self.status)
+        
+        frappe.logger().info(f"Synced payment details for membership {self.name} from subscription {self.subscription}")
+    except Exception as e:
+        frappe.log_error(f"Error syncing payment details for membership {self.name}: {str(e)}", 
+                      "Membership Sync Error")
