@@ -850,8 +850,6 @@ def get_member_sepa_mandates(doctype, txt, searchfield, start, page_len, filters
         ORDER BY sm.creation DESC
     """, (member, "%" + txt + "%", "%" + txt + "%"))
 
-# Add to verenigingen/verenigingen/doctype/membership/membership.py
-
 def sync_payment_details_from_subscription(self):
     """Sync payment details from linked subscription"""
     if not self.subscription:
@@ -907,3 +905,42 @@ def sync_payment_details_from_subscription(self):
     except Exception as e:
         frappe.log_error(f"Error syncing payment details for membership {self.name}: {str(e)}", 
                       "Membership Sync Error")
+
+def update_membership_from_subscription(doc, method=None):
+    """
+    Handler for when a subscription is updated
+    Updates the linked membership
+    
+    This function is called via hooks.py
+    """
+    # Find memberships linked to this subscription
+    memberships = frappe.get_all(
+        "Membership",
+        filters={"subscription": doc.name},
+        fields=["name"]
+    )
+    
+    if not memberships:
+        return
+        
+    for membership_data in memberships:
+        try:
+            membership = frappe.get_doc("Membership", membership_data.name)
+            
+            # Update membership status and payment details
+            membership.sync_payment_details_from_subscription()
+            
+            # Update status based on subscription status
+            if doc.status == "Active" and membership.status not in ["Active", "Expired"]:
+                membership.db_set('status', 'Active')
+            elif doc.status == "Cancelled" and membership.status != "Cancelled":
+                membership.db_set('status', 'Cancelled')
+            elif doc.status == "Unpaid" and membership.status == "Active":
+                membership.db_set('status', 'Inactive')
+                
+            frappe.logger().info(f"Updated membership {membership.name} from subscription {doc.name}")
+                
+        except Exception as e:
+            frappe.log_error(f"Error updating membership {membership_data.name} from subscription: {str(e)}", 
+                          "Membership Update Error")
+
