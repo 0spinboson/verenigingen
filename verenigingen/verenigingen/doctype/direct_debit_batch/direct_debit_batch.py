@@ -583,3 +583,51 @@ def create_dutch_sepa_xml_structure(self, message_id, payment_info_id, company, 
         ET.SubElement(rmt_inf, "Ustrd").text = f"Invoice {invoice.invoice} for {invoice.member_name}"
     
     return root
+
+@frappe.whitelist()
+def create_direct_debit_batch_for_unpaid_memberships():
+    """
+    Create a batch for direct debit payments for unpaid memberships
+    This is meant to be scheduled daily via hooks.py
+    """
+    from verenigingen.verenigingen.doctype.membership.enhanced_subscription import get_unpaid_membership_invoices
+    
+    # Get all unpaid invoices for memberships with Direct Debit payment method
+    unpaid_invoices = get_unpaid_membership_invoices()
+    
+    if not unpaid_invoices:
+        frappe.logger().info("No unpaid membership invoices found for direct debit")
+        return None
+    
+    # Create a new batch
+    batch = frappe.new_doc("Direct Debit Batch")
+    batch.batch_date = frappe.utils.today()
+    batch.batch_description = f"Membership payments batch - {frappe.utils.today()}"
+    batch.batch_type = "RCUR"  # Recurring direct debit
+    batch.currency = "EUR"  # Default currency
+    
+    # Add invoices to batch
+    for invoice in unpaid_invoices:
+        batch.append("invoices", {
+            "invoice": invoice["invoice"],
+            "membership": invoice["membership"],
+            "member": invoice["member"],
+            "member_name": invoice["member_name"],
+            "amount": invoice["amount"],
+            "currency": invoice["currency"],
+            "bank_account": invoice["bank_account"],
+            "iban": invoice["iban"],
+            "mandate_reference": invoice["mandate_reference"],
+            "status": "Pending"
+        })
+    
+    # Calculate totals
+    batch.total_amount = sum(invoice["amount"] for invoice in unpaid_invoices)
+    batch.entry_count = len(unpaid_invoices)
+    
+    # Save the batch
+    batch.insert()
+    
+    frappe.logger().info(f"Created direct debit batch {batch.name} with {batch.entry_count} invoices")
+    
+    return batch.name
