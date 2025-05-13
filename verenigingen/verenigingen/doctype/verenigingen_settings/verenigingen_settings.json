@@ -13,6 +13,9 @@
   "organization_email_domain",
   "financial_settings_section",
   "enable_razorpay_for_memberships",
+  "company_iban",
+  "company_bic",
+  "creditor_id",
   "creation_user",
   "dutch_btw_section",
   "tax_exempt_for_contributions",
@@ -93,6 +96,24 @@
   "fieldtype": "Check",
   "label": "Tax Exempt for Contributions and Donations",
   "description": "When enabled, BTW exemption codes will be applied according to Dutch tax regulations"
+},
+{
+  "fieldname": "company_iban",
+  "fieldtype": "Data",
+  "label": "Company IBAN",
+  "description": "IBAN for direct debit collections"
+},
+{
+  "fieldname": "company_bic",
+  "fieldtype": "Data",
+  "label": "Company BIC/SWIFT",
+  "description": "BIC code for company's bank"
+},
+{
+  "fieldname": "creditor_id",
+  "fieldtype": "Data",
+  "label": "Creditor ID",
+  "description": "Dutch Incassant ID for direct debit collections"
 },
 {
   "fieldname": "default_tax_exemption_type",
