@@ -406,3 +406,180 @@ def mark_invoices_as_paid(batch_name):
     success_count = batch.mark_invoices_as_paid()
     
     return success_count
+
+def generate_sepa_xml(self):
+    """Generate SEPA Direct Debit XML file for Dutch banks"""
+    try:
+        # Generate IDs for SEPA message
+        message_id = f"BATCH-{self.name}-{random_string(8)}"
+        payment_info_id = f"PMT-{self.name}-{random_string(8)}"
+        
+        # Store IDs
+        self.sepa_message_id = message_id
+        self.sepa_payment_info_id = payment_info_id
+        self.sepa_generation_date = f"{nowdate()} {nowtime()}"
+        
+        # Get company settings from Verenigingen Settings
+        settings = frappe.get_single("Verenigingen Settings")
+        company = frappe.get_doc("Company", settings.company)
+        
+        # Create XML structure - enhanced for Dutch banks
+        root = self.create_dutch_sepa_xml_structure(
+            message_id=message_id,
+            payment_info_id=payment_info_id,
+            company=company,
+            settings=settings
+        )
+        
+        # Convert to string
+        xml_string = ET.tostring(root, encoding='utf-8', method='xml')
+        
+        # Prettify XML
+        import xml.dom.minidom
+        xml_pretty = xml.dom.minidom.parseString(xml_string).toprettyxml()
+        
+        # Create temporary file
+        temp_file_path = f"/tmp/sepa-{self.name}.xml"
+        with open(temp_file_path, "w") as f:
+            f.write(xml_pretty)
+        
+        # Attach to document
+        self.sepa_file = self.attach_sepa_file(temp_file_path)
+        self.sepa_file_generated = 1
+        self.status = "Generated"
+        
+        # Update log
+        self.add_to_batch_log(_("SEPA XML file generated successfully"))
+        self.save()
+        
+        # Clean up
+        os.remove(temp_file_path)
+        
+        return self.sepa_file
+        
+    except Exception as e:
+        self.add_to_batch_log(_("Error generating SEPA file: {0}").format(str(e)))
+        frappe.log_error(f"Error generating SEPA file for batch {self.name}: {str(e)}", 
+                       "Direct Debit Batch Error")
+        frappe.throw(_("Error generating SEPA file: {0}").format(str(e)))
+        
+def create_dutch_sepa_xml_structure(self, message_id, payment_info_id, company, settings):
+    """Create SEPA XML structure specifically for Dutch direct debit"""
+    # This follows the Pain.008.001.02 format for Dutch banks
+    
+    # Create root element
+    root = ET.Element("Document")
+    root.set("xmlns", "urn:iso:std:iso:20022:tech:xsd:pain.008.001.02")
+    root.set("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
+    
+    # Customer Direct Debit Initiation
+    cstmr_drct_dbt_initn = ET.SubElement(root, "CstmrDrctDbtInitn")
+    
+    # Group Header
+    grp_hdr = ET.SubElement(cstmr_drct_dbt_initn, "GrpHdr")
+    ET.SubElement(grp_hdr, "MsgId").text = message_id
+    ET.SubElement(grp_hdr, "CreDtTm").text = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    ET.SubElement(grp_hdr, "NbOfTxs").text = str(self.entry_count)
+    ET.SubElement(grp_hdr, "CtrlSum").text = str(self.total_amount)
+    
+    # Initiating Party (Creditor)
+    init_party = ET.SubElement(grp_hdr, "InitgPty")
+    ET.SubElement(init_party, "Nm").text = company.name
+    
+    # Payment Information
+    pmt_inf = ET.SubElement(cstmr_drct_dbt_initn, "PmtInf")
+    ET.SubElement(pmt_inf, "PmtInfId").text = payment_info_id
+    ET.SubElement(pmt_inf, "PmtMtd").text = "DD"
+    ET.SubElement(pmt_inf, "BtchBookg").text = "true"
+    ET.SubElement(pmt_inf, "NbOfTxs").text = str(self.entry_count)
+    ET.SubElement(pmt_inf, "CtrlSum").text = str(self.total_amount)
+    
+    # Payment Type Information
+    pmt_tp_inf = ET.SubElement(pmt_inf, "PmtTpInf")
+    svc_lvl = ET.SubElement(pmt_tp_inf, "SvcLvl")
+    ET.SubElement(svc_lvl, "Cd").text = "SEPA"
+    lcl_instrm = ET.SubElement(pmt_tp_inf, "LclInstrm")
+    ET.SubElement(lcl_instrm, "Cd").text = "CORE"
+    ET.SubElement(pmt_tp_inf, "SeqTp").text = self.batch_type  # "RCUR" for recurring
+    
+    # Requested Collection Date
+    ET.SubElement(pmt_inf, "ReqdColltnDt").text = getdate(self.batch_date).strftime("%Y-%m-%d")
+    
+    # Creditor
+    cdtr = ET.SubElement(pmt_inf, "Cdtr")
+    ET.SubElement(cdtr, "Nm").text = company.name
+    
+    # Creditor Account (Company's IBAN)
+    # You should store this in Verenigingen Settings
+    company_iban = settings.get("company_iban") or "NL43INGB0123456789"  # Replace with actual IBAN
+    cdtr_acct = ET.SubElement(pmt_inf, "CdtrAcct")
+    id_element = ET.SubElement(cdtr_acct, "Id")
+    ET.SubElement(id_element, "IBAN").text = company_iban
+    
+    # Creditor Agent (BIC)
+    company_bic = settings.get("company_bic") or "INGBNL2A"  # Replace with actual BIC
+    cdtr_agt = ET.SubElement(pmt_inf, "CdtrAgt")
+    fin_instn_id = ET.SubElement(cdtr_agt, "FinInstnId")
+    ET.SubElement(fin_instn_id, "BIC").text = company_bic
+    
+    # Creditor Scheme ID (Incassant ID)
+    # You must store this in Verenigingen Settings
+    creditor_id = settings.get("creditor_id") or "NL13ZZZ123456780000"  # Replace with actual Creditor ID
+    cdtr_schme_id = ET.SubElement(pmt_inf, "CdtrSchmeId")
+    id_element = ET.SubElement(cdtr_schme_id, "Id")
+    prvt_id = ET.SubElement(id_element, "PrvtId")
+    othr = ET.SubElement(prvt_id, "Othr")
+    ET.SubElement(othr, "Id").text = creditor_id
+    schme_nm = ET.SubElement(othr, "SchmeNm")
+    ET.SubElement(schme_nm, "Prtry").text = "SEPA"
+    
+    # Add transactions
+    for invoice in self.invoices:
+        drct_dbt_tx_inf = ET.SubElement(pmt_inf, "DrctDbtTxInf")
+        
+        # Payment ID
+        pmt_id = ET.SubElement(drct_dbt_tx_inf, "PmtId")
+        ET.SubElement(pmt_id, "EndToEndId").text = f"E2E-{invoice.invoice}"
+        
+        # Amount
+        instd_amt = ET.SubElement(drct_dbt_tx_inf, "InstdAmt")
+        instd_amt.text = format(invoice.amount, '.2f')
+        instd_amt.set("Ccy", invoice.currency)
+        
+        # Mandate information
+        drct_dbt_tx = ET.SubElement(drct_dbt_tx_inf, "DrctDbtTx")
+        mndt_rltd_inf = ET.SubElement(drct_dbt_tx, "MndtRltd_Inf")
+        ET.SubElement(mndt_rltd_inf, "MndtId").text = invoice.mandate_reference
+        
+        # Get mandate sign date
+        sign_date = "2023-01-01"  # default fallback
+        if invoice.member:
+            mandates = frappe.get_all(
+                "SEPA Mandate",
+                filters={"member": invoice.member, "mandate_id": invoice.mandate_reference},
+                fields=["sign_date"]
+            )
+            if mandates and mandates[0].sign_date:
+                sign_date = mandates[0].sign_date
+        
+        ET.SubElement(mndt_rltd_inf, "DtOfSgntr").text = getdate(sign_date).strftime("%Y-%m-%d")
+        
+        # Debtor Agent (Customer's bank)
+        dbtr_agt = ET.SubElement(drct_dbt_tx_inf, "DbtrAgt")
+        fin_instn_id = ET.SubElement(dbtr_agt, "FinInstnId")
+        ET.SubElement(fin_instn_id, "BIC").text = get_bic_from_iban(invoice.iban) or "INGBNL2A"
+        
+        # Debtor
+        dbtr = ET.SubElement(drct_dbt_tx_inf, "Dbtr")
+        ET.SubElement(dbtr, "Nm").text = invoice.member_name
+        
+        # Debtor Account
+        dbtr_acct = ET.SubElement(drct_dbt_tx_inf, "DbtrAcct")
+        id_element = ET.SubElement(dbtr_acct, "Id")
+        ET.SubElement(id_element, "IBAN").text = invoice.iban
+        
+        # Remittance Information
+        rmt_inf = ET.SubElement(drct_dbt_tx_inf, "RmtInf")
+        ET.SubElement(rmt_inf, "Ustrd").text = f"Invoice {invoice.invoice} for {invoice.member_name}"
+    
+    return root
