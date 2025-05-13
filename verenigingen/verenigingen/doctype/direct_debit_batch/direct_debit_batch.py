@@ -631,3 +631,31 @@ def create_direct_debit_batch_for_unpaid_memberships():
     frappe.logger().info(f"Created direct debit batch {batch.name} with {batch.entry_count} invoices")
     
     return batch.name
+
+def get_bic_from_iban(iban):
+    """Try to determine BIC from IBAN country code and bank code"""
+    if not iban or len(iban) < 8:
+        return None
+    
+    # Remove spaces
+    iban = iban.replace(' ', '')
+    
+    # Dutch IBAN - extract bank code
+    if iban.startswith('NL'):
+        bank_code = iban[4:8]
+        
+        # Common Dutch bank codes
+        bank_codes = {
+            'INGB': 'INGBNL2A',  # ING Bank
+            'ABNA': 'ABNANL2A',  # ABN AMRO
+            'RABO': 'RABONL2U',  # Rabobank
+            'TRIO': 'TRIONL2U',  # Triodos Bank
+            'SNSB': 'SNSBNL2A',  # SNS Bank
+            'ASNB': 'ASNBNL21',  # ASN Bank
+            'KNAB': 'KNABNL2H'   # Knab
+        }
+        
+        return bank_codes.get(bank_code)
+    
+    # For other countries, we would need a more extensive mapping
+    return None
