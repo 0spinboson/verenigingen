@@ -483,8 +483,41 @@ def update_membership_from_subscription(doc, method=None):
         try:
             membership = frappe.get_doc("Membership", membership_data.name)
             
-            # Update membership status and payment details
+            # Map subscription status to membership status
+            status_mapping = {
+                "Active": "Active",
+                "Cancelled": "Cancelled",
+                "Unpaid": "Inactive",
+                "Past Due": "Inactive"
+            }
+            
+            # Check if the status needs an update based on the mapping
+            new_status = status_mapping.get(doc.status)
+            if new_status and membership.status != new_status:
+                # Special rules for specific transitions
+                
+                # Don't change from Expired to Active without explicit renewal
+                if membership.status == "Expired" and new_status == "Active":
+                    frappe.logger().info(f"Not updating expired membership {membership.name} to Active automatically")
+                    continue
+                
+                # Update the status
+                membership.db_set('status', new_status)
+                frappe.logger().info(f"Updated membership {membership.name} status from {membership.status} to {new_status}")
+            
+            # Always sync payment details regardless of status change
             membership.sync_payment_details_from_subscription()
+            
+            # Update next billing date
+            if doc.current_invoice_end:
+                membership.db_set('next_billing_date', doc.current_invoice_end)
+            
+            # Handle cancellation specifics
+            if doc.status == "Cancelled" and not membership.cancellation_date:
+                membership.db_set('cancellation_date', frappe.utils.today())
+                membership.db_set('cancellation_reason', "Subscription cancelled")
+                membership.db_set('cancellation_type', "Immediate")
+                
         except Exception as e:
             frappe.log_error(f"Error updating membership {membership_data.name} from subscription: {str(e)}", 
                           "Membership Update Error")
