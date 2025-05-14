@@ -7,8 +7,66 @@ class Membership(Document):
     def validate(self):
         self.validate_dates()
         self.validate_membership_type()
+        self.validate_existing_memberships()
         self.set_renewal_date()  # Calculate renewal date based on start date and membership type
         self.set_status()
+
+    def validate_existing_memberships(self):
+        """Check if there are any existing active memberships for this member"""
+        if self.is_new() and self.member:
+            existing_memberships = frappe.get_all(
+                "Membership",
+                filters={
+                    "member": self.member,
+                    "status": ["not in", ["Cancelled", "Expired"]],
+                    "docstatus": 1,
+                    "name": ["!=", self.name]
+                },
+                fields=["name", "membership_type", "start_date", "renewal_date", "status"]
+            )
+            
+            if existing_memberships:
+                membership = existing_memberships[0]
+                msg = _("This member already has an active membership:")
+                msg += f"<br><b>{membership.name}</b> ({membership.membership_type})"
+                msg += f"<br>Status: {membership.status}"
+                msg += f"<br>Start Date: {frappe.format(membership.start_date, {'fieldtype': 'Date'})}"
+                msg += f"<br>Renewal Date: {frappe.format(membership.renewal_date, {'fieldtype': 'Date'})}"
+                
+                if len(existing_memberships) > 1:
+                    msg += f"<br><br>{_('And')} {len(existing_memberships) - 1} {_('more active memberships.')}"
+                    
+                # Add view memberships link
+                msg += f'<br><br><a href="/app/membership/list?member={self.member}">{_("View All Memberships")}</a>'
+                
+                # Add allow creation checkbox
+                allow_creation = frappe.form_dict.get("allow_multiple_memberships")
+                
+                if not allow_creation:
+                    msg += f'<br><br>{_("If you want to create multiple memberships for this member, check the Allow Multiple Memberships box.")}'
+                    
+                    frappe.msgprint(
+                        msg=msg,
+                        title=_("Existing Membership Found"),
+                        indicator="orange",
+                        primary_action={
+                            "label": _("Create Anyway"),
+                            "server_action": "verenigingen.verenigingen.doctype.membership.membership.allow_multiple_memberships",
+                            "args": {
+                                "member": self.member
+                            }
+                        }
+                    )
+                    
+                    if not frappe.flags.get("allow_multiple_memberships"):
+                        frappe.throw(_("Member already has an active membership. Cancel the existing membership before creating a new one."), 
+                                   title=_("Duplicate Membership"))
+    
+    @frappe.whitelist()
+    def allow_multiple_memberships(member):
+        """Set a flag to allow creating multiple memberships for a member"""
+        frappe.flags.allow_multiple_memberships = True
+        return True
         
     def validate_dates(self):
         # If cancellation date is set, check if it's at least 1 year after start date
