@@ -10,7 +10,12 @@ frappe.ui.form.on('Membership', {
                 return false; // Prevent default behavior
             };
         }
-        
+        if (frm.is_new()) {
+            frm.add_custom_button(__('Allow Multiple Memberships'), function() {
+                frm.set_value('allow_multiple_memberships', 1);
+                frm.save();
+            }, __('Actions')).addClass('btn-warning');
+        }
         // Add custom buttons after document is submitted
         if (frm.doc.docstatus === 1) {
             // Add button to renew membership
