@@ -26,7 +26,7 @@ def setup_subscription_override():
                 # Check if it's the date change error
                 if "Not allowed to change **Current Invoice Start Date**" in error_msg:
                     # Use our custom handler
-                    from verenigingen.verenigingen.subscription_handler import SubscriptionHandler
+                    from verenigingen.subscription_handler import SubscriptionHandler
                     handler = SubscriptionHandler(self.name)
                     if handler.process_subscription():
                         return True
