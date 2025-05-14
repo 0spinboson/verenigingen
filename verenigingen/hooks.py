@@ -154,7 +154,7 @@ scheduler_events = {
     "daily": [
         "verenigingen.verenigingen.doctype.membership.scheduler.process_expired_memberships",
         "verenigingen.verenigingen.doctype.membership.scheduler.send_renewal_reminders",
-        "verenigingen.verenigingen.doctype.membership.scheduler.process_auto_renewals"
+        "verenigingen.verenigingen.doctype.membership.scheduler.process_auto_renewals",
         "verenigingen.subscription_handler.process_all_subscriptions"
     ]
 }
