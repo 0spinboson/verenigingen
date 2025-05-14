@@ -1,8 +1,13 @@
 # verenigingen/verenigingen/utils/dutch_tax_handler.py
 
-import frappe
+import frappe, sys
+from pathlib import Path
 from frappe import _
 from frappe.utils import flt, cstr
+
+utils_dir = str(Path(__file__).parent)
+if utils_dir not in sys.path:
+    sys.path.append(utils_dir)
 
 # Constants for Dutch BTW Codes
 BTW_CODES = {
