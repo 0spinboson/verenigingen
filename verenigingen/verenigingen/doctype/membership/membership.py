@@ -394,7 +394,8 @@ class Membership(Document):
                     months_to_add = 12
                 
                 if months_to_add and months_to_add > 0:
-                    subscription.end_date = add_months(subscription.start_date, months_to_add)
+                    # Add months and then subtract 1 day to make it inclusive (end on day before anniversary)
+                    subscription.end_date = add_days(add_months(subscription.start_date, months_to_add), -1)
             
             # Set company
             subscription.company = frappe.defaults.get_global_default('company') or '_Test Company'
@@ -447,7 +448,7 @@ class Membership(Document):
             # Calculate the correct current invoice end date
             if billing_interval == "Month":
                 # Add months and then subtract one day to get the end of the period
-                subscription.current_invoice_end = add_months(subscription.start_date, billing_interval_count)
+                subscription.current_invoice_end = add_days(add_months(subscription.start_date, billing_interval_count), -1)
             else:
                 # This shouldn't happen with our interval mapping, but handle it anyway
                 subscription.current_invoice_end = subscription.end_date
