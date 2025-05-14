@@ -494,7 +494,7 @@ class Membership(Document):
             self.db_set('subscription', subscription.name)
             
             if subscription.current_invoice_end:
-                self.next_billing_date = subscription.current_invoice_end
+                self.next_billing_date = add_days(subscription.current_invoice_end,1)
                 self.db_set('next_billing_date', subscription.current_invoice_end)
             
             frappe.msgprint(_("Subscription {0} created successfully").format(subscription.name))
@@ -952,7 +952,7 @@ def sync_payment_details_from_subscription(self):
         
         # Update next billing date
         if subscription.current_invoice_end:
-            self.next_billing_date = subscription.current_invoice_end
+            self.next_billing_date = add_days(subscription.current_invoice_end, 1)
             self.db_set('next_billing_date', subscription.current_invoice_end)
         
         # Get invoices from the subscription
