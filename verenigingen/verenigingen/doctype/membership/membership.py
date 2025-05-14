@@ -719,11 +719,11 @@ def create_subscription(membership_name, options=None):
         # Get default options if none provided
         if not options:
             options = {
-                'follow_calendar_months': 1,
+                'follow_calendar_months': 0,
                 'generate_invoice_at_period_start': 1,
                 'generate_new_invoices_past_due_date': 1,
                 'submit_invoice': 1,
-                'days_until_due': 30
+                'days_until_due': 27
             }
             
         # Get the membership
