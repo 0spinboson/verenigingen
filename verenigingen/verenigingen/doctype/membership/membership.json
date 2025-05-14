@@ -30,6 +30,7 @@
   "mandate_reference",
   "mandate_status",
   "subscription_section",
+  "allow_multiple_memberships",
   "subscription",
   "subscription_plan",
   "column_break_24",
@@ -58,6 +59,13 @@
    "fieldtype": "Data",
    "label": "Member Name",
    "read_only": 1
+  },
+  {
+  "fieldname": "allow_multiple_memberships",
+  "fieldtype": "Check",
+  "label": "Allow Multiple Memberships",
+  "default": 0,
+  "hidden": 1
   },
   {
    "fetch_from": "member.email",
