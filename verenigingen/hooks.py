@@ -137,11 +137,11 @@ doc_events = {
         "on_trash": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history"
     },
     "Verenigingen Settings": {
-        "on_update": "verenigingen.utils.dutch_tax_handler.setup_dutch_tax_exemption"
+        "on_update": "verenigingen.utils.setup_dutch_tax_exemption"
     },
     "Sales Invoice": {
         "before_validate": [
-            "verenigingen.utils.dutch_tax_handler.apply_tax_exemption_from_source"
+            "verenigingen.utils.apply_tax_exemption_from_source"
         ]
     }
 }
