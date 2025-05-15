@@ -259,8 +259,8 @@ class Membership(Document):
         
         # Update next billing date (use current_invoice_end instead of next_billing_date)
         if subscription.current_invoice_end:
-            self.next_billing_date = subscription.current_invoice_end
-            self.db_set('next_billing_date', subscription.current_invoice_end)
+            self.next_billing_date = add_days(subscription.current_invoice_end,1)
+            self.db_set('next_billing_date', subscription.next_billing_date)
         
         # Get invoices from the subscription's child table
         if not subscription.invoices:
@@ -495,7 +495,7 @@ class Membership(Document):
             
             if subscription.current_invoice_end:
                 self.next_billing_date = add_days(subscription.current_invoice_end,1)
-                self.db_set('next_billing_date', subscription.current_invoice_end)
+                self.db_set('next_billing_date', add_days(subscription.current_invoice_end,1))
             
             frappe.msgprint(_("Subscription {0} created successfully").format(subscription.name))
             return subscription.name
@@ -953,7 +953,7 @@ def sync_payment_details_from_subscription(self):
         # Update next billing date
         if subscription.current_invoice_end:
             self.next_billing_date = add_days(subscription.current_invoice_end, 1)
-            self.db_set('next_billing_date', subscription.current_invoice_end)
+            self.db_set('next_billing_date', subscription.next_billing_date)
         
         # Get invoices from the subscription
         if not subscription.invoices:
