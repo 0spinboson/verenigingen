@@ -256,8 +256,9 @@ class Membership(Document):
         
         # Update next billing date (use current_invoice_end instead of next_billing_date)
         if subscription.current_invoice_end:
-            self.next_billing_date = add_days(subscription.current_invoice_end,1)
-            self.db_set('next_billing_date', subscription.next_billing_date)
+            self.next_billing_date = add_days(subscription.current_invoice_end, 1)
+            self.next_billing_date = next_billing_date
+            self.db_set('next_billing_date', next_billing_date)
         
         # Get invoices from the subscription's child table
         if not subscription.invoices:
