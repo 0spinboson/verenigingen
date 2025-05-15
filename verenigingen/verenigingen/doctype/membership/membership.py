@@ -999,6 +999,8 @@ def get_member_sepa_mandates(doctype, txt, searchfield, start, page_len, filters
 
 def sync_payment_details_from_subscription(self):
     """Sync payment details from linked subscription"""
+    from frappe.utils import add_days, getdate, flt  # Add this import
+    
     if not self.subscription:
         return
         
@@ -1007,8 +1009,9 @@ def sync_payment_details_from_subscription(self):
         
         # Update next billing date
         if subscription.current_invoice_end:
-            self.next_billing_date = add_days(subscription.current_invoice_end, 1)
-            self.db_set('next_billing_date', self.next_billing_date)
+            next_billing_date = add_days(subscription.current_invoice_end, 1)
+            self.next_billing_date = next_billing_date
+            self.db_set('next_billing_date', next_billing_date)  # Use the calculated value, not subscription.next_billing_date
         
         # Get invoices using standard ERPNext methods
         unpaid_amount = 0
