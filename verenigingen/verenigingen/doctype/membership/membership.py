@@ -718,21 +718,36 @@ def show_payment_history(membership_name):
     invoices = frappe.get_all(
         "Subscription Invoice",
         filters={"subscription": membership.subscription},
-        fields=["invoice", "status", "creation"],
+        fields=["invoice", "creation"],
         order_by="creation desc"
     )
     
     payment_history = []
     
     for invoice_info in invoices:
-        invoice = frappe.get_doc("Sales Invoice", invoice_info.invoice)
-        
-        # Get linked payments
-        payments = frappe.get_all(
-            "Payment Entry Reference",
-            filters={"reference_name": invoice.name},
-            fields=["parent"]
-        )
+        try:
+            invoice = frappe.get_doc("Sales Invoice", invoice_info.invoice)
+            
+            payment_history.append({
+                "invoice": invoice.name,
+                "date": invoice.posting_date,
+                "amount": invoice.grand_total,
+                "outstanding": invoice.outstanding_amount,
+                "status": invoice.status,
+                "payments": payment_entries
+            })
+        except Exception as e:
+            frappe.log_error(f"Error fetching invoice {invoice_info.invoice}: {str(e)}", 
+                          "Membership Payment History Error")
+            # Add a placeholder entry with basic information
+            payment_history.append({
+                "invoice": invoice_info.invoice,
+                "date": invoice_info.creation,
+                "amount": 0,
+                "outstanding": 0,
+                "status": "Unknown",
+                "payments": []
+            })
         
         payment_entries = []
         for payment in payments:
