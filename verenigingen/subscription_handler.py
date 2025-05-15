@@ -62,6 +62,36 @@ class SubscriptionHandler:
                 return True
                 
         return False
+
+    def cancel_subscription(self):
+        """Cancel a subscription using direct DB operations to bypass validation"""
+        if not self.subscription:
+            return False
+            
+        # Update the subscription directly in the database
+        frappe.db.set_value(
+            "Subscription", 
+            self.subscription_name, 
+            {
+                "status": "Cancelled",
+                "cancellation_date": frappe.utils.today()
+            },
+            update_modified=False
+        )
+        
+        # Add a comment to record this action
+        frappe.get_doc({
+            "doctype": "Comment",
+            "comment_type": "Info",
+            "reference_doctype": "Subscription",
+            "reference_name": self.subscription_name,
+            "content": "Subscription cancelled via custom handler"
+        }).insert(ignore_permissions=True)
+        
+        # Reload the subscription
+        self.subscription.reload()
+        
+        return True
         
     def _process_long_term_subscription(self):
         """Handle long-term subscription processing to avoid date validation errors"""
