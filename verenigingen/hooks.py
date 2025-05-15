@@ -14,7 +14,7 @@ app_license = "MIT"
 # Includes in <head>
 # ------------------
 # Subscription handling - initialize override when app starts
-on_app_init = ["verenigingen.verenigingen.subscription_override.setup_subscription_override"]
+on_app_init = ["verenigingen.subscription_override.setup_subscription_override"]
 # include js, css files in header of desk.html
 # app_include_css = "/assets/verenigingen/css/verenigingen.css"
 # app_include_js = "/assets/verenigingen/js/verenigingen.js"
