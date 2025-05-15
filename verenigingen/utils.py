@@ -470,7 +470,8 @@ def apply_tax_exemption_from_source(doc, method=None):
     """
     Automatically apply tax exemption based on the source document
     """
-    if doc.exempt_from_tax:
+    # Check if the attribute exists before using it
+    if hasattr(doc, 'exempt_from_tax') and doc.exempt_from_tax:
         return
         
     # Skip if taxes already applied and not a new document
