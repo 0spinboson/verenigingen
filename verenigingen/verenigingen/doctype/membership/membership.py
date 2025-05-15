@@ -375,7 +375,7 @@ class Membership(Document):
             
             # Handle end date calculation
             if self.renewal_date:
-                subscription.end_date = getdate(self.renewal_date)
+                add_days(subscription.end_date = getdate(self.renewal_date), -1)
             else:
                 # Calculate based on membership type
                 membership_type = frappe.get_doc("Membership Type", self.membership_type)
