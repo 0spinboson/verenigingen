@@ -714,60 +714,64 @@ def show_payment_history(membership_name):
     if not membership.subscription:
         return []
         
-    # Get invoices from subscription
-    invoices = frappe.get_all(
-        "Subscription Invoice",
-        filters={"subscription": membership.subscription},
-        fields=["invoice", "creation"],
-        order_by="creation desc"
-    )
+    # Get the subscription document
+    try:
+        subscription = frappe.get_doc("Subscription", membership.subscription)
+    except Exception as e:
+        frappe.log_error(f"Error fetching subscription {membership.subscription}: {str(e)}", 
+                      "Membership Payment History Error")
+        return []
     
     payment_history = []
     
-    for invoice_info in invoices:
-        try:
-            invoice = frappe.get_doc("Sales Invoice", invoice_info.invoice)
-            
-            payment_history.append({
-                "invoice": invoice.name,
-                "date": invoice.posting_date,
-                "amount": invoice.grand_total,
-                "outstanding": invoice.outstanding_amount,
-                "status": invoice.status,
-                "payments": payment_entries
-            })
-        except Exception as e:
-            frappe.log_error(f"Error fetching invoice {invoice_info.invoice}: {str(e)}", 
-                          "Membership Payment History Error")
-            # Add a placeholder entry with basic information
-            payment_history.append({
-                "invoice": invoice_info.invoice,
-                "date": invoice_info.creation,
-                "amount": 0,
-                "outstanding": 0,
-                "status": "Unknown",
-                "payments": []
-            })
-        
-        payment_entries = []
-        for payment in payments:
-            payment_doc = frappe.get_doc("Payment Entry", payment.parent)
-            payment_entries.append({
-                "payment_entry": payment_doc.name,
-                "amount": payment_doc.paid_amount,
-                "date": payment_doc.posting_date,
-                "mode": payment_doc.mode_of_payment,
-                "status": payment_doc.status
-            })
-        
-        payment_history.append({
-            "invoice": invoice.name,
-            "date": invoice.posting_date,
-            "amount": invoice.grand_total,
-            "outstanding": invoice.outstanding_amount,
-            "status": invoice.status,
-            "payments": payment_entries
-        })
+    # Access the invoices directly from the subscription document's child table
+    if hasattr(subscription, 'invoices') and subscription.invoices:
+        for invoice_ref in subscription.invoices:
+            try:
+                invoice = frappe.get_doc("Sales Invoice", invoice_ref.invoice)
+                
+                # Get linked payments
+                payments = frappe.get_all(
+                    "Payment Entry Reference",
+                    filters={"reference_name": invoice.name},
+                    fields=["parent"]
+                )
+                
+                payment_entries = []
+                for payment in payments:
+                    try:
+                        payment_doc = frappe.get_doc("Payment Entry", payment.parent)
+                        payment_entries.append({
+                            "payment_entry": payment_doc.name,
+                            "amount": payment_doc.paid_amount,
+                            "date": payment_doc.posting_date,
+                            "mode": payment_doc.mode_of_payment,
+                            "status": payment_doc.status
+                        })
+                    except Exception as e:
+                        frappe.log_error(f"Error fetching payment {payment.parent}: {str(e)}", 
+                                      "Membership Payment History Error")
+                
+                payment_history.append({
+                    "invoice": invoice.name,
+                    "date": invoice.posting_date,
+                    "amount": invoice.grand_total,
+                    "outstanding": invoice.outstanding_amount,
+                    "status": invoice.status,
+                    "payments": payment_entries
+                })
+            except Exception as e:
+                frappe.log_error(f"Error fetching invoice {invoice_ref.invoice}: {str(e)}", 
+                              "Membership Payment History Error")
+                # Add a placeholder entry with basic information
+                payment_history.append({
+                    "invoice": invoice_ref.invoice,
+                    "date": invoice_ref.posting_date if hasattr(invoice_ref, 'posting_date') else None,
+                    "amount": 0,
+                    "outstanding": 0,
+                    "status": "Unknown",
+                    "payments": []
+                })
     
     return payment_history
 
