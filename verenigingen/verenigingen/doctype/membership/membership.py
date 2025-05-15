@@ -79,7 +79,7 @@ class Membership(Document):
             
                 if is_admin:
                     # Show warning but allow cancellation
-                    frappe.msgprint(_("Warning: Membership is being cancelled before the minimum 1-year period. This is allowed for administrators only."), 
+                    frappe.msgprint(_("Warning: Membership is being cancelled before the minimum 1-year period."), 
                                    indicator='yellow', alert=True)
                 else:
                     frappe.throw(_("Cancellation is only allowed after a minimum membership period of 1 year"))
