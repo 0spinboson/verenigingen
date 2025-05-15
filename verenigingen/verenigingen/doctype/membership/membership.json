@@ -131,8 +131,7 @@
    "fieldname": "next_billing_date",
    "fieldtype": "Date",
    "label": "Next Billing Date",
-   "read_only": 1,
-   "description": "Next subscription billing date (may differ from renewal date during first year)"
+   "read_only": 1
   },
   {
    "fieldname": "column_break_11",
