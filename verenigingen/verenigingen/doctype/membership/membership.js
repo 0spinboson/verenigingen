@@ -51,7 +51,6 @@ frappe.ui.form.on('Membership', {
                 frm.set_intro(
                     `<div class="alert alert-warning">
                         <strong>Note:</strong> This membership is in its first year. 
-                        By law, a 1-year minimum commitment period applies.
                         ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''} remaining until the minimum period ends.
                     </div>`,
                     'yellow'
