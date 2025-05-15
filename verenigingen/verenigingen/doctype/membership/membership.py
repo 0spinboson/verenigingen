@@ -225,22 +225,13 @@ class Membership(Document):
         # Cancel linked subscription
         if self.subscription:
             try:
+                # Use the proper subscription cancellation method
                 subscription = frappe.get_doc("Subscription", self.subscription)
                 if subscription.status != "Cancelled":
-                    # Set cancelation date
-                    subscription.db_set('cancelation_date', getdate(self.cancellation_date))
-            
-                    # Use db_set to directly update database and bypass validation
+                    # Call the standard method instead of directly setting fields
                     subscription.flags.ignore_permissions = True
-            
-                    # Now cancel the subscription
-                    try:
-                        subscription.cancel_subscription()
-                    except Exception as e:
-                        # Directly set status to cancelled as a fallback
-                        subscription.db_set('status', 'Cancelled')
-                        frappe.db.commit()
-                        frappe.msgprint(_("Subscription {0} has been cancelled").format(subscription.name))
+                    subscription.cancel_subscription()
+                    frappe.msgprint(_("Subscription {0} has been cancelled").format(subscription.name))
             except Exception as e:
                 error_msg = str(e)
                 frappe.log_error(f"Error cancelling subscription {self.subscription}: {error_msg}", 
@@ -616,13 +607,9 @@ def cancel_membership(membership_name, cancellation_date=None, cancellation_reas
     if cancellation_type == "Immediate" and membership.subscription:
         subscription = frappe.get_doc("Subscription", membership.subscription)
         if subscription.status != "Cancelled":
-            subscription.cancelation_date = cancellation_date
-            try:
-                subscription.cancel_subscription()
-            except Exception as e:
-                # Fallback to direct update
-                subscription.db_set('status', 'Cancelled')
-                frappe.db.commit()
+            # Use the standard method to cancel subscription
+            subscription.flags.ignore_permissions = True
+            subscription.cancel_subscription()
     
     frappe.msgprint(_("Membership {0} has been cancelled").format(membership.name))
     return membership.name
@@ -1024,32 +1011,20 @@ def sync_payment_details_from_subscription(self):
         # Update next billing date
         if subscription.current_invoice_end:
             self.next_billing_date = add_days(subscription.current_invoice_end, 1)
-            self.db_set('next_billing_date', subscription.next_billing_date)
+            self.db_set('next_billing_date', self.next_billing_date)
         
-        # Get invoices from the subscription
-        if not subscription.invoices:
-            return
-            
-        # Calculate unpaid amount and find latest payment date
+        # Get invoices using standard ERPNext methods
         unpaid_amount = 0
         payment_date = None
         
-        for invoice_ref in subscription.invoices:
-            try:
-                # Determine invoice type based on party type
-                invoice_type = invoice_ref.document_type or ("Sales Invoice" if subscription.party_type == "Customer" else "Purchase Invoice")
-                invoice = frappe.get_doc(invoice_type, invoice_ref.invoice)
-                
-                # Add to unpaid amount if unpaid or overdue
-                if invoice.status in ["Unpaid", "Overdue"]:
-                    unpaid_amount += flt(invoice.outstanding_amount)
-                
-                # Get latest payment date
-                if invoice.status == "Paid" and (not payment_date or getdate(invoice.posting_date) > getdate(payment_date)):
-                    payment_date = invoice.posting_date
-            except Exception as e:
-                frappe.log_error(f"Error processing invoice {invoice_ref.invoice}: {str(e)}", 
-                              "Membership Payment Sync Error")
+        # Use the current_invoice property if available
+        current_invoice = subscription.get_current_invoice()
+        
+        if current_invoice:
+            if current_invoice.status in ["Unpaid", "Overdue"]:
+                unpaid_amount += flt(current_invoice.outstanding_amount)
+            elif current_invoice.status == "Paid" and (not payment_date or getdate(current_invoice.posting_date) > getdate(payment_date)):
+                payment_date = current_invoice.posting_date
         
         # Update unpaid amount
         self.unpaid_amount = unpaid_amount
