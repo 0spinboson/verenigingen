@@ -247,6 +247,8 @@ class Membership(Document):
     
     def sync_payment_details_from_subscription(self):
         """Sync payment details from linked subscription"""
+        from frappe.utils import add_days, getdate, flt
+        
         if not self.subscription:
             return
             
