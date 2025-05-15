@@ -403,8 +403,17 @@ class Membership(Document):
             # Calculate end date based on start date and months
             end_date = add_months(subscription.start_date, months_to_add)
             # Subtract one day to make it inclusive
-            subscription.end_date = add_days(end_date, -1)
-            
+
+            frappe.logger().info(
+                f"Subscription plan {subscription_plan.name}: " +
+                f"Interval={subscription_plan.billing_interval}, " +
+                f"Count={subscription_plan.billing_interval_count}"
+            )
+            frappe.logger().info(
+                f"Calculated subscription dates for {self.name}: " +
+                f"Start={subscription.start_date}, End={subscription.end_date}, " +
+                f"Months added={months_to_add}"
+            )
             # Set company
             subscription.company = frappe.defaults.get_global_default('company') or '_Test Company'
             
