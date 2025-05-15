@@ -109,6 +109,14 @@ class SubscriptionHandler:
             frappe.logger().info(f"Successfully created invoice {invoice} for subscription {self.subscription.name} using custom handler")
             return True
             
+        except AttributeError as e:
+            # Handle missing attributes
+            if "'Subscription' object has no attribute 'billing_interval'" in str(e):
+                frappe.log_error(
+                    f"Missing billing_interval for subscription {self.subscription.name}. Please set billing details.",
+                    "Subscription Attribute Error"
+                )
+            raise
         except Exception as e:
             frappe.log_error(f"Error in custom subscription processing for {self.subscription.name}: {str(e)}", 
                           "Custom Subscription Processing Error")
