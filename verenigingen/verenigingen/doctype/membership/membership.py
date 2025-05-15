@@ -222,22 +222,28 @@ class Membership(Document):
         # Update member status
         self.update_member_status()
     
-        # Cancel linked subscription
-        if self.subscription:
-            try:
-                # Use the proper subscription cancellation method
-                subscription = frappe.get_doc("Subscription", self.subscription)
-                if subscription.status != "Cancelled":
-                    # Call the standard method instead of directly setting fields
-                    subscription.flags.ignore_permissions = True
-                    subscription.cancel_subscription()
-                    frappe.msgprint(_("Subscription {0} has been cancelled").format(subscription.name))
-            except Exception as e:
-                error_msg = str(e)
-                frappe.log_error(f"Error cancelling subscription {self.subscription}: {error_msg}", 
-                            "Membership Cancellation Error")
-                frappe.msgprint(_("Error cancelling subscription: {0}").format(error_msg))
-
+        # Store subscription reference before unlinking 
+        subscription_reference = self.subscription
+        
+        # Unlink subscription instead of cancelling it
+        if subscription_reference:
+            # Log the unlinking for tracking
+            frappe.log_error(
+                f"Membership {self.name} cancelled. Unlinked from subscription {subscription_reference}.",
+                "Membership Subscription Unlinked"
+            )
+            
+            # Unlink the subscription
+            self.db_set('subscription', None)
+            
+            # Let the user know about the unlinked subscription
+            frappe.msgprint(
+                _("Subscription {0} has been unlinked from this membership.<br>You may need to manually cancel it if required.").format(
+                    frappe.get_desk_link("Subscription", subscription_reference)
+                ), 
+                indicator='blue', 
+                alert=True
+            )
 
     def update_member_status(self):
         """Update the membership status in the Member document"""
