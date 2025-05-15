@@ -251,19 +251,22 @@ class Membership(Document):
         
         if not self.subscription:
             return
-            
+                
         subscription = frappe.get_doc("Subscription", self.subscription)
         
-        # Update next billing date (use current_invoice_end instead of next_billing_date)
+        # Update next billing date
         if subscription.current_invoice_end:
-            self.next_billing_date = add_days(subscription.current_invoice_end, 1)
+            # First define the variable
+            next_billing_date = add_days(subscription.current_invoice_end, 1)
+            # Then use it to update the object
             self.next_billing_date = next_billing_date
+            # Then use it again for db_set
             self.db_set('next_billing_date', next_billing_date)
         
         # Get invoices from the subscription's child table
-        if not subscription.invoices:
+        if not hasattr(subscription, 'invoices') or not subscription.invoices:
             return
-            
+                
         # Calculate unpaid amount
         unpaid_amount = 0
         payment_date = None
