@@ -14,6 +14,7 @@ def setup_subscription_override():
         
         # Store original methods
         original_process = erpnext_subscription.Subscription.process
+        original_cancel = erpnext_subscription.Subscription.cancel_subscription
         
         # Create wrapped versions that handle the error case
         @wraps(original_process)
@@ -36,8 +37,37 @@ def setup_subscription_override():
                     # For other validation errors, re-raise
                     raise
         
-        # Apply the monkey patch
+        # Override for cancel_subscription method
+        @wraps(original_cancel)
+        def cancel_wrapper(self):
+            try:
+                # First try the standard method
+                return original_cancel(self)
+            except frappe.ValidationError as e:
+                error_msg = str(e)
+                # Check if it's a status change error
+                if "Not allowed to change **Status**" in error_msg:
+                    # Use db_set to bypass validation
+                    self.db_set('status', 'Cancelled')
+                    self.db_set('cancelation_date', frappe.utils.today())
+                    
+                    # Add to doctype log
+                    frappe.get_doc({
+                        "doctype": "Comment",
+                        "comment_type": "Info",
+                        "reference_doctype": self.doctype,
+                        "reference_name": self.name,
+                        "content": "Subscription cancelled via custom override"
+                    }).insert(ignore_permissions=True)
+                    
+                    return True
+                else:
+                    # For other validation errors, re-raise
+                    raise
+        
+        # Apply the monkey patches
         erpnext_subscription.Subscription.process = process_wrapper
+        erpnext_subscription.Subscription.cancel_subscription = cancel_wrapper
         
         # Log successful setup
         frappe.logger().info("Subscription override successfully set up")
