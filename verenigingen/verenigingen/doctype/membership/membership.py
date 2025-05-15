@@ -149,6 +149,10 @@ class Membership(Document):
             self.status = "Active"
                 
     def on_submit(self):
+        import frappe
+        from frappe import _
+        from frappe.utils import getdate, add_days, add_months
+        import json
         # Update member's current membership
         self.update_member_status()
         
