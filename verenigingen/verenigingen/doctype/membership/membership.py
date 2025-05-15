@@ -324,10 +324,6 @@ class Membership(Document):
         frappe.msgprint(_("Renewal Membership {0} created").format(new_membership.name))
         return new_membership.name
 
-
-
-
-
     def create_subscription_from_membership(self, options=None):
         """Create an ERPNext subscription for this membership with additional options"""
         import frappe
@@ -360,6 +356,9 @@ class Membership(Document):
             if not self.subscription_plan:
                 frappe.throw(_("Subscription Plan is required to create a subscription"))
             
+            # Load the subscription plan to get its billing details
+            subscription_plan = frappe.get_doc("Subscription Plan", self.subscription_plan)
+            
             # Create subscription
             subscription = frappe.new_doc("Subscription")
             
@@ -389,12 +388,9 @@ class Membership(Document):
             # Set company
             subscription.company = frappe.defaults.get_global_default('company') or '_Test Company'
             
-            # Determine billing interval
-            membership_type = frappe.get_doc("Membership Type", self.membership_type)
-            
-            # Set billing details - Always use Month for better compatibility
-            subscription.billing_interval = "Month"
-            subscription.billing_interval_count = 1
+            # Set billing details from the subscription plan
+            subscription.billing_interval = subscription_plan.billing_interval
+            subscription.billing_interval_count = subscription_plan.billing_interval_count
             
             # Set options from provided parameters
             subscription.follow_calendar_months = options.get('follow_calendar_months', 0)
@@ -431,16 +427,15 @@ class Membership(Document):
                 self.next_billing_date = add_days(subscription.current_invoice_end, 1)
                 self.db_set('next_billing_date', add_days(subscription.current_invoice_end, 1))
             
-            # Force generate invoice if subscription starts today or in the past
+            # Queue job to process subscription for invoice generation
             if getdate(self.start_date) <= getdate(nowdate()):
-                # Create a background job to process this subscription
+                frappe.flags.in_test = False
                 frappe.enqueue(
                     "erpnext.accounts.doctype.subscription.subscription.process_all",
                     subscription=subscription.name,
-                    posting_date=subscription.current_invoice_start,
-                    now=True
+                    enqueue_after_commit=True
                 )
-                frappe.msgprint(_("Subscription created and invoice generation queued"))
+                frappe.msgprint(_("Subscription created. Invoice will be generated shortly."))
             else:
                 frappe.msgprint(_("Subscription created. Invoice will be generated on {0}").format(
                     frappe.format(subscription.current_invoice_start, {"fieldtype": "Date"})
