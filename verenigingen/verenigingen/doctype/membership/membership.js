@@ -423,6 +423,71 @@ function show_payment_history_dialog(payment_history) {
     d.show();
 }
 
+function show_invoices_dialog(invoices_data) {
+    // Format the invoices data for display
+    let html = '<div class="invoices-list">';
+    
+    // Add table for invoices
+    html += '<table class="table table-bordered table-condensed">';
+    html += '<thead><tr>';
+    html += '<th>' + __("Invoice") + '</th>';
+    html += '<th>' + __("Date") + '</th>';
+    html += '<th>' + __("Due Date") + '</th>';
+    html += '<th>' + __("Amount") + '</th>';
+    html += '<th>' + __("Outstanding") + '</th>';
+    html += '<th>' + __("Status") + '</th>';
+    html += '<th>' + __("Source") + '</th>';
+    html += '</tr></thead>';
+    html += '<tbody>';
+    
+    invoices_data.forEach(function(invoice) {
+        html += '<tr>';
+        html += '<td><a href="/app/sales-invoice/' + invoice.invoice + '">' + invoice.invoice + '</a></td>';
+        html += '<td>' + frappe.datetime.str_to_user(invoice.date) + '</td>';
+        html += '<td>' + (invoice.due_date ? frappe.datetime.str_to_user(invoice.due_date) : '-') + '</td>';
+        html += '<td>' + format_currency(invoice.amount) + '</td>';
+        html += '<td>' + format_currency(invoice.outstanding) + '</td>';
+        html += '<td>' + get_status_indicator(invoice.status) + '</td>';
+        html += '<td>' + (invoice.source || '-') + '</td>';
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table>';
+    
+    // Add summary section
+    let total_amount = 0;
+    let total_outstanding = 0;
+    
+    invoices_data.forEach(function(invoice) {
+        total_amount += flt(invoice.amount);
+        total_outstanding += flt(invoice.outstanding);
+    });
+    
+    html += '<div class="row mt-3">';
+    html += '<div class="col-sm-6">';
+    html += '<p><strong>' + __("Total Invoices") + ':</strong> ' + invoices_data.length + '</p>';
+    html += '</div>';
+    html += '<div class="col-sm-6 text-right">';
+    html += '<p><strong>' + __("Total Amount") + ':</strong> ' + format_currency(total_amount) + '</p>';
+    html += '<p><strong>' + __("Total Outstanding") + ':</strong> ' + format_currency(total_outstanding) + '</p>';
+    html += '</div>';
+    html += '</div>';
+    
+    html += '</div>';
+    
+    // Show dialog with invoices list
+    let d = new frappe.ui.Dialog({
+        title: __('All Invoices for Membership'),
+        fields: [{
+            fieldtype: 'HTML',
+            options: html
+        }],
+        size: 'large'
+    });
+    
+    d.show();
+}
+
 // Helper function to format currency
 function format_currency(value) {
     return frappe.format(value, {fieldtype: 'Currency'});
