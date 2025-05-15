@@ -379,23 +379,31 @@ class Membership(Document):
             subscription.party = member.customer
             subscription.start_date = getdate(self.start_date)
             
-            # Handle end date calculation
-            if self.renewal_date:
-                subscription.end_date = add_days(getdate(self.renewal_date), -1)
-            else:
-                # Calculate based on membership type
-                membership_type = frappe.get_doc("Membership Type", self.membership_type)
-                months_to_add = self.get_months_from_period(
-                    membership_type.subscription_period, 
-                    membership_type.subscription_period_in_months
-                )
+            # Handle end date calculation properly
+            # Calculate based on subscription plan settings
+            billing_interval = subscription_plan.billing_interval
+            billing_interval_count = subscription_plan.billing_interval_count
+            
+            # Calculate months based on billing interval
+            months_to_add = 0
+            if billing_interval == "Month":
+                months_to_add = billing_interval_count
+            elif billing_interval == "Year":
+                months_to_add = billing_interval_count * 12
+            elif billing_interval == "Day":
+                # Convert days to approximate months for initial calculation
+                months_to_add = max(1, int(billing_interval_count / 30))
+            elif billing_interval == "Week":
+                # Convert weeks to approximate months
+                months_to_add = max(1, int(billing_interval_count * 7 / 30))
                 
-                # Ensure minimum 12 months
-                if months_to_add and months_to_add < 12:
-                    months_to_add = 12
-                
-                if months_to_add and months_to_add > 0:
-                    subscription.end_date = add_days(add_months(subscription.start_date, months_to_add), -1)
+            # Ensure minimum 12 months
+            months_to_add = max(12, months_to_add)
+            
+            # Calculate end date based on start date and months
+            end_date = add_months(subscription.start_date, months_to_add)
+            # Subtract one day to make it inclusive
+            subscription.end_date = add_days(end_date, -1)
             
             # Set company
             subscription.company = frappe.defaults.get_global_default('company') or '_Test Company'
@@ -425,11 +433,17 @@ class Membership(Document):
             subscription.flags.ignore_permissions = True
             subscription.insert()
             
+            # Log the subscription details before submission for debugging
+            frappe.logger().info(
+                f"Creating subscription for membership {self.name}. Start: {subscription.start_date}, End: {subscription.end_date}"
+            )
+            
             try:
                 subscription.submit()
             except Exception as e:
                 frappe.log_error(f"Error submitting subscription: {str(e)}", 
                               "Subscription Submit Error")
+                raise
             
             # Link subscription to membership
             self.subscription = subscription.name
