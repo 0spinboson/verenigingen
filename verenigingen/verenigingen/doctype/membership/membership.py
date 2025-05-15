@@ -932,6 +932,101 @@ def verify_signature(data, signature, secret_key=None):
     return hmac.compare_digest(computed_signature, signature)
 
 @frappe.whitelist()
+def show_all_invoices(membership_name):
+    """
+    Get all invoices related to a membership either through subscription
+    or direct links
+    """
+    membership = frappe.get_doc("Membership", membership_name)
+    invoices = []
+    
+    # Get invoices from subscription if available
+    if membership.subscription:
+        try:
+            subscription = frappe.get_doc("Subscription", membership.subscription)
+            
+            # Access invoices from the subscription's child table
+            if hasattr(subscription, 'invoices') and subscription.invoices:
+                for invoice_ref in subscription.invoices:
+                    try:
+                        invoice_doc = frappe.get_doc("Sales Invoice", invoice_ref.invoice)
+                        
+                        invoices.append({
+                            "invoice": invoice_doc.name,
+                            "date": invoice_doc.posting_date,
+                            "amount": invoice_doc.grand_total,
+                            "outstanding": invoice_doc.outstanding_amount,
+                            "status": invoice_doc.status,
+                            "due_date": invoice_doc.due_date,
+                            "source": "Subscription"
+                        })
+                    except Exception as e:
+                        frappe.log_error(f"Error fetching invoice {invoice_ref.invoice}: {str(e)}",
+                                      "Membership Invoices Error")
+        except Exception as e:
+            frappe.log_error(f"Error fetching subscription {membership.subscription}: {str(e)}",
+                          "Membership Invoices Error")
+    
+    # Also look for invoices that might be directly linked to the membership
+    # via custom fields or standard references
+    direct_invoices = frappe.get_all(
+        "Sales Invoice",
+        filters={
+            "docstatus": 1,
+            "membership": membership.name  # Assuming there's a field named "membership" in Sales Invoice
+        },
+        fields=["name", "posting_date", "grand_total", "outstanding_amount", "status", "due_date"]
+    )
+    
+    for inv in direct_invoices:
+        # Check if this invoice is already in our list (to avoid duplicates)
+        if not any(existing["invoice"] == inv.name for existing in invoices):
+            invoices.append({
+                "invoice": inv.name,
+                "date": inv.posting_date,
+                "amount": inv.grand_total,
+                "outstanding": inv.outstanding_amount,
+                "status": inv.status,
+                "due_date": inv.due_date,
+                "source": "Direct Link"
+            })
+    
+    # Look for invoices related to the member (might be relevant for the membership)
+    if membership.member:
+        member = frappe.get_doc("Member", membership.member)
+        
+        # If the member has a linked customer
+        if member.customer:
+            customer_invoices = frappe.get_all(
+                "Sales Invoice",
+                filters={
+                    "docstatus": 1,
+                    "customer": member.customer,
+                    "posting_date": ["between", [membership.start_date, 
+                                                membership.renewal_date or "2099-12-31"]]
+                },
+                fields=["name", "posting_date", "grand_total", "outstanding_amount", "status", "due_date"]
+            )
+            
+            for inv in customer_invoices:
+                # Check if this invoice is already in our list (to avoid duplicates)
+                if not any(existing["invoice"] == inv.name for existing in invoices):
+                    invoices.append({
+                        "invoice": inv.name,
+                        "date": inv.posting_date,
+                        "amount": inv.grand_total,
+                        "outstanding": inv.outstanding_amount,
+                        "status": inv.status,
+                        "due_date": inv.due_date,
+                        "source": "Member/Customer"
+                    })
+    
+    # Sort all invoices by date (newest first)
+    invoices.sort(key=lambda x: x["date"] or "1900-01-01", reverse=True)
+    
+    return invoices
+
+@frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
 def get_member_sepa_mandates(doctype, txt, searchfield, start, page_len, filters):
     """Get SEPA mandates for a specific member"""
