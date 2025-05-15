@@ -379,41 +379,33 @@ class Membership(Document):
             subscription.party = member.customer
             subscription.start_date = getdate(self.start_date)
             
-            # Handle end date calculation properly
-            # Calculate based on subscription plan settings
-            billing_interval = subscription_plan.billing_interval
-            billing_interval_count = subscription_plan.billing_interval_count
-            
-            # Calculate months based on billing interval
-            months_to_add = 0
-            if billing_interval == "Month":
-                months_to_add = billing_interval_count
-            elif billing_interval == "Year":
-                months_to_add = billing_interval_count * 12
-            elif billing_interval == "Day":
-                # Convert days to approximate months for initial calculation
-                months_to_add = max(1, int(billing_interval_count / 30))
-            elif billing_interval == "Week":
-                # Convert weeks to approximate months
-                months_to_add = max(1, int(billing_interval_count * 7 / 30))
+            # Calculate end date based on membership renewal date, if available
+            if self.renewal_date:
+                subscription.end_date = self.renewal_date
+            else:
+                # Calculate based on subscription plan settings
+                billing_interval = subscription_plan.billing_interval
+                billing_interval_count = subscription_plan.billing_interval_count
                 
-            # Ensure minimum 12 months
-            months_to_add = max(12, months_to_add)
+                # Calculate months based on billing interval
+                months_to_add = 0
+                if billing_interval == "Month":
+                    months_to_add = billing_interval_count
+                elif billing_interval == "Year":
+                    months_to_add = billing_interval_count * 12
+                elif billing_interval == "Day":
+                    # Convert days to approximate months for initial calculation
+                    months_to_add = max(1, int(billing_interval_count / 30))
+                elif billing_interval == "Week":
+                    # Convert weeks to approximate months
+                    months_to_add = max(1, int(billing_interval_count * 7 / 30))
+                    
+                # REMOVED: Ensure minimum 12 months
+                # months_to_add = max(12, months_to_add)
+                
+                # Calculate end date based on start date and months
+                subscription.end_date = add_months(subscription.start_date, months_to_add)
             
-            # Calculate end date based on start date and months
-            end_date = add_months(subscription.start_date, months_to_add)
-            # Subtract one day to make it inclusive
-
-            frappe.logger().info(
-                f"Subscription plan {subscription_plan.name}: " +
-                f"Interval={subscription_plan.billing_interval}, " +
-                f"Count={subscription_plan.billing_interval_count}"
-            )
-            frappe.logger().info(
-                f"Calculated subscription dates for {self.name}: " +
-                f"Start={subscription.start_date}, End={subscription.end_date}, " +
-                f"Months added={months_to_add}"
-            )
             # Set company
             subscription.company = frappe.defaults.get_global_default('company') or '_Test Company'
             
