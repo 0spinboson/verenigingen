@@ -4,11 +4,11 @@ import erpnext
 from functools import wraps
 
 def setup_subscription_override():
-    frappe.logger().info("Setting up subscription override")
     """
     Set up monkey patching for ERPNext's Subscription module
     Call this from hooks.py on_app_init event or in a patch
     """
+    frappe.logger().info("Setting up subscription override")
     try:
         # Import the original module
         import erpnext.accounts.doctype.subscription.subscription as erpnext_subscription
@@ -25,30 +25,41 @@ def setup_subscription_override():
                 return original_process(self, *args, **kwargs)
             except frappe.ValidationError as e:
                 error_msg = str(e)
-                # Check if it's the date change error
-                if "Not allowed to change **Current Invoice Start Date**" in error_msg:
+                frappe.logger().info(f"Subscription validation error caught: {error_msg}")
+                
+                # More flexible pattern matching for error detection
+                if "Current Invoice Start Date" in error_msg and "Not allowed to change" in error_msg:
+                    frappe.logger().info(f"Handling Current Invoice Start Date error for subscription {self.name}")
                     # Use our custom handler
                     from verenigingen.subscription_handler import SubscriptionHandler
                     handler = SubscriptionHandler(self.name)
                     if handler.process_subscription():
+                        frappe.logger().info(f"Successfully processed subscription {self.name} with custom handler")
                         return True
-                    # If our handler failed, re-raise the error
+                    # If our handler failed, log and re-raise
+                    frappe.logger().error(f"Custom handler failed for subscription {self.name}")
                     raise
                 else:
                     # For other validation errors, re-raise
                     raise
+            except Exception as e:
+                frappe.logger().error(f"Unexpected error in subscription process override: {str(e)}")
+                raise
         
-        # Override for cancel_subscription method
+        # Apply the monkey patches
+        erpnext_subscription.Subscription.process = process_wrapper
+        
+        # Apply the cancel wrapper similarly with more flexible error matching
         @wraps(original_cancel)
         def cancel_wrapper(self):
             try:
-                # First try the standard method
                 return original_cancel(self)
             except frappe.ValidationError as e:
                 error_msg = str(e)
-                # Check if it's a status change error
-                if "Not allowed to change **Status**" in error_msg:
-                    # Use db_set to bypass validation
+                
+                # More flexible pattern matching
+                if "Status" in error_msg and "Not allowed to change" in error_msg:
+                    frappe.logger().info(f"Handling Status change error for subscription {self.name}")
                     self.db_set('status', 'Cancelled')
                     self.db_set('cancelation_date', frappe.utils.today())
                     
@@ -63,15 +74,15 @@ def setup_subscription_override():
                     
                     return True
                 else:
-                    # For other validation errors, re-raise
                     raise
+            except Exception as e:
+                frappe.logger().error(f"Unexpected error in subscription cancel override: {str(e)}")
+                raise
         
-        # Apply the monkey patches
-        erpnext_subscription.Subscription.process = process_wrapper
         erpnext_subscription.Subscription.cancel_subscription = cancel_wrapper
         
         # Log successful setup
-        frappe.logger().info("Subscription override successfully set up")
+        frappe.logger().info("Subscription override successfully applied")
         return True
         
     except Exception as e:
