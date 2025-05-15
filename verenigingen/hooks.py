@@ -155,7 +155,7 @@ scheduler_events = {
         "verenigingen.verenigingen.doctype.membership.scheduler.process_expired_memberships",
         "verenigingen.verenigingen.doctype.membership.scheduler.send_renewal_reminders",
         "verenigingen.verenigingen.doctype.membership.scheduler.process_auto_renewals",
-        "verenigingen.subscription_handler.process_all_subscriptions"
+        "verenigingen.subscription_handler.process_all_subscriptions",
         "verenigingen.verenigingen.doctype.membership.scheduler.notify_about_orphaned_records"
     ]
 }
