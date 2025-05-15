@@ -4,89 +4,48 @@ import erpnext
 from functools import wraps
 
 def setup_subscription_override():
-    """
-    Set up monkey patching for ERPNext's Subscription module
-    Call this from hooks.py on_app_init event or in a patch
-    """
-    frappe.logger().info("Setting up subscription override")
+    """Fix the Subscription doctype to allow updating date fields after submission"""
+    frappe.logger().info("Setting up subscription date fields to be updatable after submission")
+    
     try:
-        # Import the original module
-        import erpnext.accounts.doctype.subscription.subscription as erpnext_subscription
+        # Get the Subscription doctype
+        subscription_doctype = frappe.get_doc("DocType", "Subscription")
         
-        # Store original methods
-        original_process = erpnext_subscription.Subscription.process
-        original_cancel = erpnext_subscription.Subscription.cancel_subscription
+        # Get the fields we need to modify
+        start_date_field = None
+        end_date_field = None
         
-        # Create wrapped versions that handle the error case
-        @wraps(original_process)
-        def process_wrapper(self, *args, **kwargs):
-            try:
-                # First try the standard method
-                return original_process(self, *args, **kwargs)
-            except frappe.ValidationError as e:
-                error_msg = str(e)
-                frappe.logger().info(f"Subscription validation error caught: {error_msg}")
-                
-                # More flexible pattern matching for error detection
-                if "Current Invoice Start Date" in error_msg and "Not allowed to change" in error_msg:
-                    frappe.logger().info(f"Handling Current Invoice Start Date error for subscription {self.name}")
-                    # Use our custom handler
-                    from verenigingen.subscription_handler import SubscriptionHandler
-                    handler = SubscriptionHandler(self.name)
-                    if handler.process_subscription():
-                        frappe.logger().info(f"Successfully processed subscription {self.name} with custom handler")
-                        return True
-                    # If our handler failed, log and re-raise
-                    frappe.logger().error(f"Custom handler failed for subscription {self.name}")
-                    raise
-                else:
-                    # For other validation errors, re-raise
-                    raise
-            except Exception as e:
-                frappe.logger().error(f"Unexpected error in subscription process override: {str(e)}")
-                raise
+        for field in subscription_doctype.fields:
+            if field.fieldname == "current_invoice_start":
+                start_date_field = field
+            elif field.fieldname == "current_invoice_end":
+                end_date_field = field
         
-        # Apply the monkey patches
-        erpnext_subscription.Subscription.process = process_wrapper
+        # Set allow_on_submit = 1 for these fields
+        modified = False
         
-        # Apply the cancel wrapper similarly with more flexible error matching
-        @wraps(original_cancel)
-        def cancel_wrapper(self):
-            try:
-                return original_cancel(self)
-            except frappe.ValidationError as e:
-                error_msg = str(e)
-                
-                # More flexible pattern matching
-                if "Status" in error_msg and "Not allowed to change" in error_msg:
-                    frappe.logger().info(f"Handling Status change error for subscription {self.name}")
-                    self.db_set('status', 'Cancelled')
-                    self.db_set('cancelation_date', frappe.utils.today())
-                    
-                    # Add to doctype log
-                    frappe.get_doc({
-                        "doctype": "Comment",
-                        "comment_type": "Info",
-                        "reference_doctype": self.doctype,
-                        "reference_name": self.name,
-                        "content": "Subscription cancelled via custom override"
-                    }).insert(ignore_permissions=True)
-                    
-                    return True
-                else:
-                    raise
-            except Exception as e:
-                frappe.logger().error(f"Unexpected error in subscription cancel override: {str(e)}")
-                raise
+        if start_date_field and not start_date_field.allow_on_submit:
+            start_date_field.allow_on_submit = 1
+            modified = True
+            frappe.logger().info("Set current_invoice_start to allow_on_submit=1")
+            
+        if end_date_field and not end_date_field.allow_on_submit:
+            end_date_field.allow_on_submit = 1
+            modified = True
+            frappe.logger().info("Set current_invoice_end to allow_on_submit=1")
         
-        erpnext_subscription.Subscription.cancel_subscription = cancel_wrapper
-        
-        # Log successful setup
-        frappe.logger().info("Subscription override successfully applied")
-        return True
-        
+        # Save the doctype if we modified it
+        if modified:
+            subscription_doctype.save()
+            frappe.clear_cache(doctype="Subscription")
+            frappe.logger().info("Successfully updated Subscription doctype to allow date updates after submission")
+            return True
+        else:
+            frappe.logger().info("Subscription doctype already allows date updates after submission")
+            return True
+            
     except Exception as e:
-        frappe.log_error(f"Error setting up subscription override: {str(e)}", 
+        frappe.log_error(f"Error updating Subscription doctype: {str(e)}", 
                       "Subscription Override Error")
         return False
 
