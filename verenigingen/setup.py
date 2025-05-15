@@ -9,7 +9,22 @@ def make_custom_records():
 		{'doctype': "Party Type", "party_type": "Donor", "account_type": "Receivable"},
 	]
 	make_records(records)
-
+def create_sales_invoice_custom_fields():
+    from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+    
+    custom_fields = {
+        "Sales Invoice": [
+            {
+                "fieldname": "exempt_from_tax",
+                "label": "Exempt from Tax",
+                "fieldtype": "Check",
+                "insert_after": "tax_category",
+                "translatable": 0
+            }
+        ]
+    }
+    
+    create_custom_fields(custom_fields)
 
 def setup_verenigingen():
 	make_custom_records()
