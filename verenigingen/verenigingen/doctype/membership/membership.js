@@ -34,7 +34,30 @@ frappe.ui.form.on('Membership', {
                     });
                 }, __('Actions'));
             }
+        if (frm.doc.docstatus === 1 && frm.doc.start_date) {
+            const startDate = frappe.datetime.str_to_obj(frm.doc.start_date);
+            const today = frappe.datetime.get_today();
+            const todayObj = frappe.datetime.str_to_obj(today);
             
+            // Calculate months difference
+            const monthDiff = (todayObj.getFullYear() - startDate.getFullYear()) * 12 + 
+                             todayObj.getMonth() - startDate.getMonth();
+            
+            if (monthDiff < 12) {
+                // Calculate remaining months
+                const remainingMonths = 12 - monthDiff;
+                
+                // Add warning message
+                frm.set_intro(
+                    `<div class="alert alert-warning">
+                        <strong>Note:</strong> This membership is in its first year. 
+                        By law, a 1-year minimum commitment period applies.
+                        ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''} remaining until the minimum period ends.
+                    </div>`,
+                    'yellow'
+                );
+            }
+        }
             // Add button to cancel membership
             if (frm.doc.status === "Active" || frm.doc.status === "Pending" || frm.doc.status === "Inactive") {
                 // Calculate 1 year after start date to validate cancellation
