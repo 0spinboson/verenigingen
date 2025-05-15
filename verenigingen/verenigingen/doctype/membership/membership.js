@@ -97,7 +97,21 @@ frappe.ui.form.on('Membership', {
                     return false;
                 };
             }
-            
+            frm.add_custom_button(__('View All Invoices'), function() {
+                frappe.call({
+                    method: 'verenigingen.verenigingen.doctype.membership.membership.show_all_invoices',
+                    args: {
+                        'membership_name': frm.doc.name
+                    },
+                    callback: function(r) {
+                        if (r.message && r.message.length) {
+                            show_invoices_dialog(r.message);
+                        } else {
+                            frappe.msgprint(__('No invoices found for this membership.'));
+                        }
+                    }
+                });
+            }, __('Actions'));
             // Add button to add to direct debit batch if payment method is Direct Debit
             if (frm.doc.payment_method === 'Direct Debit' && frm.doc.unpaid_amount > 0) {
                 frm.add_custom_button(__('Add to Direct Debit Batch'), function() {
