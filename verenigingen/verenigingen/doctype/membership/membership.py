@@ -335,6 +335,7 @@ class Membership(Document):
 
 
 
+
     def create_subscription_from_membership(self, options=None):
         """Create an ERPNext subscription for this membership with additional options"""
         import frappe
@@ -500,6 +501,28 @@ class Membership(Document):
             if subscription.current_invoice_end:
                 self.next_billing_date = add_days(subscription.current_invoice_end,1)
                 self.db_set('next_billing_date', add_days(subscription.current_invoice_end,1))
+            
+            # NEW CODE: Force process the subscription to generate the first invoice immediately
+            try:
+                # Process with the start date as posting date to trigger invoice generation
+                if subscription.generate_invoice_at == "Beginning of the current subscription period":
+                    subscription.process(posting_date=subscription.start_date)
+                elif subscription.generate_invoice_at == "End of the current subscription period":
+                    # For end of period, we don't need to do anything as this will be processed later
+                    pass
+                else:
+                    # For other cases, use force_fetch_subscription_updates
+                    subscription.force_fetch_subscription_updates()
+                
+                # Reload to get updated invoice information
+                subscription.reload()
+                
+                # Log success message
+                frappe.logger().info(f"Processed subscription {subscription.name} to generate initial invoice")
+            except Exception as e:
+                frappe.log_error(f"Error processing subscription for initial invoice: {str(e)}", 
+                              "Subscription Initial Invoice Error")
+                # Don't throw error, continue as the subscription is already created
             
             frappe.msgprint(_("Subscription {0} created successfully").format(subscription.name))
             return subscription.name
