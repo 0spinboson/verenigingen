@@ -336,6 +336,7 @@ class Membership(Document):
         frappe.msgprint(_("Renewal Membership {0} created").format(new_membership.name))
         return new_membership.name
 
+
     def create_subscription_from_membership(self, options=None):
         """Create an ERPNext subscription for this membership with additional options"""
         import frappe
@@ -379,32 +380,8 @@ class Membership(Document):
             subscription.party = member.customer
             subscription.start_date = getdate(self.start_date)
             
-            # Calculate end date based on membership renewal date, if available
-            if self.renewal_date:
-                subscription.end_date = self.renewal_date
-            else:
-                # Calculate based on subscription plan settings
-                billing_interval = subscription_plan.billing_interval
-                billing_interval_count = subscription_plan.billing_interval_count
-                
-                # Calculate months based on billing interval
-                months_to_add = 0
-                if billing_interval == "Month":
-                    months_to_add = billing_interval_count
-                elif billing_interval == "Year":
-                    months_to_add = billing_interval_count * 12
-                elif billing_interval == "Day":
-                    # Convert days to approximate months for initial calculation
-                    months_to_add = max(1, int(billing_interval_count / 30))
-                elif billing_interval == "Week":
-                    # Convert weeks to approximate months
-                    months_to_add = max(1, int(billing_interval_count * 7 / 30))
-                    
-                # REMOVED: Ensure minimum 12 months
-                # months_to_add = max(12, months_to_add)
-                
-                # Calculate end date based on start date and months
-                subscription.end_date = add_months(subscription.start_date, months_to_add)
+            # IMPORTANT: Don't set end_date to match manually created subscriptions
+            # This is the key change - we're removing the end date calculation and assignment
             
             # Set company
             subscription.company = frappe.defaults.get_global_default('company') or '_Test Company'
@@ -436,7 +413,7 @@ class Membership(Document):
             
             # Log the subscription details before submission for debugging
             frappe.logger().info(
-                f"Creating subscription for membership {self.name}. Start: {subscription.start_date}, End: {subscription.end_date}"
+                f"Creating subscription for membership {self.name}. Start: {subscription.start_date}"
             )
             
             try:
