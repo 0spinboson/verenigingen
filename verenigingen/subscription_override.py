@@ -4,6 +4,7 @@ import erpnext
 from functools import wraps
 
 def setup_subscription_override():
+    frappe.logger().info("Setting up subscription override")
     """
     Set up monkey patching for ERPNext's Subscription module
     Call this from hooks.py on_app_init event or in a patch
