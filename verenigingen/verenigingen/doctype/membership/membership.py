@@ -999,55 +999,6 @@ def get_member_sepa_mandates(doctype, txt, searchfield, start, page_len, filters
         ORDER BY sm.creation DESC
     """, (member, "%" + txt + "%", "%" + txt + "%"))
 
-def sync_payment_details_from_subscription(self):
-    """Sync payment details from linked subscription"""
-    import frappe
-    from frappe import _
-    from frappe.utils import getdate, add_days, flt
-    
-    if not self.subscription:
-        return
-        
-    try:
-        subscription = frappe.get_doc("Subscription", self.subscription)
-        
-        # Update next billing date
-        if subscription.current_invoice_end:
-            next_billing_date = add_days(subscription.current_invoice_end, 1)
-            self.next_billing_date = next_billing_date
-            self.db_set('next_billing_date', next_billing_date)
-        
-        # Get invoices using standard ERPNext methods
-        unpaid_amount = 0
-        payment_date = None
-        
-        # Use the current_invoice property if available
-        current_invoice = subscription.get_current_invoice()
-        
-        if current_invoice:
-            if current_invoice.status in ["Unpaid", "Overdue"]:
-                unpaid_amount += flt(current_invoice.outstanding_amount)
-            elif current_invoice.status == "Paid" and (not payment_date or getdate(current_invoice.posting_date) > getdate(payment_date)):
-                payment_date = current_invoice.posting_date
-        
-        # Update unpaid amount
-        self.unpaid_amount = unpaid_amount
-        self.db_set('unpaid_amount', unpaid_amount)
-        
-        # Update last payment date if found
-        if payment_date:
-            self.last_payment_date = payment_date
-            self.db_set('last_payment_date', payment_date)
-        
-        # Update status based on changes
-        self.set_status()
-        self.db_set('status', self.status)
-        
-        frappe.logger().info(f"Synced payment details for membership {self.name} from subscription {self.subscription}")
-    except Exception as e:
-        frappe.log_error(f"Error syncing payment details for membership {self.name}: {str(e)}", 
-                      "Membership Sync Error")
-
 def update_membership_from_subscription(doc, method=None):
     """
     Handler for when a subscription is updated
