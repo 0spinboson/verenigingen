@@ -288,7 +288,7 @@ class Member(Document):
             for membership in memberships:
                 if membership.payment_method == "Direct Debit":
                     # Check if member has SEPA mandate fields
-                    if not hasattr(self, 'sepa_mandate') or not self.sepa_mandate:
+                    if not hasattr(self, 'default_sepa_mandate') or not self.default_sepa_mandate:
                         frappe.msgprint(
                             _("Member {0} has a membership with Direct Debit payment method but no active SEPA mandate.")
                             .format(self.name),
@@ -679,17 +679,17 @@ class Member(Document):
         """Validate bank details if payment method is Direct Debit"""
         if self.payment_method == "Direct Debit":
             # Get bank details from SEPA mandate or member
-            if self.sepa_mandate:
-                mandate = frappe.get_doc("SEPA Mandate", self.sepa_mandate)
+            if self.default_sepa_mandate:
+                mandate = frappe.get_doc("SEPA Mandate", self.default_sepa_mandate)
                 self.iban = mandate.iban
                 self.bic = mandate.bic
                 self.bank_account_name = mandate.account_holder_name
-            elif self.member:
+            elif hasattr(self, 'member') and self.member:
                 # Try to get from member's default SEPA mandate
                 member = frappe.get_doc("Member", self.member)
                 if member.default_sepa_mandate:
                     mandate = frappe.get_doc("SEPA Mandate", member.default_sepa_mandate)
-                    self.sepa_mandate = mandate.name
+                    self.default_sepa_mandate = mandate.name
                     self.iban = mandate.iban
                     self.bic = mandate.bic
                     self.bank_account_name = mandate.account_holder_name
