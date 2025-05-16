@@ -1,5 +1,8 @@
 frappe.ui.form.on('Member', {
     refresh: function(frm) {
+        if (frm.fields_dict.payment_history) {
+            $(frm.fields_dict.payment_history.grid.wrapper).addClass('payment-history-grid');
+        }
         // Add buttons to create customer and user
         if (frm.doc.docstatus === 1) {
             // Add payment processing button
@@ -18,7 +21,7 @@ frappe.ui.form.on('Member', {
                     mark_as_paid(frm);
                 }, __('Actions'));
             }
-        }            
+        }
         if (!frm.doc.customer) {
             frm.add_custom_button(__('Create Customer'), function() {
                 frm.call({
