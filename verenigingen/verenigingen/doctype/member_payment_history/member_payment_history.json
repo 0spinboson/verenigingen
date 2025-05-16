@@ -54,7 +54,7 @@
    "fieldname": "posting_date",
    "fieldtype": "Date",
    "in_list_view": 1,
-   "label": "Date",
+   "label": "Invoice Date",
    "read_only": 1
   },
   {
@@ -70,6 +70,7 @@
   {
    "fieldname": "transaction_type",
    "fieldtype": "Data",
+   "in_list_view": 1,
    "label": "Type",
    "read_only": 1
   },
@@ -101,7 +102,6 @@
   {
    "fieldname": "outstanding_amount",
    "fieldtype": "Currency",
-   "in_list_view": 1,
    "label": "Outstanding",
    "options": "Company:company:default_currency",
    "read_only": 1
@@ -109,7 +109,6 @@
   {
    "fieldname": "status",
    "fieldtype": "Data",
-   "in_list_view": 1,
    "label": "Status",
    "read_only": 1
   },
@@ -129,6 +128,7 @@
   {
    "fieldname": "payment_date",
    "fieldtype": "Date",
+   "in_list_view": 1,
    "label": "Payment Date",
    "read_only": 1
   },
