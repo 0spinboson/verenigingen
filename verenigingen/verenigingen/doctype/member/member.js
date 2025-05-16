@@ -379,7 +379,7 @@ frappe.ui.form.on('Member', {
         
         frm.set_value('full_name', full_name);
     },
-    ppayment_method: function(frm) {
+    payment_method: function(frm) {
         // Show/hide bank details based on payment method
         const is_direct_debit = frm.doc.payment_method === 'Direct Debit';
         frm.toggle_display(['bank_details_section'], is_direct_debit);
@@ -433,29 +433,6 @@ frappe.ui.form.on('Member', {
             
             if (!hasMandateWithCurrentIBAN) {
                 promptCreateMandate(frm);
-            }
-        }
-    }
-    default_sepa_mandate: function(frm) {
-        // When default mandate is changed, update the table
-        if (frm.doc.default_sepa_mandate) {
-            let found = false;
-            
-            frm.doc.sepa_mandates.forEach(function(mandate) {
-                if (mandate.sepa_mandate === frm.doc.default_sepa_mandate) {
-                    frappe.model.set_value(mandate.doctype, mandate.name, 'is_default', 1);
-                    found = true;
-                } else if (mandate.is_default) {
-                    frappe.model.set_value(mandate.doctype, mandate.name, 'is_default', 0);
-                }
-            });
-            
-            // If the selected default mandate is not in the table, add it
-            if (!found && frm.doc.default_sepa_mandate) {
-                const new_row = frm.add_child('sepa_mandates');
-                new_row.sepa_mandate = frm.doc.default_sepa_mandate;
-                new_row.is_default = 1;
-                frm.refresh_field('sepa_mandates');
             }
         }
     }
