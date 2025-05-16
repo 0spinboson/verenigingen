@@ -8,6 +8,9 @@ frappe.ui.form.on('Member', {
                     process_payment(frm);
                 }, __('Actions'));
             }
+            frm.fields_dict.payment_history.grid.grid_rows.forEach(row => {
+                format_payment_history_row(row);
+            });
             
             // Add mark as paid button
             if (frm.doc.payment_status !== 'Paid') {
@@ -38,9 +41,10 @@ frappe.ui.form.on('Member', {
             }, __('View'));
     
             // Add the new button in the same condition block
-            frm.add_custom_button(__('Refresh Payment History'), function() {
+
+            frm.add_custom_button(__('Refresh Financial History'), function() {
                 frappe.show_alert({
-                    message: __("Refreshing payment history..."),
+                    message: __("Refreshing financial history..."),
                     indicator: 'blue'
                 });
                 
@@ -50,46 +54,46 @@ frappe.ui.form.on('Member', {
                     callback: function(r) {
                         frm.refresh_field("payment_history");
                         
-                        // Count invoices by status
-                        let invoices = frm.doc.payment_history || [];
+                        // Count invoices and payments by status
+                        let records = frm.doc.payment_history || [];
                         let stats = {
-                            total: invoices.length,
+                            total: records.length,
+                            invoices: 0,
                             paid: 0,
                             unpaid: 0,
                             overdue: 0,
+                            donations: 0,
                             total_amount: 0,
                             outstanding: 0
                         };
                         
-                        invoices.forEach(invoice => {
-                            stats.total_amount += flt(invoice.amount);
-                            stats.outstanding += flt(invoice.outstanding_amount);
+                        records.forEach(record => {
+                            stats.total_amount += flt(record.amount || 0);
+                            stats.outstanding += flt(record.outstanding_amount || 0);
                             
-                            if (invoice.invoice_status === "Paid") stats.paid++;
-                            else if (invoice.invoice_status === "Overdue") stats.overdue++;
-                            else if (["Unpaid", "Submitted", "Draft"].includes(invoice.invoice_status)) stats.unpaid++;
+                            if (record.invoice_type === "Donation") {
+                                stats.donations++;
+                            } else {
+                                stats.invoices++;
+                                if (record.payment_status === "Paid") stats.paid++;
+                                else if (record.payment_status === "Overdue") stats.overdue++;
+                                else if (["Unpaid", "Partially Paid"].includes(record.payment_status)) stats.unpaid++;
+                            }
                         });
                         
                         // Show a more detailed message
-                        let message = `<div>Payment history refreshed: 
-                            ${stats.total} invoices (${stats.paid} paid, ${stats.unpaid} unpaid, ${stats.overdue} overdue)<br>
+                        let message = `<div>Financial history refreshed:<br>
+                            ${stats.invoices} invoices (${stats.paid} paid, ${stats.unpaid} unpaid, ${stats.overdue} overdue)<br>
+                            ${stats.donations} unreconciled payments/donations<br>
                             Total: ${format_currency(stats.total_amount)}, Outstanding: ${format_currency(stats.outstanding)}</div>`;
                             
                         frappe.show_alert({
                             message: message,
                             indicator: stats.outstanding > 0 ? 'orange' : 'green'
-                        }, 7);
+                        }, 10);
                     }
                 });
             }, __('Actions'));
-            
-            // Add a button to view all invoices
-            frm.add_custom_button(__('View All Invoices'), function() {
-                frappe.route_options = {
-                    "customer": frm.doc.customer
-                };
-                frappe.set_route("List", "Sales Invoice");
-            }, __('View'));
         }
         
         // Add button to view chapter if member has a primary chapter
@@ -543,4 +547,94 @@ function mark_as_paid(frm) {
     });
     
     dialog.show();
+}
+frappe.ui.form.on('Member Payment History', {
+    payment_history_add: function(frm, cdt, cdn) {
+        // Format new rows as they're added
+        let grid_row = frm.fields_dict.payment_history.grid.grid_rows_by_docname[cdn];
+        format_payment_history_row(grid_row);
+    }
+});
+function format_payment_history_row(grid_row) {
+    if (!grid_row || !grid_row.doc) return;
+    
+    setTimeout(() => {
+        try {
+            // Get all cells in the row
+            const cells = grid_row.row.find('.grid-row-column');
+            if (!cells.length) return;
+            
+            // Add special styling based on record type
+            const is_donation = grid_row.doc.invoice_type === "Donation";
+            
+            if (is_donation) {
+                // Style donation rows differently
+                $(grid_row.row).addClass('donation-row');
+                $(grid_row.row).css({
+                    'background-color': '#fcf8e3',  // Light yellow background
+                    'font-style': 'italic'
+                });
+            }
+            
+            // Format invoice status with color
+            const status = grid_row.doc.status;
+            let status_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'status');
+            if (status_idx >= 0 && cells[status_idx] && status && status !== 'N/A') {
+                let status_color = 'gray';
+                if (status === 'Paid') status_color = 'green';
+                else if (status === 'Overdue') status_color = 'red';
+                else if (status === 'Unpaid') status_color = 'orange';
+                
+                const status_html = `<span class="indicator ${status_color}">${status || ''}</span>`;
+                $(cells[status_idx]).html(status_html);
+            }
+            
+            // Format payment status with color
+            const payment_status = grid_row.doc.payment_status;
+            let payment_status_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'payment_status');
+            if (payment_status_idx >= 0 && cells[payment_status_idx]) {
+                let status_color = 'gray';
+                if (payment_status === 'Paid') status_color = 'green';
+                else if (payment_status === 'Overdue') status_color = 'red';
+                else if (payment_status === 'Unpaid') status_color = 'orange';
+                else if (payment_status === 'Partially Paid') status_color = 'blue';
+                
+                const status_html = `<span class="indicator ${status_color}">${payment_status || ''}</span>`;
+                $(cells[payment_status_idx]).html(status_html);
+            }
+            
+            // Format invoice type with appropriate icon
+            const invoice_type = grid_row.doc.invoice_type;
+            let type_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'invoice_type');
+            if (type_idx >= 0 && cells[type_idx]) {
+                let type_icon = 'file-text';
+                if (invoice_type === 'Membership') type_icon = 'users';
+                else if (invoice_type === 'Donation') type_icon = 'heart';
+                
+                const type_html = `<span>
+                    <i class="fa fa-${type_icon} text-muted" style="margin-right: 5px;"></i>
+                    ${invoice_type || ''}
+                </span>`;
+                $(cells[type_idx]).html(type_html);
+            }
+            
+            // Format mandate status
+            if (grid_row.doc.has_mandate) {
+                const mandate_status = grid_row.doc.mandate_status;
+                let mandate_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'mandate_status');
+                if (mandate_idx >= 0 && cells[mandate_idx]) {
+                    let mandate_color = 'gray';
+                    if (mandate_status === 'Active') mandate_color = 'green';
+                    else if (mandate_status === 'Expired' || mandate_status === 'Cancelled') mandate_color = 'red';
+                    else if (mandate_status === 'Suspended') mandate_color = 'orange';
+                    
+                    const mandate_html = `<span class="indicator ${mandate_color}">${mandate_status || ''}</span>`;
+                    $(cells[mandate_idx]).html(mandate_html);
+                }
+            }
+            
+        } catch (e) {
+            console.error('Error formatting payment history row:', e);
+        }
+    }, 100);
 }
