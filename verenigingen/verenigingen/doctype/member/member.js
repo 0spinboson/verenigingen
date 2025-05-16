@@ -39,15 +39,57 @@ frappe.ui.form.on('Member', {
     
             // Add the new button in the same condition block
             frm.add_custom_button(__('Refresh Payment History'), function() {
+                frappe.show_alert({
+                    message: __("Refreshing payment history..."),
+                    indicator: 'blue'
+                });
+                
                 frappe.call({
                     method: "load_payment_history",
                     doc: frm.doc,
-                    callback: function() {
+                    callback: function(r) {
                         frm.refresh_field("payment_history");
-                        frappe.show_alert(__("Payment history refreshed"));
+                        
+                        // Count invoices by status
+                        let invoices = frm.doc.payment_history || [];
+                        let stats = {
+                            total: invoices.length,
+                            paid: 0,
+                            unpaid: 0,
+                            overdue: 0,
+                            total_amount: 0,
+                            outstanding: 0
+                        };
+                        
+                        invoices.forEach(invoice => {
+                            stats.total_amount += flt(invoice.amount);
+                            stats.outstanding += flt(invoice.outstanding_amount);
+                            
+                            if (invoice.invoice_status === "Paid") stats.paid++;
+                            else if (invoice.invoice_status === "Overdue") stats.overdue++;
+                            else if (["Unpaid", "Submitted", "Draft"].includes(invoice.invoice_status)) stats.unpaid++;
+                        });
+                        
+                        // Show a more detailed message
+                        let message = `<div>Payment history refreshed: 
+                            ${stats.total} invoices (${stats.paid} paid, ${stats.unpaid} unpaid, ${stats.overdue} overdue)<br>
+                            Total: ${format_currency(stats.total_amount)}, Outstanding: ${format_currency(stats.outstanding)}</div>`;
+                            
+                        frappe.show_alert({
+                            message: message,
+                            indicator: stats.outstanding > 0 ? 'orange' : 'green'
+                        }, 7);
                     }
                 });
             }, __('Actions'));
+            
+            // Add a button to view all invoices
+            frm.add_custom_button(__('View All Invoices'), function() {
+                frappe.route_options = {
+                    "customer": frm.doc.customer
+                };
+                frappe.set_route("List", "Sales Invoice");
+            }, __('View'));
         }
         
         // Add button to view chapter if member has a primary chapter
