@@ -428,35 +428,6 @@ class Member(Document):
         
         return frappe.db.exists("SEPA Mandate", filters)
     
-    @frappe.whitelist()
-    def create_sepa_mandate(self):
-        """Create a new SEPA mandate for this member"""
-        mandate = frappe.new_doc("SEPA Mandate")
-        mandate.member = self.name
-        mandate.member_name = self.full_name
-        mandate.account_holder_name = self.full_name
-        mandate.sign_date = frappe.utils.today()
-        
-        # Set as default if no other mandate exists
-        if not self.default_sepa_mandate:
-            mandate.used_for_memberships = 1
-            mandate.used_for_donations = 1
-        
-        mandate.insert()
-        
-        # Add to member's mandate links
-        self.append("sepa_mandates", {
-            "sepa_mandate": mandate.name,
-            "is_default": not bool(self.default_sepa_mandate)
-        })
-        
-        if not self.default_sepa_mandate:
-            self.default_sepa_mandate = mandate.name
-        
-        self.save()
-        
-        return mandate.name
-        
     def on_trash(self):
         # Check if member has any active memberships
         active_memberships = frappe.get_all("Membership", 
@@ -1052,3 +1023,81 @@ def create_donor_from_member(member):
     
     frappe.msgprint(_("Donor record {0} created from member").format(donor.name))
     return donor.name
+
+@frappe.whitelist()
+def create_sepa_mandate_from_bank_details(member, iban, bic=None, account_holder_name=None, mandate_type="RCUR", sign_date=None, used_for_memberships=1, used_for_donations=0):
+    """
+    Create a new SEPA mandate based on bank details already entered
+    """
+    if not member or not iban:
+        frappe.throw(_("Member and IBAN are required"))
+    
+    if not sign_date:
+        sign_date = frappe.utils.today()
+    
+    # Get member details if not provided
+    member_doc = frappe.get_doc("Member", member)
+    if not account_holder_name:
+        account_holder_name = member_doc.full_name
+    
+    # Create mandate ID with timestamp to ensure uniqueness
+    timestamp = frappe.utils.now().replace(' ', '').replace('-', '').replace(':', '')[:14]
+    mandate_id = f"M-{member_doc.member_id}-{timestamp}"
+    
+    # Create new mandate
+    mandate = frappe.new_doc("SEPA Mandate")
+    mandate.mandate_id = mandate_id
+    mandate.member = member
+    mandate.member_name = member_doc.full_name
+    mandate.account_holder_name = account_holder_name
+    mandate.iban = iban
+    if bic:
+        mandate.bic = bic
+    mandate.sign_date = sign_date
+    mandate.mandate_type = mandate_type
+    
+    # Set usage flags
+    mandate.used_for_memberships = 1 if used_for_memberships else 0
+    mandate.used_for_donations = 1 if used_for_donations else 0
+    
+    # Set status to active
+    mandate.status = "Active"
+    mandate.is_active = 1
+    
+    mandate.insert(ignore_permissions=True)
+    
+    # Add to member's mandate links
+    member_doc.append("sepa_mandates", {
+        "sepa_mandate": mandate.name,
+        "is_current": 1
+    })
+    
+    # Save the member document
+    member_doc.save(ignore_permissions=True)
+    
+    return mandate.name
+
+@frappe.whitelist()
+def create_sepa_mandate(self):
+    """Create a new SEPA mandate for this member"""
+    mandate = frappe.new_doc("SEPA Mandate")
+    mandate.member = self.name
+    mandate.member_name = self.full_name
+    mandate.account_holder_name = self.full_name
+    mandate.sign_date = frappe.utils.today()
+    
+    # Set default usage
+    mandate.used_for_memberships = 1
+    mandate.used_for_donations = 1
+    
+    mandate.insert()
+    
+    # Add to member's mandate links
+    self.append("sepa_mandates", {
+        "sepa_mandate": mandate.name,
+        "is_current": 0  # Not current by default - user will need to fill in bank details
+    })
+    
+    self.save()
+    
+    return mandate.name
