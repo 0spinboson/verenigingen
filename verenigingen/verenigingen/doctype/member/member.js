@@ -363,22 +363,63 @@ frappe.ui.form.on('Member', {
         
         frm.set_value('full_name', full_name);
     },
-    payment_method: function(frm) {
+    ppayment_method: function(frm) {
         // Show/hide bank details based on payment method
         const is_direct_debit = frm.doc.payment_method === 'Direct Debit';
         frm.toggle_display(['bank_details_section'], is_direct_debit);
-        frm.toggle_reqd(['default_sepa_mandate'], is_direct_debit);
-        
-        // Auto-populate bank details from SEPA mandate
-        if (is_direct_debit && frm.doc.default_sepa_mandate) {
-            frappe.db.get_doc('SEPA Mandate', frm.doc.default_sepa_mandate)
-                .then(mandate => {
-                    frm.set_value('iban', mandate.iban);
-                    frm.set_value('bic', mandate.bic);
-                    frm.set_value('bank_account_name', mandate.account_holder_name);
+    },
+    iban: function(frm) {
+        // When IBAN changes, check if we need to create a new SEPA mandate
+        if (frm.doc.payment_method === 'Direct Debit' && frm.doc.iban) {
+            // First, format the IBAN
+            const formattedIban = formatIBAN(frm.doc.iban);
+            if (formattedIban !== frm.doc.iban) {
+                frm.set_value('iban', formattedIban);
+                return; // This will trigger this function again with the formatted IBAN
+            }
+            
+            // Check if we have any active mandate with this IBAN
+            let existingMandateWithSameIBAN = false;
+            if (frm.doc.sepa_mandates && frm.doc.sepa_mandates.length) {
+                existingMandateWithSameIBAN = frm.doc.sepa_mandates.some(mandate => {
+                    return get_doc_mandate_iban(mandate.sepa_mandate) === frm.doc.iban && mandate.status === 'Active';
                 });
+            }
+            
+            // If no existing mandate with this IBAN, prompt to create new one
+            if (!existingMandateWithSameIBAN) {
+                // Deactivate any current mandates
+                frm.doc.sepa_mandates.forEach(function(mandate) {
+                    if (mandate.is_current && mandate.status === 'Active') {
+                        frappe.db.set_value('SEPA Mandate', mandate.sepa_mandate, {
+                            'status': 'Suspended',
+                            'is_active': 0
+                        });
+                        frappe.model.set_value(mandate.doctype, mandate.name, 'status', 'Suspended');
+                        frappe.model.set_value(mandate.doctype, mandate.name, 'is_current', 0);
+                    }
+                });
+                
+                // Prompt to create new mandate
+                promptCreateMandate(frm);
+            }
         }
     },
+    bank_account_name: function(frm) {
+        // Update account holder name when bank account name changes
+        if (frm.doc.payment_method === 'Direct Debit' && frm.doc.bank_account_name && frm.doc.iban) {
+            // Check if we need to create a mandate
+            const hasMandateWithCurrentIBAN = frm.doc.sepa_mandates && frm.doc.sepa_mandates.some(mandate => {
+                return get_doc_mandate_iban(mandate.sepa_mandate) === frm.doc.iban && 
+                       mandate.status === 'Active' && 
+                       mandate.is_current;
+            });
+            
+            if (!hasMandateWithCurrentIBAN) {
+                promptCreateMandate(frm);
+            }
+        }
+    }
     default_sepa_mandate: function(frm) {
         // When default mandate is changed, update the table
         if (frm.doc.default_sepa_mandate) {
