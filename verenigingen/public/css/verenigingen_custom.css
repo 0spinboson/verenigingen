@@ -1,0 +1,48 @@
+/* Add this CSS to your custom app's CSS file or include it in a custom script */
+
+/* Style for the payment history grid */
+.payment-history-grid .grid-row {
+    position: relative;
+}
+
+/* Style for donation/unreconciled payment rows */
+.payment-history-grid .donation-row {
+    background-color: #fcf8e3 !important; /* Light yellow background */
+    font-style: italic;
+}
+
+/* Add a small badge to indicate the record type */
+.payment-history-grid .grid-row::before {
+    position: absolute;
+    left: 0;
+    top: 0;
+    content: "";
+    width: 3px;
+    height: 100%;
+}
+
+/* Regular invoice */
+.payment-history-grid .grid-row[data-type="Regular"]::before {
+    background-color: #5e64ff; /* Blue */
+}
+
+/* Membership invoice */
+.payment-history-grid .grid-row[data-type="Membership"]::before {
+    background-color: #7cd6fd; /* Light blue */
+}
+
+/* Donation/unreconciled payment */
+.payment-history-grid .grid-row[data-type="Donation"]::before {
+    background-color: #ff5858; /* Red */
+}
+
+/* Highlight overdue rows */
+.payment-history-grid .grid-row[data-status="Overdue"] {
+    background-color: #fff8f7 !important; /* Light red background */
+}
+
+/* Full-width notes */
+.payment-history-grid [data-fieldname="notes"] {
+    white-space: normal !important;
+    max-width: none !important;
+}
