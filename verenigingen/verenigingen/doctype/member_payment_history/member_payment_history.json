@@ -11,9 +11,9 @@
   "posting_date",
   "due_date",
   "column_break_i1",
-  "invoice_type",
-  "membership",
-  "subscription",
+  "transaction_type",
+  "reference_doctype",
+  "reference_name", 
   "column_break_i2",
   "amount",
   "outstanding_amount",
@@ -68,23 +68,22 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "invoice_type",
+   "fieldname": "transaction_type",
    "fieldtype": "Data",
    "label": "Type",
    "read_only": 1
   },
   {
-   "fieldname": "membership",
-   "fieldtype": "Link",
-   "label": "Membership",
-   "options": "Membership",
+   "fieldname": "reference_doctype",
+   "fieldtype": "Data",
+   "label": "Reference DocType",
    "read_only": 1
   },
   {
-   "fieldname": "subscription",
-   "fieldtype": "Link",
-   "label": "Subscription",
-   "options": "Subscription",
+   "fieldname": "reference_name",
+   "fieldtype": "Dynamic Link",
+   "label": "Reference Name",
+   "options": "reference_doctype",
    "read_only": 1
   },
   {
