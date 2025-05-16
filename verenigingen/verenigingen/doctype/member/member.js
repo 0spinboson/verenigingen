@@ -367,11 +367,11 @@ frappe.ui.form.on('Member', {
         // Show/hide bank details based on payment method
         const is_direct_debit = frm.doc.payment_method === 'Direct Debit';
         frm.toggle_display(['bank_details_section'], is_direct_debit);
-        frm.toggle_reqd(['sepa_mandate'], is_direct_debit);
+        frm.toggle_reqd(['default_sepa_mandate'], is_direct_debit);
         
         // Auto-populate bank details from SEPA mandate
-        if (is_direct_debit && frm.doc.sepa_mandate) {
-            frappe.db.get_doc('SEPA Mandate', frm.doc.sepa_mandate)
+        if (is_direct_debit && frm.doc.default_sepa_mandate) {
+            frappe.db.get_doc('SEPA Mandate', frm.doc.default_sepa_mandate)
                 .then(mandate => {
                     frm.set_value('iban', mandate.iban);
                     frm.set_value('bic', mandate.bic);
