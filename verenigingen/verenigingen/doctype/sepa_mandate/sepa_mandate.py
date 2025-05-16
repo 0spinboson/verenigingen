@@ -25,7 +25,7 @@ function promptCreateMandate(frm) {
     );
 }
 
-// Function to select mandate type (one-off or continuous)
+# Function to select mandate type (one-off or continuous)
 function selectMandateType(frm) {
     const d = new frappe.ui.Dialog({
         title: __('Create SEPA Mandate'),
@@ -76,7 +76,7 @@ function selectMandateType(frm) {
     d.show();
 }
 
-// Function to create SEPA mandate
+# Function to create SEPA mandate
 function createSEPAMandate(frm, values) {
     frappe.call({
         method: 'verenigingen.verenigingen.doctype.member.member.create_sepa_mandate_from_bank_details',
@@ -117,7 +117,7 @@ function createSEPAMandate(frm, values) {
     });
 }
 
-// Function to format IBAN
+# Function to format IBAN
 function formatIBAN(iban) {
     if (!iban) return '';
     
@@ -128,7 +128,7 @@ function formatIBAN(iban) {
     return iban.replace(/(.{4})/g, '$1 ').trim();
 }
 
-// Function to get IBAN from a mandate
+# Function to get IBAN from a mandate
 function get_doc_mandate_iban(mandate_name) {
     // This is an async operation but we just want a simple check,
     // so we'll use the result when it comes back
