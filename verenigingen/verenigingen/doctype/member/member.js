@@ -35,7 +35,23 @@ frappe.ui.form.on('Member', {
                 });
             }, __('Actions'));
         }
-        
+        if (frm.fields_dict.payment_history) {
+            // Remove 'No.' column from the payment history grid
+            setTimeout(function() {
+                const gridWrapper = $(frm.fields_dict.payment_history.grid.wrapper);
+                
+                // Find and hide the idx column
+                gridWrapper.find('.grid-heading-row .grid-row-check').hide();
+                gridWrapper.find('.grid-heading-row .row-index').hide();
+                
+                // Hide idx column in all rows
+                gridWrapper.find('.grid-body .data-row .row-index').hide();
+                gridWrapper.find('.grid-body .data-row .grid-row-check').hide();
+                
+                // Add a class to enable custom styling via CSS
+                gridWrapper.addClass('no-idx-column');
+            }, 500);
+        }
         // In the refresh function in member.js
         if (frm.doc.customer) {
             // Your existing buttons that require customer to be set
