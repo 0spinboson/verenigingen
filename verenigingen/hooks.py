@@ -16,7 +16,7 @@ app_license = "AGPL-3"
 # Subscription handling - initialize override when app starts
 on_app_init = ["verenigingen.subscription_override.setup_subscription_override"]
 # include js, css files in header of desk.html
- app_include_css = "/assets/verenigingen/css/verenigingen_custom.css"
+app_include_css = "/assets/verenigingen/css/verenigingen_custom.css"
 # app_include_js = "/assets/verenigingen/js/verenigingen.js"
 
 # include js, css files in header of web template
