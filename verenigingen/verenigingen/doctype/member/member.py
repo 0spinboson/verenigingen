@@ -63,46 +63,86 @@ class Member(Document):
             self.load_payment_history()
 
     def load_payment_history(self):
-        """Load payment history for this member"""
+        """Load payment history for this member with all invoices"""
         if not self.customer:
             return
         
         # Clear existing payment history
         self.payment_history = []
     
-        # Get payment entries for this customer
-        payment_entries = frappe.get_all(
-            "Payment Entry",
+        # Get all submitted invoices for this customer
+        invoices = frappe.get_all(
+            "Sales Invoice",
             filters={
-                "party_type": "Customer",
-                "party": self.customer
+                "customer": self.customer,
+                "docstatus": 1  # Submitted invoices
             },
-            fields=["name", "posting_date", "payment_type", "paid_amount", 
-                "mode_of_payment", "status", "reference_no", "reference_date"],
+            fields=["name", "posting_date", "due_date", "grand_total", "outstanding_amount", "status"],
             order_by="posting_date desc"
         )
-    
-        # Add payment entries to child table
-        for entry in payment_entries:
-            # Get reference documents
-            references = frappe.get_all(
+        
+        # Add invoices to payment history
+        for invoice in invoices:
+            invoice_doc = frappe.get_doc("Sales Invoice", invoice.name)
+            
+            # Check for linked payment entries
+            payment_entries = frappe.get_all(
                 "Payment Entry Reference",
-                filters={"parent": entry.name},
-                fields=["reference_doctype", "reference_name"]
+                filters={"reference_doctype": "Sales Invoice", "reference_name": invoice.name},
+                fields=["parent"]
             )
-        
-            ref_doctype = references[0].reference_doctype if references else None
-            ref_name = references[0].reference_name if references else None
-        
+            
+            # Get payment details if available
+            payment_entry = None
+            payment_status = "Unpaid"
+            mode_of_payment = None
+            
+            if payment_entries:
+                payment_doc = frappe.get_doc("Payment Entry", payment_entries[0].parent)
+                payment_entry = payment_doc.name
+                payment_status = payment_doc.status
+                mode_of_payment = payment_doc.mode_of_payment
+            
+            # Check for SEPA mandate
+            sepa_mandate = None
+            mandate_status = None
+            
+            # Check if invoice has a membership field
+            membership = None
+            if hasattr(invoice_doc, 'membership') and invoice_doc.membership:
+                try:
+                    membership = frappe.get_doc("Membership", invoice_doc.membership)
+                    if hasattr(membership, 'sepa_mandate') and membership.sepa_mandate:
+                        sepa_mandate = membership.sepa_mandate
+                        mandate_doc = frappe.get_doc("SEPA Mandate", sepa_mandate)
+                        mandate_status = mandate_doc.status
+                except Exception as e:
+                    frappe.log_error(f"Error checking membership {invoice_doc.membership} for invoice {invoice.name}: {str(e)}")
+            
+            # If no mandate found through membership, check member's default mandate
+            if not sepa_mandate and self.default_sepa_mandate:
+                sepa_mandate = self.default_sepa_mandate
+                try:
+                    mandate_doc = frappe.get_doc("SEPA Mandate", sepa_mandate)
+                    mandate_status = mandate_doc.status
+                except Exception as e:
+                    frappe.log_error(f"Error checking default mandate {sepa_mandate}: {str(e)}")
+            
+            # Add to payment history
             self.append("payment_history", {
-                "payment_entry": entry.name,
-                "posting_date": entry.posting_date,
-                "amount": entry.paid_amount,
-                "payment_type": entry.payment_type,
-                "mode_of_payment": entry.mode_of_payment,
-                "status": entry.status,
-                "reference_doctype": ref_doctype,
-                "reference_name": ref_name
+                "invoice": invoice.name,
+                "posting_date": invoice.posting_date,
+                "due_date": invoice.due_date,
+                "amount": invoice.grand_total,
+                "outstanding_amount": invoice.outstanding_amount,
+                "invoice_status": invoice.status,
+                "payment_entry": payment_entry,
+                "payment_status": payment_status or "Unpaid",
+                "mode_of_payment": mode_of_payment or "",
+                "sepa_mandate": sepa_mandate,
+                "mandate_status": mandate_status or "",
+                "reference_doctype": "Sales Invoice",
+                "reference_name": invoice.name
             })
 
     def validate_payment_method(self):
@@ -714,6 +754,28 @@ def update_member_payment_history(doc, method=None):
     members = frappe.get_all(
         "Member",
         filters={"customer": doc.party},
+        fields=["name"]
+    )
+    
+    # Update payment history for each member
+    for member_doc in members:
+        try:
+            member = frappe.get_doc("Member", member_doc.name)
+            member.load_payment_history()
+            member.save(ignore_permissions=True)
+        except Exception as e:
+            frappe.log_error(f"Failed to update payment history for Member {member_doc.name}: {str(e)}")
+
+# Adding a new function to update member payment history when an invoice is modified
+def update_member_payment_history_from_invoice(doc, method=None):
+    """Update payment history for member when an invoice is modified"""
+    if doc.doctype != "Sales Invoice" or doc.customer is None:
+        return
+        
+    # Find member linked to this customer
+    members = frappe.get_all(
+        "Member",
+        filters={"customer": doc.customer},
         fields=["name"]
     )
     
