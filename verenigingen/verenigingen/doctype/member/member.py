@@ -78,7 +78,7 @@ class Member(Document):
             },
             fields=[
                 "name", "posting_date", "due_date", "grand_total", 
-                "outstanding_amount", "status", "payment_schedule"
+                "outstanding_amount", "status"
             ],
             order_by="posting_date desc"
         )
