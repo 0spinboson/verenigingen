@@ -736,6 +736,27 @@ def get_board_memberships(member_name):
     return board_memberships
 
 @frappe.whitelist()
+def check_sepa_mandate_status(member):
+    """Check SEPA mandate status for dashboard indicators"""
+    member_doc = frappe.get_doc("Member", member)
+    active_mandates = member_doc.get_active_sepa_mandates()
+    
+    result = {
+        "has_active_mandate": bool(active_mandates),
+        "expiring_soon": False
+    }
+    
+    # Check if any mandate is expiring within 30 days
+    for mandate in active_mandates:
+        if mandate.expiry_date:
+            days_to_expiry = frappe.utils.date_diff(mandate.expiry_date, frappe.utils.today())
+            if 0 < days_to_expiry <= 30:
+                result["expiring_soon"] = True
+                break
+    
+    return result
+
+@frappe.whitelist()
 def update_member_payment_history(doc, method=None):
     """Update payment history for member when a payment entry is modified"""
     if doc.party_type != "Customer":
@@ -757,7 +778,6 @@ def update_member_payment_history(doc, method=None):
         except Exception as e:
             frappe.log_error(f"Failed to update payment history for Member {member_doc.name}: {str(e)}")
 
-# Adding a new function to update member payment history when an invoice is modified
 def update_member_payment_history_from_invoice(doc, method=None):
     """Update payment history for member when an invoice is modified"""
     if doc.doctype != "Sales Invoice" or doc.customer is None:
@@ -779,23 +799,47 @@ def update_member_payment_history_from_invoice(doc, method=None):
         except Exception as e:
             frappe.log_error(f"Failed to update payment history for Member {member_doc.name}: {str(e)}")
 
+# Add a new method to manually add a payment/donation record
 @frappe.whitelist()
-def check_sepa_mandate_status(member):
-    """Check SEPA mandate status for dashboard indicators"""
+def add_manual_payment_record(member, amount, payment_date=None, payment_method=None, notes=None):
+    """
+    Manually add a payment record (e.g., for cash donations)
+    """
+    if not member or not amount:
+        frappe.throw(_("Member and amount are required"))
+        
     member_doc = frappe.get_doc("Member", member)
-    active_mandates = member_doc.get_active_sepa_mandates()
     
-    result = {
-        "has_active_mandate": bool(active_mandates),
-        "expiring_soon": False
-    }
+    if not member_doc.customer:
+        frappe.throw(_("Member must have a customer record"))
+        
+    # Create a Payment Entry
+    payment = frappe.new_doc("Payment Entry")
+    payment.payment_type = "Receive"
+    payment.party_type = "Customer"
+    payment.party = member_doc.customer
+    payment.posting_date = payment_date or frappe.utils.today()
+    payment.paid_amount = float(amount)
+    payment.received_amount = float(amount)
+    payment.mode_of_payment = payment_method or "Cash"
     
-    # Check if any mandate is expiring within 30 days
-    for mandate in active_mandates:
-        if mandate.expiry_date:
-            days_to_expiry = frappe.utils.date_diff(mandate.expiry_date, frappe.utils.today())
-            if 0 < days_to_expiry <= 30:
-                result["expiring_soon"] = True
-                break
+    # Set company from Verenigingen Settings
+    settings = frappe.get_single("Verenigingen Settings")
+    payment.company = settings.company or frappe.defaults.get_global_default('company')
     
-    return result
+    # Set accounts
+    payment.paid_from = frappe.get_value("Company", payment.company, "default_receivable_account")
+    payment.paid_to = settings.donation_payment_account or frappe.get_value("Company", payment.company, "default_cash_account")
+    
+    # Add remarks
+    payment.remarks = notes or "Manual donation entry"
+    
+    # Save and submit
+    payment.insert(ignore_permissions=True)
+    payment.submit()
+    
+    # Refresh member's payment history
+    member_doc.load_payment_history()
+    member_doc.save(ignore_permissions=True)
+    
+    return payment.name
