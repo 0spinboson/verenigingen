@@ -457,8 +457,10 @@ def get_bic_from_iban(iban):
         # For other countries, we would need a more extensive mapping
         return None
     except Exception as e:
-        frappe.log_error(f"Error determining BIC from IBAN {iban}: {str(e)}", 
-                       "IBAN Processing Error")
+        frappe.log_error(
+            f"Error determining BIC from IBAN {iban}: {str(e)}",
+            "IBAN Processing Error"
+        )
         return None
 
 @frappe.whitelist()
