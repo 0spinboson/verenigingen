@@ -393,7 +393,7 @@ class DutchTaxExemptionHandler:
         
         return invoice
 
-def setup_dutch_tax_exemption():
+def setup_dutch_tax_exemption(doc=None, method=None):
     """
     Main function to set up Dutch tax exemption
     Called from hooks when Verenigingen Settings is updated
