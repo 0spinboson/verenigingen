@@ -1041,3 +1041,76 @@ def add_manual_payment_record(member, amount, payment_date=None, payment_method=
     member_doc.save(ignore_permissions=True)
     
     return payment.name
+
+@frappe.whitelist()
+def get_linked_donations(member):
+    """
+    Find linked donor record for a member to view donations
+    """
+    if not member:
+        return {"success": False, "message": "No member specified"}
+        
+    # First try to find a donor with the same email as the member
+    member_doc = frappe.get_doc("Member", member)
+    if member_doc.email:
+        donors = frappe.get_all(
+            "Donor",
+            filters={"donor_email": member_doc.email},
+            fields=["name"]
+        )
+        
+        if donors:
+            return {"success": True, "donor": donors[0].name}
+            
+    # Then try to find by name
+    if member_doc.full_name:
+        donors = frappe.get_all(
+            "Donor",
+            filters={"donor_name": ["like", f"%{member_doc.full_name}%"]},
+            fields=["name"]
+        )
+        
+        if donors:
+            return {"success": True, "donor": donors[0].name}
+    
+    # No donor found
+    return {"success": False, "message": "No donor record found for this member"}
+
+@frappe.whitelist()
+def create_donor_from_member(member):
+    """
+    Create a donor record from a member for tracking donations
+    """
+    if not member:
+        frappe.throw(_("No member specified"))
+        
+    member_doc = frappe.get_doc("Member", member)
+    
+    # Check if donor with same email already exists
+    if member_doc.email:
+        existing_donor = frappe.db.exists("Donor", {"donor_email": member_doc.email})
+        if existing_donor:
+            return existing_donor
+    
+    # Create new donor
+    donor = frappe.new_doc("Donor")
+    donor.donor_name = member_doc.full_name or member_doc.name
+    donor.donor_type = "Individual"
+    donor.donor_email = member_doc.email
+    donor.contact_person = member_doc.full_name or member_doc.name
+    donor.phone = member_doc.mobile_no or member_doc.phone
+    
+    # Set default donor category - get from settings if possible
+    donor.donor_category = "Regular Donor"  # Default
+    
+    # Get preferred communication method based on member data
+    if member_doc.email:
+        donor.preferred_communication_method = "Email"
+    elif member_doc.mobile_no:
+        donor.preferred_communication_method = "Phone"
+    
+    # Save with ignore permissions to ensure it works for all users
+    donor.insert(ignore_permissions=True)
+    
+    frappe.msgprint(_("Donor record {0} created from member").format(donor.name))
+    return donor.name
