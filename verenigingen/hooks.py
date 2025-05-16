@@ -121,10 +121,13 @@ has_permission = {
 doc_events = {
     "Membership": {
         "on_submit": "verenigingen.verenigingen.doctype.membership.membership.on_submit",
-        "on_cancel": "verenigingen.verenigingen.doctype.membership.membership.on_cancel",
+        "on_cancel": "verenigingen.verenigingen.doctype.membership.membership.on_cancel"
     },
     "Subscription": {
-        "on_update": "verenigingen.verenigingen.doctype.membership.membership.update_membership_from_subscription",
+        "on_update": [
+            "verenigingen.verenigingen.doctype.membership.membership.update_membership_from_subscription",
+            "verenigingen.utils.setup_dutch_tax_exemption"
+        ]
     },
     "Chapter": {
         "validate": "verenigingen.verenigingen.doctype.chapter.chapter.validate_chapter_access",
@@ -136,9 +139,6 @@ doc_events = {
         "on_submit": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history",
         "on_cancel": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history",
         "on_trash": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history"
-    },
-    "Verenigingen Settings": {
-        "on_update": "verenigingen.utils.setup_dutch_tax_exemption"
     },
     "Sales Invoice": {
         "before_validate": [
