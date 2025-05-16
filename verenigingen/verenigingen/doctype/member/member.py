@@ -649,21 +649,23 @@ class Member(Document):
     def validate_bank_details(self):
         """Validate bank details if payment method is Direct Debit"""
         if self.payment_method == "Direct Debit":
-            # Get bank details from SEPA mandate or member
-            if self.default_sepa_mandate:
-                mandate = frappe.get_doc("SEPA Mandate", self.default_sepa_mandate)
-                self.iban = mandate.iban
-                self.bic = mandate.bic
-                self.bank_account_name = mandate.account_holder_name
-            elif hasattr(self, 'member') and self.member:
-                # Try to get from member's default SEPA mandate
-                member = frappe.get_doc("Member", self.member)
-                if member.default_sepa_mandate:
-                    mandate = frappe.get_doc("SEPA Mandate", member.default_sepa_mandate)
-                    self.default_sepa_mandate = mandate.name
-                    self.iban = mandate.iban
-                    self.bic = mandate.bic
-                    self.bank_account_name = mandate.account_holder_name
+            # Find the current SEPA mandate
+            current_mandate = None
+            for mandate_link in self.sepa_mandates:
+                if mandate_link.is_current and mandate_link.status == "Active":
+                    try:
+                        mandate = frappe.get_doc("SEPA Mandate", mandate_link.sepa_mandate)
+                        if mandate.status == "Active" and mandate.is_active:
+                            current_mandate = mandate
+                            break
+                    except frappe.DoesNotExistError:
+                        continue
+            
+            # Use bank details from current mandate if available
+            if current_mandate:
+                self.iban = current_mandate.iban
+                self.bic = current_mandate.bic
+                self.bank_account_name = current_mandate.account_holder_name
             
             # Validate IBAN format
             if self.iban:
