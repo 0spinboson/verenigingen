@@ -54,15 +54,17 @@ frappe.ui.form.on('Member', {
                     callback: function(r) {
                         frm.refresh_field("payment_history");
                         
-                        // Count invoices and payments by status
+                        // Count records by type
                         let records = frm.doc.payment_history || [];
                         let stats = {
                             total: records.length,
                             invoices: 0,
+                            membership_invoices: 0,
+                            unreconciled: 0,
+                            donations: 0,
                             paid: 0,
                             unpaid: 0,
                             overdue: 0,
-                            donations: 0,
                             total_amount: 0,
                             outstanding: 0
                         };
@@ -71,20 +73,30 @@ frappe.ui.form.on('Member', {
                             stats.total_amount += flt(record.amount || 0);
                             stats.outstanding += flt(record.outstanding_amount || 0);
                             
-                            if (record.invoice_type === "Donation") {
-                                stats.donations++;
-                            } else {
+                            if (record.transaction_type === "Regular Invoice") {
                                 stats.invoices++;
                                 if (record.payment_status === "Paid") stats.paid++;
                                 else if (record.payment_status === "Overdue") stats.overdue++;
                                 else if (["Unpaid", "Partially Paid"].includes(record.payment_status)) stats.unpaid++;
+                            } 
+                            else if (record.transaction_type === "Membership Invoice") {
+                                stats.membership_invoices++;
+                                if (record.payment_status === "Paid") stats.paid++;
+                                else if (record.payment_status === "Overdue") stats.overdue++;
+                                else if (["Unpaid", "Partially Paid"].includes(record.payment_status)) stats.unpaid++;
+                            }
+                            else if (record.transaction_type === "Donation Payment") {
+                                stats.donations++;
+                            }
+                            else if (record.transaction_type === "Unreconciled Payment") {
+                                stats.unreconciled++;
                             }
                         });
                         
                         // Show a more detailed message
                         let message = `<div>Financial history refreshed:<br>
-                            ${stats.invoices} invoices (${stats.paid} paid, ${stats.unpaid} unpaid, ${stats.overdue} overdue)<br>
-                            ${stats.donations} unreconciled payments/donations<br>
+                            ${stats.invoices + stats.membership_invoices} invoices (${stats.membership_invoices} membership, ${stats.paid} paid, ${stats.unpaid} unpaid, ${stats.overdue} overdue)<br>
+                            ${stats.unreconciled} unreconciled payments, ${stats.donations} linked to donations<br>
                             Total: ${format_currency(stats.total_amount)}, Outstanding: ${format_currency(stats.outstanding)}</div>`;
                             
                         frappe.show_alert({
@@ -94,6 +106,26 @@ frappe.ui.form.on('Member', {
                     }
                 });
             }, __('Actions'));
+            
+            // Add link button to view all donations for this customer
+            frm.add_custom_button(__('View Donations'), function() {
+                frappe.call({
+                    method: "verenigingen.verenigingen.doctype.member.member.get_linked_donations",
+                    args: {
+                        "member": frm.doc.name
+                    },
+                    callback: function(r) {
+                        if (r.message && r.message.donor) {
+                            frappe.route_options = {
+                                "donor": r.message.donor
+                            };
+                            frappe.set_route("List", "Donation");
+                        } else {
+                            frappe.msgprint(__("No donor record linked to this member."));
+                        }
+                    }
+                });
+            }, __('View'));
         }
         
         // Add button to view chapter if member has a primary chapter
@@ -555,6 +587,8 @@ frappe.ui.form.on('Member Payment History', {
         format_payment_history_row(grid_row);
     }
 });
+
+// Helper function to format payment history grid rows
 function format_payment_history_row(grid_row) {
     if (!grid_row || !grid_row.doc) return;
     
@@ -565,10 +599,22 @@ function format_payment_history_row(grid_row) {
             if (!cells.length) return;
             
             // Add special styling based on record type
-            const is_donation = grid_row.doc.invoice_type === "Donation";
+            const transaction_type = grid_row.doc.transaction_type;
             
-            if (is_donation) {
-                // Style donation rows differently
+            // Add visual indicator to the row
+            $(grid_row.row).attr('data-type', transaction_type);
+            
+            // Style unreconciled payments differently
+            if (transaction_type === "Unreconciled Payment") {
+                $(grid_row.row).addClass('unreconciled-row');
+                $(grid_row.row).css({
+                    'background-color': '#f5f7fa',  // Light gray background
+                    'font-style': 'italic'
+                });
+            }
+            
+            // Style donation payments differently
+            if (transaction_type === "Donation Payment") {
                 $(grid_row.row).addClass('donation-row');
                 $(grid_row.row).css({
                     'background-color': '#fcf8e3',  // Light yellow background
@@ -576,7 +622,33 @@ function format_payment_history_row(grid_row) {
                 });
             }
             
-            // Format invoice status with color
+            // Format transaction type with appropriate icon
+            let type_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'transaction_type');
+            if (type_idx >= 0 && cells[type_idx]) {
+                let type_icon = 'file-text';
+                let icon_color = 'text-muted';
+                
+                if (transaction_type === 'Membership Invoice') {
+                    type_icon = 'users';
+                    icon_color = 'text-primary';
+                }
+                else if (transaction_type === 'Donation Payment') {
+                    type_icon = 'heart';
+                    icon_color = 'text-danger';
+                }
+                else if (transaction_type === 'Unreconciled Payment') {
+                    type_icon = 'question-circle';
+                    icon_color = 'text-muted';
+                }
+                
+                const type_html = `<span>
+                    <i class="fa fa-${type_icon} ${icon_color}" style="margin-right: 5px;"></i>
+                    ${transaction_type || ''}
+                </span>`;
+                $(cells[type_idx]).html(type_html);
+            }
+            
+            // Format invoice status with color if it exists
             const status = grid_row.doc.status;
             let status_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'status');
             if (status_idx >= 0 && cells[status_idx] && status && status !== 'N/A') {
@@ -603,22 +675,7 @@ function format_payment_history_row(grid_row) {
                 $(cells[payment_status_idx]).html(status_html);
             }
             
-            // Format invoice type with appropriate icon
-            const invoice_type = grid_row.doc.invoice_type;
-            let type_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'invoice_type');
-            if (type_idx >= 0 && cells[type_idx]) {
-                let type_icon = 'file-text';
-                if (invoice_type === 'Membership') type_icon = 'users';
-                else if (invoice_type === 'Donation') type_icon = 'heart';
-                
-                const type_html = `<span>
-                    <i class="fa fa-${type_icon} text-muted" style="margin-right: 5px;"></i>
-                    ${invoice_type || ''}
-                </span>`;
-                $(cells[type_idx]).html(type_html);
-            }
-            
-            // Format mandate status
+            // Format mandate status if it exists
             if (grid_row.doc.has_mandate) {
                 const mandate_status = grid_row.doc.mandate_status;
                 let mandate_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'mandate_status');
@@ -630,6 +687,17 @@ function format_payment_history_row(grid_row) {
                     
                     const mandate_html = `<span class="indicator ${mandate_color}">${mandate_status || ''}</span>`;
                     $(cells[mandate_idx]).html(mandate_html);
+                }
+            }
+            
+            // Add reference document link if exists
+            if (grid_row.doc.reference_doctype && grid_row.doc.reference_name) {
+                let ref_type_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'reference_doctype');
+                let ref_name_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'reference_name');
+                
+                if (ref_name_idx >= 0 && cells[ref_name_idx]) {
+                    const ref_html = `<a href="/app/${grid_row.doc.reference_doctype.toLowerCase().replace(/ /g, '-')}/${grid_row.doc.reference_name}">${grid_row.doc.reference_name}</a>`;
+                    $(cells[ref_name_idx]).html(ref_html);
                 }
             }
             
