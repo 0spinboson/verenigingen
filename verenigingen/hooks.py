@@ -4,12 +4,12 @@ from . import __version__ as app_version
 
 app_name = "verenigingen"
 app_title = "Verenigingen"
-app_publisher = "Your Name"
+app_publisher = "Foppe de Haan"
 app_description = "Association Management"
 app_icon = "octicon octicon-organization"
 app_color = "blue"
-app_email = "your-email@example.com"
-app_license = "MIT"
+app_email = "foppe@veganisme.org"
+app_license = "AGPL-3"
 
 # Includes in <head>
 # ------------------
@@ -143,7 +143,11 @@ doc_events = {
     "Sales Invoice": {
         "before_validate": [
             "verenigingen.utils.apply_tax_exemption_from_source"
-        ]
+        ],
+        # Add these new entries for invoice updates
+        "on_submit": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history_from_invoice",
+        "on_update_after_submit": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history_from_invoice",
+        "on_cancel": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history_from_invoice"
     }
 }
 
