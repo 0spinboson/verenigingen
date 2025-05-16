@@ -57,6 +57,7 @@ class Member(Document):
         except Exception as e:
             frappe.log_error(f"Error calculating age: {str(e)}", "Member Error")
 
+    @frappe.whitelist()
     def load_payment_history(self):
         """
         Load payment history for this member with focus on invoices.
