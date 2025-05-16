@@ -51,3 +51,19 @@
     white-space: normal !important;
     max-width: none !important;
 }
+/* Add to your custom CSS file or create a new one */
+.no-idx-column .row-index,
+.no-idx-column .grid-row-check {
+    display: none !important;
+}
+
+/* Optional: adjust widths of visible columns */
+.no-idx-column .grid-row {
+    display: flex;
+    width: 100%;
+}
+
+.no-idx-column .grid-row-column {
+    flex: 1 1 auto;
+    min-width: 100px;
+}
