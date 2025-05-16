@@ -6,24 +6,42 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "invoice_section",
   "invoice",
   "posting_date",
   "due_date",
+  "column_break_i1",
+  "invoice_type",
+  "membership",
+  "subscription",
+  "column_break_i2",
   "amount",
   "outstanding_amount",
-  "column_break_4",
-  "invoice_status",
-  "payment_entry",
+  "status",
+  "payment_section",
   "payment_status",
-  "mode_of_payment",
-  "column_break_sepa",
+  "payment_date",
+  "column_break_p1",
+  "payment_entry",
+  "payment_method",
+  "column_break_p2",
+  "paid_amount",
+  "reconciled", 
+  "sepa_section",
+  "has_mandate",
   "sepa_mandate",
+  "column_break_s1",
   "mandate_status",
-  "reference_section",
-  "reference_doctype",
-  "reference_name"
+  "mandate_reference",
+  "notes_section",
+  "notes"
  ],
  "fields": [
+  {
+   "fieldname": "invoice_section",
+   "fieldtype": "Section Break",
+   "label": "Invoice Information"
+  },
   {
    "fieldname": "invoice",
    "fieldtype": "Link",
@@ -42,9 +60,36 @@
   {
    "fieldname": "due_date",
    "fieldtype": "Date",
-   "in_list_view": 1,
    "label": "Due Date",
    "read_only": 1
+  },
+  {
+   "fieldname": "column_break_i1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "invoice_type",
+   "fieldtype": "Data",
+   "label": "Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "membership",
+   "fieldtype": "Link",
+   "label": "Membership",
+   "options": "Membership",
+   "read_only": 1
+  },
+  {
+   "fieldname": "subscription",
+   "fieldtype": "Link",
+   "label": "Subscription",
+   "options": "Subscription",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_i2",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "amount",
@@ -63,15 +108,34 @@
    "read_only": 1
   },
   {
-   "fieldname": "column_break_4",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "invoice_status",
+   "fieldname": "status",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Invoice Status",
+   "label": "Status",
    "read_only": 1
+  },
+  {
+   "fieldname": "payment_section",
+   "fieldtype": "Section Break",
+   "label": "Payment Information"
+  },
+  {
+   "fieldname": "payment_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Payment Status",
+   "options": "Unpaid\nPartially Paid\nPaid\nOverdue\nCancelled",
+   "read_only": 1
+  },
+  {
+   "fieldname": "payment_date",
+   "fieldtype": "Date",
+   "label": "Payment Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_p1",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "payment_entry",
@@ -81,20 +145,40 @@
    "read_only": 1
   },
   {
-   "fieldname": "payment_status",
+   "fieldname": "payment_method",
    "fieldtype": "Data",
-   "label": "Payment Status",
+   "label": "Payment Method",
    "read_only": 1
   },
   {
-   "fieldname": "mode_of_payment",
-   "fieldtype": "Data",
-   "label": "Mode of Payment",
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_sepa",
+   "fieldname": "column_break_p2",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "paid_amount",
+   "fieldtype": "Currency",
+   "label": "Paid Amount",
+   "options": "Company:company:default_currency",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "reconciled",
+   "fieldtype": "Check",
+   "label": "Reconciled",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sepa_section",
+   "fieldtype": "Section Break",
+   "label": "SEPA Information"
+  },
+  {
+   "default": "0",
+   "fieldname": "has_mandate",
+   "fieldtype": "Check",
+   "label": "Has SEPA Mandate",
+   "read_only": 1
   },
   {
    "fieldname": "sepa_mandate",
@@ -104,28 +188,31 @@
    "read_only": 1
   },
   {
+   "fieldname": "column_break_s1",
+   "fieldtype": "Column Break"
+  },
+  {
    "fieldname": "mandate_status",
    "fieldtype": "Data",
    "label": "Mandate Status",
    "read_only": 1
   },
   {
-   "fieldname": "reference_section",
-   "fieldtype": "Section Break",
-   "label": "Reference"
-  },
-  {
-   "fieldname": "reference_doctype",
+   "fieldname": "mandate_reference",
    "fieldtype": "Data",
-   "label": "Reference DocType",
+   "label": "Mandate Reference",
    "read_only": 1
   },
   {
-   "fieldname": "reference_name",
-   "fieldtype": "Dynamic Link",
-   "label": "Reference Name",
-   "options": "reference_doctype",
-   "read_only": 1
+   "fieldname": "notes_section",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes",
+   "read_only": 0
   }
  ],
  "istable": 1,
