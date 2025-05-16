@@ -21,62 +21,17 @@ frappe.ui.form.on('Member SEPA Mandate Link', {
         }
     },
     
-    is_default: function(frm, cdt, cdn) {
-        // When setting a mandate as default, unset others
+    is_current: function(frm, cdt, cdn) {
+        // When setting a mandate as current, unset others
         const row = locals[cdt][cdn];
         
-        if (row.is_default) {
-            // Update parent's default_sepa_mandate field
-            frm.set_value('default_sepa_mandate', row.sepa_mandate);
-            
-            // Unset default on other mandates
+        if (row.is_current) {
+            // Unset current on other mandates
             frm.doc.sepa_mandates.forEach(function(mandate) {
-                if (mandate.name !== cdn && mandate.is_default) {
-                    frappe.model.set_value(mandate.doctype, mandate.name, 'is_default', 0);
+                if (mandate.name !== cdn && mandate.is_current) {
+                    frappe.model.set_value(mandate.doctype, mandate.name, 'is_current', 0);
                 }
             });
-        }
-    }
-});
-
-// Also add handlers to the Member form for the SEPA mandates table
-frappe.ui.form.on('Member', {
-    refresh: function(frm) {
-        // Add button to create new SEPA mandate
-        if (frm.doc.name) {
-            frm.fields_dict['sepa_mandates'].grid.add_custom_button(__('Create New Mandate'), 
-                function() {
-                    frappe.new_doc('SEPA Mandate', {
-                        'member': frm.doc.name,
-                        'member_name': frm.doc.full_name,
-                        'account_holder_name': frm.doc.full_name
-                    });
-                }
-            );
-        }
-    },
-    
-    default_sepa_mandate: function(frm) {
-        // When default mandate is changed, update the table
-        if (frm.doc.default_sepa_mandate) {
-            let found = false;
-            
-            frm.doc.sepa_mandates.forEach(function(mandate) {
-                if (mandate.sepa_mandate === frm.doc.default_sepa_mandate) {
-                    frappe.model.set_value(mandate.doctype, mandate.name, 'is_default', 1);
-                    found = true;
-                } else if (mandate.is_default) {
-                    frappe.model.set_value(mandate.doctype, mandate.name, 'is_default', 0);
-                }
-            });
-            
-            // If the selected default mandate is not in the table, add it
-            if (!found && frm.doc.default_sepa_mandate) {
-                const new_row = frm.add_child('sepa_mandates');
-                new_row.sepa_mandate = frm.doc.default_sepa_mandate;
-                new_row.is_default = 1;
-                frm.refresh_field('sepa_mandates');
-            }
         }
     }
 });
