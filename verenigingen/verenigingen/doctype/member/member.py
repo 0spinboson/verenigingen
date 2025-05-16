@@ -57,6 +57,7 @@ class Member(Document):
         except Exception as e:
             frappe.log_error(f"Error calculating age: {str(e)}", "Member Error")
 
+
     @frappe.whitelist()
     def load_payment_history(self):
         """
@@ -68,7 +69,7 @@ class Member(Document):
         
         # Clear existing payment history
         self.payment_history = []
-    
+        
         # 1. Get all submitted invoices for this customer
         invoices = frappe.get_all(
             "Sales Invoice",
@@ -255,6 +256,11 @@ class Member(Document):
                 "reconciled": 0,  # Not reconciled
                 "notes": notes
             })
+        
+        # Save the document to persist the payment history
+        self.save(ignore_permissions=True)
+        
+        return True
 
     def on_load(self):
         """Load payment history when the document is loaded"""
