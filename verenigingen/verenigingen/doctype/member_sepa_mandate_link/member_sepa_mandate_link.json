@@ -7,7 +7,7 @@
   "sepa_mandate",
   "mandate_reference",
   "status",
-  "is_default",
+  "is_current",
   "valid_from",
   "valid_until"
  ],
@@ -38,10 +38,10 @@
   },
   {
    "default": "0",
-   "fieldname": "is_default",
+   "fieldname": "is_current",
    "fieldtype": "Check",
    "in_list_view": 1,
-   "label": "Is Default"
+   "label": "Is Current"
   },
   {
    "fetch_from": "sepa_mandate.sign_date",
