@@ -1,32 +1,72 @@
 # Copyright (c) 2017, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 
-import frappe
-from frappe.utils import add_months, nowdate
 from frappe.tests.utils import FrappeTestCase
-
-import erpnext
-from verenigingen.verenigingen.doctype.member.member import create_member
-from verenigingen.verenigingen.doctype.membership.membership import update_halted_razorpay_subscription
-
+import frappe
+from frappe.utils import add_days, add_months, nowdate
 
 class TestMembership(FrappeTestCase):
 	def setUp(self):
-		frappe.db.delete('Customer')
-		plan = setup_membership()
-		# make test member
-		self.member_doc = create_member(
-			frappe._dict({
-				"fullname": "_Test_Member",
-				"email": "_test_member_erpnext@example.com",
-				"plan_id": plan.name,
-				"subscription_id": "sub_DEX6xcJ1HSW4CR",
-				"customer_id": "cust_C0WlbKhp3aLA7W",
-				"subscription_status": "Active",
-			})
+		if not frappe.db.exists("Member", {"email": "test_sync@example.com"}):
+			# Create member
+			member = frappe.new_doc("Member")
+			member.first_name = "Test"
+			member.last_name = "Sync"
+			member.full_name = "Test Sync"
+			member.email = "test_sync@example.com"
+			member.insert()
+			
+			# Create customer
+			customer = frappe.new_doc("Customer")
+			customer.customer_name = member.full_name
+			customer.customer_type = "Individual"
+			customer.customer_group = "_Test Customer Group"
+			customer.territory = "_Test Territory"
+			customer.save()
+			
+			# Link customer to member
+			member.customer = customer.name
+			member.save()
+
+	def test_sync_payment_details(self):
+		"""Test synchronization of payment details from subscription"""
+		member = frappe.get_doc("Member", {"email": "test_sync@example.com"})
+		
+		# Create membership
+		membership = frappe.new_doc("Membership")
+		membership.member = member.name
+		membership.start_date = nowdate()
+		membership.membership_type = "Test Type"  # You'll need to create this or use an existing one
+		membership.insert()
+		membership.submit()
+		
+		# Create subscription (mocked)
+		subscription = frappe.new_doc("Subscription")
+		subscription.party_type = "Customer"
+		subscription.party = member.customer
+		subscription.start_date = nowdate()
+		subscription.current_invoice_start = nowdate()
+		subscription.current_invoice_end = add_days(nowdate(), 30)
+		subscription.save()
+		
+		# Link subscription to membership
+		membership.subscription = subscription.name
+		membership.save()
+		
+		# Test sync method
+		membership.sync_payment_details_from_subscription()
+		
+		# Verify next_billing_date was set
+		self.assertEqual(
+			membership.next_billing_date,
+			add_days(subscription.current_invoice_end, 1),
+			"Next billing date not set correctly"
 		)
-		self.member_doc.make_customer_and_link()
-		self.member = self.member_doc.name
+		
+		# Clean up
+		subscription.delete()
+		membership.cancel()
+		membership.delete()
 
 	def test_auto_generate_invoice_and_payment_entry(self):
 		entry = make_membership(self.member)
