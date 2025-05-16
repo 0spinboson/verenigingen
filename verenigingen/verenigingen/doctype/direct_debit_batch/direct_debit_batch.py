@@ -54,6 +54,7 @@ class DirectDebitBatch(Document):
     
     def generate_sepa_xml(self):
         """Generate SEPA Direct Debit XML file"""
+        # Replace generic implementation with enhanced Dutch version
         try:
             # Generate IDs for SEPA message
             message_id = f"BATCH-{self.name}-{random_string(8)}"
@@ -64,12 +65,16 @@ class DirectDebitBatch(Document):
             self.sepa_payment_info_id = payment_info_id
             self.sepa_generation_date = f"{nowdate()} {nowtime()}"
             
-            # Create XML structure
-            root = create_sepa_xml_structure(
+            # Get company settings from Verenigingen Settings
+            settings = frappe.get_single("Verenigingen Settings")
+            company = frappe.get_doc("Company", settings.company)
+            
+            # Create XML structure specifically for Dutch banks
+            root = self.create_dutch_sepa_xml_structure(
                 message_id=message_id,
                 payment_info_id=payment_info_id,
-                batch_data=self,
-                invoices=self.invoices
+                company=company,
+                settings=settings
             )
             
             # Convert to string
