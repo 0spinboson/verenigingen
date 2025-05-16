@@ -62,87 +62,78 @@ class Member(Document):
         if self.customer:
             self.load_payment_history()
 
-    def load_payment_history(self):
-        """Load payment history for this member with all invoices"""
-        if not self.customer:
-            return
-        
-        # Clear existing payment history
-        self.payment_history = []
-    
-        # Get all submitted invoices for this customer
-        invoices = frappe.get_all(
-            "Sales Invoice",
-            filters={
-                "customer": self.customer,
-                "docstatus": 1  # Submitted invoices
-            },
-            fields=["name", "posting_date", "due_date", "grand_total", "outstanding_amount", "status"],
-            order_by="posting_date desc"
-        )
-        
-        # Add invoices to payment history
-        for invoice in invoices:
-            invoice_doc = frappe.get_doc("Sales Invoice", invoice.name)
-            
-            # Check for linked payment entries
-            payment_entries = frappe.get_all(
-                "Payment Entry Reference",
-                filters={"reference_doctype": "Sales Invoice", "reference_name": invoice.name},
-                fields=["parent"]
-            )
-            
-            # Get payment details if available
-            payment_entry = None
-            payment_status = "Unpaid"
-            mode_of_payment = None
-            
-            if payment_entries:
-                payment_doc = frappe.get_doc("Payment Entry", payment_entries[0].parent)
-                payment_entry = payment_doc.name
-                payment_status = payment_doc.status
-                mode_of_payment = payment_doc.mode_of_payment
-            
-            # Check for SEPA mandate
-            sepa_mandate = None
-            mandate_status = None
-            
-            # Check if invoice has a membership field
-            membership = None
-            if hasattr(invoice_doc, 'membership') and invoice_doc.membership:
-                try:
-                    membership = frappe.get_doc("Membership", invoice_doc.membership)
-                    if hasattr(membership, 'sepa_mandate') and membership.sepa_mandate:
-                        sepa_mandate = membership.sepa_mandate
+
+                        sepa_mandate = membership_doc.sepa_mandate
                         mandate_doc = frappe.get_doc("SEPA Mandate", sepa_mandate)
                         mandate_status = mandate_doc.status
+                        mandate_reference = mandate_doc.mandate_id
                 except Exception as e:
-                    frappe.log_error(f"Error checking membership {invoice_doc.membership} for invoice {invoice.name}: {str(e)}")
+                    frappe.log_error(f"Error checking membership mandate for invoice {invoice.name}: {str(e)}")
             
-            # If no mandate found through membership, check member's default mandate
-            if not sepa_mandate and self.default_sepa_mandate:
+            # If no mandate found, check member's default mandate
+            if not has_mandate and self.default_sepa_mandate:
+                has_mandate = 1
                 sepa_mandate = self.default_sepa_mandate
                 try:
                     mandate_doc = frappe.get_doc("SEPA Mandate", sepa_mandate)
                     mandate_status = mandate_doc.status
+                    mandate_reference = mandate_doc.mandate_id
                 except Exception as e:
                     frappe.log_error(f"Error checking default mandate {sepa_mandate}: {str(e)}")
             
-            # Add to payment history
+            # Add invoice to payment history
             self.append("payment_history", {
                 "invoice": invoice.name,
                 "posting_date": invoice.posting_date,
                 "due_date": invoice.due_date,
+                "invoice_type": invoice_type,
+                "membership": membership,
+                "subscription": subscription,
                 "amount": invoice.grand_total,
                 "outstanding_amount": invoice.outstanding_amount,
-                "invoice_status": invoice.status,
+                "status": invoice.status,
+                "payment_status": payment_status,
+                "payment_date": payment_date,
                 "payment_entry": payment_entry,
-                "payment_status": payment_status or "Unpaid",
-                "mode_of_payment": mode_of_payment or "",
+                "payment_method": payment_method,
+                "paid_amount": paid_amount,
+                "reconciled": reconciled,
+                "has_mandate": has_mandate,
                 "sepa_mandate": sepa_mandate,
-                "mandate_status": mandate_status or "",
-                "reference_doctype": "Sales Invoice",
-                "reference_name": invoice.name
+                "mandate_status": mandate_status,
+                "mandate_reference": mandate_reference
+            })
+        
+        # 3. Now find payments that aren't reconciled with any invoice (potential donations)
+        unreconciled_payments = frappe.get_all(
+            "Payment Entry",
+            filters={
+                "party_type": "Customer",
+                "party": self.customer,
+                "docstatus": 1,
+                "name": ["not in", reconciled_payments or [""])
+            },
+            fields=["name", "posting_date", "paid_amount", "mode_of_payment", "status"],
+            order_by="posting_date desc"
+        )
+        
+        for payment in unreconciled_payments:
+            # Create a record for unreconciled payment
+            self.append("payment_history", {
+                "invoice": None,  # No invoice
+                "posting_date": payment.posting_date,
+                "due_date": None,
+                "invoice_type": "Donation",  # Mark as donation or unreconciled payment
+                "amount": payment.paid_amount,
+                "outstanding_amount": 0,
+                "status": "N/A",  # No invoice status
+                "payment_status": "Paid",  # Payment exists
+                "payment_date": payment.posting_date,
+                "payment_entry": payment.name,
+                "payment_method": payment.mode_of_payment,
+                "paid_amount": payment.paid_amount,
+                "reconciled": 0,  # Not reconciled
+                "notes": "Unreconciled payment - possible donation"
             })
 
     def validate_payment_method(self):
