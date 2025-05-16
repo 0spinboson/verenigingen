@@ -34,6 +34,8 @@
   "current_membership_type",
   "current_membership_start",
   "current_membership_end",
+  "chapter_and_volunteer_activity_section",
+  "primary_chapter",
   "financial_details_tab",
   "payment_method_section",
   "payment_method",
@@ -42,15 +44,8 @@
   "bic",
   "bank_account_name",
   "payment_reference",
-  "column_break_bank",
-  "payment_status",
-  "payment_date",
-  "payment_amount",
-  "paid_amount",
   "column_break_31",
   "membership_status",
-  "time_remaining",
-  "primary_chapter",
   "permission_category",
   "sepa_mandates_section",
   "sepa_mandates",
@@ -86,7 +81,7 @@
    "depends_on": "eval:doc.customer",
    "fieldname": "payment_history_section",
    "fieldtype": "Section Break",
-   "label": "Payment History"
+   "label": "Financial History"
   },
   {
    "fieldname": "member_id",
@@ -155,38 +150,6 @@
    "fieldname": "payment_reference",
    "fieldtype": "Data",
    "label": "Payment Reference",
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_bank",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "Unpaid",
-   "fieldname": "payment_status",
-   "fieldtype": "Select",
-   "label": "Payment Status",
-   "options": "Unpaid\nPending\nPaid\nFailed\nRefunded\nOverdue",
-   "read_only": 1
-  },
-  {
-   "fieldname": "payment_date",
-   "fieldtype": "Date",
-   "label": "Payment Date",
-   "read_only": 1
-  },
-  {
-   "fieldname": "payment_amount",
-   "fieldtype": "Currency",
-   "label": "Payment Amount",
-   "options": "currency",
-   "read_only": 1
-  },
-  {
-   "fieldname": "paid_amount",
-   "fieldtype": "Currency",
-   "label": "Paid Amount",
-   "options": "currency",
    "read_only": 1
   },
   {
@@ -357,12 +320,6 @@
    "read_only": 1
   },
   {
-   "fieldname": "time_remaining",
-   "fieldtype": "Data",
-   "label": "Time Remaining",
-   "read_only": 1
-  },
-  {
    "fieldname": "custom_fields_section",
    "fieldtype": "Section Break",
    "label": "Additional Information"
@@ -442,6 +399,11 @@
    "fieldname": "payment_method_section",
    "fieldtype": "Section Break",
    "label": "Payment method"
+  },
+  {
+   "fieldname": "chapter_and_volunteer_activity_section",
+   "fieldtype": "Section Break",
+   "label": "Chapter and Volunteer activity"
   }
  ],
  "links": [
@@ -457,7 +419,7 @@
    "table_fieldname": "references"
   }
  ],
- "modified": "2025-05-10 23:12:20.702850",
+ "modified": "2025-05-16 21:03:29.346407",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
