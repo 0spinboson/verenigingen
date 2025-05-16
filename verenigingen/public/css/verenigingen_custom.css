@@ -22,18 +22,23 @@
 }
 
 /* Regular invoice */
-.payment-history-grid .grid-row[data-type="Regular"]::before {
+.payment-history-grid .grid-row[data-type="Regular Invoice"]::before {
     background-color: #5e64ff; /* Blue */
 }
 
 /* Membership invoice */
-.payment-history-grid .grid-row[data-type="Membership"]::before {
+.payment-history-grid .grid-row[data-type="Membership Invoice"]::before {
     background-color: #7cd6fd; /* Light blue */
 }
 
-/* Donation/unreconciled payment */
-.payment-history-grid .grid-row[data-type="Donation"]::before {
+/* Donation payment */
+.payment-history-grid .grid-row[data-type="Donation Payment"]::before {
     background-color: #ff5858; /* Red */
+}
+
+/* Unreconciled payment */
+.payment-history-grid .grid-row[data-type="Unreconciled Payment"]::before {
+    background-color: #b8c2cc; /* Gray */
 }
 
 /* Highlight overdue rows */
