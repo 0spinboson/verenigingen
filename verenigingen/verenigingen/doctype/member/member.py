@@ -323,30 +323,33 @@ class Member(Document):
             if active_membership.end_date:
                 # Calculate time remaining until end date
                 days_left = date_diff(active_membership.end_date, getdate(today()))
+                
+                # Don't set time_remaining directly if field doesn't exist
+                # Instead, perhaps add it to notes or a custom field
+                time_remaining_text = ""
                 if days_left < 0:
-                    self.time_remaining = _("Expired")
+                    time_remaining_text = _("Expired")
                 elif days_left == 0:
-                    self.time_remaining = _("Expires today")
+                    time_remaining_text = _("Expires today")
                 else:
                     # Format as days/months/years depending on length
                     if days_left < 30:
-                        self.time_remaining = _("{0} days").format(days_left)
+                        time_remaining_text = _("{0} days").format(days_left)
                     elif days_left < 365:
                         months = int(days_left / 30)
-                        self.time_remaining = _("{0} months").format(months)
+                        time_remaining_text = _("{0} months").format(months)
                     else:
                         years = round(days_left / 365, 1)
-                        self.time_remaining = _("{0} years").format(years)
-            else:
-                # Lifetime membership
-                self.time_remaining = _("Lifetime")
-        else:
-            self.current_membership_details = None
-            self.current_membership_type = None
-            self.current_membership_start = None
-            self.current_membership_end = None
-            self.membership_status = None
-            self.time_remaining = None
+                        time_remaining_text = _("{0} years").format(years)
+                        
+                # Store this information in notes or a custom field if needed
+                if hasattr(self, 'time_remaining'):
+                    self.time_remaining = time_remaining_text
+                elif hasattr(self, 'notes'):
+                    # Optionally add to notes
+                    if not self.notes:
+                        self.notes = f"<p>Time remaining: {time_remaining_text}</p>"
+                    # Otherwise, consider updating notes or custom fields
             
     def get_active_membership(self):
         """Get currently active membership for this member"""
