@@ -8,7 +8,7 @@ from frappe.model.document import Document
 class MemberSEPAMandateLink(Document):
     def validate(self):
         self.validate_mandate()
-        self.check_default_mandate()
+        self.check_current_mandate()
     
     def validate_mandate(self):
         """Ensure the linked SEPA mandate exists and is active"""
@@ -24,15 +24,12 @@ class MemberSEPAMandateLink(Document):
                     indicator='orange'
                 )
     
-    def check_default_mandate(self):
-        """Ensure only one default mandate per member"""
-        if self.is_default:
+    def check_current_mandate(self):
+        """Ensure only one current mandate per member"""
+        if self.is_current:
             # Get parent document (Member)
             if self.parent and self.parenttype == "Member":
                 # Check other mandate links for this member
                 for link in self.parent.sepa_mandates:
-                    if link.name != self.name and link.is_default:
-                        link.is_default = 0
-                
-                # Also update the default_sepa_mandate field in Member
-                self.parent.default_sepa_mandate = self.sepa_mandate
+                    if link.name != self.name and link.is_current:
+                        link.is_current = 0
