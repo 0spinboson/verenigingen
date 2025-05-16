@@ -57,13 +57,28 @@ class Member(Document):
         except Exception as e:
             frappe.log_error(f"Error calculating age: {str(e)}", "Member Error")
 
-
     @frappe.whitelist()
     def load_payment_history(self):
         """
         Load payment history for this member with focus on invoices.
         Also include unreconciled payments, but maintain separation from the Donation system.
+        Then save the document to persist the changes.
         """
+        # Use the shared logic to load payment history
+        self._load_payment_history_without_save()
+        
+        # Save the document to persist the payment history
+        self.save(ignore_permissions=True)
+        
+        return True
+
+    def on_load(self):
+        """Load payment history when the document is loaded"""
+        if self.customer:
+            self._load_payment_history_without_save()
+
+    def _load_payment_history_without_save(self):
+        """Internal method to load payment history without saving"""
         if not self.customer:
             return
         
@@ -256,17 +271,7 @@ class Member(Document):
                 "reconciled": 0,  # Not reconciled
                 "notes": notes
             })
-        
-        # Save the document to persist the payment history
-        self.save(ignore_permissions=True)
-        
-        return True
-
-    def on_load(self):
-        """Load payment history when the document is loaded"""
-        if self.customer:
-            self.load_payment_history()
-
+            
     def validate_payment_method(self):
         """Validate payment method and related fields"""
         # Check if payment_method exists (it might be on Membership, not Member)
