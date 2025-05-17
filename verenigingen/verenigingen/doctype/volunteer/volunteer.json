@@ -218,7 +218,7 @@
  "links": [
   {
    "link_doctype": "Member",
-   "link_fieldname": "member",
+   "link_fieldname": "full_name",
    "parent_doctype": "Member"
   }
  ],
