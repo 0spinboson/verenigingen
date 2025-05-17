@@ -7,26 +7,43 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "basic_info_section",
   "volunteer_name",
   "member",
+  "image",
   "personal_email",
   "preferred_pronouns",
   "column_break_5",
-  "volunteer_type",
   "email",
-  "image",
-  "address_contacts",
-  "address",
-  "column_break_9",
-  "volunteer_availability_and_skills_details",
-  "availability",
-  "availability_timeslot",
+  "status",
+  "start_date",
+  "volunteer_profile_section",
+  "interests",
   "column_break_12",
-  "volunteer_skills",
-  "section_break_15",
+  "commitment_level",
+  "experience_level",
+  "preferred_work_style",
+  "assignment_section",
+  "active_assignments",
+  "assignment_history_section",
+  "assignment_history",
+  "skills_section",
+  "skills_and_qualifications",
+  "column_break_20",
+  "desired_skill_development",
+  "address_section",
+  "address_html",
+  "column_break_23",
+  "contact_html",
+  "notes_section",
   "note"
  ],
  "fields": [
+  {
+   "fieldname": "basic_info_section",
+   "fieldtype": "Section Break",
+   "label": "Basic Information"
+  },
   {
    "fieldname": "volunteer_name",
    "fieldtype": "Data",
@@ -35,16 +52,13 @@
    "reqd": 1
   },
   {
-   "fieldname": "column_break_5",
-   "fieldtype": "Column Break"
+   "fieldname": "image",
+   "fieldtype": "Attach Image",
+   "label": "Image"
   },
   {
-   "fieldname": "volunteer_type",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Volunteer Type",
-   "options": "Volunteer Type",
-   "reqd": 1
+   "fieldname": "column_break_5",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "email",
@@ -55,59 +69,34 @@
    "unique": 1
   },
   {
-   "fieldname": "image",
-   "fieldtype": "Attach Image",
-   "hidden": 1,
-   "label": "Image",
-   "no_copy": 1,
-   "print_hide": 1
-  },
-  {
    "depends_on": "eval:!doc.__islocal;",
-   "fieldname": "address_contacts",
+   "fieldname": "address_section",
    "fieldtype": "Section Break",
-   "label": "Address and Contact",
-   "options": "fa fa-map-marker"
+   "label": "Address and Contact Information"
   },
   {
-   "fieldname": "column_break_9",
+   "fieldname": "address_html",
+   "fieldtype": "HTML",
+   "label": "Address HTML"
+  },
+  {
+   "fieldname": "column_break_23",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "volunteer_availability_and_skills_details",
+   "fieldname": "contact_html",
+   "fieldtype": "HTML",
+   "label": "Contact HTML"
+  },
+  {
+   "fieldname": "notes_section",
    "fieldtype": "Section Break",
-   "label": "Availability and Skills"
-  },
-  {
-   "fieldname": "availability",
-   "fieldtype": "Select",
-   "label": "Availability",
-   "options": "\nWeekly\nWeekdays\nWeekends"
-  },
-  {
-   "fieldname": "availability_timeslot",
-   "fieldtype": "Select",
-   "label": "Availability Timeslot",
-   "options": "\nMorning\nAfternoon\nEvening\nAnytime"
-  },
-  {
-   "fieldname": "column_break_12",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "volunteer_skills",
-   "fieldtype": "Table",
-   "label": "Volunteer Skills",
-   "options": "Volunteer Skill"
-  },
-  {
-   "fieldname": "section_break_15",
-   "fieldtype": "Section Break"
+   "label": "Notes"
   },
   {
    "fieldname": "note",
-   "fieldtype": "Long Text",
-   "label": "Note"
+   "fieldtype": "Text Editor",
+   "label": "Notes and Additional Information"
   },
   {
    "fieldname": "member",
@@ -131,15 +120,108 @@
    "read_only": 1
   },
   {
-   "fetch_from": "member.primary_address",
-   "fieldname": "address",
-   "fieldtype": "Data",
-   "label": "Address"
+   "fieldname": "volunteer_profile_section",
+   "fieldtype": "Section Break",
+   "label": "Volunteer Profile"
+  },
+  {
+   "description": "Select areas where the volunteer is interested in contributing",
+   "fieldname": "interests",
+   "fieldtype": "Table MultiSelect",
+   "label": "Areas of Interest",
+   "options": "Volunteer Interest Area"
+  },
+  {
+   "fieldname": "column_break_12",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Occasional",
+   "fieldname": "commitment_level",
+   "fieldtype": "Select",
+   "label": "Commitment Level",
+   "options": "Occasional\nRegular (Monthly)\nWeekly\nIntensive"
+  },
+  {
+   "default": "Beginner",
+   "fieldname": "experience_level",
+   "fieldtype": "Select",
+   "label": "Experience Level",
+   "options": "Beginner\nIntermediate\nExperienced\nExpert"
+  },
+  {
+   "default": "Hybrid",
+   "fieldname": "preferred_work_style",
+   "fieldtype": "Select",
+   "label": "Preferred Work Style",
+   "options": "In-person\nRemote\nHybrid"
+  },
+  {
+   "fieldname": "skills_section",
+   "fieldtype": "Section Break",
+   "label": "Skills and Development"
+  },
+  {
+   "fieldname": "skills_and_qualifications",
+   "fieldtype": "Table",
+   "label": "Skills and Qualifications",
+   "options": "Volunteer Skill"
+  },
+  {
+   "fieldname": "column_break_20",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "desired_skill_development",
+   "fieldtype": "Table",
+   "label": "Skills I Want to Develop",
+   "options": "Volunteer Development Goal"
+  },
+  {
+   "fieldname": "assignment_section",
+   "fieldtype": "Section Break",
+   "label": "Current Assignments"
+  },
+  {
+   "fieldname": "active_assignments",
+   "fieldtype": "Table",
+   "label": "Active Assignments",
+   "options": "Volunteer Assignment"
+  },
+  {
+   "fieldname": "assignment_history_section",
+   "fieldtype": "Section Break",
+   "label": "Assignment History"
+  },
+  {
+   "fieldname": "assignment_history",
+   "fieldtype": "Table",
+   "label": "Past Assignments",
+   "options": "Volunteer Assignment"
+  },
+  {
+   "default": "Active",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "New\nOnboarding\nActive\nInactive\nRetired"
+  },
+  {
+   "fieldname": "start_date",
+   "fieldtype": "Date",
+   "label": "Start Date"
   }
  ],
  "image_field": "image",
- "links": [],
- "modified": "2025-05-08 21:36:45.116940",
+ "links": [
+  {
+   "link_doctype": "Member",
+   "link_fieldname": "member"
+  }
+ ],
+ "modified": "2025-05-17 12:43:45.267592",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Volunteer",
@@ -157,11 +239,18 @@
    "role": "Verenigingen Manager",
    "share": 1,
    "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1, 
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Association Manager",
+   "share": 1,
+   "write": 1
   }
  ],
- "quick_entry": 1,
- "restrict_to_domain": "Verenigingen",
- "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
