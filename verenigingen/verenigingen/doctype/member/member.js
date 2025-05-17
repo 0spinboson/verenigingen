@@ -340,6 +340,76 @@ frappe.ui.form.on('Member', {
         ['first_name', 'middle_name', 'last_name'].forEach(field => {
             frm.fields_dict[field].df.onchange = () => frm.trigger('update_full_name');
         });
+        
+        // Check for volunteer record and display details
+        if (!frm.doc.__islocal && frm.fields_dict.volunteer_details_html) {
+            frappe.call({
+                method: 'frappe.client.get_list',
+                args: {
+                    doctype: 'Volunteer',
+                    filters: {
+                        'member': frm.doc.name
+                    },
+                    fields: ['name', 'volunteer_name', 'volunteer_type', 'availability', 'availability_timeslot']
+                },
+                callback: function(r) {
+                    if (r.message && r.message.length > 0) {
+                        const volunteer = r.message[0];
+                        
+                        // Get volunteer skills
+                        frappe.call({
+                            method: 'frappe.client.get',
+                            args: {
+                                doctype: 'Volunteer',
+                                name: volunteer.name
+                            },
+                            callback: function(r) {
+                                if (r.message) {
+                                    const volunteerDoc = r.message;
+                                    let skillsHtml = '';
+                                    
+                                    if (volunteerDoc.volunteer_skills && volunteerDoc.volunteer_skills.length > 0) {
+                                        skillsHtml = '<div class="volunteer-skills"><h5>Skills</h5><ul>';
+                                        volunteerDoc.volunteer_skills.forEach(function(skill) {
+                                            skillsHtml += '<li>' + skill.volunteer_skill + '</li>';
+                                        });
+                                        skillsHtml += '</ul></div>';
+                                    }
+                                    
+                                    // Create volunteer info HTML
+                                    let html = `
+                                        <div class="volunteer-info">
+                                            <h4><a href="/app/volunteer/${volunteer.name}">${volunteer.volunteer_name}</a></h4>
+                                            <p>Type: ${volunteer.volunteer_type || 'Not specified'}</p>
+                                            <p>Availability: ${volunteer.availability || 'Not specified'} 
+                                               ${volunteer.availability_timeslot ? '(' + volunteer.availability_timeslot + ')' : ''}</p>
+                                            ${skillsHtml}
+                                        </div>
+                                    `;
+                                    
+                                    $(frm.fields_dict.volunteer_details_html.wrapper).html(html);
+                                }
+                            }
+                        });
+                    } else {
+                        // No volunteer record found
+                        $(frm.fields_dict.volunteer_details_html.wrapper).html(`
+                            <div class="volunteer-info text-muted">
+                                <p>No volunteer record linked to this member.</p>
+                                <button class="btn btn-xs btn-default create-volunteer-btn">
+                                    Create Volunteer Record
+                                </button>
+                            </div>
+                        `);
+                        
+                        // Add click handler for create button
+                        $(frm.fields_dict.volunteer_details_html.wrapper).find('.create-volunteer-btn').on('click', function() {
+                            frm.events.createVolunteerRecord(frm);
+                        });
+                    }
+                }
+            });
+        }
     },
     
     onload: function(frm) {
@@ -369,6 +439,44 @@ frappe.ui.form.on('Member', {
         }
     },
     
+    createVolunteerRecord: function(frm) {
+        // First get the email domain from settings
+        frappe.call({
+            method: 'frappe.client.get_value',
+            args: {
+                doctype: 'Verenigingen Settings',
+                fieldname: 'organization_email_domain'
+            },
+            callback: function(r) {
+                // Default domain if not set
+                const domain = r.message && r.message.organization_email_domain 
+                    ? r.message.organization_email_domain 
+                    : 'example.org';
+            
+                // Generate organization email based on full name
+                // Replace spaces with dots and convert to lowercase
+                const nameForEmail = frm.doc.full_name 
+                    ? frm.doc.full_name.replace(/\s+/g, '.').toLowerCase()
+                    : '';
+            
+                // Construct organization email
+                const orgEmail = nameForEmail ? `${nameForEmail}@${domain}` : '';
+            
+                // Set route options for creating volunteer
+                frappe.route_options = {
+                    'volunteer_name': frm.doc.full_name,
+                    'member': frm.doc.name,
+                    'preferred_pronouns': frm.doc.pronouns,
+                    'email': orgEmail,  // Organization email
+                    'personal_email': frm.doc.email || ''  // Personal email from member
+                };
+            
+                // Create new volunteer doc
+                frappe.new_doc('Volunteer');
+            }
+        });
+    },
+    
     update_full_name: function(frm) {
         // Build full name from components
         let full_name = [
@@ -379,6 +487,7 @@ frappe.ui.form.on('Member', {
         
         frm.set_value('full_name', full_name);
     },
+    
     payment_method: function(frm) {
         // Show/hide bank details based on payment method
         const is_direct_debit = frm.doc.payment_method === 'Direct Debit';
@@ -387,17 +496,11 @@ frappe.ui.form.on('Member', {
         // Set field requirements based on payment method
         frm.toggle_reqd(['iban', 'bank_account_name'], is_direct_debit);
         
-        // If just switched to direct debit and already has bank details, check for mandate
-        if (is_direct_debit && frm.doc.iban && frm.doc.bank_account_name) {
-            // Delay slightly to ensure the UI updates first
-            setTimeout(() => {
-                checkForExistingMandate(frm);
-            }, 100);
-        }
+        // REMOVED: Immediate mandate check - we now do this after save
     },
     
     iban: function(frm) {
-        // When IBAN changes, check if we need to create a new SEPA mandate
+        // When IBAN changes, format it correctly
         if (frm.doc.payment_method === 'Direct Debit' && frm.doc.iban) {
             // First, format the IBAN
             const formattedIban = formatIBAN(frm.doc.iban);
@@ -406,16 +509,26 @@ frappe.ui.form.on('Member', {
                 return; // This will trigger this function again with the formatted IBAN
             }
             
-            // If we have bank account name too, check for existing mandate
-            if (frm.doc.bank_account_name) {
+            // Only check for mandate if document is already saved
+            if (!frm.doc.__islocal && frm.doc.bank_account_name) {
                 checkForExistingMandate(frm);
             }
         }
     },
     
+    after_save: function(frm) {
+        // After saving, if payment method is Direct Debit and we have IBAN
+        // and bank account name, check for mandate
+        if (frm.doc.payment_method === 'Direct Debit' && 
+            frm.doc.iban && frm.doc.bank_account_name) {
+            checkForExistingMandate(frm);
+        }
+    },
+    
     bank_account_name: function(frm) {
         // When account holder name changes and we have IBAN for direct debit
-        if (frm.doc.payment_method === 'Direct Debit' && frm.doc.bank_account_name && frm.doc.iban) {
+        if (frm.doc.payment_method === 'Direct Debit' && 
+            frm.doc.bank_account_name && frm.doc.iban && !frm.doc.__islocal) {
             checkForExistingMandate(frm);
         }
     }
@@ -600,6 +713,7 @@ function mark_as_paid(frm) {
     
     dialog.show();
 }
+
 frappe.ui.form.on('Member Payment History', {
     payment_history_add: function(frm, cdt, cdn) {
         // Format new rows as they're added
@@ -854,7 +968,7 @@ function formatIBAN(iban) {
 function get_doc_mandate_iban(mandate_name) {
     // This is an async operation but we just want a simple check,
     // so we'll use the result when it comes back
-    frappe.db.get_value('SEPA Mandate', mandate_name, 'iban')
+    return frappe.db.get_value('SEPA Mandate', mandate_name, 'iban')
         .then(r => {
             if (r && r.message) {
                 return r.message.iban;
