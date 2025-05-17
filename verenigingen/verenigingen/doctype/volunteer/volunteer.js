@@ -19,7 +19,8 @@ frappe.ui.form.on('Volunteer', {
         frm.refresh_field('active_assignments');
         frm.refresh_field('assignment_history');
         frm.refresh_field('skills_and_qualifications');
-    }
+    },
+    
     refresh: function(frm) {
         // Set up dynamic link for address and contact
         frappe.dynamic_link = {doc: frm.doc, fieldname: 'name', doctype: 'Volunteer'};
@@ -101,7 +102,8 @@ frappe.ui.form.on('Volunteer', {
             // Apply filters based on assignment type and reference doctype
             if(child.assignment_type === "Board Position") {
                 if(child.reference_doctype === "Chapter") {
-                    filters["published"] = 1;
+                    // Removed published filter as it might be causing issues
+                    // filters["published"] = 1;
                 }
             }
             else if(child.assignment_type === "Team" || child.assignment_type === "Committee") {
@@ -445,7 +447,8 @@ function create_new_assignment(frm) {
                     var filters = {};
                     
                     if(assignment_type === 'Board Position' && reference_doctype === 'Chapter') {
-                        filters["published"] = 1;
+                        // Removed published filter
+                        // filters["published"] = 1;
                     }
                     else if((assignment_type === 'Team' || assignment_type === 'Committee') && 
                            reference_doctype === 'Volunteer Team') {
