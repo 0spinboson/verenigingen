@@ -315,10 +315,15 @@ frappe.ui.form.on('Member', {
                 });
             }, __('View'));
             
-            // If there's a default mandate, add button to view it
-            if (frm.doc.default_sepa_mandate) {
-                frm.add_custom_button(__('Default SEPA Mandate'), function() {
-                    frappe.set_route('Form', 'SEPA Mandate', frm.doc.default_sepa_mandate);
+            // If there's a current mandate, add button to view it
+            let currentMandate = null;
+            if (frm.doc.sepa_mandates && frm.doc.sepa_mandates.length) {
+                currentMandate = frm.doc.sepa_mandates.find(m => m.is_current);
+            }
+            
+            if (currentMandate) {
+                frm.add_custom_button(__('Current SEPA Mandate'), function() {
+                    frappe.set_route('Form', 'SEPA Mandate', currentMandate.sepa_mandate);
                 }, __('View'));
             }
             
@@ -526,18 +531,13 @@ frappe.ui.form.on('Member', {
     },
     
     iban: function(frm) {
-        // When IBAN changes, format it correctly
+        // When IBAN changes, only format it correctly - don't check for mandate yet
         if (frm.doc.payment_method === 'Direct Debit' && frm.doc.iban) {
-            // First, format the IBAN
+            // Format the IBAN
             const formattedIban = formatIBAN(frm.doc.iban);
             if (formattedIban !== frm.doc.iban) {
                 frm.set_value('iban', formattedIban);
-                return; // This will trigger this function again with the formatted IBAN
-            }
-            
-            // Only check for mandate if document is already saved
-            if (!frm.doc.__islocal && frm.doc.bank_account_name) {
-                checkForExistingMandate(frm);
+                // Don't do anything else here - we'll check for mandates after save
             }
         }
     },
@@ -552,11 +552,8 @@ frappe.ui.form.on('Member', {
     },
     
     bank_account_name: function(frm) {
-        // When account holder name changes and we have IBAN for direct debit
-        if (frm.doc.payment_method === 'Direct Debit' && 
-            frm.doc.bank_account_name && frm.doc.iban && !frm.doc.__islocal) {
-            checkForExistingMandate(frm);
-        }
+        // Don't do anything when bank account name changes
+        // We'll check for mandates after save
     }
 });
 
@@ -581,18 +578,15 @@ frappe.ui.form.on('Member SEPA Mandate Link', {
         }
     },
     
-    is_default: function(frm, cdt, cdn) {
-        // When setting a mandate as default, unset others
+    is_current: function(frm, cdt, cdn) {
+        // When setting a mandate as current, unset others
         const row = locals[cdt][cdn];
         
-        if (row.is_default) {
-            // Update parent's default_sepa_mandate field
-            frm.set_value('default_sepa_mandate', row.sepa_mandate);
-            
-            // Unset default on other mandates
+        if (row.is_current) {
+            // Unset current on other mandates
             frm.doc.sepa_mandates.forEach(function(mandate) {
-                if (mandate.name !== cdn && mandate.is_default) {
-                    frappe.model.set_value(mandate.doctype, mandate.name, 'is_default', 0);
+                if (mandate.name !== cdn && mandate.is_current) {
+                    frappe.model.set_value(mandate.doctype, mandate.name, 'is_current', 0);
                 }
             });
         }
