@@ -531,10 +531,11 @@ frappe.ui.form.on('Member', {
     
     payment_method: function(frm) {
         // Show/hide bank details based on payment method
-        const is_direct_debit = frm.doc.payment_method === 'Direct Debit';
+        const show_bank_details = ['Direct Debit', 'Bank Transfer'].includes(frm.doc.payment_method);
         frm.toggle_display(['bank_details_section'], is_direct_debit);
         
         // Set field requirements based on payment method
+        const is_direct_debit = frm.doc.payment_method === 'Direct Debit';
         frm.toggle_reqd(['iban', 'bank_account_name'], is_direct_debit);
         
         // REMOVED: Immediate mandate check - we now do this after save
