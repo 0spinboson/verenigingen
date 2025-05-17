@@ -2,6 +2,24 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on('Volunteer', {
+    validate: function(frm) {
+        // Ensure data is properly saved in child tables
+        if(frm.doc.active_assignments && frm.doc.active_assignments.length > 0) {
+            frm.doc.active_assignments.forEach(function(row, idx) {
+                if(row.reference_doctype && !row.reference_name) {
+                    frappe.msgprint(__("Please select reference name for row {0} in assignments", [idx+1]));
+                    frappe.validated = false;
+                }
+            });
+        }
+    },
+    
+    after_save: function(frm) {
+        // Explicitly refresh grid to ensure data is shown
+        frm.refresh_field('active_assignments');
+        frm.refresh_field('assignment_history');
+        frm.refresh_field('skills_and_qualifications');
+    }
     refresh: function(frm) {
         // Set up dynamic link for address and contact
         frappe.dynamic_link = {doc: frm.doc, fieldname: 'name', doctype: 'Volunteer'};
@@ -227,11 +245,26 @@ frappe.ui.form.on('Volunteer Assignment', {
             // Set reference to Commission
             frappe.model.set_value(cdt, cdn, 'reference_doctype', 'Commission');
         }
+        
+        // Refresh the field to update UI
+        frm.refresh_field('active_assignments');
     },
     
     reference_doctype: function(frm, cdt, cdn) {
         // When reference doctype changes, clear the reference name
         frappe.model.set_value(cdt, cdn, 'reference_name', '');
+        
+        // Refresh the parent form to update UI and apply filters
+        frm.refresh_field('active_assignments');
+        
+        // Force a re-query of the reference_name field to apply the latest filters
+        var child = locals[cdt][cdn];
+        if(child.reference_doctype) {
+            setTimeout(function() {
+                // This forces the dynamic link to refresh its options
+                frm.fields_dict.active_assignments.grid.grid_rows_by_docname[cdn].refresh_field('reference_name');
+            }, 300);
+        }
     }
 });
 
