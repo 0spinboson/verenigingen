@@ -1,3 +1,6 @@
+// Copyright (c) 2025, Your Organization and contributors
+// For license information, please see license.txt
+
 frappe.ui.form.on('Volunteer', {
     refresh: function(frm) {
         // Set up dynamic link for address and contact
@@ -55,6 +58,63 @@ frappe.ui.form.on('Volunteer', {
                 }
             );
         }
+        
+        // Set up filters for reference_name in assignment grid
+        frm.set_query("reference_name", "active_assignments", function(doc, cdt, cdn) {
+            var child = locals[cdt][cdn];
+            
+            if(!child.reference_doctype) {
+                return {
+                    filters: { "name": ["=", ""] } // No matches if no doctype selected
+                };
+            }
+            
+            var filters = {};
+            
+            // Apply filters based on assignment type and reference doctype
+            if(child.assignment_type === "Board Position") {
+                if(child.reference_doctype === "Chapter") {
+                    filters["published"] = 1;
+                }
+            }
+            else if(child.assignment_type === "Team" || child.assignment_type === "Committee") {
+                if(child.reference_doctype === "Volunteer Team") {
+                    filters["status"] = "Active";
+                    
+                    // Optionally filter by team type for committees
+                    if(child.assignment_type === "Committee") {
+                        filters["team_type"] = "Committee";
+                    }
+                }
+            }
+            else if(child.assignment_type === "Event") {
+                if(child.reference_doctype === "Event") {
+                    // Only show future or current events
+                    var today = frappe.datetime.get_today();
+                    filters["end_date"] = [">=", today];
+                }
+            }
+            else if(child.assignment_type === "Project") {
+                if(child.reference_doctype === "Project") {
+                    filters["status"] = ["in", ["Open", "In Progress"]];
+                }
+            }
+            
+            return {
+                filters: filters
+            };
+        });
+
+        // Also set up filters for the history section
+        frm.set_query("reference_name", "assignment_history", function(doc, cdt, cdn) {
+            var child = locals[cdt][cdn];
+            
+            if(!child.reference_doctype) {
+                return { filters: { "name": ["=", ""] } };
+            }
+            
+            return { filters: {} }; // No filters for history items, as they may be inactive/archived
+        });
     },
     
     member: function(frm) {
@@ -323,7 +383,27 @@ function create_new_assignment(frm) {
                 fieldname: 'reference_name',
                 fieldtype: 'Dynamic Link',
                 label: __('Reference Name'),
-                options: 'reference_doctype'
+                options: 'reference_doctype',
+                get_query: function() {
+                    var assignment_type = d.get_value('assignment_type');
+                    var reference_doctype = d.get_value('reference_doctype');
+                    
+                    var filters = {};
+                    
+                    if(assignment_type === 'Board Position' && reference_doctype === 'Chapter') {
+                        filters["published"] = 1;
+                    }
+                    else if((assignment_type === 'Team' || assignment_type === 'Committee') && 
+                           reference_doctype === 'Volunteer Team') {
+                        filters["status"] = "Active";
+                        
+                        if(assignment_type === 'Committee') {
+                            filters["team_type"] = "Committee";
+                        }
+                    }
+                    
+                    return { filters: filters };
+                }
             },
             {
                 fieldname: 'role',
