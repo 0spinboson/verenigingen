@@ -219,7 +219,7 @@
   {
    "link_doctype": "Member",
    "link_fieldname": "member",
-   "table_fieldname": null
+   "parent_doctype": "Volunteer"
   }
  ],
  "modified": "2025-05-17 12:43:45.267592",
