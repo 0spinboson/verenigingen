@@ -1,8 +1,12 @@
+// Copyright (c) 2025, Your Name and contributors
+// For license information, please see license.txt
+
 frappe.ui.form.on('Member', {
     refresh: function(frm) {
         if (frm.fields_dict.payment_history) {
             $(frm.fields_dict.payment_history.grid.wrapper).addClass('payment-history-grid');
         }
+        
         // Add buttons to create customer and user
         if (frm.doc.docstatus === 1) {
             // Add payment processing button
@@ -11,9 +15,13 @@ frappe.ui.form.on('Member', {
                     process_payment(frm);
                 }, __('Actions'));
             }
-            frm.fields_dict.payment_history.grid.grid_rows.forEach(row => {
-                format_payment_history_row(row);
-            });
+            
+            if (frm.fields_dict.payment_history && frm.fields_dict.payment_history.grid && 
+                frm.fields_dict.payment_history.grid.grid_rows) {
+                frm.fields_dict.payment_history.grid.grid_rows.forEach(row => {
+                    format_payment_history_row(row);
+                });
+            }
             
             // Add mark as paid button
             if (frm.doc.payment_status !== 'Paid') {
@@ -22,6 +30,7 @@ frappe.ui.form.on('Member', {
                 }, __('Actions'));
             }
         }
+        
         if (!frm.doc.customer) {
             frm.add_custom_button(__('Create Customer'), function() {
                 frm.call({
@@ -35,6 +44,7 @@ frappe.ui.form.on('Member', {
                 });
             }, __('Actions'));
         }
+        
         if (frm.fields_dict.payment_history) {
             // Remove 'No.' column from the payment history grid
             setTimeout(function() {
@@ -52,6 +62,7 @@ frappe.ui.form.on('Member', {
                 gridWrapper.addClass('no-idx-column');
             }, 500);
         }
+        
         // In the refresh function in member.js
         if (frm.doc.customer) {
             // Your existing buttons that require customer to be set
@@ -60,7 +71,6 @@ frappe.ui.form.on('Member', {
             }, __('View'));
     
             // Add the new button in the same condition block
-
             frm.add_custom_button(__('Refresh Financial History'), function() {
                 frappe.show_alert({
                     message: __("Refreshing financial history..."),
