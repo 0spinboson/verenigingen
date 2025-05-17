@@ -1,0 +1,115 @@
+{
+  "autoname": "hash",
+  "creation": "2025-05-17 12:43:45.267592",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+    "assignment_type",
+    "reference_doctype",
+    "reference_name",
+    "role",
+    "column_break_4",
+    "start_date",
+    "end_date",
+    "status",
+    "hours_section",
+    "estimated_hours",
+    "actual_hours",
+    "details_section",
+    "accomplishments",
+    "notes"
+  ],
+  "fields": [
+    {
+      "fieldname": "assignment_type",
+      "fieldtype": "Select",
+      "in_list_view": 1,
+      "label": "Assignment Type",
+      "options": "Board Position\nCommittee\nTeam\nProject\nEvent\nOther",
+      "reqd": 1
+    },
+    {
+      "fieldname": "reference_doctype",
+      "fieldtype": "Link",
+      "label": "Related To",
+      "options": "DocType",
+      "in_list_view": 1
+    },
+    {
+      "fieldname": "reference_name",
+      "fieldtype": "Dynamic Link",
+      "label": "Reference Name",
+      "options": "reference_doctype"
+    },
+    {
+      "fieldname": "role",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Role/Position",
+      "reqd": 1
+    },
+    {
+      "fieldname": "column_break_4",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "start_date",
+      "fieldtype": "Date",
+      "in_list_view": 1,
+      "label": "Start Date",
+      "reqd": 1
+    },
+    {
+      "fieldname": "end_date",
+      "fieldtype": "Date",
+      "label": "End Date"
+    },
+    {
+      "default": "Active",
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "in_list_view": 1,
+      "label": "Status",
+      "options": "Active\nCompleted\nPaused\nCancelled"
+    },
+    {
+      "fieldname": "hours_section",
+      "fieldtype": "Section Break",
+      "label": "Time Contribution"
+    },
+    {
+      "fieldname": "estimated_hours",
+      "fieldtype": "Float",
+      "label": "Estimated Hours"
+    },
+    {
+      "fieldname": "actual_hours",
+      "fieldtype": "Float",
+      "label": "Actual Hours"
+    },
+    {
+      "fieldname": "details_section",
+      "fieldtype": "Section Break",
+      "label": "Details"
+    },
+    {
+      "fieldname": "accomplishments",
+      "fieldtype": "Text",
+      "label": "Accomplishments"
+    },
+    {
+      "fieldname": "notes",
+      "fieldtype": "Text",
+      "label": "Notes"
+    }
+  ],
+  "istable": 1,
+  "modified": "2025-05-17 12:43:45.267592",
+  "modified_by": "Administrator",
+  "module": "Verenigingen",
+  "name": "Volunteer Assignment",
+  "owner": "Administrator",
+  "permissions": [],
+  "sort_field": "modified",
+  "sort_order": "DESC"
+}
