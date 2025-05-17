@@ -1,0 +1,88 @@
+{
+  "autoname": "hash",
+  "creation": "2025-05-17 12:43:45.267592",
+  "doctype": "DocType",
+  "engine": "InnoDB",
+  "field_order": [
+    "volunteer",
+    "volunteer_name",
+    "role_type",
+    "role",
+    "column_break_5",
+    "from_date",
+    "to_date",
+    "status",
+    "notes"
+  ],
+  "fields": [
+    {
+      "fieldname": "volunteer",
+      "fieldtype": "Link",
+      "in_list_view": 1,
+      "label": "Volunteer",
+      "options": "Volunteer",
+      "reqd": 1
+    },
+    {
+      "fetch_from": "volunteer.volunteer_name",
+      "fieldname": "volunteer_name",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Volunteer Name",
+      "read_only": 1
+    },
+    {
+      "default": "Team Member",
+      "fieldname": "role_type",
+      "fieldtype": "Select",
+      "in_list_view": 1,
+      "label": "Role Type",
+      "options": "Team Leader\nTeam Member",
+      "reqd": 1
+    },
+    {
+      "fieldname": "role",
+      "fieldtype": "Data",
+      "in_list_view": 1,
+      "label": "Role",
+      "reqd": 1
+    },
+    {
+      "fieldname": "column_break_5",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "from_date",
+      "fieldtype": "Date",
+      "label": "From Date",
+      "reqd": 1
+    },
+    {
+      "fieldname": "to_date",
+      "fieldtype": "Date",
+      "label": "To Date"
+    },
+    {
+      "default": "Active",
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "in_list_view": 1,
+      "label": "Status",
+      "options": "Active\nInactive\nCompleted\nOn Leave"
+    },
+    {
+      "fieldname": "notes",
+      "fieldtype": "Small Text",
+      "label": "Notes"
+    }
+  ],
+  "istable": 1,
+  "modified": "2025-05-17 12:43:45.267592",
+  "modified_by": "Administrator",
+  "module": "Verenigingen",
+  "name": "Volunteer Team Member",
+  "owner": "Administrator",
+  "permissions": [],
+  "sort_field": "modified",
+  "sort_order": "DESC"
+}
