@@ -36,6 +36,8 @@
   "current_membership_end",
   "chapter_and_volunteer_activity_section",
   "primary_chapter",
+  "volunteer_details_section",
+  "volunteer_details_html",
   "financial_details_tab",
   "payment_method_section",
   "payment_method",
@@ -396,6 +398,16 @@
    "fieldname": "chapter_and_volunteer_activity_section",
    "fieldtype": "Section Break",
    "label": "Chapter and Volunteer activity"
+  },
+  {
+   "fieldname": "volunteer_details_section",
+   "fieldtype": "Section Break",
+   "label": "Volunteer Details"
+  },
+  {
+   "fieldname": "volunteer_details_html",
+   "fieldtype": "HTML",
+   "label": "Volunteer Information"
   }
  ],
  "links": [
@@ -409,6 +421,11 @@
    "link_doctype": "Payment Entry",
    "link_fieldname": "party",
    "table_fieldname": "references"
+  },
+  {
+   "group": "Volunteer",
+   "link_doctype": "Volunteer",
+   "link_fieldname": "member"
   }
  ],
  "modified": "2025-05-17 12:43:45.267592",
