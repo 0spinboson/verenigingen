@@ -59,6 +59,15 @@ frappe.ui.form.on('Volunteer', {
             );
         }
         
+        // Set up filters for reference_doctype in assignment grid
+        frm.set_query("reference_doctype", "active_assignments", function() {
+            return {
+                filters: {
+                    "name": ["in", ["Chapter", "Volunteer Team", "Event", "Commission"]]
+                }
+            };
+        });
+        
         // Set up filters for reference_name in assignment grid
         frm.set_query("reference_name", "active_assignments", function(doc, cdt, cdn) {
             var child = locals[cdt][cdn];
@@ -94,11 +103,6 @@ frappe.ui.form.on('Volunteer', {
                     filters["end_date"] = [">=", today];
                 }
             }
-            else if(child.assignment_type === "Project") {
-                if(child.reference_doctype === "Project") {
-                    filters["status"] = ["in", ["Open", "In Progress"]];
-                }
-            }
             
             return {
                 filters: filters
@@ -106,6 +110,14 @@ frappe.ui.form.on('Volunteer', {
         });
 
         // Also set up filters for the history section
+        frm.set_query("reference_doctype", "assignment_history", function() {
+            return {
+                filters: {
+                    "name": ["in", ["Chapter", "Volunteer Team", "Event", "Commission"]]
+                }
+            };
+        });
+        
         frm.set_query("reference_name", "assignment_history", function(doc, cdt, cdn) {
             var child = locals[cdt][cdn];
             
@@ -208,6 +220,12 @@ frappe.ui.form.on('Volunteer Assignment', {
         } else if(assignment.assignment_type === 'Event') {
             // Set reference to Event
             frappe.model.set_value(cdt, cdn, 'reference_doctype', 'Event');
+        } else if(assignment.assignment_type === 'Committee') {
+            // Set reference to Volunteer Team with Committee filter
+            frappe.model.set_value(cdt, cdn, 'reference_doctype', 'Volunteer Team');
+        } else if(assignment.assignment_type === 'Commission') {
+            // Set reference to Commission
+            frappe.model.set_value(cdt, cdn, 'reference_doctype', 'Commission');
         }
     },
     
@@ -346,7 +364,7 @@ function create_new_assignment(frm) {
                 fieldname: 'assignment_type',
                 fieldtype: 'Select',
                 label: __('Assignment Type'),
-                options: 'Board Position\nCommittee\nTeam\nProject\nEvent\nOther',
+                options: 'Board Position\nCommittee\nTeam\nProject\nEvent\nCommission\nOther',
                 reqd: 1,
                 onchange: function() {
                     var assignment_type = d.get_value('assignment_type');
@@ -358,8 +376,12 @@ function create_new_assignment(frm) {
                         ref_doctype_field.set_value('Chapter');
                     } else if(assignment_type === 'Team') {
                         ref_doctype_field.set_value('Volunteer Team');
+                    } else if(assignment_type === 'Committee') {
+                        ref_doctype_field.set_value('Volunteer Team');
                     } else if(assignment_type === 'Event') {
                         ref_doctype_field.set_value('Event');
+                    } else if(assignment_type === 'Commission') {
+                        ref_doctype_field.set_value('Commission');
                     } else {
                         ref_doctype_field.set_value('');
                     }
@@ -373,8 +395,7 @@ function create_new_assignment(frm) {
                 get_query: function() {
                     return {
                         filters: {
-                            "issingle": 0,
-                            "istable": 0
+                            "name": ["in", ["Chapter", "Volunteer Team", "Event", "Commission"]]
                         }
                     };
                 }
