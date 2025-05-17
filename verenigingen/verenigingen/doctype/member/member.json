@@ -49,7 +49,6 @@
   "permission_category",
   "sepa_mandates_section",
   "sepa_mandates",
-  "default_sepa_mandate",
   "payment_history_section",
   "payment_history",
   "technical_stuff_tab",
@@ -102,13 +101,6 @@
    "fieldtype": "Table",
    "label": "SEPA Mandates",
    "options": "Member SEPA Mandate Link"
-  },
-  {
-   "description": "Default mandate for new memberships/donations",
-   "fieldname": "default_sepa_mandate",
-   "fieldtype": "Link",
-   "label": "Default SEPA Mandate",
-   "options": "SEPA Mandate"
   },
   {
    "fieldname": "payment_history",
@@ -419,7 +411,7 @@
    "table_fieldname": "references"
   }
  ],
- "modified": "2025-05-16 21:03:29.346407",
+ "modified": "2025-05-17 12:43:45.267592",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
