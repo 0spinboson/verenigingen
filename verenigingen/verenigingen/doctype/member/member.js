@@ -350,7 +350,7 @@ frappe.ui.form.on('Member', {
                     filters: {
                         'member': frm.doc.name
                     },
-                    fields: ['name', 'volunteer_name', 'volunteer_type', 'availability', 'availability_timeslot']
+                    fields: ['name', 'volunteer_name', 'availability', 'availability_timeslot']
                 },
                 callback: function(r) {
                     if (r.message && r.message.length > 0) {
@@ -380,7 +380,6 @@ frappe.ui.form.on('Member', {
                                     let html = `
                                         <div class="volunteer-info">
                                             <h4><a href="/app/volunteer/${volunteer.name}">${volunteer.volunteer_name}</a></h4>
-                                            <p>Type: ${volunteer.volunteer_type || 'Not specified'}</p>
                                             <p>Availability: ${volunteer.availability || 'Not specified'} 
                                                ${volunteer.availability_timeslot ? '(' + volunteer.availability_timeslot + ')' : ''}</p>
                                             ${skillsHtml}
