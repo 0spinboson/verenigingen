@@ -341,7 +341,7 @@ frappe.ui.form.on('Member', {
             frm.fields_dict[field].df.onchange = () => frm.trigger('update_full_name');
         });
         
-        // Check for volunteer record and display details
+        // Check for volunteer record and display details - UPDATED FOR NEW SCHEMA
         if (!frm.doc.__islocal && frm.fields_dict.volunteer_details_html) {
             frappe.call({
                 method: 'frappe.client.get_list',
@@ -350,7 +350,7 @@ frappe.ui.form.on('Member', {
                     filters: {
                         'member': frm.doc.name
                     },
-                    fields: ['name', 'volunteer_name', 'availability', 'availability_timeslot']
+                    fields: ['name', 'volunteer_name', 'status', 'commitment_level', 'experience_level', 'preferred_work_style']
                 },
                 callback: function(r) {
                     if (r.message && r.message.length > 0) {
@@ -368,20 +368,45 @@ frappe.ui.form.on('Member', {
                                     const volunteerDoc = r.message;
                                     let skillsHtml = '';
                                     
-                                    if (volunteerDoc.volunteer_skills && volunteerDoc.volunteer_skills.length > 0) {
+                                    // Use the new skills_and_qualifications field instead of volunteer_skills
+                                    if (volunteerDoc.skills_and_qualifications && volunteerDoc.skills_and_qualifications.length > 0) {
                                         skillsHtml = '<div class="volunteer-skills"><h5>Skills</h5><ul>';
-                                        volunteerDoc.volunteer_skills.forEach(function(skill) {
-                                            skillsHtml += '<li>' + skill.volunteer_skill + '</li>';
+                                        volunteerDoc.skills_and_qualifications.forEach(function(skill) {
+                                            skillsHtml += '<li>' + skill.volunteer_skill;
+                                            if (skill.proficiency_level) {
+                                                skillsHtml += ' <span class="text-muted">(' + skill.proficiency_level + ')</span>';
+                                            }
+                                            skillsHtml += '</li>';
                                         });
                                         skillsHtml += '</ul></div>';
                                     }
+
+                                    // Add interests if available
+                                    let interestsHtml = '';
+                                    if (volunteerDoc.interests && volunteerDoc.interests.length > 0) {
+                                        interestsHtml = '<div class="volunteer-interests"><h5>Areas of Interest</h5><div class="flex">';
+                                        volunteerDoc.interests.forEach(function(interest) {
+                                            interestsHtml += '<span class="badge badge-light mr-2 mb-2">' + 
+                                                interest.interest_area + '</span>';
+                                        });
+                                        interestsHtml += '</div></div>';
+                                    }
                                     
-                                    // Create volunteer info HTML
+                                    // Create volunteer info HTML - Updated with new fields
                                     let html = `
                                         <div class="volunteer-info">
                                             <h4><a href="/app/volunteer/${volunteer.name}">${volunteer.volunteer_name}</a></h4>
-                                            <p>Availability: ${volunteer.availability || 'Not specified'} 
-                                               ${volunteer.availability_timeslot ? '(' + volunteer.availability_timeslot + ')' : ''}</p>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <p><strong>Status:</strong> ${volunteer.status || 'Not specified'}</p>
+                                                    <p><strong>Commitment:</strong> ${volunteer.commitment_level || 'Not specified'}</p>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <p><strong>Experience:</strong> ${volunteer.experience_level || 'Not specified'}</p>
+                                                    <p><strong>Work Style:</strong> ${volunteer.preferred_work_style || 'Not specified'}</p>
+                                                </div>
+                                            </div>
+                                            ${interestsHtml}
                                             ${skillsHtml}
                                         </div>
                                     `;
@@ -467,7 +492,9 @@ frappe.ui.form.on('Member', {
                     'member': frm.doc.name,
                     'preferred_pronouns': frm.doc.pronouns,
                     'email': orgEmail,  // Organization email
-                    'personal_email': frm.doc.email || ''  // Personal email from member
+                    'personal_email': frm.doc.email || '',  // Personal email from member
+                    'status': 'Active',  // Default to Active
+                    'start_date': frappe.datetime.get_today()  // Set start date
                 };
             
                 // Create new volunteer doc
