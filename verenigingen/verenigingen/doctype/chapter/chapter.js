@@ -30,6 +30,11 @@ frappe.ui.form.on('Chapter', {
             frm.add_custom_button(__('View Board History'), function() {
                 view_board_history(frm);
             }, __('Board'));
+            
+            // Add button to sync board members with volunteer system
+            frm.add_custom_button(__('Sync with Volunteer System'), function() {
+                sync_board_with_volunteer_system(frm);
+            }, __('Board'));
         }
         
         // Add chapter statistics button
@@ -61,6 +66,33 @@ frappe.ui.form.on('Chapter Board Member', {
             frappe.db.get_doc("Member", row.member).then(doc => {
                 frappe.model.set_value(cdt, cdn, 'member_name', doc.full_name);
                 frappe.model.set_value(cdt, cdn, 'email', doc.email);
+                
+                // Check if member has a volunteer record
+                frappe.db.get_value("Volunteer", {"member": row.member}, "name", function(r) {
+                    if (r && r.name) {
+                        // Member already has a volunteer record
+                        frappe.show_alert({
+                            message: __("Member is already a volunteer. Board role will be linked to their volunteer record."),
+                            indicator: 'blue'
+                        }, 5);
+                    } else {
+                        // Ask if user wants to create a volunteer record
+                        frappe.confirm(
+                            __("Would you like to create a volunteer record for this board member?"),
+                            function() {
+                                // Yes - create volunteer record
+                                create_volunteer_record(frm, row.member);
+                            },
+                            function() {
+                                // No - do nothing
+                                frappe.show_alert({
+                                    message: __("No volunteer record created. You can create one later if needed."),
+                                    indicator: 'orange'
+                                }, 5);
+                            }
+                        );
+                    }
+                });
             });
         }
     },
@@ -70,6 +102,9 @@ frappe.ui.form.on('Chapter Board Member', {
         var row = locals[cdt][cdn];
         if (row.chapter_role && row.is_active) {
             check_for_duplicate_roles(frm, row);
+            
+            // If integrated with volunteer system, update assignment
+            update_volunteer_assignment(frm, row, true);
         }
     },
     
@@ -77,12 +112,32 @@ frappe.ui.form.on('Chapter Board Member', {
         var row = locals[cdt][cdn];
         if (row.is_active) {
             check_for_duplicate_roles(frm, row);
+            
+            // If integrated with volunteer system, update assignment
+            update_volunteer_assignment(frm, row, true);
+        } else {
+            // If integrated with volunteer system, end assignment
+            update_volunteer_assignment(frm, row, false);
         }
         
         // Set to_date when deactivating
         if (!row.is_active && !row.to_date) {
             frappe.model.set_value(cdt, cdn, 'to_date', frappe.datetime.get_today());
         }
+    },
+    
+    from_date: function(frm, cdt, cdn) {
+        // When start date changes, update volunteer assignment
+        var row = locals[cdt][cdn];
+        if (row.is_active) {
+            update_volunteer_assignment(frm, row, true);
+        }
+    },
+    
+    to_date: function(frm, cdt, cdn) {
+        // When end date changes, update volunteer assignment
+        var row = locals[cdt][cdn];
+        update_volunteer_assignment(frm, row, row.is_active);
     }
 });
 
@@ -343,6 +398,23 @@ function add_new_board_member(frm) {
                     
                     // Check if there are other active members with the same role
                     check_for_duplicate_roles(frm, child);
+                    
+                    // Create volunteer assignment if applicable
+                    frappe.db.get_value("Volunteer", {"member": values.member}, "name", function(r) {
+                        if (r && r.name) {
+                            // Member already has a volunteer record, update it
+                            update_volunteer_assignment(frm, child, true);
+                        } else {
+                            // Ask if user wants to create a volunteer record
+                            frappe.confirm(
+                                __("Would you like to create a volunteer record for this board member?"),
+                                function() {
+                                    // Yes - create volunteer record
+                                    create_volunteer_record(frm, values.member);
+                                }
+                            );
+                        }
+                    });
                 });
             }
         });
@@ -614,4 +686,88 @@ function get_active_board_members(frm) {
     }
     
     return options.join('\n');
+}
+
+// Function to create a volunteer record from board member
+function create_volunteer_record(frm, member) {
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.volunteer.volunteer.create_volunteer_from_member',
+        args: {
+            member_doc: member
+        },
+        callback: function(r) {
+            if (r.message) {
+                frappe.show_alert({
+                    message: __("Volunteer record created successfully."),
+                    indicator: 'green'
+                }, 5);
+                
+                // Refresh the form to ensure data is updated
+                frm.refresh();
+                
+                // Find any active board memberships for this member and update volunteer assignments
+                frm.doc.board_members.forEach(function(board_member) {
+                    if (board_member.member === member && board_member.is_active) {
+                        update_volunteer_assignment(frm, board_member, true);
+                    }
+                });
+            }
+        }
+    });
+}
+
+// Function to update volunteer assignment when board membership changes
+function update_volunteer_assignment(frm, board_member, is_active) {
+    if (!board_member.member) return;
+    
+    // Check if member has a volunteer record
+    frappe.db.get_value("Volunteer", {"member": board_member.member}, "name", function(r) {
+        if (r && r.name) {
+            var volunteer = r.name;
+            
+            if (is_active) {
+                // Add or update board assignment
+                frappe.call({
+                    method: 'verenigingen.verenigingen.doctype.volunteer.volunteer.add_board_member_assignment',
+                    args: {
+                        volunteer: volunteer,
+                        chapter: frm.doc.name,
+                        role: board_member.chapter_role,
+                        start_date: board_member.from_date,
+                        end_date: board_member.to_date
+                    },
+                    callback: function(r) {
+                        if (r.message) {
+                            frappe.show_alert({
+                                message: __("Volunteer assignment updated."),
+                                indicator: 'green'
+                            }, 5);
+                        }
+                    }
+                });
+            } else {
+                // End board assignment - we'll implement this later
+                // For now, we'll just show a message
+                frappe.show_alert({
+                    message: __("Board member deactivated. Remember to update their volunteer record."),
+                    indicator: 'yellow'
+                }, 5);
+            }
+        }
+    });
+}
+
+// Function to sync all board members with volunteer system
+function sync_board_with_volunteer_system(frm) {
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.volunteer.volunteer.sync_chapter_board_members',
+        callback: function(r) {
+            if (r.message) {
+                frappe.show_alert({
+                    message: __("Synced {0} board members with volunteer system.", [r.message.updated_count]),
+                    indicator: 'green'
+                }, 5);
+            }
+        }
+    });
 }
