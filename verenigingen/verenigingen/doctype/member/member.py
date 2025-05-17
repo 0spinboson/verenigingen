@@ -1097,10 +1097,7 @@ def create_sepa_mandate(self):
     
     self.save()
     
-    return mandate.nameimport frappe
-from frappe import _
-from frappe.model.document import Document
-from frappe.utils import getdate, today, add_days, date_diff
+    return mandate.name
 
 class Member(Document):
     def before_save(self):
