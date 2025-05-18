@@ -24,7 +24,6 @@
   "experience_level",
   "preferred_work_style",
   "assignment_section",
-  "active_assignments",
   "assignment_history_section",
   "assignment_history",
   "skills_section",
@@ -183,12 +182,6 @@
    "label": "Current Assignments"
   },
   {
-   "fieldname": "active_assignments",
-   "fieldtype": "Table",
-   "label": "Active Assignments",
-   "options": "Volunteer Assignment"
-  },
-  {
    "fieldname": "assignment_history_section",
    "fieldtype": "Section Break",
    "label": "Assignment History"
@@ -222,7 +215,7 @@
    "parent_doctype": "Member"
   }
  ],
- "modified": "2025-05-17 12:43:45.267592",
+ "modified": "2025-05-18 12:43:45.267592",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Volunteer",
