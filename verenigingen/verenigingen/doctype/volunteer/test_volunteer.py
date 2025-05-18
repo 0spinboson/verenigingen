@@ -28,6 +28,11 @@ class TestVolunteer(unittest.TestCase):
                 frappe.delete_doc("Volunteer Interest Category", category)
             except Exception:
                 pass
+                
+        try:
+            frappe.delete_doc("Volunteer Activity", self.test_activity_name)
+        except Exception:
+            pass
     
     def create_test_member(self):
         """Create a test member record"""
@@ -79,6 +84,21 @@ class TestVolunteer(unittest.TestCase):
         self.test_volunteer.insert()
         return self.test_volunteer
         
+    def create_test_activity(self):
+        """Create a test volunteer activity"""
+        activity = frappe.get_doc({
+            "doctype": "Volunteer Activity",
+            "volunteer": self.test_volunteer.name,
+            "activity_type": "Project",
+            "role": "Project Coordinator",
+            "description": "Test volunteer activity",
+            "status": "Active",
+            "start_date": today()
+        })
+        activity.insert()
+        self.test_activity_name = activity.name
+        return activity
+        
     def test_volunteer_creation(self):
         """Test creating a volunteer record"""
         volunteer = self.create_test_volunteer()
@@ -97,67 +117,68 @@ class TestVolunteer(unittest.TestCase):
         self.assertEqual(volunteer.skills_and_qualifications[0].volunteer_skill, "Python Programming")
         self.assertEqual(volunteer.skills_and_qualifications[0].proficiency_level, "4 - Advanced")
         
-    def test_add_assignment(self):
-        """Test adding an assignment to a volunteer"""
+    def test_add_activity(self):
+        """Test adding an activity to a volunteer"""
         volunteer = self.create_test_volunteer()
         
-        # Create a test chapter for assignment
-        if not frappe.db.exists("Chapter", "Test Chapter"):
-            chapter = frappe.get_doc({
-                "doctype": "Chapter",
-                "chapter_head": self.test_member.name,
-                "region": "Test Region",
-                "introduction": "Test chapter for assignments"
-            })
-            chapter.insert()
-            
-        # Add a board assignment
-        volunteer.add_board_assignment(
-            chapter="Test Chapter",
-            role="Test Role",
-            start_date=today()
-        )
+        # Create an activity
+        activity = self.create_test_activity()
         
-        # Reload the volunteer to get updated data
-        volunteer.reload()
+        # Verify the activity is in the volunteer's aggregated assignments
+        assignments = volunteer.get_aggregated_assignments()
         
-        # Verify assignment was added
-        self.assertEqual(len(volunteer.active_assignments), 1)
-        self.assertEqual(volunteer.active_assignments[0].assignment_type, "Board Position")
-        self.assertEqual(volunteer.active_assignments[0].reference_doctype, "Chapter")
-        self.assertEqual(volunteer.active_assignments[0].reference_name, "Test Chapter")
-        self.assertEqual(volunteer.active_assignments[0].role, "Test Role")
+        activity_found = False
+        for assignment in assignments:
+            if (assignment["source_type"] == "Activity" and 
+                assignment["source_doctype"] == "Volunteer Activity" and
+                assignment["source_name"] == activity.name):
+                activity_found = True
+                break
+                
+        self.assertTrue(activity_found, "Activity should appear in volunteer's aggregated assignments")
         
-    def test_end_assignment(self):
-        """Test ending an active assignment"""
+    def test_end_activity(self):
+        """Test ending an activity"""
         volunteer = self.create_test_volunteer()
         
-        # Create a test assignment
-        volunteer.append("active_assignments", {
-            "assignment_type": "Team",
-            "reference_doctype": "Volunteer Team",
-            "reference_name": "Test Team",
-            "role": "Team Member",
-            "start_date": add_days(today(), -30),
-            "status": "Active"
-        })
-        volunteer.save()
+        # Create an activity
+        activity = self.create_test_activity()
         
-        # End the assignment
-        volunteer.end_assignment(
-            assignment_idx=1,
-            end_date=today(),
-            notes="Test completion"
-        )
+        # End the activity
+        volunteer.end_activity(activity.name, today(), "Test completion")
         
-        # Reload volunteer
+        # Reload activity
+        activity.reload()
+        
+        # Verify status change
+        self.assertEqual(activity.status, "Completed")
+        self.assertEqual(activity.end_date, today())
+        
+        # Verify it's no longer in active assignments but in history
+        assignments = volunteer.get_aggregated_assignments()
+        
+        activity_found = False
+        for assignment in assignments:
+            if (assignment["source_type"] == "Activity" and 
+                assignment["source_doctype"] == "Volunteer Activity" and
+                assignment["source_name"] == activity.name):
+                activity_found = True
+                break
+                
+        self.assertFalse(activity_found, "Activity should not be in active assignments")
+        
+        # Reload volunteer to check assignment history
         volunteer.reload()
         
-        # Verify active assignment was moved to history
-        self.assertEqual(len(volunteer.active_assignments), 0)
-        self.assertEqual(len(volunteer.assignment_history), 1)
-        self.assertEqual(volunteer.assignment_history[0].status, "Completed")
-        self.assertEqual(volunteer.assignment_history[0].role, "Team Member")
+        # Check assignment history
+        history_entry_found = False
+        for entry in volunteer.assignment_history:
+            if (entry.reference_doctype == "Volunteer Activity" and 
+                entry.reference_name == activity.name):
+                history_entry_found = True
+                break
+                
+        self.assertTrue(history_entry_found, "Activity should be in assignment history")
         
     def test_get_skills_by_category(self):
         """Test retrieving skills grouped by category"""
@@ -187,6 +208,7 @@ class TestVolunteer(unittest.TestCase):
         
     def test_volunteer_status_tracking(self):
         """Test volunteer status updates based on assignments"""
+        # Create a new volunteer with 'New' status
         volunteer = frappe.get_doc({
             "doctype": "Volunteer",
             "volunteer_name": "Status Test Volunteer",
@@ -197,20 +219,63 @@ class TestVolunteer(unittest.TestCase):
         })
         volunteer.insert()
         
-        # Add an assignment and check if status changes from New to Active
-        volunteer.append("active_assignments", {
-            "assignment_type": "Team",
-            "reference_doctype": "Volunteer Team",
-            "reference_name": "Status Test Team",
+        # Create an activity for this volunteer
+        activity = frappe.get_doc({
+            "doctype": "Volunteer Activity",
+            "volunteer": volunteer.name,
+            "activity_type": "Project",
             "role": "Team Member",
-            "start_date": today(),
-            "status": "Active"
+            "status": "Active",
+            "start_date": today()
         })
-        volunteer.save()
+        activity.insert()
+        
+        # Reload volunteer to see status changes
         volunteer.reload()
         
         # Status should now be Active
         self.assertEqual(volunteer.status, "Active")
         
         # Cleanup
+        frappe.delete_doc("Volunteer Activity", activity.name)
         frappe.delete_doc("Volunteer", volunteer.name)
+    
+    def test_volunteer_history(self):
+        """Test the volunteer history feature"""
+        volunteer = self.create_test_volunteer()
+        
+        # Create an activity
+        activity = self.create_test_activity()
+        
+        # Get volunteer history
+        history = volunteer.get_volunteer_history()
+        
+        # Verify activity is in history
+        activity_in_history = False
+        for entry in history:
+            if (entry["assignment_type"] == "Activity" and 
+                "Project Coordinator" in entry["role"]):
+                activity_in_history = True
+                break
+                
+        self.assertTrue(activity_in_history, "Activity should appear in volunteer history")
+        
+        # End the activity
+        activity.status = "Completed"
+        activity.end_date = today()
+        activity.save()
+        
+        # Get updated history
+        volunteer.reload()
+        history = volunteer.get_volunteer_history()
+        
+        # Verify completed activity is in history with correct status
+        completed_in_history = False
+        for entry in history:
+            if (entry["assignment_type"] == "Activity" and 
+                "Project Coordinator" in entry["role"] and
+                entry["status"] == "Completed"):
+                completed_in_history = True
+                break
+                
+        self.assertTrue(completed_in_history, "Completed activity should be in history with correct status")
