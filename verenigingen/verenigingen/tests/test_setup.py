@@ -5,11 +5,16 @@ from frappe.utils import today
 
 def setup_test_environment():
     """Set up the test environment with required test records"""
-    print("Setting up test environment...")
-    setup_test_company()
-    setup_test_accounts()
-    setup_test_warehouses()
-    print("Test environment setup complete.")
+    try:
+        print("Setting up test environment...")
+        setup_test_company()
+        setup_test_accounts()
+        setup_test_warehouses()
+        print("Test environment setup complete.")
+    return True
+    except Exception as e:
+        print(f"Error setting up test environment: {e}")
+        return False
 
 def setup_test_company():
     """Create _Test Company if it doesn't exist"""
@@ -21,12 +26,20 @@ def setup_test_company():
         company.default_currency = "INR"
         company.country = "India"
         company.chart_of_accounts = "Standard"
+        company.domain = "Manufacturing" 
         try:
             company.insert(ignore_permissions=True)
             frappe.db.commit()
             print("_Test Company created")
         except Exception as e:
             print(f"Error creating company: {e}")
+    else:
+        # Ensure company has proper abbreviation
+        abbr = frappe.db.get_value("Company", "_Test Company", "abbr")
+        if not abbr:
+            frappe.db.set_value("Company", "_Test Company", "abbr", "_TC")
+            frappe.db.commit()
+            print("Updated _Test Company abbreviation")
 
 def setup_test_accounts():
     """Set up test accounts including USD payable account"""
@@ -69,6 +82,7 @@ def setup_test_accounts():
             frappe.db.commit()
             print("USD Payable account created successfully")
         except Exception as e:
+            frappe.db.rollback()
             print(f"Error creating account: {e}")
 
 def setup_test_warehouses():
@@ -80,8 +94,18 @@ def setup_test_warehouses():
         warehouse.company = "_Test Company"
         warehouse.warehouse_type = "Stores"
         try:
+            # To avoid autoname issues, we'll set the name directly
+            warehouse.name = "_Test Warehouse - _TC"
             warehouse.insert(ignore_permissions=True)
             frappe.db.commit()
             print("_Test Warehouse created")
         except Exception as e:
+            frappe.db.rollback()
             print(f"Error creating warehouse: {e}")
+
+# Function to disable automatic test record creation
+def disable_test_record_creation():
+    """Disable automatic test record creation"""
+    frappe.flags.skip_test_records = True
+    frappe.flags.make_test_records = False
+    return True
