@@ -12,7 +12,7 @@
   "national_board_chapter",
   "organization_email_domain",
   "financial_settings_section",
-  "enable_razorpay_for_memberships",
+
   "company_iban",
   "company_bic",
   "creditor_id",
@@ -22,9 +22,6 @@
   "default_tax_exemption_type",
   "default_tax_template",
   "kor_exemption_applied",
-  "razorpay_settings_section",
-  "billing_cycle",
-  "billing_frequency",
   "membership_webhook_secret",
   "column_break_6",
   "allow_invoicing",
@@ -54,18 +51,6 @@
    "fieldtype": "Select",
    "label": "Billing Cycle",
    "options": "Monthly\nYearly"
-  },
-  {
-   "depends_on": "eval:doc.enable_razorpay_for_memberships",
-   "fieldname": "razorpay_settings_section",
-   "fieldtype": "Section Break",
-   "label": "RazorPay Settings for Memberships"
-  },
-  {
-   "description": "The number of billing cycles for which the customer should be charged. For example, if a customer is buying a 1-year membership that should be billed on a monthly basis, this value should be 12.",
-   "fieldname": "billing_frequency",
-   "fieldtype": "Int",
-   "label": "Billing Frequency"
   },
   {
    "fieldname": "column_break_6",
@@ -194,12 +179,6 @@
    "fieldname": "automate_membership_payment_entries",
    "fieldtype": "Check",
    "label": "Automate Payment Entry Creation"
-  },
-  {
-   "default": "0",
-   "fieldname": "enable_razorpay_for_memberships",
-   "fieldtype": "Check",
-   "label": "Enable RazorPay For Memberships"
   },
   {
    "depends_on": "eval:doc.automate_membership_payment_entries",
