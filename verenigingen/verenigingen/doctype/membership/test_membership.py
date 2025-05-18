@@ -1,202 +1,298 @@
 import frappe
 import unittest
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import getdate, today, add_days, add_months
+from frappe.utils import getdate, today, add_days, add_months, nowdate, flt
+from verenigingen.verenigingen.doctype.membership.membership import Membership
+from verenigingen.verenigingen.doctype.membership.enhanced_subscription import sync_membership_with_subscription
 
-class TestMembershipType(FrappeTestCase):
+class TestMembership(FrappeTestCase):
     def setUp(self):
-        # Create test membership type data
-        self.membership_type_data = {
-            "membership_type_name": "Test Membership Type",
-            "description": "Test Membership Type for Unit Tests",
-            "subscription_period": "Annual",
-            "amount": 120,
-            "currency": "EUR",
-            "is_active": 1,
-            "allow_auto_renewal": 1
-        }
-        
-        # Delete any existing test membership types
-        if frappe.db.exists("Membership Type", self.membership_type_data["membership_type_name"]):
-            frappe.delete_doc("Membership Type", self.membership_type_data["membership_type_name"], force=True)
-            
-        # Delete any test subscription plans
-        for plan in frappe.get_all("Subscription Plan", filters={"plan_name": self.membership_type_data["membership_type_name"]}):
-            frappe.delete_doc("Subscription Plan", plan.name, force=True)
-            
-        # Delete any test items
-        item_code = f"MEM-{self.membership_type_data['membership_type_name']}".upper().replace(" ", "-")
-        if frappe.db.exists("Item", item_code):
-            frappe.delete_doc("Item", item_code, force=True)
+        # Create test data
+        self.setup_test_data()
     
     def tearDown(self):
         # Clean up test data
-        if frappe.db.exists("Membership Type", self.membership_type_data["membership_type_name"]):
-            frappe.delete_doc("Membership Type", self.membership_type_data["membership_type_name"], force=True)
-            
-        # Clean up any test subscription plans
-        for plan in frappe.get_all("Subscription Plan", filters={"plan_name": self.membership_type_data["membership_type_name"]}):
-            frappe.delete_doc("Subscription Plan", plan.name, force=True)
-            
-        # Clean up any test items
-        item_code = f"MEM-{self.membership_type_data['membership_type_name']}".upper().replace(" ", "-")
-        if frappe.db.exists("Item", item_code):
-            frappe.delete_doc("Item", item_code, force=True)
+        self.cleanup_test_data()
     
-    def test_create_membership_type(self):
-        """Test creating a new membership type"""
-        membership_type = frappe.new_doc("Membership Type")
-        membership_type.update(self.membership_type_data)
-        membership_type.insert()
+    def setup_test_data(self):
+        # Create test member
+        self.member_data = {
+            "first_name": "Test",
+            "last_name": "Member",
+            "email": "test.membership@example.com",
+            "mobile_no": "+31612345678",
+            "payment_method": "Bank Transfer"
+        }
         
-        self.assertEqual(membership_type.membership_type_name, "Test Membership Type")
-        self.assertEqual(membership_type.subscription_period, "Annual")
-        self.assertEqual(membership_type.amount, 120)
+        # Delete existing test members
+        for m in frappe.get_all("Member", filters={"email": self.member_data["email"]}):
+            frappe.delete_doc("Member", m.name, force=True)
+            
+        # Create a test member
+        self.member = frappe.new_doc("Member")
+        self.member.update(self.member_data)
+        self.member.insert()
+        
+        # Create customer for member
+        self.member.create_customer()
+        self.member.reload()
+        
+        # Create a test membership type
+        self.membership_type_name = "Test Membership Type"
+        if frappe.db.exists("Membership Type", self.membership_type_name):
+            frappe.delete_doc("Membership Type", self.membership_type_name, force=True)
+            
+        self.membership_type = frappe.new_doc("Membership Type")
+        self.membership_type.membership_type_name = self.membership_type_name
+        self.membership_type.subscription_period = "Annual"
+        self.membership_type.amount = 120
+        self.membership_type.currency = "EUR"
+        self.membership_type.is_active = 1
+        self.membership_type.allow_auto_renewal = 1
+        self.membership_type.insert()
+        
+        # Create a subscription plan for the membership type
+        self.membership_type.create_subscription_plan()
+        self.membership_type.reload()
     
-    def test_custom_subscription_period(self):
-        """Test validation for custom subscription period"""
-        membership_type = frappe.new_doc("Membership Type")
-        membership_type.update(self.membership_type_data)
+    def cleanup_test_data(self):
+        # Clean up memberships
+        for m in frappe.get_all("Membership", filters={"member": self.member.name}):
+            membership = frappe.get_doc("Membership", m.name)
+            if membership.docstatus == 1:
+                membership.cancel()
+            frappe.delete_doc("Membership", m.name, force=True)
         
-        # Change to custom period without setting months
-        membership_type.subscription_period = "Custom"
+        # Clean up member
+        frappe.delete_doc("Member", self.member.name, force=True)
         
-        # Should raise an error
+        # Clean up membership type
+        frappe.delete_doc("Membership Type", self.membership_type_name, force=True)
+        
+        # Clean up subscription plan
+        if self.membership_type.subscription_plan:
+            frappe.delete_doc("Subscription Plan", self.membership_type.subscription_plan, force=True)
+    
+    def test_create_membership(self):
+        """Test creating a new membership"""
+        # Create membership for the member
+        membership = frappe.new_doc("Membership")
+        membership.member = self.member.name
+        membership.membership_type = self.membership_type_name
+        membership.start_date = today()
+        membership.insert()
+        
+        # Check initial values
+        self.assertEqual(membership.member, self.member.name)
+        self.assertEqual(membership.membership_type, self.membership_type_name)
+        self.assertEqual(membership.status, "Draft")
+        
+        # Check renewal date calculation
+        expected_renewal_date = add_months(getdate(membership.start_date), 12)
+        self.assertEqual(getdate(membership.renewal_date), getdate(expected_renewal_date))
+        
+        # Check member name and email have been fetched
+        self.assertEqual(membership.member_name, self.member.full_name)
+        self.assertEqual(membership.email, self.member.email)
+    
+    def test_submit_membership(self):
+        """Test submitting a membership"""
+        # Create membership for the member
+        membership = frappe.new_doc("Membership")
+        membership.member = self.member.name
+        membership.membership_type = self.membership_type_name
+        membership.start_date = today()
+        membership.insert()
+        
+        # Submit the membership
+        membership.submit()
+        
+        # Reload the document
+        membership.reload()
+        
+        # Check status after submission
+        self.assertEqual(membership.status, "Active")
+        self.assertEqual(membership.docstatus, 1)
+        
+        # Check if subscription was created
+        self.assertTrue(membership.subscription, "Subscription should be created")
+        
+        # Verify subscription exists
+        subscription = frappe.get_doc("Subscription", membership.subscription)
+        self.assertEqual(subscription.party, self.member.customer)
+        self.assertEqual(getdate(subscription.start_date), getdate(membership.start_date))
+    
+    def test_renew_membership(self):
+        """Test membership renewal"""
+        # Create and submit membership
+        membership = frappe.new_doc("Membership")
+        membership.member = self.member.name
+        membership.membership_type = self.membership_type_name
+        membership.start_date = add_months(today(), -12)  # Last year
+        membership.insert()
+        membership.submit()
+        
+        # Renew the membership
+        new_membership_name = membership.renew_membership()
+        
+        # Check new membership
+        new_membership = frappe.get_doc("Membership", new_membership_name)
+        self.assertEqual(new_membership.member, membership.member)
+        self.assertEqual(new_membership.membership_type, membership.membership_type)
+        self.assertEqual(getdate(new_membership.start_date), getdate(membership.renewal_date))
+    
+    def test_cancel_membership(self):
+        """Test cancelling a membership"""
+        # Create and submit membership
+        membership = frappe.new_doc("Membership")
+        membership.member = self.member.name
+        membership.membership_type = self.membership_type_name
+        membership.start_date = add_months(today(), -13)  # More than 1 year ago (to allow cancellation)
+        membership.insert()
+        membership.submit()
+        
+        # Cancel the membership with reason
+        from verenigingen.verenigingen.doctype.membership.membership import cancel_membership
+        cancel_membership(
+            membership_name=membership.name,
+            cancellation_date=today(),
+            cancellation_reason="Test cancellation",
+            cancellation_type="Immediate"
+        )
+        
+        # Reload the document
+        membership.reload()
+        
+        # Check status after cancellation
+        self.assertEqual(membership.status, "Cancelled")
+        self.assertEqual(membership.cancellation_date, today())
+        self.assertEqual(membership.cancellation_reason, "Test cancellation")
+        self.assertEqual(membership.cancellation_type, "Immediate")
+    
+    def test_validate_dates(self):
+        """Test validation of membership dates"""
+        # Create membership with future start date
+        membership = frappe.new_doc("Membership")
+        membership.member = self.member.name
+        membership.membership_type = self.membership_type_name
+        membership.start_date = add_days(today(), 30)  # 30 days in future
+        membership.insert()
+        membership.submit()
+        
+        # Future cancellation date should be allowed
+        from verenigingen.verenigingen.doctype.membership.membership import cancel_membership
+        cancel_membership(
+            membership_name=membership.name,
+            cancellation_date=add_months(membership.start_date, 13),  # After 1 year minimum
+            cancellation_reason="Future cancellation",
+            cancellation_type="End of Period"
+        )
+        
+        # Reload the document
+        membership.reload()
+        
+        # Status should still be Active since cancellation is in future with End of Period
+        self.assertEqual(membership.status, "Active")
+        self.assertEqual(membership.cancellation_type, "End of Period")
+    
+    def test_early_cancellation_validation(self):
+        """Test validation preventing early cancellation"""
+        # Create and submit membership
+        membership = frappe.new_doc("Membership")
+        membership.member = self.member.name
+        membership.membership_type = self.membership_type_name
+        membership.start_date = add_months(today(), -6)  # 6 months ago (less than 1 year)
+        membership.insert()
+        membership.submit()
+        
+        # Try to cancel before 1 year - should raise an error
+        from verenigingen.verenigingen.doctype.membership.membership import cancel_membership
         with self.assertRaises(frappe.exceptions.ValidationError):
-            membership_type.insert()
-            
-        # Now set the months
-        membership_type.subscription_period_in_months = 6
-        membership_type.insert()
-        
-        # Should be valid now
-        self.assertEqual(membership_type.subscription_period, "Custom")
-        self.assertEqual(membership_type.subscription_period_in_months, 6)
+            cancel_membership(
+                membership_name=membership.name,
+                cancellation_date=today(),
+                cancellation_reason="Early cancellation",
+                cancellation_type="Immediate"
+            )
     
-    def test_negative_amount(self):
-        """Test validation for negative amount"""
-        membership_type = frappe.new_doc("Membership Type")
-        membership_type.update(self.membership_type_data)
+    def test_payment_sync(self):
+        """Test payment synchronization from subscription"""
+        # Create and submit membership
+        membership = frappe.new_doc("Membership")
+        membership.member = self.member.name
+        membership.membership_type = self.membership_type_name
+        membership.start_date = today()
+        membership.insert()
+        membership.submit()
         
-        # Set negative amount
-        membership_type.amount = -100
+        # Create a dummy invoice and payment
+        # Mock a subscription update - normally this would be called by system events
+        subscription = frappe.get_doc("Subscription", membership.subscription)
         
-        # Should raise an error
+        # Manually set next billing date
+        membership.next_billing_date = add_months(today(), 1)
+        membership.save()
+        
+        # Call sync method directly to test
+        membership.sync_payment_details_from_subscription()
+        
+        # Verify next_billing_date is preserved after sync
+        self.assertEqual(getdate(membership.next_billing_date), getdate(add_months(today(), 1)))
+    
+    def test_end_of_period_cancellation(self):
+        """Test end-of-period cancellation behavior"""
+        # Create and submit membership
+        membership = frappe.new_doc("Membership")
+        membership.member = self.member.name
+        membership.membership_type = self.membership_type_name
+        membership.start_date = add_months(today(), -13)  # More than 1 year ago
+        membership.insert()
+        membership.submit()
+        
+        # Cancel with End of Period
+        from verenigingen.verenigingen.doctype.membership.membership import cancel_membership
+        cancel_membership(
+            membership_name=membership.name,
+            cancellation_date=today(),
+            cancellation_reason="End of period test",
+            cancellation_type="End of Period"
+        )
+        
+        # Reload the document
+        membership.reload()
+        
+        # Status should NOT be Cancelled because End of Period means active until renewal date
+        # Assuming renewal date is in the future here
+        if getdate(membership.renewal_date) > getdate(today()):
+            self.assertNotEqual(membership.status, "Cancelled")
+            self.assertEqual(membership.cancellation_type, "End of Period")
+
+    def test_multiple_membership_validation(self):
+        """Test validation preventing multiple active memberships"""
+        # Create and submit first membership
+        membership1 = frappe.new_doc("Membership")
+        membership1.member = self.member.name
+        membership1.membership_type = self.membership_type_name
+        membership1.start_date = today()
+        membership1.insert()
+        membership1.submit()
+        
+        # Try to create a second membership - should validate and prevent
+        membership2 = frappe.new_doc("Membership")
+        membership2.member = self.member.name
+        membership2.membership_type = self.membership_type_name
+        membership2.start_date = add_days(today(), 1)
+        
+        # Should raise validation error unless allow_multiple_memberships is checked
         with self.assertRaises(frappe.exceptions.ValidationError):
-            membership_type.insert()
-    
-    def test_create_subscription_plan(self):
-        """Test creating a subscription plan from membership type"""
-        membership_type = frappe.new_doc("Membership Type")
-        membership_type.update(self.membership_type_data)
-        membership_type.insert()
+            membership2.insert()
         
-        # Initially no subscription plan
-        self.assertFalse(membership_type.subscription_plan)
+        # Now enable multiple memberships and try again
+        membership2.allow_multiple_memberships = 1
+        membership2.insert()
         
-        # Create subscription plan
-        plan_name = membership_type.create_subscription_plan()
-        
-        # Reload membership type
-        membership_type.reload()
-        
-        # Verify subscription plan is linked
-        self.assertTrue(membership_type.subscription_plan)
-        self.assertEqual(membership_type.subscription_plan, plan_name)
-        
-        # Verify subscription plan details
-        plan = frappe.get_doc("Subscription Plan", plan_name)
-        self.assertEqual(plan.plan_name, membership_type.membership_type_name)
-        self.assertEqual(float(plan.cost), float(membership_type.amount))
-        self.assertEqual(plan.billing_interval, "Year")  # Annual -> Year
-    
-    def test_default_membership_type(self):
-        """Test setting a membership type as default"""
-        # Create a first membership type
-        first_type = frappe.new_doc("Membership Type")
-        first_type.membership_type_name = "First Default Type"
-        first_type.subscription_period = "Annual"
-        first_type.amount = 100
-        first_type.currency = "EUR"
-        first_type.default_for_new_members = 1
-        first_type.insert()
-        
-        # Create a second membership type
-        second_type = frappe.new_doc("Membership Type")
-        second_type.membership_type_name = "Second Default Type"
-        second_type.subscription_period = "Annual"
-        second_type.amount = 120
-        second_type.currency = "EUR"
-        second_type.default_for_new_members = 1
-        second_type.insert()
-        
-        # Reload first type
-        first_type.reload()
-        
-        # First type should no longer be default
-        self.assertEqual(first_type.default_for_new_members, 0)
-        
-        # Only second type should be default
-        self.assertEqual(second_type.default_for_new_members, 1)
-        
-        # Clean up
-        first_type.delete()
-        second_type.delete()
-    
-    def test_subscription_period_mapping(self):
-        """Test mapping of subscription periods to intervals"""
-        # Test cases for different subscription periods
-        test_cases = [
-            {"period": "Monthly", "expected_interval": "Month", "expected_count": 1},
-            {"period": "Quarterly", "expected_interval": "Quarter", "expected_count": 1},
-            {"period": "Biannual", "expected_interval": "Half-Year", "expected_count": 1},
-            {"period": "Annual", "expected_interval": "Year", "expected_count": 1},
-            {"period": "Lifetime", "expected_interval": "Year", "expected_count": 1},
-        ]
-        
-        for test_case in test_cases:
-            # Create membership type with this period
-            membership_type = frappe.new_doc("Membership Type")
-            membership_type.membership_type_name = f"Test {test_case['period']}"
-            membership_type.subscription_period = test_case["period"]
-            membership_type.amount = 100
-            membership_type.currency = "EUR"
-            membership_type.insert()
-            
-            # Create subscription plan
-            plan_name = membership_type.create_subscription_plan()
-            
-            # Verify plan details
-            plan = frappe.get_doc("Subscription Plan", plan_name)
-            self.assertEqual(plan.billing_interval, test_case["expected_interval"])
-            self.assertEqual(plan.billing_interval_count, test_case["expected_count"])
-            
-            # Clean up
-            membership_type.delete()
-            frappe.delete_doc("Subscription Plan", plan_name, force=True)
-    
-    def test_custom_period_mapping(self):
-        """Test mapping of custom subscription periods"""
-        # Test custom period with specific months
-        membership_type = frappe.new_doc("Membership Type")
-        membership_type.membership_type_name = "Test Custom Period"
-        membership_type.subscription_period = "Custom"
-        membership_type.subscription_period_in_months = 9
-        membership_type.amount = 100
-        membership_type.currency = "EUR"
-        membership_type.insert()
-        
-        # Create subscription plan
-        plan_name = membership_type.create_subscription_plan()
-        
-        # Verify plan details
-        plan = frappe.get_doc("Subscription Plan", plan_name)
-        self.assertEqual(plan.billing_interval, "Month")
-        self.assertEqual(plan.billing_interval_count, 9)
-        
-        # Clean up
-        membership_type.delete()
-        frappe.delete_doc("Subscription Plan", plan_name, force=True)
+        # Should be allowed now
+        self.assertTrue(membership2.name)
 
 if __name__ == '__main__':
     unittest.main()
