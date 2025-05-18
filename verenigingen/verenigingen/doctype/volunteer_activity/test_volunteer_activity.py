@@ -8,9 +8,15 @@ from verenigingen.verenigingen.tests.test_base import VereningingenTestCase
 
 class TestVolunteerActivity(VereningingenTestCase):
     def setUp(self):
+        # Initialize the docs to delete list
+        self._docs_to_delete = []
+        
         # Create test data
         self.test_member = self.create_test_member()
+        self._docs_to_delete.append(("Member", self.test_member.name))
+        
         self.test_volunteer = self.create_test_volunteer(self.test_member)
+        self._docs_to_delete.append(("Volunteer", self.test_volunteer.name))
         
     def tearDown(self):
         # Clean up test data
