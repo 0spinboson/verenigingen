@@ -3,14 +3,18 @@
 
 import unittest
 import frappe
-from frappe.utils import today, add_days
+from frappe.utils import today, add_days, random_string
 import time
+import random
 
 class TestTeam(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # Tell Frappe not to make test records
         frappe.flags.make_test_records = False
+        
+        # Generate a unique test identifier to avoid name collisions
+        cls.test_id = random_string(8)
         
         # Clean up any leftover test data from previous failed runs
         cls.cleanup_test_data()
@@ -28,30 +32,23 @@ class TestTeam(unittest.TestCase):
                 except Exception as e:
                     print(f"Error cleaning up team {team_name}: {e}")
         
-        # Now try to delete any test volunteers/members
-        test_emails = [f"team_test_{i}@example.com" for i in range(3)]
+        # Clean up volunteers and members by matching patterns
+        # This ensures we catch records with specific naming patterns even if emails changed
+        volunteers = frappe.get_all("Volunteer", filters={"volunteer_name": ["like", "Team Test%"]}, fields=["name"])
+        for vol in volunteers:
+            try:
+                frappe.delete_doc("Volunteer", vol.name, force=True)
+                print(f"Cleaned up existing volunteer: {vol.name}")
+            except Exception as e:
+                print(f"Error cleaning up volunteer {vol.name}: {e}")
         
-        # First volunteers, then members
-        for email in test_emails:
-            # Find volunteer with similar email pattern
-            vol_email = email.replace("@example.com", "@example.org")
-            vol = frappe.db.get_value("Volunteer", {"email": vol_email}, "name")
-            if vol:
-                try:
-                    frappe.delete_doc("Volunteer", vol, force=True)
-                    print(f"Cleaned up existing volunteer: {vol}")
-                except Exception as e:
-                    print(f"Error cleaning up volunteer {vol}: {e}")
-        
-        # Now members
-        for email in test_emails:
-            member = frappe.db.get_value("Member", {"email": email}, "name")
-            if member:
-                try:
-                    frappe.delete_doc("Member", member, force=True)
-                    print(f"Cleaned up existing member: {member}")
-                except Exception as e:
-                    print(f"Error cleaning up member {member}: {e}")
+        members = frappe.get_all("Member", filters={"full_name": ["like", "Team Test%"]}, fields=["name"])
+        for member in members:
+            try:
+                frappe.delete_doc("Member", member.name, force=True)
+                print(f"Cleaned up existing member: {member.name}")
+            except Exception as e:
+                print(f"Error cleaning up member {member.name}: {e}")
         
     def setUp(self):
         # Create test data
@@ -68,26 +65,28 @@ class TestTeam(unittest.TestCase):
         
         # Create members first
         for i in range(3):
-            email = f"team_test_{i}@example.com"
+            # Generate unique identifier for this test run to avoid conflicts
+            unique_suffix = f"{self.__class__.test_id}_{i}"
             
-            # Skip the delete for now - we already cleaned up in setUpClass
-            # if frappe.db.exists("Member", {"email": email}):
-            #     frappe.delete_doc("Member", frappe.db.get_value("Member", {"email": email}, "name"))
+            # Create a unique email per run
+            email = f"team_test_{unique_suffix}@example.com"
             
+            # Create member with unique name
             member = frappe.get_doc({
                 "doctype": "Member",
-                "first_name": f"Team",
-                "last_name": f"Test {i}",
+                "first_name": f"Team{unique_suffix}",  # Make first_name unique
+                "last_name": f"Test{i}",
                 "email": email
             })
             member.insert(ignore_permissions=True)
             self.test_members.append(member)
             
-            # Create volunteer for each member
+            # Create volunteer for each member with unique name
+            vol_email = f"team.test.{unique_suffix}@example.org"
             volunteer = frappe.get_doc({
                 "doctype": "Volunteer",
-                "volunteer_name": member.full_name,
-                "email": f"{member.full_name.lower().replace(' ', '.')}@example.org",
+                "volunteer_name": f"TeamTest_{unique_suffix}",  # Use unique volunteer name
+                "email": vol_email,
                 "member": member.name,
                 "status": "Active",
                 "start_date": today()
@@ -97,9 +96,13 @@ class TestTeam(unittest.TestCase):
     
     def create_test_team(self):
         """Create a test team"""
+        team_name = f"Test Team {self.__class__.test_id}"
+        if frappe.db.exists("Team", team_name):
+            frappe.delete_doc("Team", team_name, force=True)
+            
         self.test_team = frappe.get_doc({
             "doctype": "Team",
-            "team_name": "Test Team",
+            "team_name": team_name,
             "description": "Test team for unit tests",
             "team_type": "Committee",
             "start_date": today(),
@@ -141,7 +144,7 @@ class TestTeam(unittest.TestCase):
         team = self.create_test_team()
         
         # Verify team was created
-        self.assertEqual(team.team_name, "Test Team")
+        self.assertEqual(team.team_name, f"Test Team {self.__class__.test_id}")
         self.assertEqual(team.team_type, "Committee")
         self.assertEqual(team.status, "Active")
         
@@ -208,7 +211,11 @@ class TestTeam(unittest.TestCase):
         deactivated_volunteer = None
         for i, tm in enumerate(team.team_members):
             if tm.status == "Inactive":
-                deactivated_volunteer = self.test_volunteers[i]
+                # Find the volunteer by name since the indices might not match anymore
+                for vol in self.test_volunteers:
+                    if vol.name == tm.volunteer:
+                        deactivated_volunteer = vol
+                        break
                 break
         
         if deactivated_volunteer:
@@ -271,9 +278,13 @@ class TestTeam(unittest.TestCase):
         
     def test_member_volunteer_linkage(self):
         """Test that adding a member automatically links the volunteer"""
+        team_name = f"Test Linkage Team {self.__class__.test_id}"
+        if frappe.db.exists("Team", team_name):
+            frappe.delete_doc("Team", team_name, force=True)
+            
         team = frappe.get_doc({
             "doctype": "Team",
-            "team_name": "Test Linkage Team",
+            "team_name": team_name,
             "description": "Test team for member-volunteer linkage",
             "team_type": "Working Group",
             "start_date": today(),
