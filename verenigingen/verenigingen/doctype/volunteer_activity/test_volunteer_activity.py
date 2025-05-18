@@ -3,7 +3,7 @@
 # See license.txt
 
 import frappe
-from frappe.utils import today, add_days
+from frappe.utils import today, add_days, getdate
 from verenigingen.verenigingen.tests.test_base import VereningingenTestCase
 
 class TestVolunteerActivity(VereningingenTestCase):
