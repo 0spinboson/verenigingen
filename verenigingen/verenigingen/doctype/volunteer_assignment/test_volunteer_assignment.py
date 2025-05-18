@@ -28,13 +28,11 @@ class TestVolunteerAssignment(VereningingenTestCase):
                 pass
     
     def test_basic_assignment(self):
-        """Test creating a basic assignment in assignment_history"""
-        # Add assignment to assignment_history
+        """Test creating a basic assignment in assignment_history without external references"""
+        # Use 'Other' assignment type that doesn't require external references
         self.test_volunteer.append("assignment_history", {
-            "assignment_type": "Project",
-            "reference_doctype": "Project",
-            "reference_name": "Test Project",
-            "role": "Project Member",
+            "assignment_type": "Other",
+            "role": "Test Role",
             "start_date": today(),
             "status": "Active"
         })
@@ -42,8 +40,8 @@ class TestVolunteerAssignment(VereningingenTestCase):
         
         # Verify assignment was created
         self.assertEqual(len(self.test_volunteer.assignment_history), 1)
-        self.assertEqual(self.test_volunteer.assignment_history[0].assignment_type, "Project")
-        self.assertEqual(self.test_volunteer.assignment_history[0].role, "Project Member")
+        self.assertEqual(self.test_volunteer.assignment_history[0].assignment_type, "Other")
+        self.assertEqual(self.test_volunteer.assignment_history[0].role, "Test Role")
     
     def test_board_assignment(self):
         """Test creating a board position assignment"""
@@ -80,27 +78,29 @@ class TestVolunteerAssignment(VereningingenTestCase):
     
     def test_assignment_dates(self):
         """Test assignment date validations"""
-        # Try to create assignment with end date before start date (should raise ValueError)
+        # Use an assignment without external references
+        self.test_volunteer.append("assignment_history", {
+            "assignment_type": "Other",  # Other doesn't require references
+            "role": "Test Role",
+            "start_date": today(),
+            "status": "Active"
+        })
+        self.test_volunteer.save()
+        
+        # Update with an invalid end date
+        assignment = self.test_volunteer.assignment_history[0]
+        assignment.end_date = add_days(today(), -10)  # End date before start date
+        
+        # Should raise validation error
         with self.assertRaises(Exception):
-            self.test_volunteer.append("assignment_history", {
-                "assignment_type": "Project",
-                "reference_doctype": "Project",
-                "reference_name": "Test Project",
-                "role": "Project Member",
-                "start_date": today(),
-                "end_date": add_days(today(), -10),  # End date before start date
-                "status": "Active"
-            })
             self.test_volunteer.save()
     
     def test_assignment_completion(self):
         """Test completing an assignment"""
-        # Create an active assignment
+        # Create an assignment without external references
         self.test_volunteer.append("assignment_history", {
-            "assignment_type": "Event",
-            "reference_doctype": "Event",
-            "reference_name": "Test Event",
-            "role": "Event Coordinator",
+            "assignment_type": "Other",  # Other doesn't require references
+            "role": "Test Role",
             "start_date": add_days(today(), -30),
             "status": "Active"
         })
@@ -121,21 +121,18 @@ class TestVolunteerAssignment(VereningingenTestCase):
     
     def test_volunteer_history(self):
         """Test retrieving volunteer assignment history"""
-        # Add two assignments with different statuses
+        # Add assignment without external reference
         self.test_volunteer.append("assignment_history", {
-            "assignment_type": "Board Position",
-            "reference_doctype": "Chapter",
-            "reference_name": "Test Chapter",
-            "role": "Board Member",
+            "assignment_type": "Other",  # Other doesn't require references
+            "role": "Active Role",
             "start_date": today(),
             "status": "Active"
         })
         
+        # Add another completed assignment
         self.test_volunteer.append("assignment_history", {
-            "assignment_type": "Team",
-            "reference_doctype": "Volunteer Team",
-            "reference_name": "Past Team",
-            "role": "Team Member",
+            "assignment_type": "Other",  # Other doesn't require references
+            "role": "Completed Role",
             "start_date": add_days(today(), -100),
             "end_date": add_days(today(), -10),
             "status": "Completed"
