@@ -5,7 +5,6 @@ import unittest
 import frappe
 from frappe.utils import today, add_days
 
-@unittest.skip_test_for_test_record_creation
 class TestTeam(unittest.TestCase):
     def setUp(self):
         # Create test data
