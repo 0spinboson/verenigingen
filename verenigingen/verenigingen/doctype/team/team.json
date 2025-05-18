@@ -2,67 +2,123 @@
  "actions": [],
  "allow_rename": 1,
  "autoname": "field:team_name",
- "creation": "2025-05-02 22:52:26.918368",
+ "creation": "2025-05-18 12:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "main_section",
   "team_name",
-  "desc",
+  "description",
+  "status",
+  "team_type_section",
+  "team_type",
   "chapter",
+  "is_association_wide",
+  "column_break_7",
+  "start_date",
+  "end_date",
   "team_lead",
-  "is_active",
-  "team_members"
+  "team_members_section",
+  "team_members",
+  "team_details_section",
+  "objectives",
+  "key_responsibilities"
  ],
  "fields": [
-  {
-   "fieldname": "main_section",
-   "fieldtype": "Section Break",
-   "label": "Main"
-  },
   {
    "fieldname": "team_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Team name",
+   "label": "Team Name",
    "reqd": 1,
    "unique": 1
   },
   {
-   "fieldname": "desc",
+   "fieldname": "description",
    "fieldtype": "Text Editor",
    "label": "Description"
   },
   {
+   "default": "Active",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Active\nInactive\nCompleted\nArchived"
+  },
+  {
+   "fieldname": "team_type_section",
+   "fieldtype": "Section Break",
+   "label": "Team Type"
+  },
+  {
+   "fieldname": "team_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Team Type",
+   "options": "Committee\nWorking Group\nTask Force\nProject Team\nOperational Team\nOther"
+  },
+  {
    "fieldname": "chapter",
    "fieldtype": "Link",
-   "label": "Chapter",
+   "label": "Parent Chapter",
    "options": "Chapter"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_association_wide",
+   "fieldtype": "Check",
+   "label": "Association-wide Team"
+  },
+  {
+   "fieldname": "column_break_7",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "start_date",
+   "fieldtype": "Date",
+   "label": "Start Date"
+  },
+  {
+   "fieldname": "end_date",
+   "fieldtype": "Date",
+   "label": "End Date"
   },
   {
    "fieldname": "team_lead",
    "fieldtype": "Link",
-   "label": "Team lead",
+   "label": "Team Lead",
    "options": "User"
   },
   {
-   "default": "0",
-   "fieldname": "is_active",
-   "fieldtype": "Check",
-   "label": "Is active"
+   "fieldname": "team_members_section",
+   "fieldtype": "Section Break",
+   "label": "Team Members"
   },
   {
-   "columns": 9,
    "fieldname": "team_members",
    "fieldtype": "Table",
    "label": "Team Members",
-   "options": "Team Member Role"
+   "options": "Team Member"
+  },
+  {
+   "fieldname": "team_details_section",
+   "fieldtype": "Section Break",
+   "label": "Team Details"
+  },
+  {
+   "fieldname": "objectives",
+   "fieldtype": "Text Editor",
+   "label": "Objectives"
+  },
+  {
+   "fieldname": "key_responsibilities",
+   "fieldtype": "Table",
+   "label": "Key Responsibilities",
+   "options": "Team Responsibility"
   }
  ],
- "grid_page_length": 50,
- "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-05-03 09:59:10.137020",
+ "modified": "2025-05-18 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Team",
@@ -83,6 +139,28 @@
   },
   {
    "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Verenigingen Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Association Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
    "email": 1,
    "read": 1,
    "report": 1,
@@ -93,6 +171,5 @@
  ],
  "row_format": "Dynamic",
  "sort_field": "modified",
- "sort_order": "DESC",
- "states": []
+ "sort_order": "DESC"
 }
