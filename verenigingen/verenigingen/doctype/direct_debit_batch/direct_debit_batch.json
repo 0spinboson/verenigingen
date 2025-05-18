@@ -84,7 +84,8 @@
    "fieldtype": "Select",
    "label": "Status",
    "options": "Draft\nGenerated\nSubmitted\nProcessed\nFailed",
-   "read_only": 1
+   "read_only": 1,
+   "allow_on_submit": 1
   },
   {
    "fieldname": "invoices_section",
@@ -112,7 +113,8 @@
    "fieldname": "sepa_file_generated",
    "fieldtype": "Check",
    "label": "SEPA File Generated",
-   "read_only": 1
+   "read_only": 1,
+   "allow_on_submit": 1
   },
   {
    "depends_on": "eval:doc.sepa_file_generated==1",
