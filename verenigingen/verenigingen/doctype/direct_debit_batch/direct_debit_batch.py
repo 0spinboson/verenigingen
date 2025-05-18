@@ -61,10 +61,10 @@ class DirectDebitBatch(Document):
             message_id = f"BATCH-{self.name}-{random_string(8)}"
             payment_info_id = f"PMT-{self.name}-{random_string(8)}"
             
-            # Store IDs
-            self.sepa_message_id = message_id
-            self.sepa_payment_info_id = payment_info_id
-            self.sepa_generation_date = f"{nowdate()} {nowtime()}"
+            # Store IDs - use db_set to avoid validation issues after submission
+            self.db_set('sepa_message_id', message_id)
+            self.db_set('sepa_payment_info_id', payment_info_id)
+            self.db_set('sepa_generation_date', f"{nowdate()} {nowtime()}")
             
             # Get company settings from Verenigingen Settings
             settings = frappe.get_single("Verenigingen Settings")
@@ -106,19 +106,21 @@ class DirectDebitBatch(Document):
                 f.write(xml_pretty)
             
             # Attach to document
-            self.sepa_file = self.attach_sepa_file(temp_file_path)
-            self.sepa_file_generated = 1
-            self.status = "Generated"
+            sepa_file = self.attach_sepa_file(temp_file_path)
+            
+            # Use db_set instead of direct assignment for fields that need to change after submit
+            self.db_set('sepa_file', sepa_file)
+            self.db_set('sepa_file_generated', 1)
+            self.db_set('status', 'Generated')
             
             # Update log
             self.add_to_batch_log(_("SEPA XML file generated successfully"))
-            self.save()
             
             # Clean up
             os.remove(temp_file_path)
             
             frappe.logger().info(f"SEPA XML file generated successfully for batch {self.name}")
-            return self.sepa_file
+            return sepa_file
             
         except Exception as e:
             error_msg = _("Error generating SEPA file: {0}").format(str(e))
