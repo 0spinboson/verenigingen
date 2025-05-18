@@ -5,6 +5,7 @@ import unittest
 import frappe
 from frappe.utils import getdate, today, add_days
 
+@unittest.skip_test_for_test_record_creation
 class TestVolunteerActivity(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
