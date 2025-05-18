@@ -6,6 +6,10 @@ import frappe
 from frappe.utils import today, add_days
 
 class TestTeam(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Tell Frappe not to make test records
+        frappe.flags.make_test_records = False
     def setUp(self):
         # Create test data
         self.create_test_volunteers()
