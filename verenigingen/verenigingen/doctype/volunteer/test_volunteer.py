@@ -3,97 +3,76 @@
 
 import unittest
 import frappe
-from frappe.utils import getdate, add_days, today
+from frappe.utils import getdate, today, add_days
+import random
+from verenigingen.verenigingen.tests.test_base import VereningingenTestCase
 
-class TestVolunteer(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        # Tell Frappe not to make test records
-        frappe.flags.make_test_records = False
-        
+class TestVolunteer(VereningingenTestCase):
     def setUp(self):
+        # Initialize cleanup list
+        self._docs_to_delete = []
+        
         # Create test data
-        self.create_test_member()
         self.create_test_interest_categories()
-        
-    def tearDown(self):
-        # Clean up test data
-        try:
-            frappe.delete_doc("Volunteer", self.test_volunteer.name)
-        except Exception:
-            pass
-            
-        try:
-            frappe.delete_doc("Member", self.test_member.name)
-        except Exception:
-            pass
-            
-        for category in ["Test Category 1", "Test Category 2"]:
-            try:
-                frappe.delete_doc("Volunteer Interest Category", category)
-            except Exception:
-                pass
-                
-        try:
-            frappe.delete_doc("Volunteer Activity", self.test_activity_name)
-        except Exception:
-            pass
+        self.test_member = self.create_test_member()
+        self._docs_to_delete.append(("Member", self.test_member.name))
     
-    def create_test_member(self):
-        """Create a test member record"""
-        if frappe.db.exists("Member", {"email": "test_volunteer@example.com"}):
-            frappe.delete_doc("Member", frappe.db.get_value("Member", {"email": "test_volunteer@example.com"}, "name"))
-        
-        self.test_member = frappe.get_doc({
-            "doctype": "Member",
-            "first_name": "Test",
-            "last_name": "Volunteer",
-            "email": "test_volunteer@example.com"
-        })
-        self.test_member.insert(ignore_permissions=True)
+    def tearDown(self):
+        # Clean up test data in reverse order (child records first)
+        for doctype, name in reversed(self._docs_to_delete):
+            try:
+                frappe.delete_doc(doctype, name, force=True)
+            except Exception as e:
+                print(f"Error deleting {doctype} {name}: {e}")
     
     def create_test_interest_categories(self):
         """Create test interest categories"""
         categories = ["Test Category 1", "Test Category 2"]
         for category in categories:
             if not frappe.db.exists("Volunteer Interest Category", category):
-                frappe.get_doc({
+                cat_doc = frappe.get_doc({
                     "doctype": "Volunteer Interest Category",
                     "category_name": category,
                     "description": f"Test category {category}"
-                }).insert(ignore_permissions=True)
+                })
+                cat_doc.insert(ignore_permissions=True)
+                self._docs_to_delete.append(("Volunteer Interest Category", category))
 
     def create_test_volunteer(self):
         """Create a test volunteer record"""
-        self.test_volunteer = frappe.get_doc({
+        # Generate unique name to avoid conflicts
+        unique_suffix = random.randint(1000, 9999)
+        
+        volunteer = frappe.get_doc({
             "doctype": "Volunteer",
-            "volunteer_name": "Test Volunteer",
-            "email": "test.volunteer@example.org",
+            "volunteer_name": f"Test Volunteer {unique_suffix}",
+            "email": f"test.volunteer{unique_suffix}@example.org",
             "member": self.test_member.name,
             "status": "Active",
             "start_date": today()
         })
         
         # Add interests
-        self.test_volunteer.append("interests", {
+        volunteer.append("interests", {
             "interest_area": "Test Category 1"
         })
         
         # Add skills
-        self.test_volunteer.append("skills_and_qualifications", {
+        volunteer.append("skills_and_qualifications", {
             "skill_category": "Technical",
             "volunteer_skill": "Python Programming",
             "proficiency_level": "4 - Advanced"
         })
         
-        self.test_volunteer.insert(ignore_permissions=True)
-        return self.test_volunteer
+        volunteer.insert(ignore_permissions=True)
+        self._docs_to_delete.append(("Volunteer", volunteer.name))
+        return volunteer
         
-    def create_test_activity(self):
+    def create_test_activity(self, volunteer):
         """Create a test volunteer activity"""
         activity = frappe.get_doc({
             "doctype": "Volunteer Activity",
-            "volunteer": self.test_volunteer.name,
+            "volunteer": volunteer.name,
             "activity_type": "Project",
             "role": "Project Coordinator",
             "description": "Test volunteer activity",
@@ -101,7 +80,7 @@ class TestVolunteer(unittest.TestCase):
             "start_date": today()
         })
         activity.insert(ignore_permissions=True)
-        self.test_activity_name = activity.name
+        self._docs_to_delete.append(("Volunteer Activity", activity.name))
         return activity
         
     def test_volunteer_creation(self):
@@ -109,7 +88,6 @@ class TestVolunteer(unittest.TestCase):
         volunteer = self.create_test_volunteer()
         
         # Verify record was created correctly
-        self.assertEqual(volunteer.volunteer_name, "Test Volunteer")
         self.assertEqual(volunteer.member, self.test_member.name)
         self.assertEqual(volunteer.status, "Active")
         
@@ -127,7 +105,7 @@ class TestVolunteer(unittest.TestCase):
         volunteer = self.create_test_volunteer()
         
         # Create an activity
-        activity = self.create_test_activity()
+        activity = self.create_test_activity(volunteer)
         
         # Verify the activity is in the volunteer's aggregated assignments
         assignments = volunteer.get_aggregated_assignments()
@@ -147,7 +125,7 @@ class TestVolunteer(unittest.TestCase):
         volunteer = self.create_test_volunteer()
         
         # Create an activity
-        activity = self.create_test_activity()
+        activity = self.create_test_activity(volunteer)
         
         # End the activity
         volunteer.end_activity(activity.name, today(), "Test completion")
@@ -157,7 +135,7 @@ class TestVolunteer(unittest.TestCase):
         
         # Verify status change
         self.assertEqual(activity.status, "Completed")
-        self.assertEqual(activity.end_date, today())
+        self.assertEqual(getdate(activity.end_date), getdate(today()))
         
         # Verify it's no longer in active assignments but in history
         assignments = volunteer.get_aggregated_assignments()
@@ -214,15 +192,20 @@ class TestVolunteer(unittest.TestCase):
     def test_volunteer_status_tracking(self):
         """Test volunteer status updates based on assignments"""
         # Create a new volunteer with 'New' status
+        # Use a different member for this test to avoid conflicts
+        test_member = self.create_test_member()
+        self._docs_to_delete.append(("Member", test_member.name))
+        
         volunteer = frappe.get_doc({
             "doctype": "Volunteer",
-            "volunteer_name": "Status Test Volunteer",
-            "email": "status.test@example.org",
-            "member": self.test_member.name,
+            "volunteer_name": f"Status Test Volunteer {random.randint(1000, 9999)}",
+            "email": f"status.test{random.randint(1000, 9999)}@example.org",
+            "member": test_member.name,
             "status": "New",
             "start_date": today()
         })
         volunteer.insert(ignore_permissions=True)
+        self._docs_to_delete.append(("Volunteer", volunteer.name))
         
         # Create an activity for this volunteer
         activity = frappe.get_doc({
@@ -234,23 +217,20 @@ class TestVolunteer(unittest.TestCase):
             "start_date": today()
         })
         activity.insert(ignore_permissions=True)
+        self._docs_to_delete.append(("Volunteer Activity", activity.name))
         
         # Reload volunteer to see status changes
         volunteer.reload()
         
         # Status should now be Active
         self.assertEqual(volunteer.status, "Active")
-        
-        # Cleanup
-        frappe.delete_doc("Volunteer Activity", activity.name)
-        frappe.delete_doc("Volunteer", volunteer.name)
     
     def test_volunteer_history(self):
         """Test the volunteer history feature"""
         volunteer = self.create_test_volunteer()
         
         # Create an activity
-        activity = self.create_test_activity()
+        activity = self.create_test_activity(volunteer)
         
         # Get volunteer history
         history = volunteer.get_volunteer_history()
