@@ -130,12 +130,9 @@ class TestVolunteer(VereningingenTestCase):
         # End the activity manually instead of using end_activity method
         activity.status = "Completed"
         activity.end_date = today()
-        # Convert end_date to match the expected type of start_date
-        if isinstance(activity.start_date, str) and not isinstance(activity.end_date, str):
-            activity.end_date = activity.end_date.strftime("%Y-%m-%d")
         activity.save()
         
-        # Reload activity
+        # Reload activity to get fresh data
         activity.reload()
         
         # Verify status change
@@ -146,6 +143,9 @@ class TestVolunteer(VereningingenTestCase):
             self.assertEqual(activity.end_date, today())
         else:
             self.assertEqual(getdate(activity.end_date), getdate(today()))
+        
+        # Reload volunteer to get fresh data before modifying
+        volunteer.reload()
         
         # Manually add to assignment history since end_activity has issues
         volunteer.append("assignment_history", {
@@ -242,25 +242,37 @@ class TestVolunteer(VereningingenTestCase):
         """Test the volunteer assignment history directly"""
         volunteer = self.create_test_volunteer()
         
-        # Create an activity
-        activity = self.create_test_activity(volunteer)
+        # Create two activities - one active, one to be completed
+        activity1 = self.create_test_activity(volunteer)
+        activity2 = self.create_test_activity(volunteer)
+        
+        # Mark second activity as completed
+        activity2.status = "Completed"
+        activity2.end_date = today()
+        activity2.save()
+        
+        # Reload volunteer to get fresh data
+        volunteer.reload()
         
         # Directly append to assignment_history
         volunteer.append("assignment_history", {
-            "assignment_type": "Project",
+            "assignment_type": "Activity",
             "reference_doctype": "Volunteer Activity",
-            "reference_name": activity.name,
+            "reference_name": activity1.name,
             "role": "Project Coordinator",
             "start_date": today(),
             "status": "Active"
         })
         volunteer.save()
         
+        # Reload volunteer again before second save
+        volunteer.reload()
+        
         # Add a completed entry
         volunteer.append("assignment_history", {
-            "assignment_type": "Project",
+            "assignment_type": "Activity",
             "reference_doctype": "Volunteer Activity",
-            "reference_name": f"completed-{activity.name}",
+            "reference_name": activity2.name,  # Use real activity name
             "role": "Project Coordinator",
             "start_date": add_days(today(), -30),
             "end_date": today(),
