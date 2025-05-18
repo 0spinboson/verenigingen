@@ -4,6 +4,7 @@
 
 import unittest
 import frappe
+import random
 from frappe.utils import today
 
 class VereningingenTestCase(unittest.TestCase):
