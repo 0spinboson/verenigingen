@@ -152,33 +152,49 @@ class TestDirectDebitBatch(FrappeTestCase):
         
         return membership_type
     
-    def mock_invoice_for_testing(self, membership_name, amount=100.00):
-        """Create a mock invoice for testing without requiring actual invoice submission"""
+    def create_minimal_invoice(self, amount=100.00):
+        """Create a minimal but real invoice for testing"""
         invoice_name = f"SINV-TEST-{frappe.utils.random_string(10)}"
         
-        # Insert a dummy invoice record directly into the database if needed
-        if not frappe.db.exists("Sales Invoice", invoice_name):
-            # Create a simple invoice object without all the complex validation
-            frappe.db.sql("""
-                INSERT INTO `tabSales Invoice` 
-                (name, customer, posting_date, due_date, status, docstatus, grand_total, outstanding_amount, membership) 
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (
-                invoice_name, 
-                self.member.customer, 
-                today(), 
-                add_days(today(), 30), 
-                "Unpaid", 
-                1,  # Submitted
-                amount, 
-                amount,  # Outstanding equals total for unpaid
-                membership_name
-            ))
+        # Check if invoice exists
+        if frappe.db.exists("Sales Invoice", invoice_name):
+            return invoice_name
             
+        # Create a new invoice with minimal required fields
+        invoice = frappe.new_doc("Sales Invoice")
+        invoice.name = invoice_name  # Set name explicitly
+        invoice.customer = self.member.customer
+        invoice.posting_date = today()
+        invoice.due_date = add_days(today(), 30)
+        invoice.company = "_Test Company"
+        invoice.currency = "EUR"
+        
+        # Add at least one item
+        invoice.append("items", {
+            "item_code": self.test_item,
+            "qty": 1,
+            "rate": amount,
+            "amount": amount
+        })
+        
+        # Set flags to bypass validation
+        invoice.flags.ignore_permissions = True
+        invoice.flags.ignore_validate = True
+        invoice.flags.ignore_mandatory = True
+        
+        # Insert directly to database
+        invoice.db_insert()
+        
+        # Set status and docstatus directly
+        frappe.db.set_value("Sales Invoice", invoice_name, "status", "Unpaid")
+        frappe.db.set_value("Sales Invoice", invoice_name, "docstatus", 1)
+        frappe.db.set_value("Sales Invoice", invoice_name, "grand_total", amount)
+        frappe.db.set_value("Sales Invoice", invoice_name, "outstanding_amount", amount)
+        
         return invoice_name
     
     def create_test_membership_and_invoice(self, amount=100.00):
-        """Create a test membership and mock invoice for testing"""
+        """Create a test membership and invoice for testing"""
         # Create membership type if needed
         membership_type = self.create_membership_type()
         
@@ -194,8 +210,8 @@ class TestDirectDebitBatch(FrappeTestCase):
         membership.flags.ignore_mandatory = True
         membership.insert()
         
-        # Create a mock invoice instead of a real Sales Invoice
-        invoice_name = self.mock_invoice_for_testing(membership.name, amount)
+        # Create a real invoice with minimal setup
+        invoice_name = self.create_minimal_invoice(amount)
         
         # Add to arrays for tracking
         self.memberships.append(membership.name)
