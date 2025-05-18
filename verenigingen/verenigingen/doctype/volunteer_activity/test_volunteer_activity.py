@@ -12,6 +12,8 @@ class TestVolunteerActivity(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # Set up test company and accounts if they don't exist
+        super().setUpClass()
+        frappe.flags.make_test_records = False
         if not frappe.db.exists("Company", "_Test Company"):
             from erpnext.setup.doctype.company.test_company import create_test_company
             create_test_company("_Test Company")
