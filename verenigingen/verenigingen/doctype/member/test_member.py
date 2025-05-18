@@ -1,16 +1,21 @@
 import frappe
 import unittest
+import random
+import string
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_days, today, getdate
 from verenigingen.verenigingen.doctype.member.member import Member
 
 class TestMember(FrappeTestCase):
     def setUp(self):
-        # Create test member data
+        # Generate a unique identifier using only alphanumeric characters
+        self.unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        
+        # Create test member data with unique name
         self.member_data = {
-            "first_name": "Test",
+            "first_name": f"Test{self.unique_id}",
             "last_name": "Member",
-            "email": "testmember@example.com",
+            "email": f"testmember{self.unique_id}@example.com",
             "mobile_no": "+31612345678",
             "payment_method": "Bank Transfer",
             "status": "Active",
@@ -18,29 +23,36 @@ class TestMember(FrappeTestCase):
         }
         
         # Delete existing test members
-        for m in frappe.get_all("Member", filters={"email": self.member_data["email"]}):
-            frappe.delete_doc("Member", m.name, force=True)
-            
-        # Delete any test customers
-        for c in frappe.get_all("Customer", filters={"email_id": self.member_data["email"]}):
-            frappe.delete_doc("Customer", c.name, force=True)
-            
-        # Delete any test users
-        if frappe.db.exists("User", self.member_data["email"]):
-            frappe.delete_doc("User", self.member_data["email"], force=True)
+        self.cleanup_test_data()
     
     def tearDown(self):
         # Clean up test data
-        for m in frappe.get_all("Member", filters={"email": self.member_data["email"]}):
-            frappe.delete_doc("Member", m.name, force=True)
+        self.cleanup_test_data()
+    
+    def cleanup_test_data(self):
+        # Clear any members with our test email pattern
+        for m in frappe.get_all("Member", filters={"email": ["like", "testmember%@example.com"]}):
+            try:
+                frappe.delete_doc("Member", m.name, force=True)
+            except Exception as e:
+                # Ignore errors during cleanup
+                print(f"Error cleaning up member {m.name}: {str(e)}")
             
         # Clean up any test customers
-        for c in frappe.get_all("Customer", filters={"email_id": self.member_data["email"]}):
-            frappe.delete_doc("Customer", c.name, force=True)
+        for c in frappe.get_all("Customer", filters={"email_id": ["like", "testmember%@example.com"]}):
+            try:
+                frappe.delete_doc("Customer", c.name, force=True)
+            except Exception as e:
+                # Ignore errors during cleanup
+                print(f"Error cleaning up customer {c.name}: {str(e)}")
             
         # Clean up any test users
-        if frappe.db.exists("User", self.member_data["email"]):
-            frappe.delete_doc("User", self.member_data["email"], force=True)
+        for u in frappe.get_all("User", filters={"email": ["like", "testmember%@example.com"]}):
+            try:
+                frappe.delete_doc("User", u.name, force=True)
+            except Exception as e:
+                # Ignore errors during cleanup
+                print(f"Error cleaning up user {u.name}: {str(e)}")
     
     def test_create_member(self):
         """Test creating a new member"""
@@ -48,8 +60,8 @@ class TestMember(FrappeTestCase):
         member.update(self.member_data)
         member.insert()
         
-        self.assertEqual(member.full_name, "Test Member")
-        self.assertEqual(member.email, "testmember@example.com")
+        self.assertEqual(member.full_name, f"Test{self.unique_id} Member")
+        self.assertEqual(member.email, f"testmember{self.unique_id}@example.com")
         self.assertTrue(member.name.startswith("Assoc-Member-"))
         
         # Test member_id generation
@@ -57,27 +69,44 @@ class TestMember(FrappeTestCase):
     
     def test_update_full_name(self):
         """Test that full_name is updated when component names change"""
+        # Create unique member data for this test
+        unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        member_data = {
+            "first_name": f"Test{unique_id}",
+            "last_name": "Member",
+            "email": f"testmember{unique_id}@example.com",
+            "mobile_no": "+31612345678",
+            "payment_method": "Bank Transfer"
+        }
+        
         member = frappe.new_doc("Member")
-        member.update(self.member_data)
+        member.update(member_data)
         member.insert()
         
         # Initial full name
-        self.assertEqual(member.full_name, "Test Member")
+        self.assertEqual(member.full_name, f"Test{unique_id} Member")
         
         # Update name components
         member.middle_name = "Middle"
         member.update_full_name()
         
         # Verify full name is updated
-        self.assertEqual(member.full_name, "Test Middle Member")
+        self.assertEqual(member.full_name, f"Test{unique_id} Middle Member")
     
     def test_validate_name(self):
         """Test validation for name fields"""
-        member = frappe.new_doc("Member")
-        member.update(self.member_data)
+        # Create unique member data for this test
+        unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        member_data = {
+            "first_name": f"Test{unique_id}@", # Invalid character
+            "last_name": "Member",
+            "email": f"testmember{unique_id}@example.com",
+            "mobile_no": "+31612345678",
+            "payment_method": "Bank Transfer"
+        }
         
-        # Set invalid character in name
-        member.first_name = "Test@"
+        member = frappe.new_doc("Member")
+        member.update(member_data)
         
         # Should raise an error
         with self.assertRaises(frappe.exceptions.ValidationError):
@@ -85,14 +114,20 @@ class TestMember(FrappeTestCase):
     
     def test_validate_bank_details(self):
         """Test bank details validation for direct debit payment method"""
+        # Create unique member data for this test
+        unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        member_data = {
+            "first_name": f"Test{unique_id}",
+            "last_name": "Member",
+            "email": f"testmember{unique_id}@example.com",
+            "mobile_no": "+31612345678",
+            "payment_method": "Direct Debit",
+            "iban": "NL02ABNA0123456789",
+            "bank_account_name": f"Test{unique_id} Member"
+        }
+        
         member = frappe.new_doc("Member")
-        member.update(self.member_data)
-        
-        # Change payment method to Direct Debit
-        member.payment_method = "Direct Debit"
-        member.iban = "NL02ABNA0123456789"
-        member.bank_account_name = "Test Member"
-        
+        member.update(member_data)
         member.insert()
         
         # Verify IBAN is formatted correctly
@@ -100,8 +135,18 @@ class TestMember(FrappeTestCase):
     
     def test_create_customer(self):
         """Test customer creation from member"""
+        # Create unique member data for this test
+        unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        member_data = {
+            "first_name": f"Test{unique_id}",
+            "last_name": "Member",
+            "email": f"testmember{unique_id}@example.com",
+            "mobile_no": "+31612345678",
+            "payment_method": "Bank Transfer"
+        }
+        
         member = frappe.new_doc("Member")
-        member.update(self.member_data)
+        member.update(member_data)
         member.insert()
         
         # Initially no customer
@@ -128,8 +173,18 @@ class TestMember(FrappeTestCase):
         # This test may need to be skipped or modified based on permissions
         # Creating users often requires system manager privileges
         try:
+            # Create unique member data for this test
+            unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+            member_data = {
+                "first_name": f"Test{unique_id}",
+                "last_name": "Member",
+                "email": f"testmember{unique_id}@example.com",
+                "mobile_no": "+31612345678",
+                "payment_method": "Bank Transfer"
+            }
+            
             member = frappe.new_doc("Member")
-            member.update(self.member_data)
+            member.update(member_data)
             member.insert()
             
             # Initially no user
@@ -152,14 +207,22 @@ class TestMember(FrappeTestCase):
             self.assertEqual(user.last_name, member.last_name)
         except frappe.PermissionError:
             # If permission error, skip this test
-            print("Skipping test_create_user due to permission constraints")
+            self.skipTest("Skipping test_create_user due to permission constraints")
     
     def test_payment_history(self):
         """Test payment history loading"""
-        # This test requires a customer with invoices
-        # Creating a full test is complex, so we'll just verify the method exists
+        # Create unique member data for this test
+        unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        member_data = {
+            "first_name": f"Test{unique_id}",
+            "last_name": "Member",
+            "email": f"testmember{unique_id}@example.com",
+            "mobile_no": "+31612345678",
+            "payment_method": "Bank Transfer"
+        }
+        
         member = frappe.new_doc("Member")
-        member.update(self.member_data)
+        member.update(member_data)
         member.insert()
         
         # Create customer
@@ -169,14 +232,29 @@ class TestMember(FrappeTestCase):
         # Verify the method exists
         self.assertTrue(hasattr(member, 'load_payment_history'))
         self.assertTrue(callable(getattr(member, 'load_payment_history')))
+        
+        # Try to load payment history (should not error even if empty)
+        try:
+            result = member.load_payment_history()
+            self.assertTrue(result)
+        except Exception as e:
+            self.fail(f"load_payment_history raised {type(e).__name__} unexpectedly!")
     
     def test_calculate_age(self):
         """Test age calculation from birth date"""
-        member = frappe.new_doc("Member")
-        member.update(self.member_data)
+        # Create unique member data for this test
+        unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        member_data = {
+            "first_name": f"Test{unique_id}",
+            "last_name": "Member",
+            "email": f"testmember{unique_id}@example.com",
+            "mobile_no": "+31612345678",
+            "payment_method": "Bank Transfer",
+            "birth_date": add_days(today(), -365 * 30) # 30 years ago
+        }
         
-        # Set birth date to 30 years ago
-        member.birth_date = add_days(today(), -365 * 30)
+        member = frappe.new_doc("Member")
+        member.update(member_data)
         member.insert()
         
         # Age should be 30 (or 29 if today is before birthday this year)
