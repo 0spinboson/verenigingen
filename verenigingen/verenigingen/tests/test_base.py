@@ -21,7 +21,8 @@ class VereningingenTestCase(unittest.TestCase):
     def create_test_member(self, email=None):
         """Create a test member record with unique name"""
         # Generate a random string for uniqueness - using only alphanumeric characters
-        unique_id = ''.join(frappe.utils.random.choice('abcdefghijklmnopqrstuvwxyz0123456789') for _ in range(8))
+        chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+        unique_id = ''.join(random.choice(chars) for _ in range(8))
         
         if not email:
             email = f"test{unique_id}@example.com"
