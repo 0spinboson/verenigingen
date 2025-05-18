@@ -4,12 +4,10 @@ import unittest
 import frappe
 from frappe.utils import getdate, today, add_days
 
+@unittest.skip_test_for_test_record_creation  # Skip automatic test record creation
 class TestVolunteerActivity(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        # Tell Frappe not to make test records yet - we'll do this manually after setup
-        frappe.flags.make_test_records = False
-        
         # Set up test company and accounts if they don't exist
         if not frappe.db.exists("Company", "_Test Company"):
             from erpnext.setup.doctype.company.test_company import create_test_company
@@ -23,21 +21,21 @@ class TestVolunteerActivity(unittest.TestCase):
                     "doctype": "Currency",
                     "currency_name": "USD",
                     "enabled": 1
-                }).insert()
+                }).insert(ignore_permissions=True)
                 
             # Get parent account
             parent_account = frappe.db.get_value("Account", 
-                {"account_type": "Payable", "company": "_Test Company"})
+                {"account_type": "Payable", "company": "_Test Company", "is_group": 1}, "name")
                 
             if parent_account:
-                # Create the USD payable account
+                # Create the USD payable account with correct name including company suffix
                 usd_account = frappe.get_doc({
                     "doctype": "Account",
                     "account_name": "_Test Payable USD",
-                    "parent_account": parent_account,
-                    "account_currency": "USD",
                     "account_type": "Payable",
+                    "parent_account": parent_account,
                     "company": "_Test Company",
+                    "account_currency": "USD",
                     "is_group": 0
                 })
                 usd_account.insert(ignore_permissions=True)
@@ -46,23 +44,6 @@ class TestVolunteerActivity(unittest.TestCase):
     def setUp(self):
         # Create test data for volunteer
         self.create_test_volunteer()
-        
-    def tearDown(self):
-        # Clean up test data
-        try:
-            frappe.delete_doc("Volunteer Activity", self.test_activity.name)
-        except Exception:
-            pass
-            
-        try:
-            frappe.delete_doc("Volunteer", self.test_volunteer.name)
-        except Exception:
-            pass
-            
-        try:
-            frappe.delete_doc("Member", self.test_member.name)
-        except Exception:
-            pass
         
     def tearDown(self):
         # Clean up test data
