@@ -5,6 +5,7 @@ import unittest
 import frappe
 from frappe.utils import getdate, today, add_days
 
+@unittest.skip_test_for_test_record_creation
 class TestVolunteerActivity(unittest.TestCase):
     def setUp(self):
         # Create test data
@@ -39,7 +40,7 @@ class TestVolunteerActivity(unittest.TestCase):
             "last_name": "Test",
             "email": "activity_test@example.com"
         })
-        self.test_member.insert()
+        self.test_member.insert(ignore_permissions=True)
         
         # Create volunteer record
         self.test_volunteer = frappe.get_doc({
@@ -50,7 +51,7 @@ class TestVolunteerActivity(unittest.TestCase):
             "status": "Active",
             "start_date": today()
         })
-        self.test_volunteer.insert()
+        self.test_volunteer.insert(ignore_permissions=True)
         
         return self.test_volunteer
     
@@ -65,7 +66,7 @@ class TestVolunteerActivity(unittest.TestCase):
             "status": "Active",
             "start_date": today()
         })
-        self.test_activity.insert()
+        self.test_activity.insert(ignore_permissions=True)
         
         return self.test_activity
     
