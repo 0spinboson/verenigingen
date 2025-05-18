@@ -1,4 +1,3 @@
-// Copyright (c) 2017, Frappe Technologies Pvt. Ltd. and contributors
 // For license information, please see license.txt
 
 frappe.ui.form.on('Chapter', {
@@ -72,7 +71,7 @@ frappe.ui.form.on('Chapter Board Member', {
                     if (r && r.name) {
                         // Member already has a volunteer record
                         frappe.show_alert({
-                            message: __("Member is already a volunteer. Board role will be linked to their volunteer record."),
+                            message: __("Member is already a volunteer. Board role will be reflected in their volunteer record."),
                             indicator: 'blue'
                         }, 5);
                     } else {
@@ -102,9 +101,6 @@ frappe.ui.form.on('Chapter Board Member', {
         var row = locals[cdt][cdn];
         if (row.chapter_role && row.is_active) {
             check_for_duplicate_roles(frm, row);
-            
-            // If integrated with volunteer system, update assignment
-            update_volunteer_assignment(frm, row, true);
         }
     },
     
@@ -112,12 +108,6 @@ frappe.ui.form.on('Chapter Board Member', {
         var row = locals[cdt][cdn];
         if (row.is_active) {
             check_for_duplicate_roles(frm, row);
-            
-            // If integrated with volunteer system, update assignment
-            update_volunteer_assignment(frm, row, true);
-        } else {
-            // If integrated with volunteer system, end assignment
-            update_volunteer_assignment(frm, row, false);
         }
         
         // Set to_date when deactivating
@@ -127,17 +117,21 @@ frappe.ui.form.on('Chapter Board Member', {
     },
     
     from_date: function(frm, cdt, cdn) {
-        // When start date changes, update volunteer assignment
+        // Date validation
         var row = locals[cdt][cdn];
-        if (row.is_active) {
-            update_volunteer_assignment(frm, row, true);
+        if (row.to_date && row.from_date > row.to_date) {
+            frappe.msgprint(__("Start date cannot be after end date"));
+            frappe.model.set_value(cdt, cdn, 'from_date', row.to_date);
         }
     },
     
     to_date: function(frm, cdt, cdn) {
-        // When end date changes, update volunteer assignment
+        // Date validation
         var row = locals[cdt][cdn];
-        update_volunteer_assignment(frm, row, row.is_active);
+        if (row.from_date && row.to_date && row.from_date > row.to_date) {
+            frappe.msgprint(__("End date cannot be before start date"));
+            frappe.model.set_value(cdt, cdn, 'to_date', row.from_date);
+        }
     }
 });
 
@@ -399,11 +393,14 @@ function add_new_board_member(frm) {
                     // Check if there are other active members with the same role
                     check_for_duplicate_roles(frm, child);
                     
-                    // Create volunteer assignment if applicable
+                    // Create volunteer record if applicable
                     frappe.db.get_value("Volunteer", {"member": values.member}, "name", function(r) {
                         if (r && r.name) {
-                            // Member already has a volunteer record, update it
-                            update_volunteer_assignment(frm, child, true);
+                            // Member already has a volunteer record
+                            frappe.show_alert({
+                                message: __("Board position will be reflected in the volunteer's assignments"),
+                                indicator: 'blue'
+                            }, 5);
                         } else {
                             // Ask if user wants to create a volunteer record
                             frappe.confirm(
@@ -704,54 +701,6 @@ function create_volunteer_record(frm, member) {
                 
                 // Refresh the form to ensure data is updated
                 frm.refresh();
-                
-                // Find any active board memberships for this member and update volunteer assignments
-                frm.doc.board_members.forEach(function(board_member) {
-                    if (board_member.member === member && board_member.is_active) {
-                        update_volunteer_assignment(frm, board_member, true);
-                    }
-                });
-            }
-        }
-    });
-}
-
-// Function to update volunteer assignment when board membership changes
-function update_volunteer_assignment(frm, board_member, is_active) {
-    if (!board_member.member) return;
-    
-    // Check if member has a volunteer record
-    frappe.db.get_value("Volunteer", {"member": board_member.member}, "name", function(r) {
-        if (r && r.name) {
-            var volunteer = r.name;
-            
-            if (is_active) {
-                // Add or update board assignment
-                frappe.call({
-                    method: 'verenigingen.verenigingen.doctype.volunteer.volunteer.add_board_member_assignment',
-                    args: {
-                        volunteer: volunteer,
-                        chapter: frm.doc.name,
-                        role: board_member.chapter_role,
-                        start_date: board_member.from_date,
-                        end_date: board_member.to_date
-                    },
-                    callback: function(r) {
-                        if (r.message) {
-                            frappe.show_alert({
-                                message: __("Volunteer assignment updated."),
-                                indicator: 'green'
-                            }, 5);
-                        }
-                    }
-                });
-            } else {
-                // End board assignment - we'll implement this later
-                // For now, we'll just show a message
-                frappe.show_alert({
-                    message: __("Board member deactivated. Remember to update their volunteer record."),
-                    indicator: 'yellow'
-                }, 5);
             }
         }
     });
