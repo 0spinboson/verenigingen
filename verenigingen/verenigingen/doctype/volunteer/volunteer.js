@@ -2,6 +2,10 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on('Volunteer', {
+    before_save: function(frm) {
+        console.log("Before save - active assignments:", frm.doc.active_assignments);
+    },
+    
     validate: function(frm) {
         // Ensure data is properly saved in child tables
         if(frm.doc.active_assignments && frm.doc.active_assignments.length > 0) {
@@ -15,6 +19,7 @@ frappe.ui.form.on('Volunteer', {
     },
     
     after_save: function(frm) {
+        console.log("After save - active assignments:", frm.doc.active_assignments);
         // Explicitly refresh grid to ensure data is shown
         frm.refresh_field('active_assignments');
         frm.refresh_field('assignment_history');
@@ -223,6 +228,16 @@ frappe.ui.form.on('Volunteer', {
 
 // Functions for Volunteer Assignment
 frappe.ui.form.on('Volunteer Assignment', {
+    before_add: function(frm, cdt, cdn) {
+        // Set default values for new rows
+        setTimeout(function() {
+            var row = frappe.get_doc(cdt, cdn);
+            if (!row.status) {
+                frappe.model.set_value(cdt, cdn, 'status', 'Active');
+            }
+        }, 100);
+    },
+    
     form_render: function(frm, cdt, cdn) {
         // Customize form rendering
     },
@@ -246,6 +261,11 @@ frappe.ui.form.on('Volunteer Assignment', {
         } else if(assignment.assignment_type === 'Commission') {
             // Set reference to Commission
             frappe.model.set_value(cdt, cdn, 'reference_doctype', 'Commission');
+        }
+        
+        // Set status if not set
+        if(!assignment.status) {
+            frappe.model.set_value(cdt, cdn, 'status', 'Active');
         }
         
         // Refresh the field to update UI
@@ -505,12 +525,25 @@ function create_new_assignment(frm) {
         primary_action: function() {
             var values = d.get_values();
             
-            // Add assignment to the grid
-            var child = frm.add_child('active_assignments');
-            $.extend(child, values);
+            // Create a new row in the child table with explicit field setting
+            var child = frappe.model.add_child(frm.doc, "Volunteer Assignment", "active_assignments");
+            
+            // Set all values explicitly
+            child.assignment_type = values.assignment_type;
+            child.reference_doctype = values.reference_doctype;
+            child.reference_name = values.reference_name;
+            child.role = values.role;
+            child.start_date = values.start_date;
+            child.end_date = values.end_date;
+            child.estimated_hours = values.estimated_hours;
+            child.notes = values.notes;
+            child.status = "Active"; // Explicitly set status
             
             // Refresh the grid
             frm.refresh_field('active_assignments');
+            
+            // Log data for debugging
+            console.log("Added assignment:", child);
             
             // Save the document
             frm.save();
@@ -627,9 +660,15 @@ function add_new_skill(frm) {
         primary_action: function() {
             var values = d.get_values();
             
-            // Add skill to the grid
-            var child = frm.add_child('skills_and_qualifications');
-            $.extend(child, values);
+            // Add skill to the grid with explicit field setting
+            var child = frappe.model.add_child(frm.doc, "Volunteer Skill", "skills_and_qualifications");
+            
+            // Set values explicitly
+            child.skill_category = values.skill_category;
+            child.volunteer_skill = values.volunteer_skill;
+            child.proficiency_level = values.proficiency_level;
+            child.experience_years = values.experience_years;
+            child.certifications = values.certifications;
             
             // Refresh the grid
             frm.refresh_field('skills_and_qualifications');
@@ -664,13 +703,16 @@ function add_board_positions_as_assignments(frm, board_memberships) {
         var position_key = board.parent + '::' + board.chapter_role;
         
         if(!existing_positions[position_key]) {
-            var child = frm.add_child('active_assignments');
-            frappe.model.set_value(child.doctype, child.name, 'assignment_type', 'Board Position');
-            frappe.model.set_value(child.doctype, child.name, 'reference_doctype', 'Chapter');
-            frappe.model.set_value(child.doctype, child.name, 'reference_name', board.parent);
-            frappe.model.set_value(child.doctype, child.name, 'role', board.chapter_role);
-            frappe.model.set_value(child.doctype, child.name, 'start_date', frappe.datetime.get_today());
-            frappe.model.set_value(child.doctype, child.name, 'status', 'Active');
+            // Create a new child with explicit property setting
+            var child = frappe.model.add_child(frm.doc, "Volunteer Assignment", "active_assignments");
+            
+            // Set all fields explicitly
+            child.assignment_type = 'Board Position';
+            child.reference_doctype = 'Chapter';
+            child.reference_name = board.parent;
+            child.role = board.chapter_role;
+            child.start_date = frappe.datetime.get_today();
+            child.status = 'Active';
             
             count++;
         }
@@ -679,6 +721,8 @@ function add_board_positions_as_assignments(frm, board_memberships) {
     if(count > 0) {
         // Refresh the form
         frm.refresh_field('active_assignments');
+        
+        console.log("Added board positions:", frm.doc.active_assignments);
         
         frappe.show_alert({
             message: __('Added {0} board positions as volunteer assignments', [count]),
