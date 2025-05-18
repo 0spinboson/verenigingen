@@ -56,33 +56,60 @@ class Team(Document):
                 try:
                     vol_doc = frappe.get_doc("Volunteer", member.volunteer)
                     
-                    # Check if this assignment already exists in aggregated assignments
-                    assignments = vol_doc.get_aggregated_assignments()
-                    exists = False
-                    
-                    for assignment in assignments:
-                        if (assignment["source_type"] == "Team" and 
-                            assignment["source_doctype"] == "Team" and
-                            assignment["source_name"] == self.name and
-                            assignment["role"] == member.role):
-                            exists = True
-                            
-                            # Status is tracked in the Team Member record
-                            # No need to update anything else here
-                            break
-                    
-                    # If the assignment changed status and was completed, add to history
-                    if (not member.is_active or member.status != "Active") and member.to_date:
-                        # Check if we need to add to assignment history
-                        # This only happens if status changed from active to something else
-                        if not frappe.db.exists("Volunteer Assignment", {
-                            "parent": vol_doc.name,
+                    # Ensure the volunteer has an assignments table
+                    if not vol_doc.assignments:
+                        vol_doc.append("assignments", {
                             "assignment_type": "Team",
                             "reference_doctype": "Team",
                             "reference_name": self.name,
                             "role": member.role,
-                            "status": member.status
-                        }):
+                            "from_date": member.from_date,
+                            "to_date": member.to_date if not member.is_active else None,
+                            "is_active": member.is_active
+                        })
+                        vol_doc.save(ignore_permissions=True)
+                        print(f"Added new assignment to volunteer {vol_doc.name} for team {self.name}")
+                    else:
+                        # Check if this assignment already exists
+                        exists = False
+                        for assignment in vol_doc.assignments:
+                            if (assignment.reference_doctype == "Team" and 
+                                assignment.reference_name == self.name and
+                                assignment.role == member.role):
+                                exists = True
+                                # Update the assignment status
+                                assignment.is_active = member.is_active
+                                assignment.to_date = member.to_date if not member.is_active else None
+                                vol_doc.save(ignore_permissions=True)
+                                print(f"Updated existing assignment for volunteer {vol_doc.name} and team {self.name}")
+                                break
+                        
+                        # If no matching assignment exists, add a new one
+                        if not exists:
+                            vol_doc.append("assignments", {
+                                "assignment_type": "Team",
+                                "reference_doctype": "Team",
+                                "reference_name": self.name,
+                                "role": member.role,
+                                "from_date": member.from_date,
+                                "to_date": member.to_date if not member.is_active else None,
+                                "is_active": member.is_active
+                            })
+                            vol_doc.save(ignore_permissions=True)
+                            print(f"Added new assignment to volunteer {vol_doc.name} for team {self.name}")
+                    
+                    # If the assignment changed status and was completed, add to history
+                    if (not member.is_active or member.status != "Active") and member.to_date:
+                        # Check if we need to add to assignment history
+                        has_history = False
+                        for entry in vol_doc.assignment_history:
+                            if (entry.reference_doctype == "Team" and
+                                entry.reference_name == self.name and
+                                entry.role == member.role):
+                                has_history = True
+                                break
+                                
+                        if not has_history:
                             # Add to assignment history
                             vol_doc.append("assignment_history", {
                                 "assignment_type": "Team",
@@ -93,10 +120,12 @@ class Team(Document):
                                 "end_date": member.to_date or frappe.utils.today(),
                                 "status": "Completed" if member.status != "Cancelled" else member.status
                             })
-                            vol_doc.save()
+                            vol_doc.save(ignore_permissions=True)
+                            print(f"Added assignment history entry for volunteer {vol_doc.name} and team {self.name}")
                         
                 except Exception as e:
                     frappe.log_error(f"Failed to update volunteer assignment: {str(e)}")
+                    print(f"Error updating volunteer assignment: {str(e)}")
         
         # Save if we updated a volunteer outside of regular save process
         if volunteer_updated and not self.flags.in_insert and not self.is_new():
@@ -149,7 +178,9 @@ def sync_team_with_volunteers(team_name=None):
             team_doc = frappe.get_doc("Team", team.name)
             team_doc.update_volunteer_assignments()
             updated_count += 1
+            print(f"Successfully synced team {team.name} with volunteers")
         except Exception as e:
             frappe.log_error(f"Failed to sync team {team.name}: {str(e)}")
+            print(f"Error syncing team {team.name}: {str(e)}")
     
     return {"updated_count": updated_count}
