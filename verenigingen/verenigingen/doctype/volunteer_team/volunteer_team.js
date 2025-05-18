@@ -73,6 +73,13 @@ frappe.ui.form.on('Volunteer Team', {
                 frm.refresh_field('team_members');
             }
         }
+    },
+    
+    after_save: function(frm) {
+        // After saving, sync with volunteer assignments
+        if (!frm.doc.__islocal) {
+            sync_team_with_volunteers(frm);
+        }
     }
 });
 
@@ -140,6 +147,22 @@ function get_member_title(team_type) {
     };
     
     return member_titles[team_type] || 'Team Member';
+}
+
+// Function to sync team members with volunteer records
+function sync_team_with_volunteers(frm) {
+    frappe.call({
+        method: 'update_volunteer_assignments',
+        doc: frm.doc,
+        callback: function(r) {
+            if (r.message) {
+                frappe.show_alert({
+                    message: __("Team members synchronized with volunteer assignments"),
+                    indicator: 'green'
+                }, 5);
+            }
+        }
+    });
 }
 
 // Function to add a team member
