@@ -53,6 +53,9 @@ class TestVolunteerActivity(VereningingenTestCase):
         """Test completing a volunteer activity"""
         activity = self.create_test_activity()
         
+        # Get today's date as a date object for proper comparison later
+        today_date = getdate(today())
+        
         # Set activity to completed
         activity.status = "Completed"
         activity.end_date = today()
@@ -64,7 +67,14 @@ class TestVolunteerActivity(VereningingenTestCase):
         
         # Verify activity updated correctly
         self.assertEqual(activity.status, "Completed")
-        self.assertEqual(activity.end_date, today())
+        
+        # Convert activity.end_date to string for comparison if needed
+        if isinstance(activity.end_date, str):
+            self.assertEqual(activity.end_date, today())
+        else:
+            # Compare date objects
+            self.assertEqual(activity.end_date, today_date)
+            
         self.assertEqual(activity.actual_hours, 10)
         
         # Reload volunteer to check if activity was added to history
