@@ -6,6 +6,7 @@ from frappe.utils import getdate, today, add_days
 from frappe.tests.utils import FrappeTestCase
 
 from frappe.test_runner import make_test_records, skip_test_for_test_record_creation
+from verenigingen.verenigingen.tests.test_setup import setup_test_environment
 
 @unittest.skip_test_for_test_record_creation  # Skip automatic test record creation
 class TestVolunteerActivity(unittest.TestCase):
