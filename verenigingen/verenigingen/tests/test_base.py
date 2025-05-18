@@ -18,17 +18,21 @@ class VereningingenTestCase(unittest.TestCase):
     
     # Common helper methods can go here
     def create_test_member(self, email=None):
-        """Create a test member record"""
+        """Create a test member record with unique name"""
+        # Generate a random string for uniqueness
+        unique_id = frappe.utils.random_string(8)
+        
         if not email:
-            email = f"test_{frappe.utils.random_string(8)}@example.com"
+            email = f"test_{unique_id}@example.com"
             
         if frappe.db.exists("Member", {"email": email}):
             frappe.delete_doc("Member", frappe.db.get_value("Member", {"email": email}, "name"))
         
+        # Use the unique_id in the name to ensure uniqueness
         member = frappe.get_doc({
             "doctype": "Member",
-            "first_name": "Test",
-            "last_name": "Member",
+            "first_name": f"Test_{unique_id[:4]}",
+            "last_name": f"Member_{unique_id[4:]}",
             "email": email
         })
         member.insert(ignore_permissions=True)
