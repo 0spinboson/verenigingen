@@ -16,21 +16,31 @@ class TestTeam(unittest.TestCase):
         self.create_test_volunteers()
         
     def tearDown(self):
-        # Clean up test data
-        try:
-            frappe.delete_doc("Team", self.test_team.name)
-        except Exception:
-            pass
-            
+        # Clean up test data in the correct order
+        # 1. Delete any teams first
+        test_teams = [
+            "Test Team", 
+            "Test Linkage Team"  # Add any other team names used in tests
+        ]
+        
+        for team_name in test_teams:
+            if frappe.db.exists("Team", team_name):
+                try:
+                    frappe.delete_doc("Team", team_name, force=True)
+                except Exception as e:
+                    print(f"Error deleting team {team_name}: {e}")
+        
+        # 2. Now delete volunteers
         for volunteer in self.test_volunteers:
             try:
-                frappe.delete_doc("Volunteer", volunteer.name)
+                frappe.delete_doc("Volunteer", volunteer.name, force=True)
             except Exception:
                 pass
-                
+        
+        # 3. Finally delete members
         for member in self.test_members:
             try:
-                frappe.delete_doc("Member", member.name)
+                frappe.delete_doc("Member", member.name, force=True)
             except Exception:
                 pass
     
