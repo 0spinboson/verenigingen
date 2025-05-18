@@ -149,7 +149,7 @@ class TestVolunteer(VereningingenTestCase):
         
         # Manually add to assignment history since end_activity has issues
         volunteer.append("assignment_history", {
-            "assignment_type": "Activity",
+            "assignment_type": "Project",
             "reference_doctype": "Volunteer Activity",
             "reference_name": activity.name,
             "role": "Project Coordinator",
