@@ -3,6 +3,7 @@
 import unittest
 import frappe
 from frappe.utils import getdate, today, add_days
+from frappe.tests.utils import FrappeTestCase
 
 @unittest.skip_test_for_test_record_creation  # Skip automatic test record creation
 class TestVolunteerActivity(unittest.TestCase):
