@@ -1,17 +1,20 @@
 # verenigingen/verenigingen/tests/test_setup.py
 
 import frappe
-from frappe.utils import today
+from frappe.utils import today, cint
+
+class TestSetupError(Exception):
+    pass
 
 def setup_test_environment():
-    """Set up the test environment with required test records"""
+    """Set up complete test environment with required test records"""
     try:
-        print("Setting up test environment...")
         setup_test_company()
         setup_test_accounts()
         setup_test_warehouses()
+        # Add other setup functions as needed
         print("Test environment setup complete.")
-    return True
+        return True
     except Exception as e:
         print(f"Error setting up test environment: {e}")
         return False
@@ -26,13 +29,14 @@ def setup_test_company():
         company.default_currency = "INR"
         company.country = "India"
         company.chart_of_accounts = "Standard"
-        company.domain = "Manufacturing" 
+        company.domain = "Manufacturing"  # Adding domain to ensure all necessary features are enabled
         try:
             company.insert(ignore_permissions=True)
             frappe.db.commit()
             print("_Test Company created")
         except Exception as e:
-            print(f"Error creating company: {e}")
+            frappe.db.rollback()
+            raise TestSetupError(f"Failed to create test company: {e}")
     else:
         # Ensure company has proper abbreviation
         abbr = frappe.db.get_value("Company", "_Test Company", "abbr")
@@ -57,6 +61,7 @@ def setup_test_accounts():
             frappe.db.commit()
             print("USD currency created")
         except Exception as e:
+            frappe.db.rollback()
             print(f"Error creating currency: {e}")
 
     # Find the parent account for Payable
@@ -87,6 +92,9 @@ def setup_test_accounts():
 
 def setup_test_warehouses():
     """Set up test warehouses needed for tests"""
+    # First ensure company exists and has abbr
+    setup_test_company()
+    
     if not frappe.db.exists("Warehouse", "_Test Warehouse - _TC"):
         print("Creating _Test Warehouse...")
         warehouse = frappe.new_doc("Warehouse")
