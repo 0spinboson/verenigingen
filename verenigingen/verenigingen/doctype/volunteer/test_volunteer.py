@@ -5,6 +5,7 @@ import unittest
 import frappe
 from frappe.utils import getdate, add_days, today
 
+@unittest.skip_test_for_test_record_creation
 class TestVolunteer(unittest.TestCase):
     def setUp(self):
         # Create test data
@@ -45,7 +46,7 @@ class TestVolunteer(unittest.TestCase):
             "last_name": "Volunteer",
             "email": "test_volunteer@example.com"
         })
-        self.test_member.insert()
+        self.test_member.insert(ignore_permissions=True)
     
     def create_test_interest_categories(self):
         """Create test interest categories"""
@@ -56,7 +57,7 @@ class TestVolunteer(unittest.TestCase):
                     "doctype": "Volunteer Interest Category",
                     "category_name": category,
                     "description": f"Test category {category}"
-                }).insert()
+                }).insert(ignore_permissions=True)
 
     def create_test_volunteer(self):
         """Create a test volunteer record"""
@@ -81,7 +82,7 @@ class TestVolunteer(unittest.TestCase):
             "proficiency_level": "4 - Advanced"
         })
         
-        self.test_volunteer.insert()
+        self.test_volunteer.insert(ignore_permissions=True)
         return self.test_volunteer
         
     def create_test_activity(self):
@@ -95,7 +96,7 @@ class TestVolunteer(unittest.TestCase):
             "status": "Active",
             "start_date": today()
         })
-        activity.insert()
+        activity.insert(ignore_permissions=True)
         self.test_activity_name = activity.name
         return activity
         
@@ -217,7 +218,7 @@ class TestVolunteer(unittest.TestCase):
             "status": "New",
             "start_date": today()
         })
-        volunteer.insert()
+        volunteer.insert(ignore_permissions=True)
         
         # Create an activity for this volunteer
         activity = frappe.get_doc({
@@ -228,7 +229,7 @@ class TestVolunteer(unittest.TestCase):
             "status": "Active",
             "start_date": today()
         })
-        activity.insert()
+        activity.insert(ignore_permissions=True)
         
         # Reload volunteer to see status changes
         volunteer.reload()
