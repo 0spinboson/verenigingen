@@ -401,13 +401,17 @@ class TestDirectDebitBatch(FrappeTestCase):
             batch.docstatus = 1
             batch.save()
             
+            # Give a short delay and reload to prevent timestamp issues
+            frappe.db.commit()  # Commit to ensure changes are saved
+            batch.reload()  # Reload the document to get the latest version
+            
             # Verify sepa_file_generated flag set after submission
-            batch.reload()
             self.assertTrue(batch.sepa_file_generated, "SEPA file not generated on submit")
             self.assertEqual(batch.status, "Generated", "Status not updated to Generated on submit")
         finally:
-            # Cancel the batch
+            # Cancel the batch - make sure to reload first
             if batch.docstatus == 1:
+                batch.reload()  # Reload before canceling
                 batch.cancel()
             batch.delete()
     
