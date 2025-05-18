@@ -3,6 +3,15 @@
 
 frappe.ui.form.on('Volunteer Assignment', {
     // When assignment type changes, set reference_doctype based on assignment type
+    before_add: function(frm, cdt, cdn) {
+        // Set default values for new rows
+        setTimeout(function() {
+            var row = frappe.get_doc(cdt, cdn);
+            if (!row.status) {
+                frappe.model.set_value(cdt, cdn, 'status', 'Active');
+            }
+        }, 100);
+    }
     assignment_type: function(frm, cdt, cdn) {
         var child = locals[cdt][cdn];
         
