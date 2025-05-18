@@ -4,6 +4,7 @@
 import unittest
 import frappe
 from frappe.utils import today, add_days
+import time
 
 class TestTeam(unittest.TestCase):
     @classmethod
@@ -11,38 +12,54 @@ class TestTeam(unittest.TestCase):
         # Tell Frappe not to make test records
         frappe.flags.make_test_records = False
         
+        # Clean up any leftover test data from previous failed runs
+        cls.cleanup_test_data()
+        
+    @classmethod
+    def cleanup_test_data(cls):
+        """Clean up any existing test data to start fresh"""
+        # First delete any test teams that might exist
+        test_teams = ["Test Team", "Test Linkage Team"]
+        for team_name in test_teams:
+            if frappe.db.exists("Team", team_name):
+                try:
+                    frappe.delete_doc("Team", team_name, force=True)
+                    print(f"Cleaned up existing team: {team_name}")
+                except Exception as e:
+                    print(f"Error cleaning up team {team_name}: {e}")
+        
+        # Now try to delete any test volunteers/members
+        test_emails = [f"team_test_{i}@example.com" for i in range(3)]
+        
+        # First volunteers, then members
+        for email in test_emails:
+            # Find volunteer with similar email pattern
+            vol_email = email.replace("@example.com", "@example.org")
+            vol = frappe.db.get_value("Volunteer", {"email": vol_email}, "name")
+            if vol:
+                try:
+                    frappe.delete_doc("Volunteer", vol, force=True)
+                    print(f"Cleaned up existing volunteer: {vol}")
+                except Exception as e:
+                    print(f"Error cleaning up volunteer {vol}: {e}")
+        
+        # Now members
+        for email in test_emails:
+            member = frappe.db.get_value("Member", {"email": email}, "name")
+            if member:
+                try:
+                    frappe.delete_doc("Member", member, force=True)
+                    print(f"Cleaned up existing member: {member}")
+                except Exception as e:
+                    print(f"Error cleaning up member {member}: {e}")
+        
     def setUp(self):
         # Create test data
         self.create_test_volunteers()
         
     def tearDown(self):
-        # Clean up test data in the correct order
-        # 1. Delete any teams first
-        test_teams = [
-            "Test Team", 
-            "Test Linkage Team"  # Add any other team names used in tests
-        ]
-        
-        for team_name in test_teams:
-            if frappe.db.exists("Team", team_name):
-                try:
-                    frappe.delete_doc("Team", team_name, force=True)
-                except Exception as e:
-                    print(f"Error deleting team {team_name}: {e}")
-        
-        # 2. Now delete volunteers
-        for volunteer in getattr(self, 'test_volunteers', []):
-            try:
-                frappe.delete_doc("Volunteer", volunteer.name, force=True)
-            except Exception as e:
-                print(f"Error deleting volunteer {volunteer.name}: {e}")
-        
-        # 3. Finally delete members
-        for member in getattr(self, 'test_members', []):
-            try:
-                frappe.delete_doc("Member", member.name, force=True)
-            except Exception as e:
-                print(f"Error deleting member {member.name}: {e}")
+        # Clean up test data
+        self.cleanup_test_data()
     
     def create_test_volunteers(self):
         """Create test members and volunteers for team"""
@@ -53,8 +70,9 @@ class TestTeam(unittest.TestCase):
         for i in range(3):
             email = f"team_test_{i}@example.com"
             
-            if frappe.db.exists("Member", {"email": email}):
-                frappe.delete_doc("Member", frappe.db.get_value("Member", {"email": email}, "name"))
+            # Skip the delete for now - we already cleaned up in setUpClass
+            # if frappe.db.exists("Member", {"email": email}):
+            #     frappe.delete_doc("Member", frappe.db.get_value("Member", {"email": email}, "name"))
             
             member = frappe.get_doc({
                 "doctype": "Member",
@@ -181,7 +199,6 @@ class TestTeam(unittest.TestCase):
         team.save()
         
         # Wait for a moment to allow async processes to complete if any
-        import time
         time.sleep(1)
         
         # Reload team to get fresh data
@@ -282,6 +299,3 @@ class TestTeam(unittest.TestCase):
         # Check that volunteer is now linked
         self.assertEqual(team.team_members[0].volunteer, self.test_volunteers[0].name)
         self.assertEqual(team.team_members[0].volunteer_name, self.test_volunteers[0].volunteer_name)
-        
-        # Clean up
-        frappe.delete_doc("Team", team.name)
