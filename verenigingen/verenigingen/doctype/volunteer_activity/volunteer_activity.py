@@ -26,7 +26,7 @@ class VolunteerActivity(Document):
         if self.has_value_changed("status") and self.status != "Active" and self.get_db_value("status") == "Active":
             # Add to assignment history
             volunteer.append("assignment_history", {
-                "assignment_type": "Activity",
+                "assignment_type": "Project",
                 "reference_doctype": self.reference_doctype or "Volunteer Activity",
                 "reference_name": self.reference_name or self.name,
                 "role": self.role,
