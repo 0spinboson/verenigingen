@@ -43,6 +43,19 @@ class TestVolunteerAggregatedAssignments(VereningingenTestCase):
         self.test_volunteer.insert(ignore_permissions=True)
         self._docs_to_delete.append(("Volunteer", self.test_volunteer.name))
         
+        # Create Chapter Role if it doesn't exist
+        role_name = "Secretary"
+        if not frappe.db.exists("Chapter Role", role_name):
+            chapter_role = frappe.get_doc({
+                "doctype": "Chapter Role",
+                "role_name": role_name,
+                "description": "Test role for Secretary",
+                "permissions_level": "Admin",
+                "is_active": 1
+            })
+            chapter_role.insert(ignore_permissions=True)
+            self._docs_to_delete.append(("Chapter Role", role_name))
+        
         # 3. Create a chapter with explicit name
         chapter_name = f"Test_Chapter_{unique_suffix}"
         self.test_chapter = frappe.get_doc({
@@ -58,7 +71,7 @@ class TestVolunteerAggregatedAssignments(VereningingenTestCase):
             "member": self.test_member.name,
             "member_name": self.test_member.full_name,
             "email": self.test_member.email,
-            "chapter_role": "Secretary",
+            "chapter_role": role_name,  # Use the role we created
             "from_date": today(),
             "is_active": 1
         })
