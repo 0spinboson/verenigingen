@@ -3,9 +3,10 @@
 
 import unittest
 import frappe
-from frappe.utils import today, add_days, random_string
+from frappe.utils import today, add_days
 import time
 import random
+import string
 
 class TestTeam(unittest.TestCase):
     @classmethod
@@ -13,8 +14,8 @@ class TestTeam(unittest.TestCase):
         # Tell Frappe not to make test records
         frappe.flags.make_test_records = False
         
-        # Generate a unique test identifier to avoid name collisions
-        cls.test_id = random_string(8)
+        # Generate a unique test identifier using only alphanumeric characters
+        cls.test_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
         
         # Clean up any leftover test data from previous failed runs
         cls.cleanup_test_data()
@@ -33,7 +34,6 @@ class TestTeam(unittest.TestCase):
                     print(f"Error cleaning up team {team_name}: {e}")
         
         # Clean up volunteers and members by matching patterns
-        # This ensures we catch records with specific naming patterns even if emails changed
         volunteers = frappe.get_all("Volunteer", filters={"volunteer_name": ["like", "Team Test%"]}, fields=["name"])
         for vol in volunteers:
             try:
@@ -66,26 +66,26 @@ class TestTeam(unittest.TestCase):
         # Create members first
         for i in range(3):
             # Generate unique identifier for this test run to avoid conflicts
-            unique_suffix = f"{self.__class__.test_id}_{i}"
+            unique_suffix = f"{self.__class__.test_id}{i}"
             
             # Create a unique email per run
-            email = f"team_test_{unique_suffix}@example.com"
+            email = f"teamtest{unique_suffix}@example.com"
             
-            # Create member with unique name
+            # Create member with unique name (no special characters)
             member = frappe.get_doc({
                 "doctype": "Member",
-                "first_name": f"Team{unique_suffix}",  # Make first_name unique
-                "last_name": f"Test{i}",
+                "first_name": f"Team{i}",
+                "last_name": f"Test{unique_suffix}", 
                 "email": email
             })
             member.insert(ignore_permissions=True)
             self.test_members.append(member)
             
             # Create volunteer for each member with unique name
-            vol_email = f"team.test.{unique_suffix}@example.org"
+            vol_email = f"teamtest{unique_suffix}@example.org"
             volunteer = frappe.get_doc({
                 "doctype": "Volunteer",
-                "volunteer_name": f"TeamTest_{unique_suffix}",  # Use unique volunteer name
+                "volunteer_name": f"Team Test {unique_suffix}",  # Space is probably ok
                 "email": vol_email,
                 "member": member.name,
                 "status": "Active",
