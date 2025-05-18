@@ -110,9 +110,6 @@
   ],
   "links": [
     {
-      "group": "Members",
-      "link_doctype": "Volunteer",
-      "link_fieldname": "team"
     }
   ],
   "modified": "2025-05-17 12:43:45.267592",
