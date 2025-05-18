@@ -3,5 +3,5 @@
 
 from frappe.model.document import Document
 
-class VolunteerTeamResponsibility(Document):
+class TeamResponsibility(Document):
     pass
