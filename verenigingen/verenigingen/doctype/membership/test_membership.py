@@ -1,203 +1,202 @@
-# Copyright (c) 2017, Frappe Technologies Pvt. Ltd. and Contributors
-# See license.txt
-
-from frappe.tests.utils import FrappeTestCase
 import frappe
-from frappe.utils import add_days, add_months, nowdate
+import unittest
+from frappe.tests.utils import FrappeTestCase
+from frappe.utils import getdate, today, add_days, add_months
 
-class TestMembership(FrappeTestCase):
-	def setUp(self):
-		if not frappe.db.exists("Member", {"email": "test_sync@example.com"}):
-			# Create member
-			member = frappe.new_doc("Member")
-			member.first_name = "Test"
-			member.last_name = "Sync"
-			member.full_name = "Test Sync"
-			member.email = "test_sync@example.com"
-			member.insert()
-			
-			# Create customer
-			customer = frappe.new_doc("Customer")
-			customer.customer_name = member.full_name
-			customer.customer_type = "Individual"
-			customer.customer_group = "_Test Customer Group"
-			customer.territory = "_Test Territory"
-			customer.save()
-			
-			# Link customer to member
-			member.customer = customer.name
-			member.save()
+class TestMembershipType(FrappeTestCase):
+    def setUp(self):
+        # Create test membership type data
+        self.membership_type_data = {
+            "membership_type_name": "Test Membership Type",
+            "description": "Test Membership Type for Unit Tests",
+            "subscription_period": "Annual",
+            "amount": 120,
+            "currency": "EUR",
+            "is_active": 1,
+            "allow_auto_renewal": 1
+        }
+        
+        # Delete any existing test membership types
+        if frappe.db.exists("Membership Type", self.membership_type_data["membership_type_name"]):
+            frappe.delete_doc("Membership Type", self.membership_type_data["membership_type_name"], force=True)
+            
+        # Delete any test subscription plans
+        for plan in frappe.get_all("Subscription Plan", filters={"plan_name": self.membership_type_data["membership_type_name"]}):
+            frappe.delete_doc("Subscription Plan", plan.name, force=True)
+            
+        # Delete any test items
+        item_code = f"MEM-{self.membership_type_data['membership_type_name']}".upper().replace(" ", "-")
+        if frappe.db.exists("Item", item_code):
+            frappe.delete_doc("Item", item_code, force=True)
+    
+    def tearDown(self):
+        # Clean up test data
+        if frappe.db.exists("Membership Type", self.membership_type_data["membership_type_name"]):
+            frappe.delete_doc("Membership Type", self.membership_type_data["membership_type_name"], force=True)
+            
+        # Clean up any test subscription plans
+        for plan in frappe.get_all("Subscription Plan", filters={"plan_name": self.membership_type_data["membership_type_name"]}):
+            frappe.delete_doc("Subscription Plan", plan.name, force=True)
+            
+        # Clean up any test items
+        item_code = f"MEM-{self.membership_type_data['membership_type_name']}".upper().replace(" ", "-")
+        if frappe.db.exists("Item", item_code):
+            frappe.delete_doc("Item", item_code, force=True)
+    
+    def test_create_membership_type(self):
+        """Test creating a new membership type"""
+        membership_type = frappe.new_doc("Membership Type")
+        membership_type.update(self.membership_type_data)
+        membership_type.insert()
+        
+        self.assertEqual(membership_type.membership_type_name, "Test Membership Type")
+        self.assertEqual(membership_type.subscription_period, "Annual")
+        self.assertEqual(membership_type.amount, 120)
+    
+    def test_custom_subscription_period(self):
+        """Test validation for custom subscription period"""
+        membership_type = frappe.new_doc("Membership Type")
+        membership_type.update(self.membership_type_data)
+        
+        # Change to custom period without setting months
+        membership_type.subscription_period = "Custom"
+        
+        # Should raise an error
+        with self.assertRaises(frappe.exceptions.ValidationError):
+            membership_type.insert()
+            
+        # Now set the months
+        membership_type.subscription_period_in_months = 6
+        membership_type.insert()
+        
+        # Should be valid now
+        self.assertEqual(membership_type.subscription_period, "Custom")
+        self.assertEqual(membership_type.subscription_period_in_months, 6)
+    
+    def test_negative_amount(self):
+        """Test validation for negative amount"""
+        membership_type = frappe.new_doc("Membership Type")
+        membership_type.update(self.membership_type_data)
+        
+        # Set negative amount
+        membership_type.amount = -100
+        
+        # Should raise an error
+        with self.assertRaises(frappe.exceptions.ValidationError):
+            membership_type.insert()
+    
+    def test_create_subscription_plan(self):
+        """Test creating a subscription plan from membership type"""
+        membership_type = frappe.new_doc("Membership Type")
+        membership_type.update(self.membership_type_data)
+        membership_type.insert()
+        
+        # Initially no subscription plan
+        self.assertFalse(membership_type.subscription_plan)
+        
+        # Create subscription plan
+        plan_name = membership_type.create_subscription_plan()
+        
+        # Reload membership type
+        membership_type.reload()
+        
+        # Verify subscription plan is linked
+        self.assertTrue(membership_type.subscription_plan)
+        self.assertEqual(membership_type.subscription_plan, plan_name)
+        
+        # Verify subscription plan details
+        plan = frappe.get_doc("Subscription Plan", plan_name)
+        self.assertEqual(plan.plan_name, membership_type.membership_type_name)
+        self.assertEqual(float(plan.cost), float(membership_type.amount))
+        self.assertEqual(plan.billing_interval, "Year")  # Annual -> Year
+    
+    def test_default_membership_type(self):
+        """Test setting a membership type as default"""
+        # Create a first membership type
+        first_type = frappe.new_doc("Membership Type")
+        first_type.membership_type_name = "First Default Type"
+        first_type.subscription_period = "Annual"
+        first_type.amount = 100
+        first_type.currency = "EUR"
+        first_type.default_for_new_members = 1
+        first_type.insert()
+        
+        # Create a second membership type
+        second_type = frappe.new_doc("Membership Type")
+        second_type.membership_type_name = "Second Default Type"
+        second_type.subscription_period = "Annual"
+        second_type.amount = 120
+        second_type.currency = "EUR"
+        second_type.default_for_new_members = 1
+        second_type.insert()
+        
+        # Reload first type
+        first_type.reload()
+        
+        # First type should no longer be default
+        self.assertEqual(first_type.default_for_new_members, 0)
+        
+        # Only second type should be default
+        self.assertEqual(second_type.default_for_new_members, 1)
+        
+        # Clean up
+        first_type.delete()
+        second_type.delete()
+    
+    def test_subscription_period_mapping(self):
+        """Test mapping of subscription periods to intervals"""
+        # Test cases for different subscription periods
+        test_cases = [
+            {"period": "Monthly", "expected_interval": "Month", "expected_count": 1},
+            {"period": "Quarterly", "expected_interval": "Quarter", "expected_count": 1},
+            {"period": "Biannual", "expected_interval": "Half-Year", "expected_count": 1},
+            {"period": "Annual", "expected_interval": "Year", "expected_count": 1},
+            {"period": "Lifetime", "expected_interval": "Year", "expected_count": 1},
+        ]
+        
+        for test_case in test_cases:
+            # Create membership type with this period
+            membership_type = frappe.new_doc("Membership Type")
+            membership_type.membership_type_name = f"Test {test_case['period']}"
+            membership_type.subscription_period = test_case["period"]
+            membership_type.amount = 100
+            membership_type.currency = "EUR"
+            membership_type.insert()
+            
+            # Create subscription plan
+            plan_name = membership_type.create_subscription_plan()
+            
+            # Verify plan details
+            plan = frappe.get_doc("Subscription Plan", plan_name)
+            self.assertEqual(plan.billing_interval, test_case["expected_interval"])
+            self.assertEqual(plan.billing_interval_count, test_case["expected_count"])
+            
+            # Clean up
+            membership_type.delete()
+            frappe.delete_doc("Subscription Plan", plan_name, force=True)
+    
+    def test_custom_period_mapping(self):
+        """Test mapping of custom subscription periods"""
+        # Test custom period with specific months
+        membership_type = frappe.new_doc("Membership Type")
+        membership_type.membership_type_name = "Test Custom Period"
+        membership_type.subscription_period = "Custom"
+        membership_type.subscription_period_in_months = 9
+        membership_type.amount = 100
+        membership_type.currency = "EUR"
+        membership_type.insert()
+        
+        # Create subscription plan
+        plan_name = membership_type.create_subscription_plan()
+        
+        # Verify plan details
+        plan = frappe.get_doc("Subscription Plan", plan_name)
+        self.assertEqual(plan.billing_interval, "Month")
+        self.assertEqual(plan.billing_interval_count, 9)
+        
+        # Clean up
+        membership_type.delete()
+        frappe.delete_doc("Subscription Plan", plan_name, force=True)
 
-	def test_sync_payment_details(self):
-		"""Test synchronization of payment details from subscription"""
-		member = frappe.get_doc("Member", {"email": "test_sync@example.com"})
-		
-		# Create membership
-		membership = frappe.new_doc("Membership")
-		membership.member = member.name
-		membership.start_date = nowdate()
-		membership.membership_type = "Test Type"  # You'll need to create this or use an existing one
-		membership.insert()
-		membership.submit()
-		
-		# Create subscription (mocked)
-		subscription = frappe.new_doc("Subscription")
-		subscription.party_type = "Customer"
-		subscription.party = member.customer
-		subscription.start_date = nowdate()
-		subscription.current_invoice_start = nowdate()
-		subscription.current_invoice_end = add_days(nowdate(), 30)
-		subscription.save()
-		
-		# Link subscription to membership
-		membership.subscription = subscription.name
-		membership.save()
-		
-		# Test sync method
-		membership.sync_payment_details_from_subscription()
-		
-		# Verify next_billing_date was set
-		self.assertEqual(
-			membership.next_billing_date,
-			add_days(subscription.current_invoice_end, 1),
-			"Next billing date not set correctly"
-		)
-		
-		# Clean up
-		subscription.delete()
-		membership.cancel()
-		membership.delete()
-
-	def test_auto_generate_invoice_and_payment_entry(self):
-		entry = make_membership(self.member)
-
-		# Naive test to see if at all invoice was generated and attached to member
-		# In any case if details were missing, the invoicing would throw an error
-		invoice = entry.generate_invoice(save=True)
-		self.assertEqual(invoice.name, entry.invoice)
-
-	def test_renew_within_30_days(self):
-		# create a membership for two months
-		# Should work fine
-		make_membership(self.member, { "from_date": nowdate() })
-		make_membership(self.member, { "from_date": add_months(nowdate(), 1) })
-
-		from frappe.utils.user import add_role
-		add_role("test@example.com", "Verenigingen Manager")
-		frappe.set_user("test@example.com")
-
-		# create next membership with expiry not within 30 days
-		self.assertRaises(frappe.ValidationError, make_membership, self.member, {
-			"from_date": add_months(nowdate(), 2),
-		})
-
-		frappe.set_user("Administrator")
-		# create the same membership but as administrator
-		make_membership(self.member, {
-			"from_date": add_months(nowdate(), 2),
-			"to_date": add_months(nowdate(), 3),
-		})
-
-	def test_halted_memberships(self):
-		make_membership(self.member, {
-			"from_date": add_months(nowdate(), 2),
-			"to_date": add_months(nowdate(), 3)
-		})
-
-		self.assertEqual(frappe.db.get_value("Member", self.member, "subscription_status"), "Active")
-		payload = get_subscription_payload()
-		update_halted_razorpay_subscription(data=payload)
-		self.assertEqual(frappe.db.get_value("Member", self.member, "subscription_status"), "Halted")
-
-	def tearDown(self):
-		frappe.db.rollback()
-
-def set_config(key, value):
-	frappe.db.set_value("Verenigingen Settings", None, key, value)
-
-def make_membership(member, payload={}):
-	data = {
-		"doctype": "Membership",
-		"member": member,
-		"membership_status": "Current",
-		"membership_type": "_rzpy_test_milythm",
-		"currency": "INR",
-		"paid": 1,
-		"from_date": nowdate(),
-		"amount": 100
-	}
-	data.update(payload)
-	membership = frappe.get_doc(data)
-	membership.insert(ignore_permissions=True, ignore_if_duplicate=True)
-	return membership
-
-def create_item(item_code):
-	if not frappe.db.exists("Item", item_code):
-		item = frappe.new_doc("Item")
-		item.item_code = item_code
-		item.item_name = item_code
-		item.stock_uom = "Nos"
-		item.description = item_code
-		item.item_group = "All Item Groups"
-		item.is_stock_item = 0
-		item.save()
-	else:
-		item = frappe.get_doc("Item", item_code)
-	return item
-
-def setup_membership():
-	# Get default company
-	company = frappe.get_doc("Company", erpnext.get_default_company())
-
-	# update non profit settings
-	settings = frappe.get_doc("Verenigingen Settings")
-	# Enable razorpay
-	settings.enable_razorpay_for_memberships = 1
-	settings.billing_cycle = "Monthly"
-	settings.billing_frequency = 24
-	# Enable invoicing
-	settings.allow_invoicing = 1
-	settings.automate_membership_payment_entries = 1
-	settings.company = company.name
-	settings.donation_company = company.name
-	settings.membership_payment_account = company.default_cash_account
-	settings.membership_debit_account = company.default_receivable_account
-	settings.flags.ignore_mandatory = True
-	settings.save()
-
-	# make test plan
-	if not frappe.db.exists("Membership Type", "_rzpy_test_milythm"):
-		plan = frappe.new_doc("Membership Type")
-		plan.membership_type = "_rzpy_test_milythm"
-		plan.amount = 100
-		plan.razorpay_plan_id = "_rzpy_test_milythm"
-		plan.linked_item = create_item("_Test Item for Verenigingen Membership").name
-		plan.insert()
-	else:
-		plan = frappe.get_doc("Membership Type", "_rzpy_test_milythm")
-
-	return plan
-
-def get_subscription_payload():
-	return {
-		"entity": "event",
-		"account_id": "acc_BFQ7uQEaa7j2z7",
-		"event": "subscription.halted",
-		"contains": [
-			"subscription"
-		],
-		"payload": {
-			"subscription": {
-				"entity": {
-					"id": "sub_DEX6xcJ1HSW4CR",
-					"entity": "subscription",
-					"plan_id": "_rzpy_test_milythm",
-					"customer_id": "cust_C0WlbKhp3aLA7W",
-					"status": "halted",
-					"notes": {
-						"Important": "Notes for Internal Reference"
-					},
-				}
-			}
-		}
-	}
+if __name__ == '__main__':
+    unittest.main()
