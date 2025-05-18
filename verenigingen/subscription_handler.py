@@ -43,25 +43,30 @@ class SubscriptionHandler:
         """Check if this is a long-term subscription (annual or longer)"""
         if not self.subscription:
             return False
+        
+        # Get billing info from subscription plans
+        try:
+            billing_info = self.subscription.get_billing_cycle_and_interval()
+            if not billing_info:
+                return False
+                
+            # Get the billing interval from the first plan
+            billing_interval = billing_info[0].get("billing_interval")
+            billing_interval_count = billing_info[0].get("billing_interval_count")
             
-        # Check for annual subscription
-        if self.subscription.billing_interval == "Year":
-            return True
-            
-        # Check for monthly billing with long intervals
-        if self.subscription.billing_interval == "Month" and self.subscription.billing_interval_count >= 12:
-            return True
-            
-        # Check time difference between start and end dates
-        if self.subscription.end_date:
-            days_diff = date_diff(
-                getdate(self.subscription.end_date), 
-                getdate(self.subscription.start_date)
-            )
-            if days_diff >= 365:  # At least a year
+            # Check for annual subscription
+            if billing_interval == "Year":
+                return True
+                    
+            # Check for monthly billing with long intervals
+            if billing_interval == "Month" and billing_interval_count >= 12:
                 return True
                 
-        return False
+            # Rest of the method...
+        except Exception as e:
+            frappe.log_error(f"Error determining subscription length: {str(e)}", 
+                         "Subscription Length Error")
+            return False
 
     def cancel_subscription(self):
         """Cancel a subscription using direct DB operations to bypass validation"""
