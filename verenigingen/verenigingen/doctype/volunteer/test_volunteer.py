@@ -247,7 +247,7 @@ class TestVolunteer(VereningingenTestCase):
         
         # Directly append to assignment_history
         volunteer.append("assignment_history", {
-            "assignment_type": "Activity",
+            "assignment_type": "Project",
             "reference_doctype": "Volunteer Activity",
             "reference_name": activity.name,
             "role": "Project Coordinator",
@@ -258,7 +258,7 @@ class TestVolunteer(VereningingenTestCase):
         
         # Add a completed entry
         volunteer.append("assignment_history", {
-            "assignment_type": "Activity",
+            "assignment_type": "Project",
             "reference_doctype": "Volunteer Activity",
             "reference_name": f"completed-{activity.name}",
             "role": "Project Coordinator",
