@@ -7,6 +7,14 @@ import frappe
 import random
 from frappe.utils import today
 
+if not hasattr(unittest, 'skip_test_for_test_record_creation'):
+    def skip_test_for_test_record_creation(cls):
+        """Decorator to skip automatic test record creation"""
+        return cls
+    
+    # Add to unittest module
+    unittest.skip_test_for_test_record_creation = skip_test_for_test_record_creation
+
 class VereningingenTestCase(unittest.TestCase):
     """Base test class for Verenigingen tests with helpful utility methods"""
     
