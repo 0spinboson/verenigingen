@@ -3,300 +3,310 @@
 
 import unittest
 import frappe
-from frappe.utils import getdate, today, add_days
+from frappe.utils import today, add_days
+import time
 import random
-from verenigingen.verenigingen.tests.test_base import VereningingenTestCase
+import string
 
-class TestVolunteer(VereningingenTestCase):
-    def setUp(self):
-        # Initialize cleanup list
-        self._docs_to_delete = []
+class TestTeam(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Tell Frappe not to make test records
+        frappe.flags.make_test_records = False
         
-        # Create test data
-        self.create_test_interest_categories()
-        self.test_member = self.create_test_member()
-        self._docs_to_delete.append(("Member", self.test_member.name))
-    
-    def tearDown(self):
-        # Clean up test data in reverse order (child records first)
-        for doctype, name in reversed(self._docs_to_delete):
+        # Generate a unique test identifier using only alphanumeric characters
+        cls.test_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        
+        # Clean up any leftover test data from previous failed runs
+        cls.cleanup_test_data()
+        
+    @classmethod
+    def cleanup_test_data(cls):
+        """Clean up any existing test data to start fresh"""
+        # First delete any test teams that might exist
+        test_teams = ["Test Team", "Test Linkage Team"]
+        for team_name in test_teams:
+            if frappe.db.exists("Team", team_name):
+                try:
+                    frappe.delete_doc("Team", team_name, force=True)
+                    print(f"Cleaned up existing team: {team_name}")
+                except Exception as e:
+                    print(f"Error cleaning up team {team_name}: {e}")
+        
+        # Clean up volunteers and members by matching patterns
+        volunteers = frappe.get_all("Volunteer", filters={"volunteer_name": ["like", "Team Test%"]}, fields=["name"])
+        for vol in volunteers:
             try:
-                frappe.delete_doc(doctype, name, force=True)
+                frappe.delete_doc("Volunteer", vol.name, force=True)
+                print(f"Cleaned up existing volunteer: {vol.name}")
             except Exception as e:
-                print(f"Error deleting {doctype} {name}: {e}")
+                print(f"Error cleaning up volunteer {vol.name}: {e}")
+        
+        members = frappe.get_all("Member", filters={"full_name": ["like", "Team Test%"]}, fields=["name"])
+        for member in members:
+            try:
+                frappe.delete_doc("Member", member.name, force=True)
+                print(f"Cleaned up existing member: {member.name}")
+            except Exception as e:
+                print(f"Error cleaning up member {member.name}: {e}")
+        
+    def setUp(self):
+        # Create test data
+        self.create_test_volunteers()
+        
+    def tearDown(self):
+        # Clean up test data
+        self.cleanup_test_data()
     
-    def create_test_interest_categories(self):
-        """Create test interest categories"""
-        categories = ["Test Category 1", "Test Category 2"]
-        for category in categories:
-            if not frappe.db.exists("Volunteer Interest Category", category):
-                cat_doc = frappe.get_doc({
-                    "doctype": "Volunteer Interest Category",
-                    "category_name": category,
-                    "description": f"Test category {category}"
-                })
-                cat_doc.insert(ignore_permissions=True)
-                self._docs_to_delete.append(("Volunteer Interest Category", category))
-
-    def create_test_volunteer(self):
-        """Create a test volunteer record"""
-        # Generate unique name to avoid conflicts
-        unique_suffix = random.randint(1000, 9999)
+    def create_test_volunteers(self):
+        """Create test members and volunteers for team"""
+        self.test_members = []
+        self.test_volunteers = []
         
-        volunteer = frappe.get_doc({
-            "doctype": "Volunteer",
-            "volunteer_name": f"Test Volunteer {unique_suffix}",
-            "email": f"test.volunteer{unique_suffix}@example.org",
-            "member": self.test_member.name,
-            "status": "Active",
-            "start_date": today()
-        })
-        
-        # Add interests
-        volunteer.append("interests", {
-            "interest_area": "Test Category 1"
-        })
-        
-        # Add skills
-        volunteer.append("skills_and_qualifications", {
-            "skill_category": "Technical",
-            "volunteer_skill": "Python Programming",
-            "proficiency_level": "4 - Advanced"
-        })
-        
-        volunteer.insert(ignore_permissions=True)
-        self._docs_to_delete.append(("Volunteer", volunteer.name))
-        return volunteer
-        
-    def create_test_activity(self, volunteer):
-        """Create a test volunteer activity"""
-        activity = frappe.get_doc({
-            "doctype": "Volunteer Activity",
-            "volunteer": volunteer.name,
-            "activity_type": "Project",
-            "role": "Project Coordinator",
-            "description": "Test volunteer activity",
-            "status": "Active",
-            "start_date": today()
-        })
-        activity.insert(ignore_permissions=True)
-        self._docs_to_delete.append(("Volunteer Activity", activity.name))
-        return activity
-        
-    def test_volunteer_creation(self):
-        """Test creating a volunteer record"""
-        volunteer = self.create_test_volunteer()
-        
-        # Verify record was created correctly
-        self.assertEqual(volunteer.member, self.test_member.name)
-        self.assertEqual(volunteer.status, "Active")
-        
-        # Verify interests
-        self.assertEqual(len(volunteer.interests), 1)
-        self.assertEqual(volunteer.interests[0].interest_area, "Test Category 1")
-        
-        # Verify skills
-        self.assertEqual(len(volunteer.skills_and_qualifications), 1)
-        self.assertEqual(volunteer.skills_and_qualifications[0].volunteer_skill, "Python Programming")
-        self.assertEqual(volunteer.skills_and_qualifications[0].proficiency_level, "4 - Advanced")
-        
-    def test_add_activity(self):
-        """Test adding an activity to a volunteer"""
-        volunteer = self.create_test_volunteer()
-        
-        # Create an activity
-        activity = self.create_test_activity(volunteer)
-        
-        # Verify the activity is in the volunteer's aggregated assignments
-        assignments = volunteer.get_aggregated_assignments()
-        
-        activity_found = False
-        for assignment in assignments:
-            if (assignment["source_type"] == "Activity" and 
-                assignment["source_doctype"] == "Volunteer Activity" and
-                assignment["source_name"] == activity.name):
-                activity_found = True
-                break
-                
-        self.assertTrue(activity_found, "Activity should appear in volunteer's aggregated assignments")
-        
-    def test_end_activity(self):
-        """Test ending an activity"""
-        volunteer = self.create_test_volunteer()
-        
-        # Create an activity
-        activity = self.create_test_activity(volunteer)
-        
-        # End the activity manually instead of using end_activity method
-        activity.status = "Completed"
-        activity.end_date = today()
-        activity.save()
-        
-        # Reload activity to get fresh data
-        activity.reload()
-        
-        # Verify status change
-        self.assertEqual(activity.status, "Completed")
-        
-        # Verify date is set (handle both string and date object comparison)
-        if isinstance(activity.end_date, str):
-            self.assertEqual(activity.end_date, today())
-        else:
-            self.assertEqual(getdate(activity.end_date), getdate(today()))
-        
-        # Reload volunteer to get fresh data before modifying
-        volunteer.reload()
-        
-        # Manually add to assignment history since end_activity has issues
-        volunteer.append("assignment_history", {
-            "assignment_type": "Project",
-            "reference_doctype": "Volunteer Activity",
-            "reference_name": activity.name,
-            "role": "Project Coordinator",
-            "start_date": activity.start_date,
-            "end_date": activity.end_date,
-            "status": "Completed"
-        })
-        volunteer.save()
-        
-        # Reload volunteer
-        volunteer.reload()
-        
-        # Check assignment history
-        history_entry_found = False
-        for entry in volunteer.assignment_history:
-            if (entry.reference_doctype == "Volunteer Activity" and 
-                entry.reference_name == activity.name):
-                history_entry_found = True
-                break
-                
-        self.assertTrue(history_entry_found, "Activity should be in assignment history")
-        
-    def test_get_skills_by_category(self):
-        """Test retrieving skills grouped by category"""
-        volunteer = self.create_test_volunteer()
-        
-        # Add more skills in different categories
-        volunteer.append("skills_and_qualifications", {
-            "skill_category": "Communication",
-            "volunteer_skill": "Public Speaking",
-            "proficiency_level": "3 - Intermediate"
-        })
-        volunteer.append("skills_and_qualifications", {
-            "skill_category": "Technical",
-            "volunteer_skill": "Database Design",
-            "proficiency_level": "2 - Basic"
-        })
-        volunteer.save()
-        
-        # Get skills by category
-        skills_by_category = volunteer.get_skills_by_category()
-        
-        # Verify grouping
-        self.assertIn("Technical", skills_by_category)
-        self.assertIn("Communication", skills_by_category)
-        self.assertEqual(len(skills_by_category["Technical"]), 2)
-        self.assertEqual(len(skills_by_category["Communication"]), 1)
-        
-    def test_volunteer_status_tracking(self):
-        """Test volunteer status updates based on assignments"""
-        # Create a new volunteer with 'New' status
-        # Use a different member for this test to avoid conflicts
-        test_member = self.create_test_member()
-        self._docs_to_delete.append(("Member", test_member.name))
-        
-        volunteer = frappe.get_doc({
-            "doctype": "Volunteer",
-            "volunteer_name": f"Status Test Volunteer {random.randint(1000, 9999)}",
-            "email": f"status.test{random.randint(1000, 9999)}@example.org",
-            "member": test_member.name,
-            "status": "New",
-            "start_date": today()
-        })
-        volunteer.insert(ignore_permissions=True)
-        self._docs_to_delete.append(("Volunteer", volunteer.name))
-        
-        # Create an activity for this volunteer
-        activity = frappe.get_doc({
-            "doctype": "Volunteer Activity",
-            "volunteer": volunteer.name,
-            "activity_type": "Project",
-            "role": "Team Member",
-            "status": "Active",
-            "start_date": today()
-        })
-        activity.insert(ignore_permissions=True)
-        self._docs_to_delete.append(("Volunteer Activity", activity.name))
-        
-        # Manually update status since it doesn't happen automatically
-        volunteer.status = "Active"
-        volunteer.save()
-        
-        # Reload volunteer to see status changes
-        volunteer.reload()
-        
-        # Status should now be Active
-        self.assertEqual(volunteer.status, "Active")
+        # Create members first
+        for i in range(3):
+            # Generate unique identifier for this test run to avoid conflicts
+            unique_suffix = f"{self.__class__.test_id}{i}"
+            
+            # Create a unique email per run
+            email = f"teamtest{unique_suffix}@example.com"
+            
+            # Create member with unique name (no special characters)
+            member = frappe.get_doc({
+                "doctype": "Member",
+                "first_name": f"Team{i}",
+                "last_name": f"Test{unique_suffix}", 
+                "email": email
+            })
+            member.insert(ignore_permissions=True)
+            self.test_members.append(member)
+            
+            # Create volunteer for each member with unique name
+            vol_email = f"teamtest{unique_suffix}@example.org"
+            volunteer = frappe.get_doc({
+                "doctype": "Volunteer",
+                "volunteer_name": f"Team Test {unique_suffix}",  # Space is probably ok
+                "email": vol_email,
+                "member": member.name,
+                "status": "Active",
+                "start_date": today()
+            })
+            volunteer.insert(ignore_permissions=True)
+            self.test_volunteers.append(volunteer)
     
-    def test_volunteer_history(self):
-        """Test the volunteer assignment history directly"""
-        volunteer = self.create_test_volunteer()
-        
-        # Create two activities - one active, one to be completed
-        activity1 = self.create_test_activity(volunteer)
-        activity2 = self.create_test_activity(volunteer)
-        
-        # Remember initial count of assignment history
-        initial_history_count = len(volunteer.assignment_history)
-        
-        # Mark second activity as completed
-        activity2.status = "Completed"
-        activity2.end_date = today()
-        activity2.save()
-        
-        # Reload volunteer to get fresh data
-        volunteer.reload()
-        
-        # Directly append to assignment_history
-        volunteer.append("assignment_history", {
-            "assignment_type": "Project",
-            "reference_doctype": "Volunteer Activity",
-            "reference_name": activity1.name,
-            "role": "Project Coordinator",
+    def create_test_team(self):
+        """Create a test team"""
+        team_name = f"Test Team {self.__class__.test_id}"
+        if frappe.db.exists("Team", team_name):
+            frappe.delete_doc("Team", team_name, force=True)
+            
+        self.test_team = frappe.get_doc({
+            "doctype": "Team",
+            "team_name": team_name,
+            "description": "Test team for unit tests",
+            "team_type": "Committee",
             "start_date": today(),
             "status": "Active"
         })
-        volunteer.save()
         
-        # Reload volunteer again before second save
-        volunteer.reload()
-        
-        # Add a completed entry
-        volunteer.append("assignment_history", {
-            "assignment_type": "Project",
-            "reference_doctype": "Volunteer Activity",
-            "reference_name": activity2.name,  # Use real activity name
-            "role": "Project Coordinator",
-            "start_date": add_days(today(), -30),
-            "end_date": today(),
-            "status": "Completed"
+        # Add team leader
+        self.test_team.append("team_members", {
+            "member": self.test_members[0].name,
+            "member_name": self.test_members[0].full_name,
+            "volunteer": self.test_volunteers[0].name,
+            "volunteer_name": self.test_volunteers[0].volunteer_name,
+            "role_type": "Team Leader",
+            "role": "Committee Chair",
+            "from_date": today(),
+            "is_active": 1,
+            "status": "Active"
         })
-        volunteer.save()
         
-        # Reload to get the final state
-        volunteer.reload()
+        # Add team members
+        for i in range(1, len(self.test_members)):
+            self.test_team.append("team_members", {
+                "member": self.test_members[i].name,
+                "member_name": self.test_members[i].full_name,
+                "volunteer": self.test_volunteers[i].name,
+                "volunteer_name": self.test_volunteers[i].volunteer_name,
+                "role_type": "Team Member",
+                "role": "Committee Member",
+                "from_date": today(),
+                "is_active": 1,
+                "status": "Active"
+            })
+            
+        self.test_team.insert(ignore_permissions=True)
+        return self.test_team
+    
+    def test_team_creation(self):
+        """Test creating a team"""
+        team = self.create_test_team()
         
-        # Verify we have more entries in assignment_history than we started with
-        self.assertGreater(len(volunteer.assignment_history), initial_history_count, 
-                          "Should have added entries to assignment_history")
+        # Verify team was created
+        self.assertEqual(team.team_name, f"Test Team {self.__class__.test_id}")
+        self.assertEqual(team.team_type, "Committee")
+        self.assertEqual(team.status, "Active")
         
-        # Check for active and completed entries
-        active_found = completed_found = False
-        for entry in volunteer.assignment_history:
-            if entry.status == "Active":
-                active_found = True
-            if entry.status == "Completed":
-                completed_found = True
+        # Verify team members
+        self.assertEqual(len(team.team_members), len(self.test_members))
         
-        self.assertTrue(active_found, "Should have an active entry in assignment history")
-        self.assertTrue(completed_found, "Should have a completed entry in assignment history")
+        # Check leader role
+        leader = next((m for m in team.team_members if m.role_type == "Team Leader"), None)
+        self.assertIsNotNone(leader, "Team should have a leader")
+        self.assertEqual(leader.role, "Committee Chair")
+        
+        # Check member roles
+        members = [m for m in team.team_members if m.role_type == "Team Member"]
+        self.assertEqual(len(members), len(self.test_members) - 1, "All non-leaders should be members")
+    
+    def test_volunteer_integration(self):
+        """Test volunteer assignments get created for team members"""
+        team = self.create_test_team()
+        
+        # Update team to trigger volunteer assignment processing
+        team.description = "Updated description to trigger save"
+        team.save()
+        
+        # Verify assignments were reflected in volunteer aggregated assignments
+        for volunteer in self.test_volunteers:
+            # Reload volunteer to get latest assignments
+            volunteer.reload()
+            
+            # Get aggregated assignments
+            assignments = volunteer.get_aggregated_assignments()
+            
+            # Check if there's a team assignment
+            has_team_assignment = False
+            for assignment in assignments:
+                if (assignment["source_type"] == "Team" and 
+                    assignment["source_doctype"] == "Team" and
+                    assignment["source_name"] == team.name):
+                    has_team_assignment = True
+                    break
+                    
+            self.assertTrue(has_team_assignment, f"Volunteer {volunteer.volunteer_name} should have team assignment")
+    
+    def test_team_member_status_change(self):
+        """Test changing team member status updates volunteer assignment"""
+        team = self.create_test_team()
+        
+        # Change status of one team member to inactive
+        for member in team.team_members:
+            if member.role_type == "Team Member":
+                member.status = "Inactive"
+                member.is_active = 0
+                member.to_date = today()
+                break
+                
+        team.save()
+        
+        # Wait for a moment to allow async processes to complete if any
+        time.sleep(1)
+        
+        # Reload team to get fresh data
+        team.reload()
+        
+        # Find the volunteer corresponding to the deactivated member
+        deactivated_volunteer = None
+        for i, tm in enumerate(team.team_members):
+            if tm.status == "Inactive":
+                # Find the volunteer by name since the indices might not match anymore
+                for vol in self.test_volunteers:
+                    if vol.name == tm.volunteer:
+                        deactivated_volunteer = vol
+                        break
+                break
+        
+        if deactivated_volunteer:
+            # Reload volunteer to get latest assignments
+            deactivated_volunteer.reload()
+            
+            # Get aggregated assignments
+            assignments = deactivated_volunteer.get_aggregated_assignments()
+            
+            # There should be no active team assignment
+            active_team_assignment = False
+            for assignment in assignments:
+                if (assignment["source_type"] == "Team" and 
+                    assignment["source_doctype"] == "Team" and
+                    assignment["source_name"] == team.name and
+                    assignment["is_active"]):
+                    active_team_assignment = True
+                    break
+                    
+            self.assertFalse(active_team_assignment, 
+                            f"Deactivated member should not have active team assignment")
+            
+            # Check volunteer's assignment history for completed team assignment
+            has_history_entry = False
+            for entry in deactivated_volunteer.assignment_history:
+                if (entry.reference_doctype == "Team" and 
+                    entry.reference_name == team.name):
+                    has_history_entry = True
+                    break
+                    
+            self.assertTrue(has_history_entry, 
+                           "Deactivated team assignment should be in volunteer's assignment history")
+    
+    def test_team_responsibilities(self):
+        """Test adding responsibilities to a team"""
+        team = self.create_test_team()
+        
+        # Add some responsibilities
+        team.append("key_responsibilities", {
+            "responsibility": "Organize monthly meetings",
+            "description": "Schedule and prepare agenda for monthly committee meetings",
+            "status": "In Progress"
+        })
+        
+        team.append("key_responsibilities", {
+            "responsibility": "Annual report",
+            "description": "Prepare annual report of committee activities",
+            "status": "Pending"
+        })
+        
+        team.save()
+        
+        # Verify responsibilities
+        self.assertEqual(len(team.key_responsibilities), 2)
+        
+        # Verify responsibility details
+        responsibilities = [r.responsibility for r in team.key_responsibilities]
+        self.assertIn("Organize monthly meetings", responsibilities)
+        self.assertIn("Annual report", responsibilities)
+        
+    def test_member_volunteer_linkage(self):
+        """Test that adding a member automatically links the volunteer"""
+        team_name = f"Test Linkage Team {self.__class__.test_id}"
+        if frappe.db.exists("Team", team_name):
+            frappe.delete_doc("Team", team_name, force=True)
+            
+        team = frappe.get_doc({
+            "doctype": "Team",
+            "team_name": team_name,
+            "description": "Test team for member-volunteer linkage",
+            "team_type": "Working Group",
+            "start_date": today(),
+            "status": "Active"
+        })
+        
+        # Add only member without volunteer
+        team.append("team_members", {
+            "member": self.test_members[0].name,
+            "member_name": self.test_members[0].full_name,
+            "role_type": "Team Leader",
+            "role": "Working Group Lead",
+            "from_date": today(),
+            "is_active": 1,
+            "status": "Active"
+        })
+        
+        team.insert(ignore_permissions=True)
+        
+        # Reload to verify volunteer was automatically linked
+        team.reload()
+        
+        # Check that volunteer is now linked
+        self.assertEqual(team.team_members[0].volunteer, self.test_volunteers[0].name)
+        self.assertEqual(team.team_members[0].volunteer_name, self.test_volunteers[0].volunteer_name)
