@@ -53,7 +53,6 @@ class Member(Document):
                 self.age = age
             else:
                 self.age = None
-                frappe.log_error("No birth date, age set to None", "Age Debug")
         except Exception as e:
             frappe.log_error(f"Error calculating age: {str(e)}", "Member Error")
 
