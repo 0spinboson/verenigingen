@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import today, nowdate, add_days, flt
 from verenigingen.verenigingen.tests.test_setup import setup_test_environment
-from vereiningen.verenigingen.tests.patch_test_runner import patch_test_runner
+from verenigingen.verenigingen.tests.patch_test_runner import patch_test_runner
 
 class TestDirectDebitBatch(FrappeTestCase):
     @classmethod
