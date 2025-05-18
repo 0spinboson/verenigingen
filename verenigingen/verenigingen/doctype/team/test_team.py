@@ -6,6 +6,11 @@ import frappe
 from frappe.utils import today, add_days
 
 class TestTeam(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Tell Frappe not to make test records
+        frappe.flags.make_test_records = False
+        
     def setUp(self):
         # Create test data
         self.create_test_volunteers()
@@ -47,7 +52,7 @@ class TestTeam(unittest.TestCase):
                 "last_name": f"Test {i}",
                 "email": email
             })
-            member.insert()
+            member.insert(ignore_permissions=True)
             self.test_members.append(member)
             
             # Create volunteer for each member
@@ -59,7 +64,7 @@ class TestTeam(unittest.TestCase):
                 "status": "Active",
                 "start_date": today()
             })
-            volunteer.insert()
+            volunteer.insert(ignore_permissions=True)
             self.test_volunteers.append(volunteer)
     
     def create_test_team(self):
@@ -100,7 +105,7 @@ class TestTeam(unittest.TestCase):
                 "status": "Active"
             })
             
-        self.test_team.insert()
+        self.test_team.insert(ignore_permissions=True)
         return self.test_team
     
     def test_team_creation(self):
@@ -259,7 +264,7 @@ class TestTeam(unittest.TestCase):
             "status": "Active"
         })
         
-        team.insert()
+        team.insert(ignore_permissions=True)
         
         # Reload to verify volunteer was automatically linked
         team.reload()
