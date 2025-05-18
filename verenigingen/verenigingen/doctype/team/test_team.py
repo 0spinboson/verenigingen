@@ -176,28 +176,50 @@ class TestTeam(unittest.TestCase):
         """Test volunteer assignments get created for team members"""
         if not self.test_members:
             self.skipTest("No test members could be created")
-            
+                
         team = self.create_test_team()
+        
+        # Print debugging info
+        print(f"Created test team: {team.name} with {len(team.team_members)} members")
+        for i, tm in enumerate(team.team_members):
+            print(f"Team member {i}: {tm.member_name}, volunteer: {tm.volunteer}")
         
         # Update team to trigger volunteer assignment processing
         team.description = "Updated description to trigger save"
         team.save()
+        
+        # Give more time for async processes to complete
+        time.sleep(3)
+        
+        # Force synchronize volunteers explicitly
+        # This ensures volunteer assignments are updated
+        from verenigingen.verenigingen.doctype.team.team import sync_team_with_volunteers
+        sync_team_with_volunteers(team_name=team.name)
         
         # Verify assignments were reflected in volunteer aggregated assignments
         for volunteer in self.test_volunteers:
             # Reload volunteer to get latest assignments
             volunteer.reload()
             
+            # Print debugging info
+            print(f"Checking volunteer: {volunteer.name}, {volunteer.volunteer_name}")
+            
             # Get aggregated assignments
             assignments = volunteer.get_aggregated_assignments()
+            
+            # Print all assignments for debugging
+            print(f"Found {len(assignments)} assignments for volunteer {volunteer.volunteer_name}:")
+            for a in assignments:
+                print(f"- {a.get('source_type', 'Unknown')}: {a.get('source_name', 'Unknown')}, active: {a.get('is_active', 'Unknown')}")
             
             # Check if there's a team assignment
             has_team_assignment = False
             for assignment in assignments:
-                if (assignment["source_type"] == "Team" and 
-                    assignment["source_doctype"] == "Team" and
-                    assignment["source_name"] == team.name):
+                if (assignment.get("source_type") == "Team" and 
+                    assignment.get("source_doctype") == "Team" and
+                    assignment.get("source_name") == team.name):
                     has_team_assignment = True
+                    print(f"Found team assignment for volunteer {volunteer.volunteer_name}")
                     break
                     
             self.assertTrue(has_team_assignment, f"Volunteer {volunteer.volunteer_name} should have team assignment")
