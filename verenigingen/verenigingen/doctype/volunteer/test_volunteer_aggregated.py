@@ -5,6 +5,7 @@ import unittest
 import frappe
 from frappe.utils import getdate, today, add_days
 
+@unittest.skip_test_for_test_record_creation
 class TestVolunteerAggregatedAssignments(unittest.TestCase):
     def setUp(self):
         # Create test data
@@ -49,7 +50,7 @@ class TestVolunteerAggregatedAssignments(unittest.TestCase):
             "last_name": "Test",
             "email": "agg_test@example.com"
         })
-        self.test_member.insert()
+        self.test_member.insert(ignore_permissions=True)
         
         # 2. Create a volunteer
         self.test_volunteer = frappe.get_doc({
@@ -60,7 +61,7 @@ class TestVolunteerAggregatedAssignments(unittest.TestCase):
             "status": "Active",
             "start_date": today()
         })
-        self.test_volunteer.insert()
+        self.test_volunteer.insert(ignore_permissions=True)
         
         # 3. Create a chapter
         self.test_chapter = frappe.get_doc({
@@ -80,7 +81,7 @@ class TestVolunteerAggregatedAssignments(unittest.TestCase):
             "is_active": 1
         })
         
-        self.test_chapter.insert()
+        self.test_chapter.insert(ignore_permissions=True)
         
         # 4. Create a team
         self.test_team = frappe.get_doc({
@@ -105,7 +106,7 @@ class TestVolunteerAggregatedAssignments(unittest.TestCase):
             "status": "Active"
         })
         
-        self.test_team.insert()
+        self.test_team.insert(ignore_permissions=True)
         
         # 5. Create a volunteer activity
         self.test_activity = frappe.get_doc({
@@ -117,7 +118,7 @@ class TestVolunteerAggregatedAssignments(unittest.TestCase):
             "status": "Active",
             "start_date": today()
         })
-        self.test_activity.insert()
+        self.test_activity.insert(ignore_permissions=True)
     
     def test_aggregated_assignments(self):
         """Test the aggregated assignments feature"""
