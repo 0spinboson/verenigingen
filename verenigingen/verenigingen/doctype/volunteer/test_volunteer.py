@@ -5,8 +5,12 @@ import unittest
 import frappe
 from frappe.utils import getdate, add_days, today
 
-@unittest.skip_test_for_test_record_creation
 class TestVolunteer(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Tell Frappe not to make test records
+        frappe.flags.make_test_records = False
+        
     def setUp(self):
         # Create test data
         self.create_test_member()
