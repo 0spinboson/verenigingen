@@ -2,25 +2,43 @@
 # Copyright (c) 2025, Your Organization and Contributors
 # See license.txt
 
-import unittest
 import frappe
-from frappe.utils import getdate, today, add_days
+from frappe.utils import today, add_days
+from verenigingen.verenigingen.tests.test_base import VereningingenTestCase
 
-# Use standard unittest skip decorator
-@unittest.skip("Skipping tests temporarily due to test infrastructure issues")
-class TestVolunteerActivity(unittest.TestCase):
+class TestVolunteerActivity(VereningingenTestCase):
     def setUp(self):
-        pass
+        # Create test data
+        self.test_member = self.create_test_member()
+        self.test_volunteer = self.create_test_volunteer(self.test_member)
         
     def tearDown(self):
-        pass
+        # Clean up test data
+        for doctype, name in self._docs_to_delete:
+            try:
+                frappe.delete_doc(doctype, name, force=True)
+            except Exception:
+                pass
+    
+    def create_test_activity(self):
+        """Create a test volunteer activity"""
+        activity = frappe.get_doc({
+            "doctype": "Volunteer Activity",
+            "volunteer": self.test_volunteer.name,
+            "activity_type": "Project",
+            "role": "Project Coordinator",
+            "description": "Test volunteer activity",
+            "status": "Active",
+            "start_date": today()
+        })
+        activity.insert(ignore_permissions=True)
+        self._docs_to_delete.append(("Volunteer Activity", activity.name))
+        return activity
+    
+    def test_activity_creation(self):
+        """Test creating a volunteer activity"""
+        activity = self.create_test_activity()
         
-    def test_minimal(self):
-        """Just a minimal test to pass the test runner"""
-        self.assertTrue(True)
-
-# Create a non-skipped test that's guaranteed to pass for CI purposes
-class TestVolunteerActivityMinimal(unittest.TestCase):
-    def test_ensure_doctype_exists(self):
-        """Simple test to verify doctype exists"""
-        self.assertTrue(frappe.db.exists("DocType", "Volunteer Activity"))
+        # Basic validation
+        self.assertEqual(activity.volunteer, self.test_volunteer.name)
+        self.assertEqual(activity.status, "Active")
