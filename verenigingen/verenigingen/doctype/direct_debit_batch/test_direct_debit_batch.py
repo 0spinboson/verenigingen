@@ -401,9 +401,9 @@ class TestDirectDebitBatch(FrappeTestCase):
             batch.docstatus = 1
             batch.save()
             
-            # Give a short delay and reload to prevent timestamp issues
-            frappe.db.commit()  # Commit to ensure changes are saved
-            batch.reload()  # Reload the document to get the latest version
+            # Force reload to get the updated document
+            frappe.db.commit()
+            batch = frappe.get_doc("Direct Debit Batch", batch.name)
             
             # Verify sepa_file_generated flag set after submission
             self.assertTrue(batch.sepa_file_generated, "SEPA file not generated on submit")
@@ -411,9 +411,12 @@ class TestDirectDebitBatch(FrappeTestCase):
         finally:
             # Cancel the batch - make sure to reload first
             if batch.docstatus == 1:
-                batch.reload()  # Reload before canceling
+                # Get fresh copy of the document to prevent timestamp mismatch
+                batch = frappe.get_doc("Direct Debit Batch", batch.name)
                 batch.cancel()
-            batch.delete()
+            
+            # Delete using frappe.delete_doc to properly clean up
+            frappe.delete_doc("Direct Debit Batch", batch.name, force=True)
     
     def test_invoice_validation(self):
         """Test invoice validation"""
