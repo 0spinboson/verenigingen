@@ -15,6 +15,13 @@ class TestMembership(FrappeTestCase):
         self.cleanup_test_data()
     
     def setup_test_data(self):
+        # Create "Membership" item group if it doesn't exist
+        if not frappe.db.exists("Item Group", "Membership"):
+            item_group = frappe.new_doc("Item Group")
+            item_group.item_group_name = "Membership"
+            item_group.parent_item_group = "All Item Groups"
+            item_group.insert(ignore_permissions=True)
+            
         # Create test member
         self.member_data = {
             "first_name": "Test",
@@ -51,27 +58,82 @@ class TestMembership(FrappeTestCase):
         self.membership_type.allow_auto_renewal = 1
         self.membership_type.insert()
         
-        # Create a subscription plan for the membership type
-        self.membership_type.create_subscription_plan()
-        self.membership_type.reload()
+        # Create subscription plan without creating an item
+        # We'll use a more test-friendly approach
+        self.create_test_subscription_plan()
+    
+    def create_test_subscription_plan(self):
+        """Create a subscription plan for testing without the item dependency"""
+        plan_name = f"Test Plan - {self.membership_type_name}"
+        
+        # Delete existing plan if it exists
+        if frappe.db.exists("Subscription Plan", plan_name):
+            frappe.delete_doc("Subscription Plan", plan_name)
+            
+        # Create a test item for the plan if it doesn't exist
+        item_code = f"TEST-MEMBERSHIP-ITEM"
+        if not frappe.db.exists("Item", item_code):
+            item = frappe.new_doc("Item")
+            item.item_code = item_code
+            item.item_name = "Test Membership Item"
+            item.item_group = "Membership"
+            item.is_stock_item = 0
+            item.include_item_in_manufacturing = 0
+            item.is_service_item = 1
+            item.is_subscription_item = 1
+            
+            # Default warehouse
+            item.append("item_defaults", {
+                "company": frappe.defaults.get_global_default('company') or '_Test Company'
+            })
+            
+            item.insert(ignore_permissions=True)
+        
+        # Create subscription plan
+        plan = frappe.new_doc("Subscription Plan")
+        plan.plan_name = plan_name
+        plan.item = item_code
+        plan.price_determination = "Fixed Rate"
+        plan.cost = self.membership_type.amount
+        plan.billing_interval = "Year"
+        plan.billing_interval_count = 1
+        plan.insert(ignore_permissions=True)
+        
+        # Link plan to membership type
+        self.membership_type.subscription_plan = plan.name
+        self.membership_type.save()
     
     def cleanup_test_data(self):
         # Clean up memberships
         for m in frappe.get_all("Membership", filters={"member": self.member.name}):
-            membership = frappe.get_doc("Membership", m.name)
-            if membership.docstatus == 1:
-                membership.cancel()
-            frappe.delete_doc("Membership", m.name, force=True)
+            try:
+                membership = frappe.get_doc("Membership", m.name)
+                if membership.docstatus == 1:
+                    membership.cancel()
+                frappe.delete_doc("Membership", m.name, force=True)
+            except Exception as e:
+                # Ignore errors during cleanup
+                print(f"Error during cleanup: {str(e)}")
         
         # Clean up member
-        frappe.delete_doc("Member", self.member.name, force=True)
+        if frappe.db.exists("Member", self.member.name):
+            frappe.delete_doc("Member", self.member.name, force=True)
         
         # Clean up membership type
-        frappe.delete_doc("Membership Type", self.membership_type_name, force=True)
+        if frappe.db.exists("Membership Type", self.membership_type_name):
+            frappe.delete_doc("Membership Type", self.membership_type_name, force=True)
         
         # Clean up subscription plan
-        if self.membership_type.subscription_plan:
-            frappe.delete_doc("Subscription Plan", self.membership_type.subscription_plan, force=True)
+        plan_name = f"Test Plan - {self.membership_type_name}"
+        if frappe.db.exists("Subscription Plan", plan_name):
+            frappe.delete_doc("Subscription Plan", plan_name, force=True)
+        
+        # Clean up test item
+        item_code = "TEST-MEMBERSHIP-ITEM"
+        if frappe.db.exists("Item", item_code):
+            frappe.delete_doc("Item", item_code, force=True)
+        
+        # We don't delete the Item Group as it might be used by other tests
     
     def test_create_membership(self):
         """Test creating a new membership"""
