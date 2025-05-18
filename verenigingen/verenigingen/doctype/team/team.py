@@ -27,20 +27,26 @@ class Team(Document):
         if not has_leader and self.status == "Active" and self.team_members:
             frappe.msgprint(_("Warning: Active team should have at least one active team leader"))
     
+    def before_insert(self):
+        """Link volunteers to members before insert"""
+        self.update_volunteer_assignments()
+    
     def on_update(self):
         """Update volunteer assignments when team is updated"""
         self.update_volunteer_assignments()
     
     def update_volunteer_assignments(self):
         """Update volunteer assignments for all team members"""
+        volunteer_updated = False
+        
         for member in self.team_members:
-            if not member.volunteer:
+            if not member.volunteer and member.member:
                 # If no volunteer is specified but member is, try to find a volunteer
-                if member.member:
-                    volunteer = frappe.db.get_value("Volunteer", {"member": member.member}, "name")
-                    if volunteer:
-                        member.volunteer = volunteer
-                        member.volunteer_name = frappe.db.get_value("Volunteer", volunteer, "volunteer_name")
+                volunteer = frappe.db.get_value("Volunteer", {"member": member.member}, "name")
+                if volunteer:
+                    member.volunteer = volunteer
+                    member.volunteer_name = frappe.db.get_value("Volunteer", volunteer, "volunteer_name")
+                    volunteer_updated = True
                 else:
                     continue
                 
@@ -91,6 +97,10 @@ class Team(Document):
                         
                 except Exception as e:
                     frappe.log_error(f"Failed to update volunteer assignment: {str(e)}")
+        
+        # Save if we updated a volunteer outside of regular save process
+        if volunteer_updated and not self.flags.in_insert and not self.is_new():
+            self.db_update()
 
 @frappe.whitelist()
 def get_team_members(team):
