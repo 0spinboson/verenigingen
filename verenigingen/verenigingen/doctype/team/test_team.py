@@ -31,18 +31,18 @@ class TestTeam(unittest.TestCase):
                     print(f"Error deleting team {team_name}: {e}")
         
         # 2. Now delete volunteers
-        for volunteer in self.test_volunteers:
+        for volunteer in getattr(self, 'test_volunteers', []):
             try:
                 frappe.delete_doc("Volunteer", volunteer.name, force=True)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Error deleting volunteer {volunteer.name}: {e}")
         
         # 3. Finally delete members
-        for member in self.test_members:
+        for member in getattr(self, 'test_members', []):
             try:
                 frappe.delete_doc("Member", member.name, force=True)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Error deleting member {member.name}: {e}")
     
     def create_test_volunteers(self):
         """Create test members and volunteers for team"""
