@@ -308,7 +308,7 @@ class TestMember(FrappeTestCase):
             chapter.postal_codes = "1000-1099, 2500, 3*"
             chapter.published = 1
             chapter.insert(ignore_permissions=True)
-            
+                
         # Create an address in the chapter's region
         address = frappe.new_doc("Address")
         address.address_title = f"Test Address for {self.member_data['email']}"
@@ -319,26 +319,26 @@ class TestMember(FrappeTestCase):
         address.country = "Netherlands"
         address.pincode = "1050"  # Within the chapter's range
         address.insert(ignore_permissions=True)
-        
+            
         # Create a test member
         member = frappe.new_doc("Member")
         member.update(self.member_data)
         member.primary_address = address.name
         member.insert()
-        
+            
         # Test postal code matching
         self.assertTrue(chapter.matches_postal_code("1050"))
         self.assertTrue(chapter.matches_postal_code("2500"))
         self.assertTrue(chapter.matches_postal_code("3123"))
         self.assertFalse(chapter.matches_postal_code("4000"))
-        
+            
         # Test chapter suggestion
         result = frappe.call("verenigingen.verenigingen.doctype.chapter.chapter.suggest_chapter_for_member",
                             member_name=member.name,
                             postal_code=address.pincode,
                             state=address.state,
                             city=address.city)
-    
+        
         # Check if chapter management is disabled
         if result.get("disabled"):
             self.skipTest("Chapter management is disabled in the system")
@@ -346,10 +346,21 @@ class TestMember(FrappeTestCase):
             # Should find our test chapter
             self.assertTrue(result)
             self.assertTrue(result.get("matches_by_postal") or result.get("matches_by_region"))
-                    
-        # Clean up
-        frappe.delete_doc("Address", address.name)
-        frappe.delete_doc("Member", member.name)
-
-if __name__ == '__main__':
-    unittest.main()
+                        
+        # Clean up - Fix: First unlink the address from the member, then delete
+        try:
+            # First update the member to remove the address link
+            member.primary_address = None
+            member.save()
+            
+            # Now delete the member and address
+            frappe.delete_doc("Member", member.name)
+            
+            # Try to delete the address, but use force if needed
+            try:
+                frappe.delete_doc("Address", address.name)
+            except frappe.LinkExistsError:
+                # If it still can't be deleted, use force_delete=True
+                frappe.delete_doc("Address", address.name, force=True)
+        except Exception as e:
+            print(f"Cleanup error (can be ignored): {str(e)}")
