@@ -1327,7 +1327,7 @@ function checkForExistingMandate(frm) {
                                 primary_action(values) {
                                     // Create the mandate directly
                                     frappe.call({
-                                        method: 'vereiningen.verenigingen.doctype.member.member.create_and_link_mandate',
+                                        method: 'verenigingen.verenigingen.doctype.member.member.create_and_link_mandate',
                                         args: {
                                             member: frm.doc.name,
                                             iban: frm.doc.iban,
