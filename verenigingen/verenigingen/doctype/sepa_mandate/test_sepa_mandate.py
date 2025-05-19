@@ -111,11 +111,12 @@ class TestSEPAMandate(unittest.TestCase):
         self.mandate.insert()
         self.assertEqual(self.mandate.status, "Active")
         
-        # Before testing flag change, ensure status is properly synced in the class
+        # Change is_active to 0 and verify status changes to Suspended
         self.mandate.is_active = 0
-        self.mandate.validate()  # This should call sync_status_and_active_flag
         self.mandate.save()
         
+        # Reload the document to ensure we see the saved changes
+        self.mandate.reload()
         self.assertEqual(self.mandate.status, "Suspended")
     
     def test_status_suspended(self):
@@ -125,11 +126,12 @@ class TestSEPAMandate(unittest.TestCase):
         self.mandate.insert()
         self.assertEqual(self.mandate.status, "Suspended")
         
-        # Before testing flag change, ensure status is properly synced
+        # Change is_active to 1 and verify status changes to Active
         self.mandate.is_active = 1
-        self.mandate.validate()  # This should call sync_status_and_active_flag 
         self.mandate.save()
         
+        # Reload the document to ensure we see the saved changes
+        self.mandate.reload()
         self.assertEqual(self.mandate.status, "Active")
     
     def test_status_expired(self):
