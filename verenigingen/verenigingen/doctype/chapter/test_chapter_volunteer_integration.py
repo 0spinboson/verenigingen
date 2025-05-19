@@ -8,8 +8,8 @@ from verenigingen.verenigingen.doctype.volunteer.volunteer import sync_chapter_b
 
 class TestChapterVolunteerIntegration(unittest.TestCase):
     def setUp(self):
-        # Create a timestamp suffix to ensure unique test data names
-        self.test_timestamp = frappe.utils.now().replace(":", "").replace("-", "").replace(" ", "")
+        # Create a timestamp suffix to ensure unique test data names - only alphanumeric
+        self.test_timestamp = ''.join(c for c in frappe.utils.now() if c.isalnum())
         
         # Create test data in the right order
         self.test_members = []
@@ -83,24 +83,24 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
         if existing_head:
             self.chapter_head_member = frappe.get_doc("Member", existing_head)
         else:
-            # Create new chapter head
+            # Create new chapter head - use only alphanumeric characters in names
             self.chapter_head_member = frappe.get_doc({
                 "doctype": "Member",
                 "first_name": "Chapter",
-                "last_name": f"Head {self.test_timestamp}",
+                "last_name": f"Head{self.test_timestamp[:8]}", # Use only the first 8 chars of timestamp
                 "email": head_email
             })
             self.chapter_head_member.insert(ignore_permissions=True)
         
         # Generate a unique name for the test chapter
-        test_chapter_name = f"Test Chapter {self.test_timestamp}"
+        test_chapter_name = f"TestChapter{self.test_timestamp[:8]}"
         
         # Create a chapter
         self.test_chapter = frappe.get_doc({
             "doctype": "Chapter",
             "name": test_chapter_name,
             "chapter_head": self.chapter_head_member.name,
-            "region": "Test Region",
+            "region": "TestRegion",
             "introduction": "Test chapter for integration tests"
         })
         self.test_chapter.insert(ignore_permissions=True)
@@ -132,11 +132,11 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
         for i in range(3):
             email = f"board_member_{i}_{self.test_timestamp}@example.com"
             
-            # Create the member with unique email
+            # Create the member with unique email - use only alphanumeric in names
             member = frappe.get_doc({
                 "doctype": "Member",
-                "first_name": f"Board",
-                "last_name": f"Member {i} {self.test_timestamp}",
+                "first_name": f"Board{i}",
+                "last_name": f"Member{self.test_timestamp[:8]}", # Use only the first 8 chars of timestamp
                 "email": email
             })
             member.insert(ignore_permissions=True)
@@ -144,10 +144,12 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
             
         # Create a volunteer for one member
         if self.test_members:
+            # Clean the name for volunteer (remove any spaces)
+            clean_name = self.test_members[0].full_name.replace(" ", "")
             volunteer = frappe.get_doc({
                 "doctype": "Volunteer",
-                "volunteer_name": self.test_members[0].full_name,
-                "email": f"{self.test_members[0].full_name.lower().replace(' ', '.')}@example.org",
+                "volunteer_name": clean_name,
+                "email": f"{clean_name.lower()}@example.org",
                 "member": self.test_members[0].name,
                 "status": "Active",
                 "start_date": frappe.utils.today()
