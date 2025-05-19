@@ -36,14 +36,29 @@ class SEPAMandate(Document):
                 frappe.throw(_("Invalid IBAN length"))
     
     def set_status(self):
-        # Auto-set status based on dates
-        if self.status not in ["Cancelled", "Suspended"]:
-            if self.expiry_date and getdate(self.expiry_date) < getdate(today()):
-                self.status = "Expired"
-            elif not self.is_active:
-                self.status = "Suspended"
-            else:
-                self.status = "Active"
+        """Set status based on dates and flags, respecting manual selections"""
+        # Don't override these manually set statuses
+        if self.status in ["Cancelled"]:
+            # Cancelled is a manual terminal state that shouldn't be overridden
+            return
+            
+        # Handle Draft status separately - keep it as Draft until submission
+        if self.status == "Draft" and self.docstatus == 0:
+            # Keep as Draft until submitted
+            return
+            
+        # Handle Suspended - don't override a manual Suspended status
+        if self.status == "Suspended" and not self.is_active:
+            # User wants it suspended and is_active flag is consistent
+            return
+            
+        # Auto-determine status based on conditions
+        if self.expiry_date and getdate(self.expiry_date) < getdate(today()):
+            self.status = "Expired"
+        elif not self.is_active:
+            self.status = "Suspended"
+        else:
+            self.status = "Active"
     
     def on_update(self):
         """
