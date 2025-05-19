@@ -71,56 +71,63 @@
    "reqd": 1
   },
   {
+   "fieldname": "enable_chapter_management",
+   "fieldtype": "Check",
+   "label": "Enable Chapter Management",
+   "default": 1,
+   "description": "When enabled, allows assigning members to chapters and using chapter-based features"
+  },
+  {
   "fieldname": "dutch_btw_section",
   "fieldtype": "Section Break",
   "label": "Dutch BTW (VAT) Settings"
-},
-{
+  },
+  {
   "default": "0",
   "fieldname": "tax_exempt_for_contributions",
   "fieldtype": "Check",
   "label": "Tax Exempt for Contributions and Donations",
   "description": "When enabled, BTW exemption codes will be applied according to Dutch tax regulations"
-},
-{
+  },
+  {
   "fieldname": "company_iban",
   "fieldtype": "Data",
   "label": "Company IBAN",
   "description": "IBAN for direct debit collections"
-},
-{
+  },
+  {
   "fieldname": "company_bic",
   "fieldtype": "Data",
   "label": "Company BIC/SWIFT",
   "description": "BIC code for company's bank"
-},
-{
+  },
+  {
   "fieldname": "creditor_id",
   "fieldtype": "Data",
   "label": "Creditor ID",
   "description": "Dutch Incassant ID for direct debit collections"
-},
-{
+  },
+  {
   "fieldname": "default_tax_exemption_type",
   "fieldtype": "Select",
   "label": "Default Tax Exemption Type",
   "options": "\nEXEMPT_NONPROFIT\nEXEMPT_MEMBERSHIP\nEXEMPT_FUNDRAISING\nEXEMPT_SMALL_BUSINESS\nOUTSIDE_SCOPE\nEXEMPT_WITH_INPUT\nEXEMPT_NO_INPUT",
   "default": "EXEMPT_MEMBERSHIP",
   "depends_on": "eval:doc.tax_exempt_for_contributions"
-},
-{
+  },
+  {
   "fieldname": "default_tax_template",
   "fieldtype": "Link",
   "label": "Default Tax Template",
   "options": "Sales Taxes and Charges Template",
   "depends_on": "eval:doc.tax_exempt_for_contributions"
-},
-{
+  },
+  {
   "fieldname": "kor_exemption_applied",
   "fieldtype": "Check",
   "label": "Small Business Scheme (KOR) Applied",
   "description": "Check if your organization has applied for the KOR exemption"
-},
+  },
   {
    "default": "0",
    "depends_on": "eval:doc.allow_invoicing && doc.send_email",
