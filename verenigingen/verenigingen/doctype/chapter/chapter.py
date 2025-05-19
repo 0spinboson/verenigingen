@@ -5,11 +5,13 @@ import frappe
 from frappe import _
 from frappe.website.website_generator import WebsiteGenerator
 from frappe.utils import getdate, today, add_days, date_diff, now
+import re
 
 class Chapter(WebsiteGenerator):
     def validate(self):
         # Keep existing validation code
         self.validate_board_members()
+        self.validate_postal_codes()
         
         if not self.route:
             self.route = 'chapters/' + self.scrub(self.name)
@@ -31,6 +33,39 @@ class Chapter(WebsiteGenerator):
                 # Validate member exists
                 if not frappe.db.exists("Member", member.member):
                     frappe.throw(_("Member {0} does not exist").format(member.member))
+    
+    def validate_postal_codes(self):
+        """Validate postal code patterns"""
+        if not self.postal_codes:
+            return
+            
+        # Split by commas and validate each pattern
+        patterns = [p.strip() for p in self.postal_codes.split(',')]
+        valid_patterns = []
+        
+        for pattern in patterns:
+            # Check for range pattern (e.g. 1000-1099)
+            if '-' in pattern:
+                start, end = pattern.split('-', 1)
+                if not (start.isdigit() and end.isdigit()):
+                    frappe.msgprint(_("Invalid postal code range: {0}. Using numeric ranges only.").format(pattern))
+                    continue
+                valid_patterns.append(pattern)
+            # Check for wildcard pattern (e.g. 10*)
+            elif '*' in pattern:
+                base = pattern.replace('*', '')
+                if not base.isdigit():
+                    frappe.msgprint(_("Invalid wildcard postal code: {0}. Base should be numeric.").format(pattern))
+                    continue
+                valid_patterns.append(pattern)
+            # Simple postal code
+            elif pattern.isdigit() or pattern.isalnum():
+                valid_patterns.append(pattern)
+            else:
+                frappe.msgprint(_("Invalid postal code pattern: {0}. Skipping.").format(pattern))
+        
+        # Join valid patterns back together
+        self.postal_codes = ', '.join(valid_patterns)
     
     def get_board_members(self, include_inactive=False, role=None):
         """Get list of board members, optionally filtered by role"""
@@ -115,6 +150,33 @@ class Chapter(WebsiteGenerator):
         
         return context
     
+    def matches_postal_code(self, postal_code):
+        """Check if a postal code matches this chapter's postal code patterns"""
+        if not self.postal_codes or not postal_code:
+            return False
+            
+        postal_code = str(postal_code).strip().upper()
+        patterns = [p.strip().upper() for p in self.postal_codes.split(',')]
+        
+        for pattern in patterns:
+            # Check for range pattern (e.g. 1000-1099)
+            if '-' in pattern:
+                start, end = pattern.split('-', 1)
+                if start.isdigit() and end.isdigit() and postal_code.isdigit():
+                    if int(start) <= int(postal_code) <= int(end):
+                        return True
+            # Check for wildcard pattern (e.g. 10*)
+            elif '*' in pattern:
+                # Convert to regex pattern
+                regex_pattern = pattern.replace('*', '.*')
+                if re.match(f"^{regex_pattern}$", postal_code):
+                    return True
+            # Simple postal code
+            elif postal_code == pattern:
+                return True
+        
+        return False
+        
     @frappe.whitelist()
     def add_board_member(self, member, role, from_date=None, to_date=None):
         """Add a new board member to this chapter"""
@@ -415,3 +477,82 @@ def get_chapter_stats(chapter_name):
         "recent_memberships": recent_memberships,
         "last_updated": now()
     }
+
+@frappe.whitelist()
+def get_chapters_by_postal_code(postal_code):
+    """Get chapters that match a postal code"""
+    if not postal_code:
+        return []
+        
+    postal_code = str(postal_code).strip().upper()
+    
+    # Get all published chapters
+    chapters = frappe.get_all(
+        "Chapter",
+        filters={"published": 1},
+        fields=["name", "region", "postal_codes", "introduction"]
+    )
+    
+    matching_chapters = []
+    
+    for chapter in chapters:
+        if not chapter.get("postal_codes"):
+            continue
+            
+        # Create chapter object to use the matching method
+        chapter_doc = frappe.get_doc("Chapter", chapter.name)
+        if chapter_doc.matches_postal_code(postal_code):
+            matching_chapters.append(chapter)
+    
+    return matching_chapters
+
+@frappe.whitelist()
+def suggest_chapter_for_member(member_name, postal_code=None, state=None, city=None):
+    """Suggest appropriate chapters for a member based on location data"""
+    result = {
+        "matches_by_postal": [],
+        "matches_by_region": [],
+        "matches_by_city": [],
+        "all_chapters": []
+    }
+    
+    # Get all published chapters for baseline
+    result["all_chapters"] = frappe.get_all(
+        "Chapter",
+        filters={"published": 1},
+        fields=["name", "region", "postal_codes", "introduction"]
+    )
+    
+    # If no location data, just return all chapters
+    if not (postal_code or state or city):
+        return result
+        
+    # First priority: Match by postal code
+    if postal_code:
+        result["matches_by_postal"] = get_chapters_by_postal_code(postal_code)
+        
+        # If we have postal matches, that's the most specific, so return early
+        if result["matches_by_postal"]:
+            return result
+    
+    # Second priority: Match by region/state
+    if state:
+        for chapter in result["all_chapters"]:
+            if chapter.get("region") and (
+                state.lower() in chapter.get("region").lower() or
+                chapter.get("region").lower() in state.lower()
+            ):
+                result["matches_by_region"].append(chapter)
+    
+    # Third priority: Match by city
+    if city:
+        for chapter in result["all_chapters"]:
+            if (
+                city.lower() in chapter.get("name").lower() or
+                (chapter.get("region") and city.lower() in chapter.get("region").lower())
+            ):
+                # Don't add duplicates already in region matches
+                if chapter not in result["matches_by_region"]:
+                    result["matches_by_city"].append(chapter)
+    
+    return result
