@@ -1160,18 +1160,6 @@ function selectMandateType(frm) {
                 fieldname: 'mandate_type',
                 fieldtype: 'Select',
                 options: [
-                    {label: __('One-off payment'), value: '
-
-// Function to select mandate type (one-off or continuous)
-function selectMandateType(frm) {
-    const d = new frappe.ui.Dialog({
-        title: __('Create SEPA Mandate'),
-        fields: [
-            {
-                label: __('Mandate Type'),
-                fieldname: 'mandate_type',
-                fieldtype: 'Select',
-                options: [
                     {label: __('One-off payment'), value: 'OOFF'},
                     {label: __('Recurring payments'), value: 'RCUR'}
                 ],
