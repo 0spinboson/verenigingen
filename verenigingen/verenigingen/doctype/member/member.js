@@ -621,13 +621,31 @@ frappe.ui.form.on('Member', {
     },
     
     iban: function(frm) {
-        // When IBAN changes, only format it correctly - don't check for mandate yet
-        if (frm.doc.payment_method === 'Direct Debit' && frm.doc.iban) {
+        // When IBAN changes, format it correctly and try to derive BIC
+        if (frm.doc.iban) {
             // Format the IBAN
             const formattedIban = formatIBAN(frm.doc.iban);
             if (formattedIban !== frm.doc.iban) {
                 frm.set_value('iban', formattedIban);
-                // Don't do anything else here - we'll check for mandates after save
+            }
+            
+            // Try to derive BIC from IBAN if payment method is Direct Debit and BIC is empty
+            if (frm.doc.payment_method === 'Direct Debit' && (!frm.doc.bic || frm.doc.bic === '')) {
+                frappe.call({
+                    method: 'verenigingen.verenigingen.doctype.member.member.derive_bic_from_iban',
+                    args: {
+                        iban: formattedIban
+                    },
+                    callback: function(r) {
+                        if (r.message && r.message.bic) {
+                            frm.set_value('bic', r.message.bic);
+                            frappe.show_alert({
+                                message: __('BIC/SWIFT code derived from IBAN'),
+                                indicator: 'green'
+                            }, 3);
+                        }
+                    }
+                });
             }
         }
     },
