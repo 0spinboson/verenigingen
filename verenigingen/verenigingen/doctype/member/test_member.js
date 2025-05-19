@@ -104,3 +104,64 @@ QUnit.test("test: Member - Volunteer Section", function (assert) {
 		() => done()
 	]);
 });
+
+QUnit.test("test: Member - SEPA Mandate Handling", function(assert) {
+    let done = assert.async();
+
+    // Number of asserts
+    assert.expect(3);
+
+    frappe.run_serially([
+        // Create a member with Direct Debit payment method and IBAN
+        () => frappe.tests.make('Member', [
+            {first_name: 'SEPA'},
+            {last_name: 'Test'},
+            {email: 'sepa.test@example.com'},
+            {payment_method: 'Bank Transfer'} // Start with Bank Transfer
+        ]),
+        // Save the member first to ensure it's created
+        () => cur_frm.save(),
+        () => frappe.timeout(1),
+        // Now switch to Direct Debit to trigger the mandate check
+        () => frappe.tests.set_form_values(cur_frm, [
+            {payment_method: 'Direct Debit'},
+            {iban: 'NL02ABNA0123456789'},
+            {bank_account_name: 'SEPA Test'}
+        ]),
+        () => cur_frm.save(),
+        () => frappe.timeout(2), // Wait for any dialogs
+        
+        // Check if mandate creation dialog appears
+        () => {
+            // Look for the SEPA mandate dialog
+            let dialog = $(".modal-dialog:visible");
+            assert.ok(dialog.length, "Mandate creation dialog should appear on first Direct Debit save");
+            
+            // Click "Yes" to create mandate
+            dialog.find('.btn-primary').click();
+        },
+        () => frappe.timeout(2), // Wait for mandate type dialog
+        
+        // Fill mandate type dialog and submit
+        () => {
+            let mandateTypeDialog = $(".modal-dialog:visible");
+            assert.ok(mandateTypeDialog.length, "Mandate type dialog should appear");
+            
+            // Fill the form and click create
+            mandateTypeDialog.find('.btn-primary').click();
+        },
+        () => frappe.timeout(3), // Wait for server call and refresh
+        
+        // Save again to verify no repeated dialog
+        () => cur_frm.save(),
+        () => frappe.timeout(2),
+        
+        // Verify no dialog appears on second save
+        () => {
+            let dialog = $(".modal-dialog:visible");
+            assert.notOk(dialog.length, "No mandate dialog should appear on second save");
+        },
+        
+        () => done()
+    ]);
+});
