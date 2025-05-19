@@ -1248,6 +1248,36 @@ def create_and_link_mandate(member, iban, bic=None, account_holder_name=None,
     if not account_holder_name:
         account_holder_name = member_doc.full_name
     
+    # Find existing active mandates for this member
+    existing_mandates = frappe.get_all(
+        "SEPA Mandate",
+        filters={
+            "member": member,
+            "status": "Active",
+            "is_active": 1
+        },
+        fields=["name"]
+    )
+    
+    # If using for memberships, suspend existing mandates used for memberships
+    if used_for_memberships:
+        for mandate_data in existing_mandates:
+            mandate = frappe.get_doc("SEPA Mandate", mandate_data.name)
+            if mandate.used_for_memberships:
+                # Set existing mandates to Suspended
+                mandate.status = "Suspended"
+                mandate.is_active = 0
+                mandate.save(ignore_permissions=True)
+    
+    # Similarly for donations if needed
+    if used_for_donations:
+        for mandate_data in existing_mandates:
+            mandate = frappe.get_doc("SEPA Mandate", mandate_data.name)
+            if mandate.used_for_donations and mandate.status == "Active":
+                mandate.status = "Suspended"
+                mandate.is_active = 0
+                mandate.save(ignore_permissions=True)
+    
     # Create mandate ID with timestamp to ensure uniqueness
     timestamp = frappe.utils.now().replace(' ', '').replace('-', '').replace(':', '')[:14]
     mandate_id = f"M-{member_doc.member_id}-{timestamp}"
