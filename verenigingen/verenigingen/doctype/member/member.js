@@ -157,63 +157,75 @@ frappe.ui.form.on('Member', {
             }, __('View'));
         }
         
-        // Add button to view chapter if member has a primary chapter
-        if (frm.doc.primary_chapter) {
-            frm.add_custom_button(__('View Chapter'), function() {
-                frappe.set_route('Form', 'Chapter', frm.doc.primary_chapter);
-            }, __('View'));
-        }
-        
-        // Add button to change primary chapter
-        frm.add_custom_button(__('Change Chapter'), function() {
-            suggest_chapter_for_member(frm);
-        }, __('Actions'));
-        
-        // Enhance chapter field with visual indication
-        if (!frm.doc.__islocal) {
-            // Add a suggestion container if no chapter is assigned
-            if (!frm.doc.primary_chapter && !$('.chapter-suggestion-container').length) {
-                var $container = $('<div class="chapter-suggestion-container alert alert-info mt-2"></div>');
-                $container.html(`
-                    <p>${__("This member doesn't have a chapter assigned yet.")}</p>
-                    <button class="btn btn-sm btn-primary suggest-chapter-btn">
-                        ${__("Find a Chapter")}
-                    </button>
-                `);
-                
-                $(frm.fields_dict.primary_chapter.wrapper).append($container);
-                
-                // Add click handler
-                $('.suggest-chapter-btn').on('click', function() {
-                    suggest_chapter_for_member(frm);
-                });
-            }
-            
-            // Add a nice visual indicator in the form header if chapter is set
-            if (frm.doc.primary_chapter && !frm.doc.__unsaved) {
-                frm.dashboard.add_indicator(__("Member of {0}", [frm.doc.primary_chapter]), "blue");
-            }
-        }
-        
-        // Check if user is a board member of any chapter
+        // Chapter-related buttons - check if chapter management is enabled
         frappe.call({
-            method: 'verenigingen.verenigingen.doctype.member.member.get_board_memberships',
-            args: {
-                member_name: frm.doc.name
-            },
+            method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
             callback: function(r) {
-                if (r.message && r.message.length) {
-                    // Show board memberships
-                    var html = '<div class="board-memberships"><h4>Board Positions</h4><ul>';
+                if (r.message) {
+                    // Only show chapter buttons if enabled
+                    if (frm.doc.primary_chapter) {
+                        frm.add_custom_button(__('View Chapter'), function() {
+                            frappe.set_route('Form', 'Chapter', frm.doc.primary_chapter);
+                        }, __('View'));
+                    }
+                    
+                    frm.add_custom_button(__('Change Chapter'), function() {
+                        suggest_chapter_for_member(frm);
+                    }, __('Actions'));
+                    
+                    // Add chapter suggestion UI when no chapter is assigned
+                    if (!frm.doc.__islocal && !frm.doc.primary_chapter && !$('.chapter-suggestion-container').length) {
+                        var $container = $('<div class="chapter-suggestion-container alert alert-info mt-2"></div>');
+                        $container.html(`
+                            <p>${__("This member doesn't have a chapter assigned yet.")}</p>
+                            <button class="btn btn-sm btn-primary suggest-chapter-btn">
+                                ${__("Find a Chapter")}
+                            </button>
+                        `);
+                        
+                        $(frm.fields_dict.primary_chapter.wrapper).append($container);
+                        
+                        // Add click handler
+                        $('.suggest-chapter-btn').on('click', function() {
+                            suggest_chapter_for_member(frm);
+                        });
+                    }
+                    
+                    // Add a nice visual indicator in the form header if chapter is set
+                    if (frm.doc.primary_chapter && !frm.doc.__unsaved) {
+                        frm.dashboard.add_indicator(__("Member of {0}", [frm.doc.primary_chapter]), "blue");
+                    }
+                    
+                    // Check if user is a board member of any chapter
+                    frappe.call({
+                        method: 'verenigingen.verenigingen.doctype.member.member.get_board_memberships',
+                        args: {
+                            member_name: frm.doc.name
+                        },
+                        callback: function(r) {
+                            if (r.message && r.message.length) {
+                                // Show board memberships
+                                var html = '<div class="board-memberships"><h4>Board Positions</h4><ul>';
 
-                    r.message.forEach(function(board) {
-                        html += '<li><strong>' + board.chapter_role + '</strong> at <a href="/app/chapter/' + 
-                                board.parent + '">' + board.parent + '</a></li>';
+                                r.message.forEach(function(board) {
+                                    html += '<li><strong>' + board.chapter_role + '</strong> at <a href="/app/chapter/' + 
+                                            board.parent + '">' + board.parent + '</a></li>';
+                                });
+
+                                html += '</ul></div>';
+
+                                $(frm.fields_dict.board_memberships_html.wrapper).html(html);
+                            }
+                        }
                     });
-
-                    html += '</ul></div>';
-
-                    $(frm.fields_dict.board_memberships_html.wrapper).html(html);
+                } else {
+                    // Hide chapter field if chapter management is disabled
+                    frm.toggle_display('primary_chapter', false);
+                    frm.toggle_display('chapter_and_volunteer_activity_section', false);
+                    
+                    if (frm.fields_dict.board_memberships_html) {
+                        $(frm.fields_dict.board_memberships_html.wrapper).empty();
+                    }
                 }
             }
         });
@@ -476,7 +488,7 @@ frappe.ui.form.on('Member', {
             });
         }
         
-        // Add some CSS for chapter selection interface
+        // Add CSS for chapter selection interface
         frappe.dom.set_style(`
             .chapter-suggestion-container {
                 margin-top: 10px;
@@ -513,13 +525,38 @@ frappe.ui.form.on('Member', {
                     }
                 }
             });
+            
+            // Get form settings based on system configuration
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.member.member.get_member_form_settings',
+                callback: function(r) {
+                    if (r.message) {
+                        // Toggle chapter field visibility based on settings
+                        frm.toggle_display('primary_chapter', r.message.show_chapter_field);
+                        frm.toggle_display('chapter_and_volunteer_activity_section', r.message.show_chapter_field);
+                        
+                        // Update chapter field label if needed
+                        if (r.message.chapter_field_label) {
+                            frm.set_df_property('primary_chapter', 'label', r.message.chapter_field_label);
+                        }
+                    }
+                }
+            });
         }
     },
     
     primary_address: function(frm) {
         // If address is set and chapter is not, suggest chapter
         if (frm.doc.primary_address && !frm.doc.primary_chapter) {
-            suggest_chapter_from_address(frm);
+            // First check if chapter management is enabled
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
+                callback: function(r) {
+                    if (r.message) {
+                        suggest_chapter_from_address(frm);
+                    }
+                }
+            });
         }
     },
     
@@ -648,77 +685,103 @@ frappe.ui.form.on('Member SEPA Mandate Link', {
 
 // Function to suggest chapters based on address
 function suggest_chapter_from_address(frm) {
-    // First get the address details
+    // First check if chapter management is enabled
     frappe.call({
-        method: 'frappe.client.get',
-        args: {
-            doctype: 'Address',
-            name: frm.doc.primary_address
-        },
+        method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
         callback: function(r) {
-            if (r.message) {
-                const address = r.message;
-                
-                // Call the suggestion function with address details
-                suggest_chapter_for_member(frm, {
-                    postal_code: address.pincode,
-                    state: address.state,
-                    city: address.city
-                });
+            if (!r.message) {
+                return;
             }
+            
+            // Get the address details
+            frappe.call({
+                method: 'frappe.client.get',
+                args: {
+                    doctype: 'Address',
+                    name: frm.doc.primary_address
+                },
+                callback: function(r) {
+                    if (r.message) {
+                        const address = r.message;
+                        
+                        // Call the suggestion function with address details
+                        suggest_chapter_for_member(frm, {
+                            postal_code: address.pincode,
+                            state: address.state,
+                            city: address.city
+                        });
+                    }
+                }
+            });
         }
     });
 }
 
 // Main function to suggest chapters for a member
 function suggest_chapter_for_member(frm, location_data) {
-    let postal_code, state, city;
-    
-    if (location_data) {
-        postal_code = location_data.postal_code;
-        state = location_data.state;
-        city = location_data.city;
-    }
-    
-    // If we have a primary address but no location data, fetch it
-    if (!location_data && frm.doc.primary_address) {
-        return suggest_chapter_from_address(frm);
-    }
-    
-    // Call server method to find matching chapters
+    // First check if chapter management is enabled
     frappe.call({
-        method: 'verenigingen.verenigingen.doctype.chapter.chapter.suggest_chapter_for_member',
-        args: {
-            member_name: frm.doc.name,
-            postal_code: postal_code || null,
-            state: state || null,
-            city: city || null
-        },
+        method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
         callback: function(r) {
             if (!r.message) {
-                // If no suggestions, show the simple chapter selector
-                show_chapter_selector(frm);
+                frappe.msgprint(__('Chapter management is disabled in system settings.'));
                 return;
             }
             
-            const results = r.message;
+            let postal_code, state, city;
             
-            // Prioritize matches in this order: postal > region > city
-            let best_matches = results.matches_by_postal.length ? results.matches_by_postal :
-                               results.matches_by_region.length ? results.matches_by_region :
-                               results.matches_by_city.length ? results.matches_by_city :
-                               [];
-                               
-            if (best_matches.length === 1) {
-                // Single best match - suggest directly
-                suggest_single_chapter(frm, best_matches[0], location_data);
-            } else if (best_matches.length > 1) {
-                // Multiple matches - show selection with matches highlighted
-                show_chapter_selector(frm, best_matches);
-            } else {
-                // No matches - show standard selector
-                show_chapter_selector(frm);
+            if (location_data) {
+                postal_code = location_data.postal_code;
+                state = location_data.state;
+                city = location_data.city;
             }
+            
+            // If we have a primary address but no location data, fetch it
+            if (!location_data && frm.doc.primary_address) {
+                return suggest_chapter_from_address(frm);
+            }
+            
+            // Call server method to find matching chapters
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.chapter.chapter.suggest_chapter_for_member',
+                args: {
+                    member_name: frm.doc.name,
+                    postal_code: postal_code || null,
+                    state: state || null,
+                    city: city || null
+                },
+                callback: function(r) {
+                    if (!r.message) {
+                        // If no suggestions, show the simple chapter selector
+                        show_chapter_selector(frm);
+                        return;
+                    }
+                    
+                    const results = r.message;
+                    
+                    if (results.disabled) {
+                        frappe.msgprint(__('Chapter management is disabled in system settings.'));
+                        return;
+                    }
+                    
+                    // Prioritize matches in this order: postal > region > city
+                    let best_matches = results.matches_by_postal?.length ? results.matches_by_postal :
+                                      results.matches_by_region?.length ? results.matches_by_region :
+                                      results.matches_by_city?.length ? results.matches_by_city :
+                                      [];
+                                      
+                    if (best_matches.length === 1) {
+                        // Single best match - suggest directly
+                        suggest_single_chapter(frm, best_matches[0], location_data);
+                    } else if (best_matches.length > 1) {
+                        // Multiple matches - show selection with matches highlighted
+                        show_chapter_selector(frm, best_matches);
+                    } else {
+                        // No matches - show standard selector
+                        show_chapter_selector(frm);
+                    }
+                }
+            });
         }
     });
 }
@@ -1086,6 +1149,18 @@ function promptCreateMandate(frm) {
         }
     );
 }
+
+// Function to select mandate type (one-off or continuous)
+function selectMandateType(frm) {
+    const d = new frappe.ui.Dialog({
+        title: __('Create SEPA Mandate'),
+        fields: [
+            {
+                label: __('Mandate Type'),
+                fieldname: 'mandate_type',
+                fieldtype: 'Select',
+                options: [
+                    {label: __('One-off payment'), value: '
 
 // Function to select mandate type (one-off or continuous)
 function selectMandateType(frm) {
