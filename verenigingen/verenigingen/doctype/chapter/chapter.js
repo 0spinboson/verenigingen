@@ -1,262 +1,831 @@
+// Copyright (c) 2025, Your Name and contributors
 // For license information, please see license.txt
 
-frappe.ui.form.on('Chapter', {
+frappe.ui.form.on('Member', {
     refresh: function(frm) {
-        // Add button to view chapter members
-        frm.add_custom_button(__('View Members'), function() {
-            frappe.set_route('List', 'Member', {'primary_chapter': frm.doc.name});
-        }, __('View'));
-        
-        // Add email buttons
-        frm.add_custom_button(__('Email Board Members'), function() {
-            send_email_to_board_members(frm);
-        }, __('Communication'));
-        
-        frm.add_custom_button(__('Email All Members'), function() {
-            send_email_to_chapter_members(frm);
-        }, __('Communication'));
-        
-        // Add board management buttons
-        if (frm.doc.name) {
-            frm.add_custom_button(__('Manage Board Members'), function() {
-                manage_board_members(frm);
-            }, __('Board'));
-            
-            frm.add_custom_button(__('Transition Board Role'), function() {
-                show_transition_dialog(frm);
-            }, __('Board'));
-            
-            frm.add_custom_button(__('View Board History'), function() {
-                view_board_history(frm);
-            }, __('Board'));
-            
-            // Add button to sync board members with volunteer system
-            frm.add_custom_button(__('Sync with Volunteer System'), function() {
-                sync_board_with_volunteer_system(frm);
-            }, __('Board'));
+        if (frm.fields_dict.payment_history) {
+            $(frm.fields_dict.payment_history.grid.wrapper).addClass('payment-history-grid');
         }
         
-        // Add chapter statistics button
-        frm.add_custom_button(__('Chapter Statistics'), function() {
-            show_chapter_stats(frm);
+        // Add buttons to create customer and user
+        if (frm.doc.docstatus === 1) {
+            // Add payment processing button
+            if (frm.doc.payment_status !== 'Paid') {
+                frm.add_custom_button(__('Process Payment'), function() {
+                    process_payment(frm);
+                }, __('Actions'));
+            }
+            
+            if (frm.fields_dict.payment_history && frm.fields_dict.payment_history.grid && 
+                frm.fields_dict.payment_history.grid.grid_rows) {
+                frm.fields_dict.payment_history.grid.grid_rows.forEach(row => {
+                    format_payment_history_row(row);
+                });
+            }
+            
+            // Add mark as paid button
+            if (frm.doc.payment_status !== 'Paid') {
+                frm.add_custom_button(__('Mark as Paid'), function() {
+                    mark_as_paid(frm);
+                }, __('Actions'));
+            }
+        }
+        
+        if (!frm.doc.customer) {
+            frm.add_custom_button(__('Create Customer'), function() {
+                frm.call({
+                    doc: frm.doc,
+                    method: 'create_customer',
+                    callback: function(r) {
+                        if (r.message) {
+                            frm.refresh();
+                        }
+                    }
+                });
+            }, __('Actions'));
+        }
+        
+        if (frm.fields_dict.payment_history) {
+            // Remove 'No.' column from the payment history grid
+            setTimeout(function() {
+                const gridWrapper = $(frm.fields_dict.payment_history.grid.wrapper);
+                
+                // Find and hide the idx column
+                gridWrapper.find('.grid-heading-row .grid-row-check').hide();
+                gridWrapper.find('.grid-heading-row .row-index').hide();
+                
+                // Hide idx column in all rows
+                gridWrapper.find('.grid-body .data-row .row-index').hide();
+                gridWrapper.find('.grid-body .data-row .grid-row-check').hide();
+                
+                // Add a class to enable custom styling via CSS
+                gridWrapper.addClass('no-idx-column');
+            }, 500);
+        }
+        
+        // In the refresh function in member.js
+        if (frm.doc.customer) {
+            // Your existing buttons that require customer to be set
+            frm.add_custom_button(__('Customer'), function() {
+                frappe.set_route('Form', 'Customer', frm.doc.customer);
+            }, __('View'));
+    
+            // Add the new button in the same condition block
+            frm.add_custom_button(__('Refresh Financial History'), function() {
+                frappe.show_alert({
+                    message: __("Refreshing financial history..."),
+                    indicator: 'blue'
+                });
+                
+                frappe.call({
+                    method: "load_payment_history",
+                    doc: frm.doc,
+                    callback: function(r) {
+                        frm.refresh_field("payment_history");
+                        
+                        // Count records by type
+                        let records = frm.doc.payment_history || [];
+                        let stats = {
+                            total: records.length,
+                            invoices: 0,
+                            membership_invoices: 0,
+                            unreconciled: 0,
+                            donations: 0,
+                            paid: 0,
+                            unpaid: 0,
+                            overdue: 0,
+                            total_amount: 0,
+                            outstanding: 0
+                        };
+                        
+                        records.forEach(record => {
+                            stats.total_amount += flt(record.amount || 0);
+                            stats.outstanding += flt(record.outstanding_amount || 0);
+                            
+                            if (record.transaction_type === "Regular Invoice") {
+                                stats.invoices++;
+                                if (record.payment_status === "Paid") stats.paid++;
+                                else if (record.payment_status === "Overdue") stats.overdue++;
+                                else if (["Unpaid", "Partially Paid"].includes(record.payment_status)) stats.unpaid++;
+                            } 
+                            else if (record.transaction_type === "Membership Invoice") {
+                                stats.membership_invoices++;
+                                if (record.payment_status === "Paid") stats.paid++;
+                                else if (record.payment_status === "Overdue") stats.overdue++;
+                                else if (["Unpaid", "Partially Paid"].includes(record.payment_status)) stats.unpaid++;
+                            }
+                            else if (record.transaction_type === "Donation Payment") {
+                                stats.donations++;
+                            }
+                            else if (record.transaction_type === "Unreconciled Payment") {
+                                stats.unreconciled++;
+                            }
+                        });
+                        
+                        // Show a more detailed message
+                        let message = `<div>Financial history refreshed:<br>
+                            ${stats.invoices + stats.membership_invoices} invoices (${stats.membership_invoices} membership, ${stats.paid} paid, ${stats.unpaid} unpaid, ${stats.overdue} overdue)<br>
+                            ${stats.unreconciled} unreconciled payments, ${stats.donations} linked to donations<br>
+                            Total: ${format_currency(stats.total_amount)}, Outstanding: ${format_currency(stats.outstanding)}</div>`;
+                            
+                        frappe.show_alert({
+                            message: message,
+                            indicator: stats.outstanding > 0 ? 'orange' : 'green'
+                        }, 10);
+                    }
+                });
+            }, __('Actions'));
+            
+            // Add link button to view all donations for this customer
+            frm.add_custom_button(__('View Donations'), function() {
+                frappe.call({
+                    method: "verenigingen.verenigingen.doctype.member.member.get_linked_donations",
+                    args: {
+                        "member": frm.doc.name
+                    },
+                    callback: function(r) {
+                        if (r.message && r.message.donor) {
+                            frappe.route_options = {
+                                "donor": r.message.donor
+                            };
+                            frappe.set_route("List", "Donation");
+                        } else {
+                            frappe.msgprint(__("No donor record linked to this member."));
+                        }
+                    }
+                });
+            }, __('View'));
+        }
+        
+        // Add button to view chapter if member has a primary chapter
+        if (frm.doc.primary_chapter) {
+            frm.add_custom_button(__('View Chapter'), function() {
+                frappe.set_route('Form', 'Chapter', frm.doc.primary_chapter);
+            }, __('View'));
+        }
+        
+        // Add button to change primary chapter
+        frm.add_custom_button(__('Change Chapter'), function() {
+            suggest_chapter_for_member(frm);
+        }, __('Actions'));
+        
+        // Check if user is a board member of any chapter
+        frappe.call({
+            method: 'verenigingen.verenigingen.doctype.member.member.get_board_memberships',
+            args: {
+                member_name: frm.doc.name
+            },
+            callback: function(r) {
+                if (r.message && r.message.length) {
+                    // Show board memberships
+                    var html = '<div class="board-memberships"><h4>Board Positions</h4><ul>';
+
+                    r.message.forEach(function(board) {
+                        html += '<li><strong>' + board.chapter_role + '</strong> at <a href="/app/chapter/' + 
+                                board.parent + '">' + board.parent + '</a></li>';
+                    });
+
+                    html += '</ul></div>';
+
+                    $(frm.fields_dict.board_memberships_html.wrapper).html(html);
+                }
+            }
+        });
+        
+        // Add button to create user
+        if (!frm.doc.user && frm.doc.email) {
+            frm.add_custom_button(__('Create User'), function() {
+                frm.call({
+                    doc: frm.doc,
+                    method: 'create_user',
+                    callback: function(r) {
+                        if (r.message) {
+                            frm.refresh();
+                        }
+                    }
+                });
+            }, __('Actions'));
+        }
+        
+        frm.add_custom_button(__('Create Volunteer'), function() {
+            // First get the email domain from settings
+            frappe.call({
+                method: 'frappe.client.get_value',
+                args: {
+                    doctype: 'Verenigingen Settings',
+                    fieldname: 'organization_email_domain'
+                },
+                callback: function(r) {
+                    // Default domain if not set
+                    const domain = r.message && r.message.organization_email_domain 
+                        ? r.message.organization_email_domain 
+                        : 'example.org';
+                
+                    // Generate organization email based on full name
+                    // Replace spaces with dots and convert to lowercase
+                    const nameForEmail = frm.doc.full_name 
+                        ? frm.doc.full_name.replace(/\s+/g, '.').toLowerCase()
+                        : '';
+                
+                    // Construct organization email
+                    const orgEmail = nameForEmail ? `${nameForEmail}@${domain}` : '';
+                
+                    // Set route options for creating volunteer
+                    frappe.route_options = {
+                        'volunteer_name': frm.doc.full_name,
+                        'member': frm.doc.name,
+                        'preferred_pronouns': frm.doc.pronouns,
+                        'email': orgEmail,  // Organization email
+                        'personal_email': frm.doc.email || ''  // Personal email from member
+                    };
+                
+                    // Create new volunteer doc
+                    frappe.new_doc('Volunteer');
+                }
+            });
+        }, __('Actions'));
+        
+        // Add button to create a new membership
+        frm.add_custom_button(__('Create Membership'), function() {
+            frappe.new_doc('Membership', {
+                'member': frm.doc.name,
+                'member_name': frm.doc.full_name,
+                'email': frm.doc.email,
+                'mobile_no': frm.doc.mobile_no,
+                'start_date': frappe.datetime.get_today()
+            });
+        }, __('Actions'));
+        
+        // Add button to view memberships
+        frm.add_custom_button(__('View Memberships'), function() {
+            frappe.set_route('List', 'Membership', {'member': frm.doc.name});
         }, __('View'));
         
-        // Custom button for board members table
-        if (frm.fields_dict['board_members']) {
-            frm.fields_dict['board_members'].grid.add_custom_button(__('Add Board Member'), 
-                function() {
-                    add_new_board_member(frm);
+        // Add button to view linked customer
+        if (frm.doc.customer) {
+            frm.add_custom_button(__('Customer'), function() {
+                frappe.set_route('Form', 'Customer', frm.doc.customer);
+            }, __('View'));
+        }
+        
+        // Add button to view linked user
+        if (frm.doc.user) {
+            frm.add_custom_button(__('User'), function() {
+                frappe.set_route('Form', 'User', frm.doc.user);
+            }, __('View'));
+        }
+        
+        // Add button to view current membership
+        if (frm.doc.current_membership_details) {
+            frm.add_custom_button(__('Current Membership'), function() {
+                frappe.set_route('Form', 'Membership', frm.doc.current_membership_details);
+            }, __('View'));
+        }
+        
+        // Add button to view existing volunteer record if any
+        frm.add_custom_button(__('View Volunteer'), function() {
+            frappe.call({
+                method: 'frappe.client.get_list',
+                args: {
+                    doctype: 'Volunteer',
+                    filters: {
+                        'member': frm.doc.name
+                    },
+                    fields: ['name']
+                },
+                callback: function(r) {
+                    if (r.message && r.message.length > 0) {
+                        frappe.set_route('Form', 'Volunteer', r.message[0].name);
+                    } else {
+                        frappe.msgprint(__('No volunteer record found for this member. Please create one first.'));
+                    }
+                }
+            });
+        }, __('View'));
+        
+        // SEPA Mandate Management Buttons
+        if (!frm.is_new()) {
+            // Add button to create new SEPA mandate
+            frm.add_custom_button(__('Create SEPA Mandate'), function() {
+                frappe.call({
+                    method: 'create_sepa_mandate',
+                    doc: frm.doc,
+                    callback: function(r) {
+                        if (r.message) {
+                            frappe.set_route('Form', 'SEPA Mandate', r.message);
+                        }
+                    }
+                });
+            }, __('Actions'));
+            
+            // Add button to view SEPA mandates
+            frm.add_custom_button(__('View SEPA Mandates'), function() {
+                frappe.set_route('List', 'SEPA Mandate', {
+                    'member': frm.doc.name
+                });
+            }, __('View'));
+            
+            // If there's a current mandate, add button to view it
+            let currentMandate = null;
+            if (frm.doc.sepa_mandates && frm.doc.sepa_mandates.length) {
+                currentMandate = frm.doc.sepa_mandates.find(m => m.is_current);
+            }
+            
+            if (currentMandate) {
+                frm.add_custom_button(__('Current SEPA Mandate'), function() {
+                    frappe.set_route('Form', 'SEPA Mandate', currentMandate.sepa_mandate);
+                }, __('View'));
+            }
+            
+            // Add custom button for SEPA mandates grid
+            if (frm.fields_dict['sepa_mandates']) {
+                frm.fields_dict['sepa_mandates'].grid.add_custom_button(__('Create New Mandate'), 
+                    function() {
+                        frappe.new_doc('SEPA Mandate', {
+                            'member': frm.doc.name,
+                            'member_name': frm.doc.full_name,
+                            'account_holder_name': frm.doc.full_name
+                        });
+                    }
+                );
+            }
+        }
+
+        // Attach triggers to name fields dynamically
+        ['first_name', 'middle_name', 'last_name'].forEach(field => {
+            frm.fields_dict[field].df.onchange = () => frm.trigger('update_full_name');
+        });
+        
+        // Check for volunteer record and display details - UPDATED FOR NEW SCHEMA
+        if (!frm.doc.__islocal && frm.fields_dict.volunteer_details_html) {
+            frappe.call({
+                method: 'frappe.client.get_list',
+                args: {
+                    doctype: 'Volunteer',
+                    filters: {
+                        'member': frm.doc.name
+                    },
+                    fields: ['name', 'volunteer_name', 'status', 'commitment_level', 'experience_level', 'preferred_work_style']
+                },
+                callback: function(r) {
+                    if (r.message && r.message.length > 0) {
+                        const volunteer = r.message[0];
+                        
+                        // Get volunteer skills
+                        frappe.call({
+                            method: 'frappe.client.get',
+                            args: {
+                                doctype: 'Volunteer',
+                                name: volunteer.name
+                            },
+                            callback: function(r) {
+                                if (r.message) {
+                                    const volunteerDoc = r.message;
+                                    let skillsHtml = '';
+                                    
+                                    // Use the new skills_and_qualifications field instead of volunteer_skills
+                                    if (volunteerDoc.skills_and_qualifications && volunteerDoc.skills_and_qualifications.length > 0) {
+                                        skillsHtml = '<div class="volunteer-skills"><h5>Skills</h5><ul>';
+                                        volunteerDoc.skills_and_qualifications.forEach(function(skill) {
+                                            skillsHtml += '<li>' + skill.volunteer_skill;
+                                            if (skill.proficiency_level) {
+                                                skillsHtml += ' <span class="text-muted">(' + skill.proficiency_level + ')</span>';
+                                            }
+                                            skillsHtml += '</li>';
+                                        });
+                                        skillsHtml += '</ul></div>';
+                                    }
+
+                                    // Add interests if available
+                                    let interestsHtml = '';
+                                    if (volunteerDoc.interests && volunteerDoc.interests.length > 0) {
+                                        interestsHtml = '<div class="volunteer-interests"><h5>Areas of Interest</h5><div class="flex">';
+                                        volunteerDoc.interests.forEach(function(interest) {
+                                            interestsHtml += '<span class="badge badge-light mr-2 mb-2">' + 
+                                                interest.interest_area + '</span>';
+                                        });
+                                        interestsHtml += '</div></div>';
+                                    }
+                                    
+                                    // Create volunteer info HTML - Updated with new fields
+                                    let html = `
+                                        <div class="volunteer-info">
+                                            <h4><a href="/app/volunteer/${volunteer.name}">${volunteer.volunteer_name}</a></h4>
+                                            <div class="row">
+                                                <div class="col-md-6">
+                                                    <p><strong>Status:</strong> ${volunteer.status || 'Not specified'}</p>
+                                                    <p><strong>Commitment:</strong> ${volunteer.commitment_level || 'Not specified'}</p>
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <p><strong>Experience:</strong> ${volunteer.experience_level || 'Not specified'}</p>
+                                                    <p><strong>Work Style:</strong> ${volunteer.preferred_work_style || 'Not specified'}</p>
+                                                </div>
+                                            </div>
+                                            ${interestsHtml}
+                                            ${skillsHtml}
+                                        </div>
+                                    `;
+                                    
+                                    $(frm.fields_dict.volunteer_details_html.wrapper).html(html);
+                                }
+                            }
+                        });
+                    } else {
+                        // No volunteer record found
+                        $(frm.fields_dict.volunteer_details_html.wrapper).html(`
+                            <div class="volunteer-info text-muted">
+                                <p>No volunteer record linked to this member.</p>
+                                <button class="btn btn-xs btn-default create-volunteer-btn">
+                                    Create Volunteer Record
+                                </button>
+                            </div>
+                        `);
+                        
+                        // Add click handler for create button
+                        $(frm.fields_dict.volunteer_details_html.wrapper).find('.create-volunteer-btn').on('click', function() {
+                            frm.events.createVolunteerRecord(frm);
+                        });
+                    }
+                }
+            });
+        }
+    },
+    
+    onload: function(frm) {
+        if (!frm.is_new()) {
+            // Check if member has active SEPA mandates
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.member.member.check_sepa_mandate_status',
+                args: {
+                    member: frm.doc.name
+                },
+                callback: function(r) {
+                    if (r.message) {
+                        if (!r.message.has_active_mandate) {
+                            frm.dashboard.add_indicator(
+                                __('No Active SEPA Mandate'), 
+                                'orange'
+                            );
+                        } else if (r.message.expiring_soon) {
+                            frm.dashboard.add_indicator(
+                                __('SEPA Mandate Expiring Soon'), 
+                                'yellow'
+                            );
+                        }
+                    }
+                }
+            });
+        }
+    },
+    
+    primary_address: function(frm) {
+        // If address is set and chapter is not, suggest chapter
+        if (frm.doc.primary_address && !frm.doc.primary_chapter) {
+            suggest_chapter_from_address(frm);
+        }
+    },
+    
+    createVolunteerRecord: function(frm) {
+        // First get the email domain from settings
+        frappe.call({
+            method: 'frappe.client.get_value',
+            args: {
+                doctype: 'Verenigingen Settings',
+                fieldname: 'organization_email_domain'
+            },
+            callback: function(r) {
+                // Default domain if not set
+                const domain = r.message && r.message.organization_email_domain 
+                    ? r.message.organization_email_domain 
+                    : 'example.org';
+            
+                // Generate organization email based on full name
+                // Replace spaces with dots and convert to lowercase
+                const nameForEmail = frm.doc.full_name 
+                    ? frm.doc.full_name.replace(/\s+/g, '.').toLowerCase()
+                    : '';
+            
+                // Construct organization email
+                const orgEmail = nameForEmail ? `${nameForEmail}@${domain}` : '';
+            
+                // Set route options for creating volunteer
+                frappe.route_options = {
+                    'volunteer_name': frm.doc.full_name,
+                    'member': frm.doc.name,
+                    'preferred_pronouns': frm.doc.pronouns,
+                    'email': orgEmail,  // Organization email
+                    'personal_email': frm.doc.email || '',  // Personal email from member
+                    'status': 'Active',  // Default to Active
+                    'start_date': frappe.datetime.get_today()  // Set start date
+                };
+            
+                // Create new volunteer doc
+                frappe.new_doc('Volunteer');
+            }
+        });
+    },
+    
+    update_full_name: function(frm) {
+        // Build full name from components
+        let full_name = [
+            frm.doc.first_name,
+            frm.doc.middle_name,
+            frm.doc.last_name
+        ].filter(Boolean).join(' ');
+        
+        frm.set_value('full_name', full_name);
+    },
+    
+    payment_method: function(frm) {
+        // Show/hide bank details based on payment method
+        const show_bank_details = ['Direct Debit', 'Bank Transfer'].includes(frm.doc.payment_method);
+        frm.toggle_display(['bank_details_section'], is_direct_debit);
+        
+        // Set field requirements based on payment method
+        const is_direct_debit = frm.doc.payment_method === 'Direct Debit';
+        frm.toggle_reqd(['iban', 'bank_account_name'], is_direct_debit);
+        
+        // REMOVED: Immediate mandate check - we now do this after save
+    },
+    
+    iban: function(frm) {
+        // When IBAN changes, only format it correctly - don't check for mandate yet
+        if (frm.doc.payment_method === 'Direct Debit' && frm.doc.iban) {
+            // Format the IBAN
+            const formattedIban = formatIBAN(frm.doc.iban);
+            if (formattedIban !== frm.doc.iban) {
+                frm.set_value('iban', formattedIban);
+                // Don't do anything else here - we'll check for mandates after save
+            }
+        }
+    },
+    
+    after_save: function(frm) {
+        // After saving, if payment method is Direct Debit and we have IBAN
+        // and bank account name, check for mandate
+        if (frm.doc.payment_method === 'Direct Debit' && 
+            frm.doc.iban && frm.doc.bank_account_name) {
+            checkForExistingMandate(frm);
+        }
+    },
+    
+    bank_account_name: function(frm) {
+        // Don't do anything when bank account name changes
+        // We'll check for mandates after save
+    }
+});
+
+// Handlers for the Member SEPA Mandate Link child table
+frappe.ui.form.on('Member SEPA Mandate Link', {
+    sepa_mandate: function(frm, cdt, cdn) {
+        // When a mandate is selected, fetch its details
+        const row = locals[cdt][cdn];
+        
+        if (row.sepa_mandate) {
+            frappe.db.get_value('SEPA Mandate', row.sepa_mandate, 
+                ['mandate_id', 'status', 'sign_date', 'expiry_date'], 
+                function(r) {
+                    if (r) {
+                        frappe.model.set_value(cdt, cdn, 'mandate_reference', r.mandate_id);
+                        frappe.model.set_value(cdt, cdn, 'status', r.status);
+                        frappe.model.set_value(cdt, cdn, 'valid_from', r.sign_date);
+                        frappe.model.set_value(cdt, cdn, 'valid_until', r.expiry_date);
+                    }
                 }
             );
         }
     },
     
-    validate: function(frm) {
-        validate_board_members(frm);
-    }
-});
-
-// Add to Chapter Board Member child table
-frappe.ui.form.on('Chapter Board Member', {
-    member: function(frm, cdt, cdn) {
-        var row = locals[cdt][cdn];
-        if (row.member) {
-            // Fetch member details
-            frappe.db.get_doc("Member", row.member).then(doc => {
-                frappe.model.set_value(cdt, cdn, 'member_name', doc.full_name);
-                frappe.model.set_value(cdt, cdn, 'email', doc.email);
-                
-                // Check if member has a volunteer record
-                frappe.db.get_value("Volunteer", {"member": row.member}, "name", function(r) {
-                    if (r && r.name) {
-                        // Member already has a volunteer record
-                        frappe.show_alert({
-                            message: __("Member is already a volunteer. Board role will be reflected in their volunteer record."),
-                            indicator: 'blue'
-                        }, 5);
-                    } else {
-                        // Ask if user wants to create a volunteer record
-                        frappe.confirm(
-                            __("Would you like to create a volunteer record for this board member?"),
-                            function() {
-                                // Yes - create volunteer record
-                                create_volunteer_record(frm, row.member);
-                            },
-                            function() {
-                                // No - do nothing
-                                frappe.show_alert({
-                                    message: __("No volunteer record created. You can create one later if needed."),
-                                    indicator: 'orange'
-                                }, 5);
-                            }
-                        );
-                    }
-                });
-            });
-        }
-    },
-    
-    chapter_role: function(frm, cdt, cdn) {
-        // Check for duplicate roles
-        var row = locals[cdt][cdn];
-        if (row.chapter_role && row.is_active) {
-            check_for_duplicate_roles(frm, row);
-        }
-    },
-    
-    is_active: function(frm, cdt, cdn) {
-        var row = locals[cdt][cdn];
-        if (row.is_active) {
-            check_for_duplicate_roles(frm, row);
-        }
+    is_current: function(frm, cdt, cdn) {
+        // When setting a mandate as current, unset others
+        const row = locals[cdt][cdn];
         
-        // Set to_date when deactivating
-        if (!row.is_active && !row.to_date) {
-            frappe.model.set_value(cdt, cdn, 'to_date', frappe.datetime.get_today());
-        }
-    },
-    
-    from_date: function(frm, cdt, cdn) {
-        // Date validation
-        var row = locals[cdt][cdn];
-        if (row.to_date && row.from_date > row.to_date) {
-            frappe.msgprint(__("Start date cannot be after end date"));
-            frappe.model.set_value(cdt, cdn, 'from_date', row.to_date);
-        }
-    },
-    
-    to_date: function(frm, cdt, cdn) {
-        // Date validation
-        var row = locals[cdt][cdn];
-        if (row.from_date && row.to_date && row.from_date > row.to_date) {
-            frappe.msgprint(__("End date cannot be before start date"));
-            frappe.model.set_value(cdt, cdn, 'to_date', row.from_date);
-        }
-    }
-});
-
-// Function to send email to board members
-function send_email_to_board_members(frm) {
-    if (!frm.doc.board_members || !frm.doc.board_members.length) {
-        frappe.msgprint(__('No board members to email'));
-        return;
-    }
-    
-    var board_members = frm.doc.board_members.filter(function(member) {
-        return member.is_active && member.email;
-    }).map(function(member) {
-        return member.email;
-    });
-    
-    if (!board_members.length) {
-        frappe.msgprint(__('No active board members with email addresses'));
-        return;
-    }
-    
-    var d = new frappe.ui.Dialog({
-        title: __('Email Board Members'),
-        fields: [
-            {
-                label: __('Subject'),
-                fieldname: 'subject',
-                fieldtype: 'Data',
-                reqd: 1,
-                default: __('Message from Chapter ') + frm.doc.name
-            },
-            {
-                label: __('Message'),
-                fieldname: 'message',
-                fieldtype: 'Text Editor',
-                reqd: 1
-            }
-        ],
-        primary_action_label: __('Send'),
-        primary_action: function() {
-            var values = d.get_values();
-            
-            frappe.call({
-                method: 'frappe.core.doctype.communication.email.make',
-                args: {
-                    recipients: board_members.join(','),
-                    subject: values.subject,
-                    content: values.message,
-                    doctype: frm.doctype,
-                    name: frm.docname,
-                    send_email: 1
-                },
-                callback: function(r) {
-                    if(!r.exc) {
-                        frappe.msgprint(__('Email sent to board members'));
-                        d.hide();
-                    }
+        if (row.is_current) {
+            // Unset current on other mandates
+            frm.doc.sepa_mandates.forEach(function(mandate) {
+                if (mandate.name !== cdn && mandate.is_current) {
+                    frappe.model.set_value(mandate.doctype, mandate.name, 'is_current', 0);
                 }
             });
         }
+    }
+});
+
+// Function to suggest chapters based on address
+function suggest_chapter_from_address(frm) {
+    // First get the address details
+    frappe.call({
+        method: 'frappe.client.get',
+        args: {
+            doctype: 'Address',
+            name: frm.doc.primary_address
+        },
+        callback: function(r) {
+            if (r.message) {
+                const address = r.message;
+                
+                // Call the suggestion function with address details
+                suggest_chapter_for_member(frm, {
+                    postal_code: address.pincode,
+                    state: address.state,
+                    city: address.city
+                });
+            }
+        }
     });
-    
-    d.show();
 }
 
-// Function to send email to all chapter members
-function send_email_to_chapter_members(frm) {
+// Main function to suggest chapters for a member
+function suggest_chapter_for_member(frm, location_data) {
+    let postal_code, state, city;
+    
+    if (location_data) {
+        postal_code = location_data.postal_code;
+        state = location_data.state;
+        city = location_data.city;
+    }
+    
+    // If we have a primary address but no location data, fetch it
+    if (!location_data && frm.doc.primary_address) {
+        return suggest_chapter_from_address(frm);
+    }
+    
+    // Call server method to find matching chapters
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.chapter.chapter.suggest_chapter_for_member',
+        args: {
+            member_name: frm.doc.name,
+            postal_code: postal_code || null,
+            state: state || null,
+            city: city || null
+        },
+        callback: function(r) {
+            if (!r.message) {
+                // If no suggestions, show the simple chapter selector
+                show_chapter_selector(frm);
+                return;
+            }
+            
+            const results = r.message;
+            
+            // Prioritize matches in this order: postal > region > city
+            let best_matches = results.matches_by_postal.length ? results.matches_by_postal :
+                               results.matches_by_region.length ? results.matches_by_region :
+                               results.matches_by_city.length ? results.matches_by_city :
+                               [];
+                               
+            if (best_matches.length === 1) {
+                // Single best match - suggest directly
+                suggest_single_chapter(frm, best_matches[0], location_data);
+            } else if (best_matches.length > 1) {
+                // Multiple matches - show selection with matches highlighted
+                show_chapter_selector(frm, best_matches);
+            } else {
+                // No matches - show standard selector
+                show_chapter_selector(frm);
+            }
+        }
+    });
+}
+
+// Function to suggest a single chapter
+function suggest_single_chapter(frm, chapter, location_data) {
+    let location_text = "";
+    if (location_data) {
+        if (location_data.postal_code) {
+            location_text = __("postal code {0}", [location_data.postal_code]);
+        } else if (location_data.city) {
+            location_text = location_data.city;
+        } else if (location_data.state) {
+            location_text = location_data.state;
+        }
+    }
+    
+    frappe.confirm(
+        __('Based on your location in {0}, we suggest joining the {1} chapter. Would you like to join this chapter?', 
+        [location_text || 'your area', chapter.name]),
+        function() {
+            // Yes - set primary chapter
+            frappe.call({
+                method: 'frappe.client.set_value',
+                args: {
+                    doctype: 'Member',
+                    name: frm.doc.name,
+                    fieldname: 'primary_chapter',
+                    value: chapter.name
+                },
+                callback: function(r) {
+                    if(!r.exc) {
+                        frappe.msgprint(__('You have joined the {0} chapter', [chapter.name]));
+                        frm.reload_doc();
+                    }
+                }
+            });
+        },
+        function() {
+            // No - show the standard chapter selection dialog
+            show_chapter_selector(frm);
+        }
+    );
+}
+
+// Function to show chapter selector dialog
+function show_chapter_selector(frm, suggested_chapters) {
     frappe.call({
         method: 'frappe.client.get_list',
         args: {
-            doctype: 'Member',
+            doctype: 'Chapter',
             filters: {
-                'primary_chapter': frm.doc.name
+                'published': 1
             },
-            fields: ['name', 'full_name', 'email']
+            fields: ['name', 'region', 'introduction']
         },
         callback: function(r) {
             if (!r.message || !r.message.length) {
-                frappe.msgprint(__('No members found for this chapter'));
+                frappe.msgprint(__('No active chapters found'));
                 return;
             }
             
-            var members = r.message.filter(function(member) {
-                return member.email;
+            const chapters = r.message;
+            
+            // Format options for the select field
+            let options = chapters.map(function(chapter) {
+                return {
+                    value: chapter.name,
+                    label: __("{0} ({1})", [chapter.name, chapter.region])
+                };
             });
             
-            if (!members.length) {
-                frappe.msgprint(__('No members with email addresses found'));
-                return;
+            // Determine the most suitable default
+            let default_chapter = frm.doc.primary_chapter;
+            
+            // If we have suggested chapters, use the first one as default
+            if (suggested_chapters && suggested_chapters.length) {
+                default_chapter = suggested_chapters[0].name;
             }
             
-            var d = new frappe.ui.Dialog({
-                title: __('Email Chapter Members'),
+            const d = new frappe.ui.Dialog({
+                title: __('Select Chapter'),
                 fields: [
                     {
-                        label: __('Subject'),
-                        fieldname: 'subject',
-                        fieldtype: 'Data',
+                        label: __('Chapter'),
+                        fieldname: 'chapter',
+                        fieldtype: 'Select',
+                        options: options,
                         reqd: 1,
-                        default: __('Message from Chapter ') + frm.doc.name
+                        default: default_chapter
                     },
                     {
-                        label: __('Message'),
-                        fieldname: 'message',
-                        fieldtype: 'Text Editor',
-                        reqd: 1
+                        label: __('Note'),
+                        fieldname: 'note',
+                        fieldtype: 'Small Text',
+                        depends_on: 'eval:!doc.chapter'
                     }
                 ],
-                primary_action_label: __('Send'),
+                primary_action_label: __('Join Chapter'),
                 primary_action: function() {
-                    var values = d.get_values();
+                    const values = d.get_values();
+                    
+                    if (!values.chapter) {
+                        frappe.msgprint(__('Please select a chapter'));
+                        return;
+                    }
+                    
+                    if (values.chapter === frm.doc.primary_chapter) {
+                        frappe.msgprint(__('No change in chapter'));
+                        d.hide();
+                        return;
+                    }
                     
                     frappe.call({
-                        method: 'frappe.core.doctype.communication.email.make',
+                        method: 'frappe.client.set_value',
                         args: {
-                            recipients: members.map(function(m) { return m.email; }).join(','),
-                            subject: values.subject,
-                            content: values.message,
-                            doctype: frm.doctype,
-                            name: frm.docname,
-                            send_email: 1
+                            doctype: 'Member',
+                            name: frm.doc.name,
+                            fieldname: 'primary_chapter',
+                            value: values.chapter
                         },
                         callback: function(r) {
                             if(!r.exc) {
-                                frappe.msgprint(__('Email sent to chapter members'));
+                                // Log the change if a note was provided
+                                if (values.note) {
+                                    frappe.call({
+                                        method: 'frappe.client.insert',
+                                        args: {
+                                            doc: {
+                                                doctype: 'Comment',
+                                                comment_type: 'Info',
+                                                reference_doctype: 'Member',
+                                                reference_name: frm.doc.name,
+                                                content: __('Changed chapter to {0}. Note: {1}', 
+                                                    [values.chapter, values.note])
+                                            }
+                                        }
+                                    });
+                                }
+                                
+                                frappe.msgprint(__('Successfully joined the {0} chapter', [values.chapter]));
+                                frm.reload_doc();
                                 d.hide();
                             }
                         }
@@ -265,288 +834,67 @@ function send_email_to_chapter_members(frm) {
             });
             
             d.show();
-        }
-    });
-}
-
-// Function to check for duplicate active roles
-function check_for_duplicate_roles(frm, current_row) {
-    // Check for duplicate active roles
-    var active_roles = {};
-    
-    frm.doc.board_members.forEach(function(member) {
-        if (member.is_active && member.chapter_role && 
-            member.name !== current_row.name) {
-            if (member.chapter_role === current_row.chapter_role) {
-                frappe.msgprint(__("Role '{0}' is already assigned to {1}", 
-                    [current_row.chapter_role, member.member_name]));
-                
-                // Ask if user wants to deactivate the existing role
-                frappe.confirm(
-                    __('Do you want to deactivate the existing assignment to {0}?', [member.member_name]),
-                    function() {
-                        // Yes - deactivate existing role
-                        frappe.model.set_value(member.doctype, member.name, 'is_active', 0);
-                        frappe.model.set_value(member.doctype, member.name, 'to_date', frappe.datetime.get_today());
-                    }
-                );
-            }
-            active_roles[member.chapter_role] = member.member;
-        }
-    });
-}
-
-// Function to validate board members on save
-function validate_board_members(frm) {
-    // Check for duplicate active roles on save
-    var active_roles = {};
-    var has_error = false;
-    
-    frm.doc.board_members.forEach(function(member) {
-        if (member.is_active && member.chapter_role) {
-            if (active_roles[member.chapter_role]) {
-                frappe.msgprint(__("Role '{0}' is assigned to multiple active board members", [member.chapter_role]));
-                has_error = true;
-            }
-            active_roles[member.chapter_role] = member.member;
             
-            // Check dates
-            if (member.to_date && 
-                frappe.datetime.str_to_obj(member.from_date) > frappe.datetime.str_to_obj(member.to_date)) {
-                frappe.msgprint(__("Board member {0} has start date after end date", [member.member_name]));
-                has_error = true;
+            // If we have suggested chapters, highlight them in the dialog
+            if (suggested_chapters && suggested_chapters.length) {
+                setTimeout(function() {
+                    // Add a note about the suggestions
+                    const suggested_names = suggested_chapters.map(c => c.name).join(', ');
+                    const suggestion_note = $(`<div class="alert alert-info mt-3">
+                        <span>${__('Suggested chapters based on your location:')} <strong>${suggested_names}</strong></span>
+                    </div>`);
+                    
+                    $(d.body).find('.form-layout').prepend(suggestion_note);
+                }, 500);
             }
         }
     });
-    
-    return !has_error;
 }
 
-// Function to add a new board member
-function add_new_board_member(frm) {
-    // Get chapter roles
-    frappe.db.get_list('Chapter Role', {
-        fields: ['name', 'permissions_level'],
-        filters: { 'is_active': 1 }
-    }).then(roles => {
-        if (!roles || !roles.length) {
-            frappe.msgprint(__('No active chapter roles found. Please create roles first.'));
-            return;
-        }
-        
-        // Create dialog
-        var d = new frappe.ui.Dialog({
-            title: __('Add New Board Member'),
-            fields: [
-                {
-                    fieldname: 'member',
-                    fieldtype: 'Link',
-                    label: __('Member'),
-                    options: 'Member',
-                    reqd: 1,
-                    get_query: function() {
-                        return {
-                            filters: {
-                                'primary_chapter': frm.doc.name
-                            }
-                        };
-                    }
-                },
-                {
-                    fieldname: 'chapter_role',
-                    fieldtype: 'Link',
-                    label: __('Board Role'),
-                    options: 'Chapter Role',
-                    reqd: 1
-                },
-                {
-                    fieldname: 'from_date',
-                    fieldtype: 'Date',
-                    label: __('From Date'),
-                    default: frappe.datetime.get_today(),
-                    reqd: 1
-                },
-                {
-                    fieldname: 'to_date',
-                    fieldtype: 'Date',
-                    label: __('To Date')
-                }
-            ],
-            primary_action_label: __('Add'),
-            primary_action: function(values) {
-                // Add new row to board_members
-                var child = frm.add_child('board_members');
-                frappe.model.set_value(child.doctype, child.name, 'member', values.member);
-                frappe.model.set_value(child.doctype, child.name, 'chapter_role', values.chapter_role);
-                frappe.model.set_value(child.doctype, child.name, 'from_date', values.from_date);
-                frappe.model.set_value(child.doctype, child.name, 'to_date', values.to_date);
-                frappe.model.set_value(child.doctype, child.name, 'is_active', 1);
-                
-                // Fetch member details
-                frappe.db.get_doc("Member", values.member).then(doc => {
-                    frappe.model.set_value(child.doctype, child.name, 'member_name', doc.full_name);
-                    frappe.model.set_value(child.doctype, child.name, 'email', doc.email);
-                    
-                    frm.refresh_field('board_members');
-                    d.hide();
-                    
-                    // Check if there are other active members with the same role
-                    check_for_duplicate_roles(frm, child);
-                    
-                    // Create volunteer record if applicable
-                    frappe.db.get_value("Volunteer", {"member": values.member}, "name", function(r) {
-                        if (r && r.name) {
-                            // Member already has a volunteer record
-                            frappe.show_alert({
-                                message: __("Board position will be reflected in the volunteer's assignments"),
-                                indicator: 'blue'
-                            }, 5);
-                        } else {
-                            // Ask if user wants to create a volunteer record
-                            frappe.confirm(
-                                __("Would you like to create a volunteer record for this board member?"),
-                                function() {
-                                    // Yes - create volunteer record
-                                    create_volunteer_record(frm, values.member);
-                                }
-                            );
-                        }
-                    });
-                });
+function process_payment(frm) {
+    frappe.call({
+        method: 'process_payment',
+        doc: frm.doc,
+        callback: function(r) {
+            if (r.message) {
+                frm.reload_doc();
+                frappe.msgprint(__('Payment processing initiated'));
             }
-        });
-        
-        d.show();
+        }
     });
 }
 
-// Function to manage board members
-function manage_board_members(frm) {
-    // Get chapter roles
-    frappe.db.get_list('Chapter Role', {
-        fields: ['name', 'permissions_level'],
-        filters: { 'is_active': 1 }
-    }).then(roles => {
-        if (!roles || !roles.length) {
-            frappe.msgprint(__('No active chapter roles found. Please create roles first.'));
-            return;
-        }
-        
-        // Create dialog
-        var d = new frappe.ui.Dialog({
-            title: __('Manage Board Members'),
-            fields: [
-                {
-                    fieldname: 'member_section',
-                    fieldtype: 'Section Break',
-                    label: __('Add New Board Member')
-                },
-                {
-                    fieldname: 'member',
-                    fieldtype: 'Link',
-                    label: __('Member'),
-                    options: 'Member',
-                    reqd: 1
-                },
-                {
-                    fieldname: 'chapter_role',
-                    fieldtype: 'Link',
-                    label: __('Board Role'),
-                    options: 'Chapter Role',
-                    reqd: 1
-                },
-                {
-                    fieldname: 'from_date',
-                    fieldtype: 'Date',
-                    label: __('From Date'),
-                    default: frappe.datetime.get_today(),
-                    reqd: 1
-                },
-                {
-                    fieldname: 'to_date',
-                    fieldtype: 'Date',
-                    label: __('To Date')
-                }
-            ],
-            primary_action_label: __('Add Board Member'),
-            primary_action: function(values) {
-                // Call the server method to add board member
-                frappe.call({
-                    method: 'add_board_member',
-                    doc: frm.doc,
-                    args: {
-                        member: values.member,
-                        role: values.chapter_role,
-                        from_date: values.from_date,
-                        to_date: values.to_date
-                    },
-                    callback: function(r) {
-                        if (r.message) {
-                            d.hide();
-                            frm.reload_doc();
-                        }
-                    }
-                });
-            }
-        });
-        
-        d.show();
-    });
-}
-
-// Function to show board role transition dialog
-function show_transition_dialog(frm) {
-    // Get active board members
-    var active_members = get_active_board_members(frm);
-    
-    if (!active_members || active_members.length === 0) {
-        frappe.msgprint(__('No active board members found'));
-        return;
-    }
-    
-    // Create dialog for board role transitions
-    var d = new frappe.ui.Dialog({
-        title: __('Transition Board Role'),
+function mark_as_paid(frm) {
+    const dialog = new frappe.ui.Dialog({
+        title: __('Mark as Paid'),
         fields: [
             {
-                fieldname: 'current_member',
-                fieldtype: 'Select',
-                label: __('Current Board Member'),
-                options: active_members,
-                reqd: 1
-            },
-            {
-                fieldname: 'new_role',
-                fieldtype: 'Link',
-                label: __('New Role'),
-                options: 'Chapter Role',
-                reqd: 1
-            },
-            {
-                fieldname: 'transition_date',
+                fieldname: 'payment_date',
                 fieldtype: 'Date',
-                label: __('Transition Date'),
+                label: __('Payment Date'),
                 default: frappe.datetime.get_today(),
+                reqd: 1
+            },
+            {
+                fieldname: 'amount',
+                fieldtype: 'Currency',
+                label: __('Amount'),
+                default: frm.doc.payment_amount,
                 reqd: 1
             }
         ],
-        primary_action_label: __('Transition Role'),
+        primary_action_label: __('Mark as Paid'),
         primary_action: function(values) {
-            // Extract member name from the select option
-            var member = values.current_member.split(' | ')[0];
-            
-            // Call the server method to transition role
             frappe.call({
-                method: 'transition_board_role',
+                method: 'mark_as_paid',
                 doc: frm.doc,
                 args: {
-                    member: member,
-                    new_role: values.new_role,
-                    transition_date: values.transition_date
+                    payment_date: values.payment_date,
+                    amount: values.amount
                 },
                 callback: function(r) {
                     if (r.message) {
-                        d.hide();
+                        dialog.hide();
                         frm.reload_doc();
                     }
                 }
@@ -554,169 +902,339 @@ function show_transition_dialog(frm) {
         }
     });
     
+    dialog.show();
+}
+
+frappe.ui.form.on('Member Payment History', {
+    payment_history_add: function(frm, cdt, cdn) {
+        // Format new rows as they're added
+        let grid_row = frm.fields_dict.payment_history.grid.grid_rows_by_docname[cdn];
+        format_payment_history_row(grid_row);
+    }
+});
+
+// Helper function to format payment history grid rows
+function format_payment_history_row(grid_row) {
+    if (!grid_row || !grid_row.doc) return;
+    
+    setTimeout(() => {
+        try {
+            // Get all cells in the row
+            const cells = grid_row.row.find('.grid-row-column');
+            if (!cells.length) return;
+            
+            // Add special styling based on record type
+            const transaction_type = grid_row.doc.transaction_type;
+            
+            // Add visual indicator to the row
+            $(grid_row.row).attr('data-type', transaction_type);
+            
+            // Style unreconciled payments differently
+            if (transaction_type === "Unreconciled Payment") {
+                $(grid_row.row).addClass('unreconciled-row');
+                $(grid_row.row).css({
+                    'background-color': '#f5f7fa',  // Light gray background
+                    'font-style': 'italic'
+                });
+            }
+            
+            // Style donation payments differently
+            if (transaction_type === "Donation Payment") {
+                $(grid_row.row).addClass('donation-row');
+                $(grid_row.row).css({
+                    'background-color': '#fcf8e3',  // Light yellow background
+                    'font-style': 'italic'
+                });
+            }
+            
+            // Format transaction type with appropriate icon
+            let type_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'transaction_type');
+            if (type_idx >= 0 && cells[type_idx]) {
+                let type_icon = 'file-text';
+                let icon_color = 'text-muted';
+                
+                if (transaction_type === 'Membership Invoice') {
+                    type_icon = 'users';
+                    icon_color = 'text-primary';
+                }
+                else if (transaction_type === 'Donation Payment') {
+                    type_icon = 'heart';
+                    icon_color = 'text-danger';
+                }
+                else if (transaction_type === 'Unreconciled Payment') {
+                    type_icon = 'question-circle';
+                    icon_color = 'text-muted';
+                }
+                
+                const type_html = `<span>
+                    <i class="fa fa-${type_icon} ${icon_color}" style="margin-right: 5px;"></i>
+                    ${transaction_type || ''}
+                </span>`;
+                $(cells[type_idx]).html(type_html);
+            }
+            
+            // Format invoice status with color if it exists
+            const status = grid_row.doc.status;
+            let status_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'status');
+            if (status_idx >= 0 && cells[status_idx] && status && status !== 'N/A') {
+                let status_color = 'gray';
+                if (status === 'Paid') status_color = 'green';
+                else if (status === 'Overdue') status_color = 'red';
+                else if (status === 'Unpaid') status_color = 'orange';
+                
+                const status_html = `<span class="indicator ${status_color}">${status || ''}</span>`;
+                $(cells[status_idx]).html(status_html);
+            }
+            
+            // Format payment status with color
+            const payment_status = grid_row.doc.payment_status;
+            let payment_status_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'payment_status');
+            if (payment_status_idx >= 0 && cells[payment_status_idx]) {
+                let status_color = 'gray';
+                if (payment_status === 'Paid') status_color = 'green';
+                else if (payment_status === 'Overdue') status_color = 'red';
+                else if (payment_status === 'Unpaid') status_color = 'orange';
+                else if (payment_status === 'Partially Paid') status_color = 'blue';
+                
+                const status_html = `<span class="indicator ${status_color}">${payment_status || ''}</span>`;
+                $(cells[payment_status_idx]).html(status_html);
+            }
+            
+            // Format mandate status if it exists
+            if (grid_row.doc.has_mandate) {
+                const mandate_status = grid_row.doc.mandate_status;
+                let mandate_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'mandate_status');
+                if (mandate_idx >= 0 && cells[mandate_idx]) {
+                    let mandate_color = 'gray';
+                    if (mandate_status === 'Active') mandate_color = 'green';
+                    else if (mandate_status === 'Expired' || mandate_status === 'Cancelled') mandate_color = 'red';
+                    else if (mandate_status === 'Suspended') mandate_color = 'orange';
+                    
+                    const mandate_html = `<span class="indicator ${mandate_color}">${mandate_status || ''}</span>`;
+                    $(cells[mandate_idx]).html(mandate_html);
+                }
+            }
+            
+            // Add reference document link if exists
+            if (grid_row.doc.reference_doctype && grid_row.doc.reference_name) {
+                let ref_type_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'reference_doctype');
+                let ref_name_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'reference_name');
+                
+                if (ref_name_idx >= 0 && cells[ref_name_idx]) {
+                    const ref_html = `<a href="/app/${grid_row.doc.reference_doctype.toLowerCase().replace(/ /g, '-')}/${grid_row.doc.reference_name}">${grid_row.doc.reference_name}</a>`;
+                    $(cells[ref_name_idx]).html(ref_html);
+                }
+            }
+            
+        } catch (e) {
+            console.error('Error formatting payment history row:', e);
+        }
+    }, 100);
+}
+
+// Helper function to prompt for SEPA mandate creation
+function promptCreateMandate(frm) {
+    if (!frm.doc.iban || !frm.doc.bank_account_name) {
+        frappe.msgprint(__('Please enter both IBAN and Account Holder Name before creating a SEPA mandate'));
+        return;
+    }
+    
+    frappe.confirm(
+        __('Would you like to create a new SEPA mandate for this bank account?'),
+        function() {
+            // Yes - show dialog for mandate type
+            selectMandateType(frm);
+        },
+        function() {
+            // No - do nothing
+            frappe.show_alert(__('No SEPA mandate created. Payment by direct debit requires a mandate.'), 5);
+        }
+    );
+}
+
+// Function to select mandate type (one-off or continuous)
+function selectMandateType(frm) {
+    const d = new frappe.ui.Dialog({
+        title: __('Create SEPA Mandate'),
+        fields: [
+            {
+                label: __('Mandate Type'),
+                fieldname: 'mandate_type',
+                fieldtype: 'Select',
+                options: [
+                    {label: __('One-off payment'), value: 'OOFF'},
+                    {label: __('Recurring payments'), value: 'RCUR'}
+                ],
+                default: 'RCUR',
+                reqd: 1
+            },
+            {
+                label: __('Sign Date'),
+                fieldname: 'sign_date',
+                fieldtype: 'Date',
+                default: frappe.datetime.get_today(),
+                reqd: 1
+            },
+            {
+                label: __('Used for'),
+                fieldname: 'usage_section',
+                fieldtype: 'Section Break'
+            },
+            {
+                label: __('Memberships'),
+                fieldname: 'used_for_memberships',
+                fieldtype: 'Check',
+                default: 1
+            },
+            {
+                label: __('Donations'),
+                fieldname: 'used_for_donations',
+                fieldtype: 'Check',
+                default: 0
+            }
+        ],
+        primary_action_label: __('Create'),
+        primary_action(values) {
+            createSEPAMandate(frm, values);
+            d.hide();
+        }
+    });
+    
     d.show();
 }
 
-// Function to view board history
-function view_board_history(frm) {
+// Function to create SEPA mandate
+function createSEPAMandate(frm, values) {
     frappe.call({
-        method: 'verenigingen.verenigingen.doctype.chapter.chapter.get_chapter_board_history',
+        method: 'verenigingen.verenigingen.doctype.member.member.create_sepa_mandate_from_bank_details',
         args: {
-            chapter_name: frm.doc.name
+            member: frm.doc.name,
+            iban: frm.doc.iban,
+            bic: frm.doc.bic || '',
+            account_holder_name: frm.doc.bank_account_name,
+            mandate_type: values.mandate_type,
+            sign_date: values.sign_date,
+            used_for_memberships: values.used_for_memberships,
+            used_for_donations: values.used_for_donations
         },
         callback: function(r) {
-            if (!r.message || !r.message.length) {
-                frappe.msgprint(__('No board history found'));
-                return;
-            }
-            
-            // Create a table to show the history
-            var history = r.message;
-            var html = '<div class="board-history"><table class="table table-bordered">';
-            html += '<thead><tr><th>Member</th><th>Role</th><th>From Date</th><th>To Date</th><th>Status</th></tr></thead>';
-            html += '<tbody>';
-            
-            history.forEach(function(entry) {
-                var status = entry.is_active ? 'Active' : 'Inactive';
-                var status_color = entry.is_active ? 'green' : 'gray';
+            if (r.message) {
+                // Add mandate to the table
+                const new_row = frm.add_child('sepa_mandates');
+                new_row.sepa_mandate = r.message;
+                new_row.is_current = 1;
+                frm.refresh_field('sepa_mandates');
                 
-                html += '<tr>';
-                html += '<td>' + entry.member_name + '</td>';
-                html += '<td>' + entry.role + '</td>';
-                html += '<td>' + frappe.datetime.str_to_user(entry.from_date) + '</td>';
-                html += '<td>' + (entry.to_date ? frappe.datetime.str_to_user(entry.to_date) : '') + '</td>';
-                html += '<td><span class="indicator ' + status_color + '">' + status + '</span></td>';
-                html += '</tr>';
-            });
-            
-            html += '</tbody></table></div>';
-            
-            var d = new frappe.ui.Dialog({
-                title: __('Board History - {0}', [frm.doc.name]),
-                fields: [{
-                    fieldtype: 'HTML',
-                    options: html
-                }],
-                primary_action_label: __('Close'),
-                primary_action: function() {
-                    d.hide();
-                }
-            });
-            
-            d.show();
+                frappe.show_alert({
+                    message: __('SEPA Mandate created successfully'),
+                    indicator: 'green'
+                }, 5);
+                
+                // Fetch mandate details to update the row
+                frappe.db.get_doc('SEPA Mandate', r.message)
+                    .then(mandate => {
+                        frappe.model.set_value(new_row.doctype, new_row.name, 'mandate_reference', mandate.mandate_id);
+                        frappe.model.set_value(new_row.doctype, new_row.name, 'status', mandate.status);
+                        frappe.model.set_value(new_row.doctype, new_row.name, 'valid_from', mandate.sign_date);
+                        frappe.model.set_value(new_row.doctype, new_row.name, 'valid_until', mandate.expiry_date);
+                        frm.refresh_field('sepa_mandates');
+                    });
+            }
         }
     });
 }
 
-// Function to show chapter statistics
-function show_chapter_stats(frm) {
-    frappe.call({
-        method: 'verenigingen.verenigingen.doctype.chapter.chapter.get_chapter_stats',
-        args: {
-            chapter_name: frm.doc.name
-        },
-        callback: function(r) {
-            if (!r.message) {
-                frappe.msgprint(__('Could not retrieve chapter statistics'));
-                return;
-            }
-            
-            var stats = r.message;
-            var html = '<div class="chapter-stats">';
-            
-            // Overview section
-            html += '<div class="stats-section"><h4>Overview</h4>';
-            html += '<div class="row">';
-            html += '<div class="col-sm-6"><div class="stat-item"><div class="stat-number">' + stats.member_count + '</div><div class="stat-label">Members</div></div></div>';
-            html += '<div class="col-sm-6"><div class="stat-item"><div class="stat-number">' + stats.board_count + '</div><div class="stat-label">Board Members</div></div></div>';
-            html += '</div></div>';
-            
-            // Recent memberships section
-            if (stats.recent_memberships && stats.recent_memberships.length) {
-                html += '<div class="stats-section"><h4>Recent Memberships</h4>';
-                html += '<table class="table table-condensed">';
-                html += '<thead><tr><th>Member</th><th>Start Date</th><th>Status</th></tr></thead>';
-                html += '<tbody>';
-                
-                stats.recent_memberships.forEach(function(membership) {
-                    html += '<tr>';
-                    html += '<td>' + membership.member + '</td>';
-                    html += '<td>' + frappe.datetime.str_to_user(membership.start_date) + '</td>';
-                    html += '<td>' + membership.status + '</td>';
-                    html += '</tr>';
-                });
-                
-                html += '</tbody></table></div>';
-            }
-            
-            html += '<div class="text-muted small">Last updated: ' + stats.last_updated + '</div>';
-            html += '</div>';
-            
-            var d = new frappe.ui.Dialog({
-                title: __('Chapter Statistics - {0}', [frm.doc.name]),
-                fields: [{
-                    fieldtype: 'HTML',
-                    options: html
-                }],
-                primary_action_label: __('Close'),
-                primary_action: function() {
-                    d.hide();
-                }
-            });
-            
-            d.show();
-        }
-    });
-}
-
-// Function to get active board members for select field
-function get_active_board_members(frm) {
-    // Return a string of options for select field
-    var options = [];
+// Function to format IBAN
+function formatIBAN(iban) {
+    if (!iban) return '';
     
-    if (frm.doc.board_members) {
-        frm.doc.board_members.forEach(function(member) {
-            if (member.is_active) {
-                options.push(member.member + ' | ' + member.member_name + ' (' + member.chapter_role + ')');
+    // Remove spaces and convert to uppercase
+    iban = iban.replace(/\s+/g, '').toUpperCase();
+    
+    // Format with spaces every 4 characters
+    return iban.replace(/(.{4})/g, '$1 ').trim();
+}
+
+// Function to get IBAN from a mandate
+function get_doc_mandate_iban(mandate_name) {
+    // This is an async operation but we just want a simple check,
+    // so we'll use the result when it comes back
+    return frappe.db.get_value('SEPA Mandate', mandate_name, 'iban')
+        .then(r => {
+            if (r && r.message) {
+                return r.message.iban;
             }
+            return '';
         });
+}
+
+// Function to check for existing mandates with the current IBAN
+async function checkForExistingMandate(frm) {
+    // Check if we already have an active mandate for this IBAN
+    let existingMandateWithSameIBAN = false;
+    
+    if (frm.doc.sepa_mandates && frm.doc.sepa_mandates.length) {
+        // Go through existing mandates
+        for (const mandate of frm.doc.sepa_mandates) {
+            if (mandate.status === 'Active') {
+                // Get IBAN for this mandate
+                const mandateIBAN = await get_doc_mandate_iban(mandate.sepa_mandate);
+                if (mandateIBAN === frm.doc.iban) {
+                    existingMandateWithSameIBAN = true;
+                    
+                    // If this mandate is not current, make it current
+                    if (!mandate.is_current) {
+                        // Deactivate any current mandates first
+                        frm.doc.sepa_mandates.forEach(function(m) {
+                            if (m.is_current) {
+                                frappe.model.set_value(m.doctype, m.name, 'is_current', 0);
+                            }
+                        });
+                        
+                        // Make this mandate current
+                        frappe.model.set_value(mandate.doctype, mandate.name, 'is_current', 1);
+                        frm.refresh_field('sepa_mandates');
+                        
+                        frappe.show_alert({
+                            message: __('Found existing mandate for this IBAN and set it as current'),
+                            indicator: 'green'
+                        }, 5);
+                    }
+                    break;
+                }
+            }
+        }
     }
     
-    return options.join('\n');
-}
-
-// Function to create a volunteer record from board member
-function create_volunteer_record(frm, member) {
-    frappe.call({
-        method: 'verenigingen.verenigingen.doctype.volunteer.volunteer.create_volunteer_from_member',
-        args: {
-            member_doc: member
-        },
-        callback: function(r) {
-            if (r.message) {
-                frappe.show_alert({
-                    message: __("Volunteer record created successfully."),
-                    indicator: 'green'
-                }, 5);
+    // If no existing mandate with this IBAN, deactivate any current mandates
+    // and prompt to create a new one
+    if (!existingMandateWithSameIBAN) {
+        // Deactivate any current mandates
+        let currentMandatesDeactivated = false;
+        
+        for (const mandate of frm.doc.sepa_mandates) {
+            if (mandate.is_current && mandate.status === 'Active') {
+                // Suspend this mandate in the database
+                await frappe.db.set_value('SEPA Mandate', mandate.sepa_mandate, {
+                    'status': 'Suspended',
+                    'is_active': 0
+                });
                 
-                // Refresh the form to ensure data is updated
-                frm.refresh();
+                // Update local state
+                frappe.model.set_value(mandate.doctype, mandate.name, 'status', 'Suspended');
+                frappe.model.set_value(mandate.doctype, mandate.name, 'is_current', 0);
+                currentMandatesDeactivated = true;
             }
         }
-    });
-}
-
-// Function to sync all board members with volunteer system
-function sync_board_with_volunteer_system(frm) {
-    frappe.call({
-        method: 'verenigingen.verenigingen.doctype.volunteer.volunteer.sync_chapter_board_members',
-        callback: function(r) {
-            if (r.message) {
-                frappe.show_alert({
-                    message: __("Synced {0} board members with volunteer system.", [r.message.updated_count]),
-                    indicator: 'green'
-                }, 5);
-            }
+        
+        if (currentMandatesDeactivated) {
+            frappe.show_alert({
+                message: __('Previous SEPA mandates have been deactivated due to IBAN change'),
+                indicator: 'orange'
+            }, 5);
         }
-    });
+        
+        // Prompt to create a new mandate
+        promptCreateMandate(frm);
+    }
 }
