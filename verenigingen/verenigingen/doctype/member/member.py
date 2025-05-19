@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import getdate, today, add_days, date_diff
+from frappe.utils import getdate, today, add_days, date_diff, now
 
 class Member(Document):
     def before_save(self):
@@ -547,6 +547,10 @@ class Member(Document):
         
     def get_chapters(self):
         """Get all chapters this member belongs to"""
+        # Check if chapter management is enabled
+        if not is_chapter_management_enabled():
+            return []
+            
         chapters = []
         
         # Add primary chapter
@@ -589,6 +593,9 @@ class Member(Document):
 
     def is_board_member(self, chapter=None):
         """Check if member is a board member of any chapter or a specific chapter"""
+        if not is_chapter_management_enabled():
+            return False
+            
         filters = {"member": self.name, "is_active": 1}
         
         if chapter:
@@ -598,6 +605,9 @@ class Member(Document):
     
     def get_board_roles(self):
         """Get all board roles for this member"""
+        if not is_chapter_management_enabled():
+            return []
+            
         board_roles = frappe.get_all(
             "Chapter Board Member",
             filters={"member": self.name, "is_active": 1},
@@ -615,6 +625,10 @@ class Member(Document):
         # Can always view own payments
         if self.name == view_member:
             return True
+        
+        # If chapter management is disabled, only system managers can view others
+        if not is_chapter_management_enabled():
+            return False
         
         # Check if member is a board member with financial permissions
         member_obj = frappe.get_doc("Member", view_member)
@@ -825,10 +839,46 @@ class Member(Document):
             if days_overdue > 30:  # Configurable grace period
                 self.payment_status = "Overdue"
                 self.db_set('payment_status', 'Overdue')
+                
+    @frappe.whitelist()
+    def create_sepa_mandate(self):
+        """Create a new SEPA mandate for this member"""
+        mandate = frappe.new_doc("SEPA Mandate")
+        mandate.member = self.name
+        mandate.member_name = self.full_name
+        mandate.account_holder_name = self.full_name
+        mandate.sign_date = frappe.utils.today()
+        
+        # Set default usage
+        mandate.used_for_memberships = 1
+        mandate.used_for_donations = 1
+        
+        mandate.insert()
+        
+        # Add to member's mandate links
+        self.append("sepa_mandates", {
+            "sepa_mandate": mandate.name,
+            "is_current": 0  # Not current by default - user will need to fill in bank details
+        })
+        
+        self.save()
+        
+        return mandate.name
+
+def is_chapter_management_enabled():
+    """Check if chapter management is enabled in settings"""
+    try:
+        return frappe.db.get_single_value("Verenigingen Settings", "enable_chapter_management") == 1
+    except:
+        # Default to enabled if setting doesn't exist
+        return True
 
 @frappe.whitelist()
 def get_board_memberships(member_name):
     """Get board memberships for a member with proper permission handling"""
+    if not is_chapter_management_enabled():
+        return []
+        
     # Query directly using SQL to bypass permission checks
     board_memberships = frappe.db.sql("""
         SELECT cbm.parent, cbm.chapter_role 
@@ -1074,26 +1124,46 @@ def create_sepa_mandate_from_bank_details(member, iban, bic=None, account_holder
     return mandate.name
 
 @frappe.whitelist()
-def create_sepa_mandate(self):
-    """Create a new SEPA mandate for this member"""
-    mandate = frappe.new_doc("SEPA Mandate")
-    mandate.member = self.name
-    mandate.member_name = self.full_name
-    mandate.account_holder_name = self.full_name
-    mandate.sign_date = frappe.utils.today()
+def get_member_form_settings():
+    """Get settings for the member form based on system configuration"""
+    settings = {
+        "show_chapter_field": is_chapter_management_enabled(),
+        "chapter_field_label": _("Chapter") if is_chapter_management_enabled() else ""
+    }
     
-    # Set default usage
-    mandate.used_for_memberships = 1
-    mandate.used_for_donations = 1
+    return settings
+
+@frappe.whitelist()
+def find_chapter_by_postal_code(postal_code):
+    """Find chapters matching a postal code"""
+    if not is_chapter_management_enabled():
+        return {"success": False, "message": "Chapter management is disabled"}
+        
+    if not postal_code:
+        return {"success": False, "message": "Postal code is required"}
     
-    mandate.insert()
+    # Get all published chapters
+    chapters = frappe.get_all(
+        "Chapter",
+        filters={"published": 1},
+        fields=["name", "region", "postal_codes"]
+    )
     
-    # Add to member's mandate links
-    self.append("sepa_mandates", {
-        "sepa_mandate": mandate.name,
-        "is_current": 0  # Not current by default - user will need to fill in bank details
-    })
+    matching_chapters = []
     
-    self.save()
+    for chapter in chapters:
+        if not chapter.get("postal_codes"):
+            continue
+            
+        # Create chapter object to use the matching method
+        chapter_doc = frappe.get_doc("Chapter", chapter.name)
+        if chapter_doc.matches_postal_code(postal_code):
+            matching_chapters.append({
+                "name": chapter.name,
+                "region": chapter.region
+            })
     
-    return mandate.name
+    return {
+        "success": True,
+        "matching_chapters": matching_chapters
+    }
