@@ -209,9 +209,10 @@ def create_test_member():
     # Import for generating alphanumeric strings
     import random
     import string
-    
-    # Generate a random string with only letters and numbers
+
     random_string = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+    # Generate a random string with only letters and numbers
+    random_digits = ''.join(random.choices(string.digits, k=8))
     member_email = f"test_sepa_{random_string}@example.com"
     
     # Create member with unique alphanumeric first name
@@ -220,7 +221,7 @@ def create_test_member():
         "first_name": f"Test{random_string[:4]}",  # Add random string to first name
         "last_name": "SEPA",
         "email": member_email,
-        "mobile_no": f"+316{random_string[:8]}",  # Add unique phone number
+        "mobile_no": f"+316{random_digits}",  # Add unique phone number
         "iban": "NL91ABNA0417164300"  # Test IBAN
     })
     member.insert(ignore_permissions=True)
