@@ -106,7 +106,24 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
         self.test_chapter.insert(ignore_permissions=True)
         
         return self.test_chapter
-    
+
+    def create_test_chapter_roles(self):
+        """Create test chapter roles that can be used in tests"""
+        # List of roles to create
+        roles = ["Chair", "Secretary", "Treasurer", "New Role"]
+        
+        for role in roles:
+            # Check if role already exists
+            if not frappe.db.exists("Chapter Role", role):
+                # Create the role
+                role_doc = frappe.get_doc({
+                    "doctype": "Chapter Role",
+                    "name": role,
+                    "role_name": role,
+                    "permissions_level": "Admin",
+                    "is_active": 1
+                })
+                role_doc.insert(ignore_permissions=True)
     def create_test_members(self):
         """Create test members for board positions with unique emails"""
         self.test_members = []
