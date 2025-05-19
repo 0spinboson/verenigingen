@@ -300,14 +300,14 @@ class TestMember(FrappeTestCase):
         # Create a test chapter with postal code patterns
         if frappe.db.exists("Chapter", "Test Chapter"):
             chapter = frappe.get_doc("Chapter", "Test Chapter")
-            else:
-                chapter = frappe.new_doc("Chapter")
-                chapter.name = "Test Chapter"
-                chapter.region = "Test Region"
-                chapter.introduction = "Test Chapter for Chapter Matching"
-                chapter.postal_codes = "1000-1099, 2500, 3*"
-                chapter.published = 1
-                chapter.insert(ignore_permissions=True)
+        else:
+            chapter = frappe.new_doc("Chapter")
+            chapter.name = "Test Chapter"
+            chapter.region = "Test Region"
+            chapter.introduction = "Test Chapter for Chapter Matching"
+            chapter.postal_codes = "1000-1099, 2500, 3*"
+            chapter.published = 1
+            chapter.insert(ignore_permissions=True)
             
         # Create an address in the chapter's region
         address = frappe.new_doc("Address")
