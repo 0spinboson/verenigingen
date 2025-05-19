@@ -508,9 +508,10 @@ def get_chapters_by_postal_code(postal_code):
 
 @frappe.whitelist()
 def suggest_chapter_for_member(member_name, postal_code=None, state=None, city=None):
+    """Suggest appropriate chapters for a member based on location data"""
     if not is_chapter_management_enabled():
         return {"all_chapters": [], "disabled": True}
-    """Suggest appropriate chapters for a member based on location data"""
+        
     result = {
         "matches_by_postal": [],
         "matches_by_region": [],
