@@ -1,6 +1,58 @@
 // Copyright (c) 2025, Your Name and contributors
 // For license information, please see license.txt
 
+// Add at the top of your file - the debounce utility function
+function debounce(func, wait) {
+    let timeout;
+    return function(...args) {
+        const context = this;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), wait);
+    };
+}
+
+// Add the debounced handler for IBAN
+const debouncedIbanHandler = debounce(function(frm) {
+    if (frm.doc.iban) {
+        // Store original value to check for actual changes
+        const originalIban = frm.doc.iban;
+        
+        // Format the IBAN
+        const formattedIban = formatIBAN(frm.doc.iban);
+        
+        // Only proceed if there's an actual change to the normalized value
+        const normalizedOriginal = originalIban.replace(/\s+/g, '').toUpperCase();
+        const normalizedFormatted = formattedIban.replace(/\s+/g, '').toUpperCase();
+        
+        if (normalizedOriginal !== normalizedFormatted) {
+            // Real change detected - update IBAN and derive BIC
+            frm.set_value('iban', formattedIban);
+            
+            // Try to derive BIC from IBAN
+            if (frm.doc.payment_method === 'Direct Debit' && (!frm.doc.bic || frm.doc.bic === '')) {
+                frappe.call({
+                    method: 'verenigingen.verenigingen.doctype.member.member.derive_bic_from_iban',
+                    args: {
+                        iban: formattedIban
+                    },
+                    callback: function(r) {
+                        if (r.message && r.message.bic) {
+                            frm.set_value('bic', r.message.bic);
+                            frappe.show_alert({
+                                message: __('BIC/SWIFT code derived from IBAN'),
+                                indicator: 'green'
+                            }, 3);
+                        }
+                    }
+                });
+            }
+        } else if (formattedIban !== originalIban) {
+            // Only the formatting changed (spaces, etc.) - just update the display
+            frm.set_value('iban', formattedIban);
+        }
+    }
+}, 500);
+
 frappe.ui.form.on('Member', {
     refresh: function(frm) {
         if (frm.fields_dict.payment_history) {
@@ -621,45 +673,63 @@ frappe.ui.form.on('Member', {
     },
     
     iban: function(frm) {
-        // When IBAN changes, format it correctly and try to derive BIC
-        if (frm.doc.iban) {
-            // Format the IBAN
-            const formattedIban = formatIBAN(frm.doc.iban);
-            if (formattedIban !== frm.doc.iban) {
-                frm.set_value('iban', formattedIban);
-            }
+        // Replace your current iban function with this
+        debouncedIbanHandler(frm);
+    },
+    
+    before_save: function(frm) {
+        // New function to ensure BIC is saved
+        if (frm.doc.payment_method === 'Direct Debit' && 
+            frm.doc.iban && 
+            (!frm.doc.bic || frm.doc.bic === '') && 
+            !frm._bic_fetch_attempted) {
             
-            // Try to derive BIC from IBAN if payment method is Direct Debit and BIC is empty
-            if (frm.doc.payment_method === 'Direct Debit' && (!frm.doc.bic || frm.doc.bic === '')) {
-                frappe.call({
-                    method: 'verenigingen.verenigingen.doctype.member.member.derive_bic_from_iban',
-                    args: {
-                        iban: formattedIban
-                    },
-                    callback: function(r) {
-                        if (r.message && r.message.bic) {
-                            frm.set_value('bic', r.message.bic);
-                            frappe.show_alert({
-                                message: __('BIC/SWIFT code derived from IBAN'),
-                                indicator: 'green'
-                            }, 3);
-                        }
+            // Set a flag to prevent infinite loop
+            frm._bic_fetch_attempted = true;
+            
+            // Try to get BIC synchronously
+            frappe.call({
+                method: 'vereiningen.verenigingen.doctype.member.member.derive_bic_from_iban',
+                args: {
+                    iban: frm.doc.iban
+                },
+                async: false, // Make this call synchronous
+                callback: function(r) {
+                    if (r.message && r.message.bic) {
+                        frm.set_value('bic', r.message.bic);
+                        frappe.show_alert({
+                            message: __('BIC/SWIFT code derived from IBAN'),
+                            indicator: 'green'
+                        }, 3);
                     }
-                });
-            }
+                }
+            });
         }
     },
     
     after_save: function(frm) {
-        // After saving, if payment method is Direct Debit and we have IBAN
-        // and bank account name, check for mandate
+        // Replace your current after_save with this
         if (frm.doc.payment_method === 'Direct Debit' && 
             frm.doc.iban && frm.doc.bank_account_name) {
-            checkForExistingMandate(frm);
+            
+            // Store the IBAN normalized value in a custom property for comparison
+            const currentIbanNormalized = frm.doc.iban.replace(/\s+/g, '').toUpperCase();
+            
+            // Compare with previous value (if exists)
+            if (!frm._previous_iban_normalized || 
+                frm._previous_iban_normalized !== currentIbanNormalized) {
+                
+                // Update stored value
+                frm._previous_iban_normalized = currentIbanNormalized;
+                
+                // Only check for mandate if IBAN changed
+                checkForExistingMandate(frm);
+            }
         }
     },
     
     bank_account_name: function(frm) {
+        // Keep your existing bank_account_name function as is
         // Don't do anything when bank account name changes
         // We'll check for mandates after save
     }
