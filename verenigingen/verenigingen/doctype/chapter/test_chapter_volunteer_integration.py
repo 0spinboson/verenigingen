@@ -9,6 +9,7 @@ from verenigingen.verenigingen.doctype.volunteer.volunteer import sync_chapter_b
 class TestChapterVolunteerIntegration(unittest.TestCase):
     def setUp(self):
         # Create test data
+        self.create_test_chapter_roles()
         self.create_test_chapter()
         self.create_test_members()
         
@@ -30,6 +31,32 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
                 frappe.delete_doc("Volunteer", volunteer)
             except Exception:
                 pass
+                
+        # Clean up chapter roles
+        for role in ["Chair", "Secretary", "Treasurer", "New Role"]:
+            try:
+                if frappe.db.exists("Chapter Role", role):
+                    frappe.delete_doc("Chapter Role", role)
+            except Exception:
+                pass
+    
+    def create_test_chapter_roles(self):
+        """Create test chapter roles that can be used in tests"""
+        # List of roles to create
+        roles = ["Chair", "Secretary", "Treasurer", "New Role"]
+        
+        for role in roles:
+            # Check if role already exists
+            if not frappe.db.exists("Chapter Role", role):
+                # Create the role
+                role_doc = frappe.get_doc({
+                    "doctype": "Chapter Role",
+                    "name": role,
+                    "role_name": role,
+                    "permissions_level": "Admin",
+                    "is_active": 1
+                })
+                role_doc.insert(ignore_permissions=True)
     
     def create_test_chapter(self):
         """Create a test chapter"""
