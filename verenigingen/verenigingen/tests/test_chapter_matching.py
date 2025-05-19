@@ -94,10 +94,79 @@ class TestChapterMatching(VereningingenTestCase):
         address.insert(ignore_permissions=True)
         return address
     
-    def test_postal_code_matching(self):
+def test_postal_code_matching(self):
         """Test matching chapters based on postal code"""
         # Test matching by postal code range
         amsterdam_chapter = frappe.get_doc("Chapter", "Test Amsterdam")
         
         # Should match Amsterdam chapter
-        self
+        self.assertTrue(amsterdam_chapter.matches_postal_code("1001"))
+        self.assertTrue(amsterdam_chapter.matches_postal_code("1099"))
+        self.assertFalse(amsterdam_chapter.matches_postal_code("1100"))
+        
+        # Test matching by exact postal code
+        utrecht_chapter = frappe.get_doc("Chapter", "Test Utrecht")
+        self.assertTrue(utrecht_chapter.matches_postal_code("3500"))
+        self.assertFalse(utrecht_chapter.matches_postal_code("3501"))
+        
+        # Test matching by wildcard pattern
+        eindhoven_chapter = frappe.get_doc("Chapter", "Test Eindhoven")
+        self.assertTrue(eindhoven_chapter.matches_postal_code("5600"))
+        self.assertTrue(eindhoven_chapter.matches_postal_code("5699"))
+        self.assertFalse(eindhoven_chapter.matches_postal_code("4600"))
+
+    def test_suggest_chapter_for_member(self):
+        """Test suggesting chapters based on member address"""
+        # Link the test address to the member
+        self.test_member.primary_address = self.test_address.name
+        self.test_member.save()
+        
+        # Call the suggestion function
+        result = frappe.call("verenigingen.verenigingen.doctype.chapter.chapter.suggest_chapter_for_member", 
+                             member_name=self.test_member.name, 
+                             postal_code=self.test_address.pincode,
+                             state=self.test_address.state,
+                             city=self.test_address.city)
+        
+        # Should have matched Amsterdam chapter by postal code
+        self.assertTrue(result["matches_by_postal"])
+        self.assertEqual(result["matches_by_postal"][0].name, "Test Amsterdam")
+        
+        # Test with different postal code
+        result = frappe.call("verenigingen.verenigingen.doctype.chapter.chapter.suggest_chapter_for_member",
+                             member_name=self.test_member.name,
+                             postal_code="3500",  # Utrecht
+                             state=self.test_address.state,
+                             city=self.test_address.city)
+        
+        # Should have matched Utrecht chapter by postal code
+        self.assertTrue(result["matches_by_postal"])
+        self.assertEqual(result["matches_by_postal"][0].name, "Test Utrecht")
+        
+        # Test matching by region only
+        result = frappe.call("verenigingen.verenigingen.doctype.chapter.chapter.suggest_chapter_for_member",
+                             member_name=self.test_member.name,
+                             postal_code="9999",  # No match
+                             state="Noord-Holland",  # Amsterdam
+                             city="Unknown")
+        
+        # Should have matched Amsterdam chapter by region
+        self.assertFalse(result["matches_by_postal"])
+        self.assertTrue(result["matches_by_region"])
+        self.assertEqual(result["matches_by_region"][0].name, "Test Amsterdam")
+        
+        # Test matching by city only
+        result = frappe.call("verenigingen.verenigingen.doctype.chapter.chapter.suggest_chapter_for_member",
+                             member_name=self.test_member.name,
+                             postal_code=None,
+                             state=None,
+                             city="Amsterdam")
+        
+        # Should have matched Amsterdam chapter by city
+        self.assertFalse(result["matches_by_postal"])
+        self.assertFalse(result["matches_by_region"])
+        self.assertTrue(result["matches_by_city"])
+        self.assertEqual(result["matches_by_city"][0].name, "Test Amsterdam")
+
+if __name__ == '__main__':
+    unittest.main()
