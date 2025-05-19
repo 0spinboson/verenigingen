@@ -8,8 +8,15 @@ from verenigingen.verenigingen.doctype.volunteer.volunteer import sync_chapter_b
 
 class TestChapterVolunteerIntegration(unittest.TestCase):
     def setUp(self):
-        # Create a timestamp suffix to ensure unique test data names - only alphanumeric
-        self.test_timestamp = ''.join(c for c in frappe.utils.now() if c.isalnum())
+        # Create a unique timestamp suffix with randomness - alphanumeric only
+        import random
+        import string
+        
+        # Get current timestamp and filter to alphanumeric only
+        timestamp = ''.join(c for c in frappe.utils.now() if c.isalnum())
+        # Generate random alphanumeric suffix
+        random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        self.test_timestamp = f"{timestamp}{random_suffix}"
         
         # Create test data in the right order
         self.test_members = []
@@ -74,20 +81,20 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
                 print(f"Error deleting role {role}: {e}")
     
     def create_test_chapter(self):
-        """Create a test chapter with unique name"""
+        """Create a test chapter with unique name - alphanumeric only"""
         # Create a member for chapter head with unique email
-        head_email = f"chapter_head_{self.test_timestamp}@example.com"
+        head_email = f"chapterhead{self.test_timestamp[:8]}@example.com"
         
         # Check if a member with this email already exists
         existing_head = frappe.db.get_value("Member", {"email": head_email}, "name")
         if existing_head:
             self.chapter_head_member = frappe.get_doc("Member", existing_head)
         else:
-            # Create new chapter head - use only alphanumeric characters in names
+            # Create new chapter head - alphanumeric only
             self.chapter_head_member = frappe.get_doc({
                 "doctype": "Member",
                 "first_name": "Chapter",
-                "last_name": f"Head{self.test_timestamp[:8]}", # Use only the first 8 chars of timestamp
+                "last_name": f"Head{self.test_timestamp[:8]}", 
                 "email": head_email
             })
             self.chapter_head_member.insert(ignore_permissions=True)
@@ -124,19 +131,22 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
                     "is_active": 1
                 })
                 role_doc.insert(ignore_permissions=True)
+
     def create_test_members(self):
-        """Create test members for board positions with unique emails"""
+        """Create test members for board positions with unique emails - alphanumeric only"""
         self.test_members = []
         
         # Create a few test members
         for i in range(3):
-            email = f"board_member_{i}_{self.test_timestamp}@example.com"
+            # Make email and names more unique using index and timestamp (alphanumeric only)
+            email = f"boardmember{i}{self.test_timestamp[:8]}@example.com"
+            unique_suffix = f"{self.test_timestamp[:8]}{i}"
             
-            # Create the member with unique email - use only alphanumeric in names
+            # Create the member with unique email and name
             member = frappe.get_doc({
                 "doctype": "Member",
                 "first_name": f"Board{i}",
-                "last_name": f"Member{self.test_timestamp[:8]}", # Use only the first 8 chars of timestamp
+                "last_name": f"Test{unique_suffix}", # Alphanumeric only
                 "email": email
             })
             member.insert(ignore_permissions=True)
@@ -144,12 +154,12 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
             
         # Create a volunteer for one member
         if self.test_members:
-            # Clean the name for volunteer (remove any spaces)
-            clean_name = self.test_members[0].full_name.replace(" ", "")
+            # Generate a unique name for the volunteer - alphanumeric only
+            unique_name = f"TestVolunteer{self.test_timestamp[:8]}"
             volunteer = frappe.get_doc({
                 "doctype": "Volunteer",
-                "volunteer_name": clean_name,
-                "email": f"{clean_name.lower()}@example.org",
+                "volunteer_name": unique_name,
+                "email": f"{unique_name.lower()}@example.org",
                 "member": self.test_members[0].name,
                 "status": "Active",
                 "start_date": frappe.utils.today()
@@ -210,35 +220,54 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
         # Check assignments for the pre-existing volunteer
         volunteer = frappe.get_doc("Volunteer", self.test_volunteers[0])
         
-        # Should have a board position assignment
+        # Check if there are any board assignments using a more flexible approach
         has_board_assignment = False
         
-        # Check what fields exist on the volunteer document
-        if hasattr(volunteer, 'assignments'):
-            assignments_field = 'assignments'
-        elif hasattr(volunteer, 'volunteer_assignments'):
-            assignments_field = 'volunteer_assignments'
-        else:
-            frappe.msgprint(f"Available fields on volunteer: {dir(volunteer)}")
-            assignments_field = None
+        # Try a direct database query for volunteer assignments
+        assignments = frappe.get_all(
+            "Volunteer Assignment",
+            filters={
+                "volunteer": volunteer.name,
+                "assignment_type": "Board Position",
+                "reference_doctype": "Chapter",
+                "reference_name": self.test_chapter.name
+            },
+            fields=["name"]
+        )
         
-        if assignments_field:
-            for assignment in getattr(volunteer, assignments_field):
-                if (assignment.get('assignment_type') == "Board Position" and 
-                    assignment.get('reference_doctype') == "Chapter" and
-                    assignment.get('reference_name') == self.test_chapter.name):
-                    has_board_assignment = True
-                    break
+        if assignments:
+            has_board_assignment = True
         
-        # If no assignments field found, try to call a method that might access assignments
-        if not has_board_assignment and hasattr(volunteer, 'get_active_assignments'):
-            active_assignments = volunteer.get_active_assignments()
-            for assignment in active_assignments:
-                if (assignment.get('assignment_type') == "Board Position" and 
-                    assignment.get('reference_doctype') == "Chapter" and
-                    assignment.get('reference_name') == self.test_chapter.name):
-                    has_board_assignment = True
-                    break
+        # If direct query found nothing, try looking for child table
+        if not has_board_assignment:
+            # Try different possible field names for assignments
+            possible_assignment_fields = ['assignments', 'volunteer_assignments']
+            
+            for field in possible_assignment_fields:
+                if hasattr(volunteer, field) and getattr(volunteer, field):
+                    assignments = getattr(volunteer, field)
+                    for assignment in assignments:
+                        if hasattr(assignment, 'assignment_type') and hasattr(assignment, 'reference_doctype') and hasattr(assignment, 'reference_name'):
+                            if (assignment.assignment_type == "Board Position" and 
+                                assignment.reference_doctype == "Chapter" and
+                                assignment.reference_name == self.test_chapter.name):
+                                has_board_assignment = True
+                                break
+        
+        # If we still didn't find it, try a method
+        if not has_board_assignment and hasattr(volunteer, 'get_active_assignments') and callable(getattr(volunteer, 'get_active_assignments')):
+            try:
+                active_assignments = volunteer.get_active_assignments()
+                if isinstance(active_assignments, list):
+                    for assignment in active_assignments:
+                        if isinstance(assignment, dict):
+                            if (assignment.get('assignment_type') == "Board Position" and 
+                                assignment.get('reference_doctype') == "Chapter" and
+                                assignment.get('reference_name') == self.test_chapter.name):
+                                has_board_assignment = True
+                                break
+            except Exception:
+                pass
                     
         self.assertTrue(has_board_assignment, "Volunteer should have a board position assignment")
     
@@ -267,31 +296,37 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
         # Should have a board position assignment with the new role
         has_new_role = False
         
-        # Check what fields exist on the volunteer document
-        if hasattr(volunteer, 'assignments'):
-            assignments_field = 'assignments'
-        elif hasattr(volunteer, 'volunteer_assignments'):
-            assignments_field = 'volunteer_assignments'
-        else:
-            frappe.msgprint(f"Available fields on volunteer: {dir(volunteer)}")
-            assignments_field = None
+        # Try direct database query first
+        assignments = frappe.get_all(
+            "Volunteer Assignment",
+            filters={
+                "volunteer": volunteer.name,
+                "assignment_type": "Board Position",
+                "reference_doctype": "Chapter",
+                "reference_name": self.test_chapter.name,
+                "role": "New Role"
+            },
+            fields=["name"]
+        )
         
-        if assignments_field:
-            for assignment in getattr(volunteer, assignments_field):
-                if (assignment.get('assignment_type') == "Board Position" and 
-                    assignment.get('reference_name') == self.test_chapter.name and
-                    assignment.get('role') == "New Role"):
-                    has_new_role = True
-                    break
+        if assignments:
+            has_new_role = True
         
-        # If no assignments field found, try to call a method that might access assignments
-        if not has_new_role and hasattr(volunteer, 'get_active_assignments'):
-            active_assignments = volunteer.get_active_assignments()
-            for assignment in active_assignments:
-                if (assignment.get('assignment_type') == "Board Position" and 
-                    assignment.get('reference_name') == self.test_chapter.name and
-                    assignment.get('role') == "New Role"):
-                    has_new_role = True
-                    break
+        # If direct query found nothing, try looking for child table
+        if not has_new_role:
+            # Try different possible field names for assignments
+            possible_assignment_fields = ['assignments', 'volunteer_assignments']
+            
+            for field in possible_assignment_fields:
+                if hasattr(volunteer, field) and getattr(volunteer, field):
+                    assignments = getattr(volunteer, field)
+                    for assignment in assignments:
+                        if hasattr(assignment, 'assignment_type') and hasattr(assignment, 'reference_doctype') and hasattr(assignment, 'reference_name') and hasattr(assignment, 'role'):
+                            if (assignment.assignment_type == "Board Position" and 
+                                assignment.reference_doctype == "Chapter" and
+                                assignment.reference_name == self.test_chapter.name and
+                                assignment.role == "New Role"):
+                                has_new_role = True
+                                break
                     
         self.assertTrue(has_new_role, "Volunteer assignment should be updated with new role")
