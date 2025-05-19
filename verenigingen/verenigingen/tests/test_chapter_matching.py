@@ -93,6 +93,113 @@ class TestChapterMatching(VereningingenTestCase):
         })
         address.insert(ignore_permissions=True)
         return address
+
+    def test_postal_code_edge_cases(self):
+        """Test edge cases in postal code matching"""
+        # Create a chapter with range 1000-1099
+        range_chapter = self.create_test_chapter("Range Test", "Test Region", "1000-1099")
+        
+        # Test exact boundaries
+        self.assertTrue(range_chapter.matches_postal_code("1000"), "Lower boundary should match")
+        self.assertTrue(range_chapter.matches_postal_code("1099"), "Upper boundary should match")
+        self.assertFalse(range_chapter.matches_postal_code("999"), "Just below range shouldn't match")
+        self.assertFalse(range_chapter.matches_postal_code("1100"), "Just above range shouldn't match")
+        
+        # Test wildcard patterns
+        wildcard_chapter = self.create_test_chapter("Wildcard Test", "Test Region", "5*")
+        self.assertTrue(wildcard_chapter.matches_postal_code("5"), "Single digit should match")
+        self.assertTrue(wildcard_chapter.matches_postal_code("50"), "Double digit should match")
+        self.assertTrue(wildcard_chapter.matches_postal_code("5999"), "Four-digit should match")
+        self.assertFalse(wildcard_chapter.matches_postal_code("65"), "Non-matching prefix shouldn't match")
+        
+        # Test multiple patterns
+        multi_pattern_chapter = self.create_test_chapter("Multi Pattern", "Test Region", "2500, 3000-3100, 4*")
+        self.assertTrue(multi_pattern_chapter.matches_postal_code("2500"), "Exact match should work")
+        self.assertTrue(multi_pattern_chapter.matches_postal_code("3050"), "Range match should work")
+        self.assertTrue(multi_pattern_chapter.matches_postal_code("4123"), "Wildcard match should work")
+        self.assertFalse(multi_pattern_chapter.matches_postal_code("2600"), "Non-matching code shouldn't match")
+        
+    def test_no_chapter_matches(self):
+        """Test when no chapters match the member's location"""
+        # Create address with postal code that doesn't match any chapter
+        address = frappe.get_doc({
+            "doctype": "Address",
+            "address_title": f"No Match Address",
+            "address_type": "Personal",
+            "address_line1": "No Match Street 123",
+            "city": "No Match City",
+            "state": "No Match Region",
+            "country": "Netherlands",
+            "pincode": "9999",  # Doesn't match any chapter
+            "links": [{
+                "link_doctype": "Member",
+                "link_name": self.test_member.name
+            }]
+        })
+        address.insert(ignore_permissions=True)
+        
+        # Link to test member
+        self.test_member.primary_address = address.name
+        self.test_member.save()
+        
+        # Call the suggestion function
+        result = frappe.call("verenigingen.verenigingen.doctype.chapter.chapter.suggest_chapter_for_member", 
+                             member_name=self.test_member.name, 
+                             postal_code=address.pincode,
+                             state=address.state,
+                             city=address.city)
+        
+        # Should not have matched by postal code
+        self.assertFalse(result["matches_by_postal"])
+        
+        # Should not have matched by region (assuming no chapter has this region)
+        self.assertFalse(result["matches_by_region"])
+        
+        # Should not have matched by city (assuming no chapter has this city)
+        self.assertFalse(result["matches_by_city"])
+        
+        # But should still return all chapters
+        self.assertTrue(result["all_chapters"])
+        
+    def test_partial_location_match(self):
+        """Test matching with partial location data"""
+        # Create a chapter with a specific region
+        region_chapter = self.create_test_chapter("Region Test", "Test Region")
+        
+        # Create address that matches region but not postal code
+        address = frappe.get_doc({
+            "doctype": "Address",
+            "address_title": f"Region Match Address",
+            "address_type": "Personal",
+            "address_line1": "Region Match Street 123",
+            "city": "Some City",
+            "state": "Test Region",  # Matches the chapter
+            "country": "Netherlands",
+            "pincode": "9999",  # Doesn't match any chapter
+            "links": [{
+                "link_doctype": "Member",
+                "link_name": self.test_member.name
+            }]
+        })
+        address.insert(ignore_permissions=True)
+        
+        # Link to test member
+        self.test_member.primary_address = address.name
+        self.test_member.save()
+        
+        # Call the suggestion function
+        result = frappe.call("verenigingen.verenigingen.doctype.chapter.chapter.suggest_chapter_for_member", 
+                             member_name=self.test_member.name, 
+                             postal_code=address.pincode,
+                             state=address.state,
+                             city=address.city)
+        
+        # Should not have matched by postal code
+        self.assertFalse(result["matches_by_postal"])
+        
+        # Should have matched by region
+        self.assertTrue(result["matches_by_region"])
+        self.assertEqual(result["matches_by_region"][0].name, "Region Test")
     
 def test_postal_code_matching(self):
         """Test matching chapters based on postal code"""
