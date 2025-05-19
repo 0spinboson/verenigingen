@@ -205,17 +205,22 @@ class TestSEPAMandate(unittest.TestCase):
         self.assertTrue(mandate_found, "Mandate should be added to Member's mandate list")
 
 def create_test_member():
-    """Helper function to create a test member with a unique name"""
-    # Use a unique random string for each test member
-    random_string = frappe.utils.random_string(8)
+    """Helper function to create a test member with a unique alphanumeric name"""
+    # Import for generating alphanumeric strings
+    import random
+    import string
+    
+    # Generate a random string with only letters and numbers
+    random_string = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
     member_email = f"test_sepa_{random_string}@example.com"
     
-    # Create member with unique first name to avoid duplicate full_name issues
+    # Create member with unique alphanumeric first name
     member = frappe.get_doc({
         "doctype": "Member",
-        "first_name": f"Test{random_string[:4]}",
+        "first_name": f"Test{random_string[:4]}",  # Add random string to first name
         "last_name": "SEPA",
         "email": member_email,
+        "mobile_no": f"+316{random_string[:8]}",  # Add unique phone number
         "iban": "NL91ABNA0417164300"  # Test IBAN
     })
     member.insert(ignore_permissions=True)
