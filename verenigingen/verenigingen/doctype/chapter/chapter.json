@@ -39,10 +39,11 @@
    "read_only": 0, 
    "remember_last_selected_value": 0, 
    "report_hide": 0, 
-   "reqd": 1, 
+   "reqd": 0, 
    "search_index": 0, 
    "set_only_once": 0,
-   "unique": 0
+   "unique": 0,
+   "in_quick_entry": 0
   }, 
   {
    "allow_bulk_edit": 0, 
@@ -102,7 +103,15 @@
    "search_index": 0, 
    "set_only_once": 0, 
    "unique": 0
-  }, 
+  },
+  {
+   "fieldname": "postal_codes",
+   "fieldtype": "Small Text",
+   "label": "Postal Codes",
+   "description": "List of postal code patterns separated by commas (e.g. 1000-1099, 2500, 3*)",
+   "in_list_view": 0,
+   "in_standard_filter": 0
+  },
   {
    "allow_bulk_edit": 0, 
    "allow_on_submit": 0, 
