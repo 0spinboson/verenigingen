@@ -169,6 +169,32 @@ frappe.ui.form.on('Member', {
             suggest_chapter_for_member(frm);
         }, __('Actions'));
         
+        // Enhance chapter field with visual indication
+        if (!frm.doc.__islocal) {
+            // Add a suggestion container if no chapter is assigned
+            if (!frm.doc.primary_chapter && !$('.chapter-suggestion-container').length) {
+                var $container = $('<div class="chapter-suggestion-container alert alert-info mt-2"></div>');
+                $container.html(`
+                    <p>${__("This member doesn't have a chapter assigned yet.")}</p>
+                    <button class="btn btn-sm btn-primary suggest-chapter-btn">
+                        ${__("Find a Chapter")}
+                    </button>
+                `);
+                
+                $(frm.fields_dict.primary_chapter.wrapper).append($container);
+                
+                // Add click handler
+                $('.suggest-chapter-btn').on('click', function() {
+                    suggest_chapter_for_member(frm);
+                });
+            }
+            
+            // Add a nice visual indicator in the form header if chapter is set
+            if (frm.doc.primary_chapter && !frm.doc.__unsaved) {
+                frm.dashboard.add_indicator(__("Member of {0}", [frm.doc.primary_chapter]), "blue");
+            }
+        }
+        
         // Check if user is a board member of any chapter
         frappe.call({
             method: 'verenigingen.verenigingen.doctype.member.member.get_board_memberships',
@@ -449,6 +475,18 @@ frappe.ui.form.on('Member', {
                 }
             });
         }
+        
+        // Add some CSS for chapter selection interface
+        frappe.dom.set_style(`
+            .chapter-suggestion-container {
+                margin-top: 10px;
+                padding: 10px;
+            }
+            .suggested-chapter {
+                font-weight: bold;
+                color: var(--primary);
+            }
+        `);
     },
     
     onload: function(frm) {
@@ -538,14 +576,11 @@ frappe.ui.form.on('Member', {
     
     payment_method: function(frm) {
         // Show/hide bank details based on payment method
-        const show_bank_details = ['Direct Debit', 'Bank Transfer'].includes(frm.doc.payment_method);
-        frm.toggle_display(['bank_details_section'], is_direct_debit);
-        
-        // Set field requirements based on payment method
         const is_direct_debit = frm.doc.payment_method === 'Direct Debit';
-        frm.toggle_reqd(['iban', 'bank_account_name'], is_direct_debit);
+        const show_bank_details = ['Direct Debit', 'Bank Transfer'].includes(frm.doc.payment_method);
         
-        // REMOVED: Immediate mandate check - we now do this after save
+        frm.toggle_display(['bank_details_section'], show_bank_details);
+        frm.toggle_reqd(['iban', 'bank_account_name'], is_direct_debit);
     },
     
     iban: function(frm) {
