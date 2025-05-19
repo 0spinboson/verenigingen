@@ -65,29 +65,109 @@ class TestSEPAMandate(unittest.TestCase):
         self.mandate.insert()
         self.assertEqual(self.mandate.iban, "NL91ABNA0417164300")
     
-    def test_set_status_active(self):
+    def test_preserve_draft_status(self):
+        """Test Draft status is preserved until explicitly changed"""
+        self.mandate.status = "Draft"
+        self.mandate.is_active = 1
+        self.mandate.insert()
+        
+        # Status should remain as Draft
+        self.assertEqual(self.mandate.status, "Draft")
+        
+        # Modify and save to check if Draft status persists
+        self.mandate.account_holder_name = "Modified Name"
+        self.mandate.save()
+        
+        # Status should still be Draft
+        self.assertEqual(self.mandate.status, "Draft")
+    
+    def test_preserve_cancelled_status(self):
+        """Test Cancelled status is preserved and not overridden"""
+        # First insert with Active status
+        self.mandate.status = "Active"
+        self.mandate.insert()
+        
+        # Now set it to Cancelled
+        self.mandate.status = "Cancelled"
+        self.mandate.is_active = 0
+        self.mandate.cancelled_date = today()
+        self.mandate.save()
+        
+        # Status should be Cancelled
+        self.assertEqual(self.mandate.status, "Cancelled")
+        
+        # Change other fields and verify Cancelled status persists
+        self.mandate.account_holder_name = "New Holder Name"
+        self.mandate.save()
+        
+        # Status should still be Cancelled
+        self.assertEqual(self.mandate.status, "Cancelled")
+    
+    def test_status_active(self):
         """Test status is set to Active with valid configuration"""
+        self.mandate.status = "Active"
         self.mandate.is_active = 1
         self.mandate.insert()
         self.assertEqual(self.mandate.status, "Active")
+        
+        # Change is_active to 0 and verify status changes to Suspended
+        self.mandate.is_active = 0
+        self.mandate.save()
+        self.assertEqual(self.mandate.status, "Suspended")
     
-    def test_set_status_suspended(self):
+    def test_status_suspended(self):
         """Test status is set to Suspended when is_active=0"""
+        self.mandate.status = "Suspended"
         self.mandate.is_active = 0
         self.mandate.insert()
         self.assertEqual(self.mandate.status, "Suspended")
+        
+        # Change is_active to 1 and verify status changes to Active
+        self.mandate.is_active = 1
+        self.mandate.save()
+        self.assertEqual(self.mandate.status, "Active")
     
-    def test_set_status_expired(self):
+    def test_status_expired(self):
         """Test status is set to Expired when expiry date is in the past"""
         # Set sign date to a past date, and expiry date between sign date and today
         self.mandate.sign_date = add_days(today(), -30)  # 30 days in the past
         self.mandate.expiry_date = add_days(today(), -1)  # Yesterday (but after sign date)
+        self.mandate.status = "Active"  # Start with Active
         self.mandate.insert()
         self.assertEqual(self.mandate.status, "Expired")
+        
+        # Verify that changing is_active doesn't override Expired status
+        self.mandate.is_active = 1
+        self.mandate.save()
+        self.assertEqual(self.mandate.status, "Expired")
+    
+    def test_is_active_flag_sync(self):
+        """Test is_active flag stays in sync with status"""
+        # Start with Active status
+        self.mandate.status = "Active"
+        self.mandate.is_active = 1
+        self.mandate.insert()
+        self.assertEqual(self.mandate.is_active, 1)
+        
+        # Change to Suspended
+        self.mandate.status = "Suspended"
+        self.mandate.save()
+        self.assertEqual(self.mandate.is_active, 0)
+        
+        # Change back to Active
+        self.mandate.status = "Active"
+        self.mandate.save()
+        self.assertEqual(self.mandate.is_active, 1)
+        
+        # Change to Cancelled
+        self.mandate.status = "Cancelled"
+        self.mandate.save()
+        self.assertEqual(self.mandate.is_active, 0)
     
     def test_on_update_member_relationship(self):
         """Test relationship with Member is properly set up on update"""
-        # Insert mandate first
+        # Insert mandate first with Active status
+        self.mandate.status = "Active"
         self.mandate.insert()
         
         # Get the member and check if mandate was added
@@ -105,9 +185,9 @@ class TestSEPAMandate(unittest.TestCase):
     
     def test_multiple_mandates_current_handling(self):
         """Test how multiple mandates are handled for a Member"""
-        # Create first mandate
-        first_mandate = self.mandate
-        first_mandate.insert()
+        # Create first mandate with Active status
+        self.mandate.status = "Active"
+        self.mandate.insert()
         
         # Create second mandate - use force=True during cleanup to avoid link errors
         second_mandate_id = f"TEST-MANDATE-2-{frappe.utils.random_string(8)}"
@@ -118,7 +198,7 @@ class TestSEPAMandate(unittest.TestCase):
             "account_holder_name": self.test_member.full_name,
             "iban": "NL91ABNA0417164300",  # Test IBAN
             "sign_date": today(),
-            "status": "Draft",
+            "status": "Active",
             "mandate_type": "RCUR",
             "scheme": "SEPA",
             "is_active": 1,
@@ -141,7 +221,7 @@ class TestSEPAMandate(unittest.TestCase):
             
             # Verify both mandates are in the member's list
             mandate_names = [m.sepa_mandate for m in member.sepa_mandates]
-            self.assertIn(first_mandate.name, mandate_names, "First mandate should be in member's list")
+            self.assertIn(self.mandate.name, mandate_names, "First mandate should be in member's list")
             self.assertIn(second_mandate.name, mandate_names, "Second mandate should be in member's list")
             
         finally:
@@ -149,6 +229,31 @@ class TestSEPAMandate(unittest.TestCase):
             if frappe.db.exists("SEPA Mandate", second_mandate.name):
                 frappe.db.set_value("SEPA Mandate", second_mandate.name, "status", "Cancelled")
                 frappe.delete_doc("SEPA Mandate", second_mandate.name, force=True, ignore_permissions=True)
+                
+    def test_suspend_existing_mandates(self):
+        """Test that creating a new mandate suspends existing ones"""
+        # First create a mandate normally
+        first_mandate = self.mandate
+        first_mandate.status = "Active"
+        first_mandate.insert()
+        first_mandate_name = first_mandate.name
+        
+        # Now simulate creating a new mandate via the create_and_link_mandate function
+        from verenigingen.verenigingen.doctype.member.member import create_and_link_mandate
+        
+        # Create a second mandate - different IBAN
+        second_mandate = create_and_link_mandate(
+            member=self.test_member.name,
+            iban="DE89370400440532013000",  # Different IBAN
+            account_holder_name=self.test_member.full_name,
+            mandate_type="RCUR",
+            used_for_memberships=1
+        )
+        
+        # Check that first mandate is now suspended
+        updated_first_mandate = frappe.get_doc("SEPA Mandate", first_mandate_name)
+        self.assertEqual(updated_first_mandate.status, "Suspended")
+        self.assertEqual(updated_first_mandate.is_active, 0)
 
 def create_test_member():
     """Helper function to create a test member"""
