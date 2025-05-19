@@ -1213,3 +1213,83 @@ def check_and_handle_sepa_mandate(member, iban):
     else:
         # No matching mandate, need to create a new one
         return {"action": "create_new"}
+
+@frappe.whitelist()
+def need_new_mandate(member, iban):
+    """Check if we need to create a new mandate for this IBAN"""
+    # Find any mandate with matching IBAN
+    matching_mandates = frappe.get_all(
+        "SEPA Mandate",
+        filters={
+            "member": member,
+            "iban": iban,
+            "status": "Active",
+            "is_active": 1
+        },
+        fields=["name"]
+    )
+    
+    # If no matching mandates, we need a new one
+    return {"need_new": not bool(matching_mandates)}
+
+@frappe.whitelist()
+def create_and_link_mandate(member, iban, bic=None, account_holder_name=None, 
+                           mandate_type="RCUR", sign_date=None, 
+                           used_for_memberships=1, used_for_donations=0):
+    """Create a new mandate and link it to the member in one atomic operation"""
+    if not member or not iban:
+        frappe.throw(_("Member and IBAN are required"))
+    
+    if not sign_date:
+        sign_date = frappe.utils.today()
+    
+    # Get member details if not provided
+    member_doc = frappe.get_doc("Member", member)
+    if not account_holder_name:
+        account_holder_name = member_doc.full_name
+    
+    # Create mandate ID with timestamp to ensure uniqueness
+    timestamp = frappe.utils.now().replace(' ', '').replace('-', '').replace(':', '')[:14]
+    mandate_id = f"M-{member_doc.member_id}-{timestamp}"
+    
+    # Create new mandate
+    mandate = frappe.new_doc("SEPA Mandate")
+    mandate.mandate_id = mandate_id
+    mandate.member = member
+    mandate.member_name = member_doc.full_name
+    mandate.account_holder_name = account_holder_name
+    mandate.iban = iban
+    if bic:
+        mandate.bic = bic
+    mandate.sign_date = sign_date
+    mandate.mandate_type = mandate_type
+    
+    # Set usage flags
+    mandate.used_for_memberships = 1 if used_for_memberships else 0
+    mandate.used_for_donations = 1 if used_for_donations else 0
+    
+    # Set status to active
+    mandate.status = "Active"
+    mandate.is_active = 1
+    
+    mandate.insert(ignore_permissions=True)
+    
+    # Now link this mandate to the member using a direct database update
+    # This avoids issues with document state management
+    frappe.db.sql("""
+        INSERT INTO `tabMember SEPA Mandate Link`
+        (name, parent, parentfield, parenttype, sepa_mandate, is_current, mandate_reference, status, valid_from)
+        VALUES (%s, %s, 'sepa_mandates', 'Member', %s, 1, %s, %s, %s)
+    """, (frappe.generate_hash(), member, mandate.name, mandate.mandate_id, 'Active', mandate.sign_date))
+    
+    # Update any existing mandates to not be current
+    frappe.db.sql("""
+        UPDATE `tabMember SEPA Mandate Link`
+        SET is_current = 0
+        WHERE parent = %s AND sepa_mandate != %s
+    """, (member, mandate.name))
+    
+    # Commit the transaction to ensure all changes are saved
+    frappe.db.commit()
+    
+    return mandate.name
