@@ -45,9 +45,13 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
         })
         head_member.insert()
         
+        # Generate a unique name for the test chapter
+        test_chapter_name = f"Test Chapter {frappe.utils.now()[:19]}"
+        
         # Create a chapter
         self.test_chapter = frappe.get_doc({
             "doctype": "Chapter",
+            "name": test_chapter_name,  # Set an explicit name
             "chapter_head": head_member.name,
             "region": "Test Region",
             "introduction": "Test chapter for integration tests"
