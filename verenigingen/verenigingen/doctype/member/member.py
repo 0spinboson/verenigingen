@@ -1168,3 +1168,48 @@ def find_chapter_by_postal_code(postal_code):
         "success": True,
         "matching_chapters": matching_chapters
     }
+
+@frappe.whitelist()
+def check_and_handle_sepa_mandate(member, iban):
+    """Check if a mandate exists for this IBAN and handle accordingly"""
+    member_doc = frappe.get_doc("Member", member)
+    
+    # Find any mandate with matching IBAN
+    matching_mandates = frappe.get_all(
+        "SEPA Mandate",
+        filters={
+            "member": member,
+            "iban": iban,
+            "status": "Active",
+            "is_active": 1
+        },
+        fields=["name"]
+    )
+    
+    if matching_mandates:
+        # Found an active mandate with this IBAN
+        mandate_doc = frappe.get_doc("SEPA Mandate", matching_mandates[0].name)
+        
+        # See if this mandate is already set as current
+        is_current = False
+        for mandate_link in member_doc.sepa_mandates:
+            if mandate_link.sepa_mandate == mandate_doc.name and mandate_link.is_current:
+                is_current = True
+                break
+        
+        if not is_current:
+            # Set this mandate as current
+            for mandate_link in member_doc.sepa_mandates:
+                if mandate_link.sepa_mandate == mandate_doc.name:
+                    mandate_link.is_current = 1
+                else:
+                    mandate_link.is_current = 0
+            
+            member_doc.save(ignore_permissions=True)
+            return {"action": "use_existing", "mandate": mandate_doc.name}
+        else:
+            # Already set as current
+            return {"action": "none_needed"}
+    else:
+        # No matching mandate, need to create a new one
+        return {"action": "create_new"}
