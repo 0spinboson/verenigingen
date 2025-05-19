@@ -165,8 +165,8 @@ frappe.ui.form.on('Member', {
         }
         
         // Add button to change primary chapter
-        frm.add_custom_button(__('Change Primary Chapter'), function() {
-            change_primary_chapter(frm);
+        frm.add_custom_button(__('Change Chapter'), function() {
+            suggest_chapter_for_member(frm);
         }, __('Actions'));
         
         // Check if user is a board member of any chapter
@@ -478,6 +478,13 @@ frappe.ui.form.on('Member', {
         }
     },
     
+    primary_address: function(frm) {
+        // If address is set and chapter is not, suggest chapter
+        if (frm.doc.primary_address && !frm.doc.primary_chapter) {
+            suggest_chapter_from_address(frm);
+        }
+    },
+    
     createVolunteerRecord: function(frm) {
         // First get the email domain from settings
         frappe.call({
@@ -604,8 +611,126 @@ frappe.ui.form.on('Member SEPA Mandate Link', {
     }
 });
 
-// Function to change primary chapter
-function change_primary_chapter(frm) {
+// Function to suggest chapters based on address
+function suggest_chapter_from_address(frm) {
+    // First get the address details
+    frappe.call({
+        method: 'frappe.client.get',
+        args: {
+            doctype: 'Address',
+            name: frm.doc.primary_address
+        },
+        callback: function(r) {
+            if (r.message) {
+                const address = r.message;
+                
+                // Call the suggestion function with address details
+                suggest_chapter_for_member(frm, {
+                    postal_code: address.pincode,
+                    state: address.state,
+                    city: address.city
+                });
+            }
+        }
+    });
+}
+
+// Main function to suggest chapters for a member
+function suggest_chapter_for_member(frm, location_data) {
+    let postal_code, state, city;
+    
+    if (location_data) {
+        postal_code = location_data.postal_code;
+        state = location_data.state;
+        city = location_data.city;
+    }
+    
+    // If we have a primary address but no location data, fetch it
+    if (!location_data && frm.doc.primary_address) {
+        return suggest_chapter_from_address(frm);
+    }
+    
+    // Call server method to find matching chapters
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.chapter.chapter.suggest_chapter_for_member',
+        args: {
+            member_name: frm.doc.name,
+            postal_code: postal_code || null,
+            state: state || null,
+            city: city || null
+        },
+        callback: function(r) {
+            if (!r.message) {
+                // If no suggestions, show the simple chapter selector
+                show_chapter_selector(frm);
+                return;
+            }
+            
+            const results = r.message;
+            
+            // Prioritize matches in this order: postal > region > city
+            let best_matches = results.matches_by_postal.length ? results.matches_by_postal :
+                               results.matches_by_region.length ? results.matches_by_region :
+                               results.matches_by_city.length ? results.matches_by_city :
+                               [];
+                               
+            if (best_matches.length === 1) {
+                // Single best match - suggest directly
+                suggest_single_chapter(frm, best_matches[0], location_data);
+            } else if (best_matches.length > 1) {
+                // Multiple matches - show selection with matches highlighted
+                show_chapter_selector(frm, best_matches);
+            } else {
+                // No matches - show standard selector
+                show_chapter_selector(frm);
+            }
+        }
+    });
+}
+
+// Function to suggest a single chapter
+function suggest_single_chapter(frm, chapter, location_data) {
+    let location_text = "";
+    if (location_data) {
+        if (location_data.postal_code) {
+            location_text = __("postal code {0}", [location_data.postal_code]);
+        } else if (location_data.city) {
+            location_text = location_data.city;
+        } else if (location_data.state) {
+            location_text = location_data.state;
+        }
+    }
+    
+    frappe.confirm(
+        __('Based on your location in {0}, we suggest joining the {1} chapter. Would you like to join this chapter?', 
+        [location_text || 'your area', chapter.name]),
+        function() {
+            // Yes - set primary chapter
+            frappe.call({
+                method: 'frappe.client.set_value',
+                args: {
+                    doctype: 'Member',
+                    name: frm.doc.name,
+                    fieldname: 'primary_chapter',
+                    value: chapter.name
+                },
+                callback: function(r) {
+                    if(!r.exc) {
+                        frappe.msgprint(__('You have joined the {0} chapter', [chapter.name]));
+                        frm.reload_doc();
+                    }
+                }
+            });
+        },
+        function() {
+            // No - show the standard chapter selection dialog
+            show_chapter_selector(frm);
+        }
+    );
+}
+
+// Function to show chapter selector dialog
+function show_chapter_selector(frm, suggested_chapters) {
     frappe.call({
         method: 'frappe.client.get_list',
         args: {
@@ -613,7 +738,7 @@ function change_primary_chapter(frm) {
             filters: {
                 'published': 1
             },
-            fields: ['name']
+            fields: ['name', 'region', 'introduction']
         },
         callback: function(r) {
             if (!r.message || !r.message.length) {
@@ -621,31 +746,53 @@ function change_primary_chapter(frm) {
                 return;
             }
             
-            var chapters = r.message.map(function(c) { return c.name; });
+            const chapters = r.message;
             
-            var d = new frappe.ui.Dialog({
-                title: __('Change Primary Chapter'),
+            // Format options for the select field
+            let options = chapters.map(function(chapter) {
+                return {
+                    value: chapter.name,
+                    label: __("{0} ({1})", [chapter.name, chapter.region])
+                };
+            });
+            
+            // Determine the most suitable default
+            let default_chapter = frm.doc.primary_chapter;
+            
+            // If we have suggested chapters, use the first one as default
+            if (suggested_chapters && suggested_chapters.length) {
+                default_chapter = suggested_chapters[0].name;
+            }
+            
+            const d = new frappe.ui.Dialog({
+                title: __('Select Chapter'),
                 fields: [
                     {
-                        label: __('New Primary Chapter'),
+                        label: __('Chapter'),
                         fieldname: 'chapter',
                         fieldtype: 'Select',
-                        options: chapters,
+                        options: options,
                         reqd: 1,
-                        default: frm.doc.primary_chapter
+                        default: default_chapter
                     },
                     {
-                        label: __('Reason for Change'),
-                        fieldname: 'reason',
-                        fieldtype: 'Small Text'
+                        label: __('Note'),
+                        fieldname: 'note',
+                        fieldtype: 'Small Text',
+                        depends_on: 'eval:!doc.chapter'
                     }
                 ],
-                primary_action_label: __('Update'),
+                primary_action_label: __('Join Chapter'),
                 primary_action: function() {
-                    var values = d.get_values();
+                    const values = d.get_values();
+                    
+                    if (!values.chapter) {
+                        frappe.msgprint(__('Please select a chapter'));
+                        return;
+                    }
                     
                     if (values.chapter === frm.doc.primary_chapter) {
-                        frappe.msgprint(__('No change in primary chapter'));
+                        frappe.msgprint(__('No change in chapter'));
                         d.hide();
                         return;
                     }
@@ -660,8 +807,8 @@ function change_primary_chapter(frm) {
                         },
                         callback: function(r) {
                             if(!r.exc) {
-                                // Log the change if a reason was provided
-                                if (values.reason) {
+                                // Log the change if a note was provided
+                                if (values.note) {
                                     frappe.call({
                                         method: 'frappe.client.insert',
                                         args: {
@@ -670,14 +817,14 @@ function change_primary_chapter(frm) {
                                                 comment_type: 'Info',
                                                 reference_doctype: 'Member',
                                                 reference_name: frm.doc.name,
-                                                content: __('Changed primary chapter from {0} to {1}. Reason: {2}', 
-                                                    [frm.doc.primary_chapter, values.chapter, values.reason])
+                                                content: __('Changed chapter to {0}. Note: {1}', 
+                                                    [values.chapter, values.note])
                                             }
                                         }
                                     });
                                 }
                                 
-                                frappe.msgprint(__('Primary chapter updated'));
+                                frappe.msgprint(__('Successfully joined the {0} chapter', [values.chapter]));
                                 frm.reload_doc();
                                 d.hide();
                             }
@@ -687,6 +834,19 @@ function change_primary_chapter(frm) {
             });
             
             d.show();
+            
+            // If we have suggested chapters, highlight them in the dialog
+            if (suggested_chapters && suggested_chapters.length) {
+                setTimeout(function() {
+                    // Add a note about the suggestions
+                    const suggested_names = suggested_chapters.map(c => c.name).join(', ');
+                    const suggestion_note = $(`<div class="alert alert-info mt-3">
+                        <span>${__('Suggested chapters based on your location:')} <strong>${suggested_names}</strong></span>
+                    </div>`);
+                    
+                    $(d.body).find('.form-layout').prepend(suggestion_note);
+                }, 500);
+            }
         }
     });
 }
