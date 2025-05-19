@@ -12,6 +12,24 @@ class SEPAMandate(Document):
     def validate(self):
         self.validate_dates()
         self.validate_iban()
+        self.sync_status_and_active_flag()
+        
+    def sync_status_and_active_flag(self):
+        """Ensure status and is_active flag are in sync"""
+        # If status changes, update is_active flag
+        if self.status == "Active" and not self.is_active:
+            self.is_active = 1
+        elif self.status in ["Suspended", "Cancelled", "Expired"] and self.is_active:
+            self.is_active = 0
+            
+        # If is_active changes, update status (unless status is a terminal state)
+        if self.status not in ["Cancelled", "Expired", "Draft"]:
+            if self.is_active and self.status == "Suspended":
+                self.status = "Active"
+            elif not self.is_active and self.status == "Active":
+                self.status = "Suspended"
+        
+        # Now apply the date-based status rules
         self.set_status()
     
     def validate_dates(self):
@@ -38,26 +56,19 @@ class SEPAMandate(Document):
     def set_status(self):
         """Set status based on dates and flags, respecting manual selections"""
         # Don't override these manually set statuses
-        if self.status in ["Cancelled"]:
-            # Cancelled is a manual terminal state that shouldn't be overridden
+        if self.status in ["Cancelled", "Draft"]:
+            # These are manual states that shouldn't be overridden
             return
-            
-        # Handle Draft status separately - keep it as Draft until submission
-        if self.status == "Draft" and self.docstatus == 0:
-            # Keep as Draft until submitted
-            return
-            
-        # Handle Suspended - don't override a manual Suspended status
-        if self.status == "Suspended" and not self.is_active:
-            # User wants it suspended and is_active flag is consistent
-            return
-            
+        
         # Auto-determine status based on conditions
         if self.expiry_date and getdate(self.expiry_date) < getdate(today()):
             self.status = "Expired"
-        elif not self.is_active:
+            self.is_active = 0
+        elif not self.is_active and self.status != "Expired":
+            # Only change to Suspended if not already Expired
             self.status = "Suspended"
-        else:
+        elif self.is_active and self.status not in ["Expired", "Cancelled"]:
+            # Only change to Active if not in a terminal state
             self.status = "Active"
     
     def on_update(self):
