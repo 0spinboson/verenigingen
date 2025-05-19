@@ -16,21 +16,24 @@ class SEPAMandate(Document):
         
     def sync_status_and_active_flag(self):
         """Ensure status and is_active flag are in sync"""
-        # If status changes, update is_active flag
+        # First sync the is_active flag based on status
         if self.status == "Active" and not self.is_active:
             self.is_active = 1
         elif self.status in ["Suspended", "Cancelled", "Expired"] and self.is_active:
             self.is_active = 0
-            
-        # If is_active changes, update status (unless status is a terminal state)
+        
+        # Then sync the status based on is_active flag
+        # But don't override these terminal/special states
         if self.status not in ["Cancelled", "Expired", "Draft"]:
-            if self.is_active and self.status == "Suspended":
+            if self.is_active and self.status != "Active":
                 self.status = "Active"
-            elif not self.is_active and self.status == "Active":
+            elif not self.is_active and self.status != "Suspended":
                 self.status = "Suspended"
         
-        # Now apply the date-based status rules
-        self.set_status()
+        # Finally, check date-based status (this overrides previous steps)
+        if self.expiry_date and getdate(self.expiry_date) < getdate(today()):
+            self.status = "Expired"
+            self.is_active = 0
     
     def validate_dates(self):
         # Ensure sign date is not in the future
@@ -43,7 +46,7 @@ class SEPAMandate(Document):
                 frappe.throw(_("Expiry date cannot be before sign date"))
     
     def validate_iban(self):
-        # Basic IBAN validation (you might want to add more sophisticated validation)
+        # Basic IBAN validation
         if self.iban:
             # Remove spaces and convert to uppercase
             iban = self.iban.replace(' ', '').upper()
@@ -52,24 +55,6 @@ class SEPAMandate(Document):
             # Basic length check (varies by country)
             if len(iban) < 15 or len(iban) > 34:
                 frappe.throw(_("Invalid IBAN length"))
-    
-    def set_status(self):
-        """Set status based on dates and flags, respecting manual selections"""
-        # Don't override these manually set statuses
-        if self.status in ["Cancelled", "Draft"]:
-            # These are manual states that shouldn't be overridden
-            return
-        
-        # Auto-determine status based on conditions
-        if self.expiry_date and getdate(self.expiry_date) < getdate(today()):
-            self.status = "Expired"
-            self.is_active = 0
-        elif not self.is_active and self.status != "Expired":
-            # Only change to Suspended if not already Expired
-            self.status = "Suspended"
-        elif self.is_active and self.status not in ["Expired", "Cancelled"]:
-            # Only change to Active if not in a terminal state
-            self.status = "Active"
     
     def on_update(self):
         """
