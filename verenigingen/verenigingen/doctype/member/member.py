@@ -865,6 +865,7 @@ class Member(Document):
         
         return mandate.name
 
+@frappe.whitelist()
 def is_chapter_management_enabled():
     """Check if chapter management is enabled in settings"""
     try:
