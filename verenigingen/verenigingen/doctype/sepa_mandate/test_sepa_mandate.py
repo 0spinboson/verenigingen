@@ -112,12 +112,17 @@ class TestSEPAMandate(unittest.TestCase):
         self.assertEqual(self.mandate.status, "Active")
         
         # Change is_active to 0 and verify status changes to Suspended
-        self.mandate.is_active = 0
-        self.mandate.save()
+        mandate = frappe.get_doc("SEPA Mandate", self.mandate.name)
+        mandate.is_active = 0
+        # Save will trigger both validate and before_save
+        mandate.save()
         
-        # Reload the document to ensure we see the saved changes
-        self.mandate.reload()
-        self.assertEqual(self.mandate.status, "Suspended")
+        # Fetch a fresh copy of the mandate from the database
+        refreshed = frappe.get_doc("SEPA Mandate", self.mandate.name)
+        self.assertEqual(refreshed.status, "Suspended", 
+                         f"Expected status to be Suspended but got {refreshed.status}")
+        self.assertEqual(refreshed.is_active, 0,
+                         f"Expected is_active to be 0 but got {refreshed.is_active}")
     
     def test_status_suspended(self):
         """Test status is set to Suspended when is_active=0"""
@@ -127,12 +132,17 @@ class TestSEPAMandate(unittest.TestCase):
         self.assertEqual(self.mandate.status, "Suspended")
         
         # Change is_active to 1 and verify status changes to Active
-        self.mandate.is_active = 1
-        self.mandate.save()
+        mandate = frappe.get_doc("SEPA Mandate", self.mandate.name)
+        mandate.is_active = 1
+        # Save will trigger both validate and before_save
+        mandate.save()
         
-        # Reload the document to ensure we see the saved changes
-        self.mandate.reload()
-        self.assertEqual(self.mandate.status, "Active")
+        # Fetch a fresh copy of the mandate from the database
+        refreshed = frappe.get_doc("SEPA Mandate", self.mandate.name)
+        self.assertEqual(refreshed.status, "Active",
+                         f"Expected status to be Active but got {refreshed.status}")
+        self.assertEqual(refreshed.is_active, 1,
+                         f"Expected is_active to be 1 but got {refreshed.is_active}")
     
     def test_status_expired(self):
         """Test status is set to Expired when expiry date is in the past"""
