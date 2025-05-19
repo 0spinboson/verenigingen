@@ -1252,118 +1252,33 @@ function get_doc_mandate_iban(mandate_name) {
         });
 }
 
-// Function to check for existing mandates with the current IBAN
-async function checkForExistingMandate(frm) {
-    // Skip check if payment method isn't Direct Debit
-    if (frm.doc.payment_method !== 'Direct Debit') {
+function checkForExistingMandate(frm) {
+    if (frm.doc.payment_method !== 'Direct Debit' || !frm.doc.iban || !frm.doc.bank_account_name) {
         return;
     }
     
-    // Skip if we don't have IBAN or bank account name
-    if (!frm.doc.iban || !frm.doc.bank_account_name) {
-        return;
-    }
-    
-    // Check if we already have an active mandate for this IBAN
-    let existingMandateWithSameIBAN = false;
-    
-    // MODIFICATION: Use Promise-based approach to avoid racing conditions
-    if (frm.doc.sepa_mandates && frm.doc.sepa_mandates.length) {
-        // First check if there's already a current active mandate
-        const currentMandate = frm.doc.sepa_mandates.find(mandate => 
-            mandate.is_current && mandate.status === 'Active'
-        );
-        
-        if (currentMandate) {
-            try {
-                // Get IBAN for the current mandate
-                const result = await frappe.db.get_value('SEPA Mandate', currentMandate.sepa_mandate, 'iban');
-                const mandateIBAN = result.message.iban;
-                
-                // If IBAN matches current mandate, no need to do anything
-                if (mandateIBAN === frm.doc.iban) {
-                    existingMandateWithSameIBAN = true;
-                    return; // Exit early - no changes needed
+    // Use a dedicated server method to check and handle mandates
+    frappe.call({
+        method: 'vereiningen.verenigingen.doctype.member.member.check_and_handle_sepa_mandate',
+        args: {
+            member: frm.doc.name,
+            iban: frm.doc.iban
+        },
+        callback: function(r) {
+            if (r.message) {
+                if (r.message.action === 'create_new') {
+                    // Need to create a new mandate - show dialog after a delay
+                    setTimeout(() => promptCreateMandate(frm), 1000);
+                } else if (r.message.action === 'use_existing') {
+                    // Server handled setting an existing mandate as current
+                    frappe.show_alert({
+                        message: __('Using existing SEPA mandate for this IBAN'),
+                        indicator: 'green'
+                    }, 5);
+                    frm.reload_doc();
                 }
-            } catch (e) {
-                console.error("Error checking current mandate IBAN:", e);
+                // If 'none_needed', do nothing
             }
         }
-        
-        // If no current mandate matches, check all active mandates
-        for (const mandate of frm.doc.sepa_mandates) {
-            if (mandate.status === 'Active') {
-                try {
-                    // Get IBAN for this mandate
-                    const result = await frappe.db.get_value('SEPA Mandate', mandate.sepa_mandate, 'iban');
-                    const mandateIBAN = result.message.iban;
-                    
-                    if (mandateIBAN === frm.doc.iban) {
-                        existingMandateWithSameIBAN = true;
-                        
-                        // If this mandate is not current, make it current
-                        if (!mandate.is_current) {
-                            // Deactivate any current mandates first
-                            frm.doc.sepa_mandates.forEach(function(m) {
-                                if (m.is_current) {
-                                    frappe.model.set_value(m.doctype, m.name, 'is_current', 0);
-                                }
-                            });
-                            
-                            // Make this mandate current
-                            frappe.model.set_value(mandate.doctype, mandate.name, 'is_current', 1);
-                            frm.refresh_field('sepa_mandates');
-                            
-                            frappe.show_alert({
-                                message: __('Found existing mandate for this IBAN and set it as current'),
-                                indicator: 'green'
-                            }, 5);
-                        }
-                        break;
-                    }
-                } catch (e) {
-                    console.error("Error checking mandate IBAN:", e);
-                }
-            }
-        }
-    }
-    
-    // If no existing mandate with this IBAN, deactivate any current mandates
-    // and prompt to create a new one
-    if (!existingMandateWithSameIBAN) {
-        // Deactivate any current mandates
-        let currentMandatesDeactivated = false;
-        
-        for (const mandate of frm.doc.sepa_mandates || []) {
-            if (mandate.is_current && mandate.status === 'Active') {
-                try {
-                    // Suspend this mandate in the database
-                    await frappe.db.set_value('SEPA Mandate', mandate.sepa_mandate, {
-                        'status': 'Suspended',
-                        'is_active': 0
-                    });
-                    
-                    // Update local state
-                    frappe.model.set_value(mandate.doctype, mandate.name, 'status', 'Suspended');
-                    frappe.model.set_value(mandate.doctype, mandate.name, 'is_current', 0);
-                    currentMandatesDeactivated = true;
-                } catch (e) {
-                    console.error("Error deactivating mandate:", e);
-                }
-            }
-        }
-        
-        if (currentMandatesDeactivated) {
-            frappe.show_alert({
-                message: __('Previous SEPA mandates have been deactivated due to IBAN change'),
-                indicator: 'orange'
-            }, 5);
-        }
-        
-        // MODIFICATION: Use setTimeout to avoid document modified error
-        // by ensuring this runs after the current save operation completes
-        setTimeout(() => {
-            promptCreateMandate(frm);
-        }, 500);
-    }
+    });
 }
