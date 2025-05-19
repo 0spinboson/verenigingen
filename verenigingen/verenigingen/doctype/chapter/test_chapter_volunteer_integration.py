@@ -123,23 +123,27 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
             
     def add_board_members_to_chapter(self):
         """Add test members as board members to test chapter"""
-        # Define some board roles
+        # Define board roles - these should already be created in setUp
         roles = ["Chair", "Secretary", "Treasurer"]
         
         # Add each member with a role
         for i, member in enumerate(self.test_members):
             role = roles[i % len(roles)]
             
+            # Verify the role exists before trying to use it
+            if not frappe.db.exists("Chapter Role", role):
+                frappe.throw(f"Test chapter role {role} does not exist. Please ensure create_test_chapter_roles was called.")
+            
             self.test_chapter.append("board_members", {
                 "member": member.name,
                 "member_name": member.full_name,
                 "email": member.email,
                 "chapter_role": role,
-                "from_date": today(),
+                "from_date": frappe.utils.today(),
                 "is_active": 1
             })
             
-        self.test_chapter.save()
+        self.test_chapter.save(ignore_permissions=True)
     
     def test_create_volunteer_from_board_member(self):
         """Test creating a volunteer record from a board member"""
