@@ -1259,7 +1259,7 @@ function checkForExistingMandate(frm) {
     
     // Use a dedicated server method to check and handle mandates
     frappe.call({
-        method: 'vereiningen.verenigingen.doctype.member.member.check_and_handle_sepa_mandate',
+        method: 'verenigingen.verenigingen.doctype.member.member.check_and_handle_sepa_mandate',
         args: {
             member: frm.doc.name,
             iban: frm.doc.iban
