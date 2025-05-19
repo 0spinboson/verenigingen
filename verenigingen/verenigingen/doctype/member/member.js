@@ -20,35 +20,28 @@ const debouncedIbanHandler = debounce(function(frm) {
         // Format the IBAN
         const formattedIban = formatIBAN(frm.doc.iban);
         
-        // Only proceed if there's an actual change to the normalized value
-        const normalizedOriginal = originalIban.replace(/\s+/g, '').toUpperCase();
-        const normalizedFormatted = formattedIban.replace(/\s+/g, '').toUpperCase();
+        // Always update formatting for consistency
+        if (formattedIban !== originalIban) {
+            frm.set_value('iban', formattedIban);
+        }
         
-        if (normalizedOriginal !== normalizedFormatted) {
-            // Real change detected - update IBAN and derive BIC
-            frm.set_value('iban', formattedIban);
-            
-            // Try to derive BIC from IBAN
-            if (frm.doc.payment_method === 'Direct Debit' && (!frm.doc.bic || frm.doc.bic === '')) {
-                frappe.call({
-                    method: 'verenigingen.verenigingen.doctype.member.member.derive_bic_from_iban',
-                    args: {
-                        iban: formattedIban
-                    },
-                    callback: function(r) {
-                        if (r.message && r.message.bic) {
-                            frm.set_value('bic', r.message.bic);
-                            frappe.show_alert({
-                                message: __('BIC/SWIFT code derived from IBAN'),
-                                indicator: 'green'
-                            }, 3);
-                        }
+        // Try to derive BIC from IBAN if BIC is empty, regardless of IBAN change
+        if (frm.doc.payment_method === 'Direct Debit' && (!frm.doc.bic || frm.doc.bic === '')) {
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.member.member.derive_bic_from_iban',
+                args: {
+                    iban: formattedIban
+                },
+                callback: function(r) {
+                    if (r.message && r.message.bic) {
+                        frm.set_value('bic', r.message.bic);
+                        frappe.show_alert({
+                            message: __('BIC/SWIFT code derived from IBAN'),
+                            indicator: 'green'
+                        }, 3);
                     }
-                });
-            }
-        } else if (formattedIban !== originalIban) {
-            // Only the formatting changed (spaces, etc.) - just update the display
-            frm.set_value('iban', formattedIban);
+                }
+            });
         }
     }
 }, 500);
@@ -708,21 +701,24 @@ frappe.ui.form.on('Member', {
     },
     
     after_save: function(frm) {
-        // Replace your current after_save with this
+        // Only proceed if we have direct debit with bank details
         if (frm.doc.payment_method === 'Direct Debit' && 
             frm.doc.iban && frm.doc.bank_account_name) {
             
             // Store the IBAN normalized value in a custom property for comparison
             const currentIbanNormalized = frm.doc.iban.replace(/\s+/g, '').toUpperCase();
             
-            // Compare with previous value (if exists)
-            if (!frm._previous_iban_normalized || 
-                frm._previous_iban_normalized !== currentIbanNormalized) {
-                
-                // Update stored value
+            // Initialize previous value if it doesn't exist
+            if (!frm._previous_iban_normalized) {
+                frm._previous_iban_normalized = currentIbanNormalized;
+            }
+            
+            // Only check for mandate if normalized IBAN actually changed
+            if (frm._previous_iban_normalized !== currentIbanNormalized) {
+                // Update stored value before checking for mandate
                 frm._previous_iban_normalized = currentIbanNormalized;
                 
-                // Only check for mandate if IBAN changed
+                // Only check for mandate if IBAN actually changed
                 checkForExistingMandate(frm);
             }
         }
