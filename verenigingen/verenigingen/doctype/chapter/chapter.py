@@ -508,6 +508,8 @@ def get_chapters_by_postal_code(postal_code):
 
 @frappe.whitelist()
 def suggest_chapter_for_member(member_name, postal_code=None, state=None, city=None):
+    if not is_chapter_management_enabled():
+        return {"all_chapters": [], "disabled": True}
     """Suggest appropriate chapters for a member based on location data"""
     result = {
         "matches_by_postal": [],
@@ -556,3 +558,12 @@ def suggest_chapter_for_member(member_name, postal_code=None, state=None, city=N
                     result["matches_by_city"].append(chapter)
     
     return result
+
+def is_chapter_management_enabled():
+    """Check if chapter management is enabled in settings"""
+    try:
+        return frappe.db.get_single_value("Verenigingen Settings", "enable_chapter_management") == 1
+    except:
+        # Default to enabled if setting doesn't exist
+        return True
+
