@@ -12,33 +12,49 @@ class SEPAMandate(Document):
     def validate(self):
         self.validate_dates()
         self.validate_iban()
-        self.sync_status_and_active_flag()
+        self.set_status_based_on_dates()
         
-    def before_save(self):
-        """This is called just before saving the document"""
-        self.sync_status_and_active_flag()
-        
-    def sync_status_and_active_flag(self):
-        """Ensure status and is_active flag are in sync"""
-        # First sync the is_active flag based on status
-        if self.status == "Active" and not self.is_active:
-            self.is_active = 1
-        elif self.status in ["Suspended", "Cancelled", "Expired"] and self.is_active:
-            self.is_active = 0
-        
-        # Then sync the status based on is_active flag
-        # But don't override these terminal/special states
-        if self.status not in ["Cancelled", "Expired", "Draft"]:
-            if self.is_active and self.status != "Active":
-                self.status = "Active"
-            elif not self.is_active and self.status != "Suspended":
-                self.status = "Suspended"
-        
-        # Finally, check date-based status (this overrides previous steps)
-        if self.expiry_date and getdate(self.expiry_date) < getdate(today()):
+    def set_status_based_on_dates(self):
+        """Set expiry status based on dates"""
+        # Check expiry date - this takes precedence over other statuses
+        # except Cancelled which is manually set
+        if self.expiry_date and getdate(self.expiry_date) < getdate(today()) and self.status != "Cancelled":
             self.status = "Expired"
             self.is_active = 0
     
+    def set_value(self, fieldname, value):
+        """Override set_value for special field handling"""
+        # If setting is_active flag, update status accordingly
+        if fieldname == "is_active":
+            # Only update status if not in these special statuses
+            if self.status not in ["Cancelled", "Expired", "Draft"]:
+                if value:
+                    # When activating, set status to Active
+                    super().set_value(fieldname, value)
+                    super().set_value("status", "Active")
+                else:
+                    # When deactivating, set status to Suspended
+                    super().set_value(fieldname, value)
+                    super().set_value("status", "Suspended")
+            else:
+                # Just set the is_active value without changing status
+                super().set_value(fieldname, value)
+        # If setting status, update is_active flag accordingly
+        elif fieldname == "status":
+            if value == "Active":
+                super().set_value(fieldname, value)
+                super().set_value("is_active", 1)
+            elif value in ["Suspended", "Cancelled", "Expired"]:
+                super().set_value(fieldname, value)
+                super().set_value("is_active", 0)
+            else:
+                # Just set the status without changing is_active
+                super().set_value(fieldname, value)
+        else:
+            # For other fields, just use the parent class implementation
+            super().set_value(fieldname, value)
+        return self
+        
     def validate_dates(self):
         # Ensure sign date is not in the future
         if self.sign_date and getdate(self.sign_date) > getdate(today()):
