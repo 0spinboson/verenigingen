@@ -6,14 +6,23 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import getdate, today
 
-
-
 class SEPAMandate(Document):
     def validate(self):
         self.validate_dates()
         self.validate_iban()
         self.set_status_based_on_dates()
         
+        # Also synchronize status and is_active flag during validation
+        self.sync_status_is_active()
+        
+    def sync_status_is_active(self):
+        """Synchronize status and is_active flag explicitly"""
+        # Make sure is_active matches status
+        if self.status == "Active" and not self.is_active:
+            self.is_active = 1
+        elif self.status in ["Suspended", "Cancelled", "Expired"] and self.is_active:
+            self.is_active = 0
+            
     def set_status_based_on_dates(self):
         """Set expiry status based on dates"""
         # Check expiry date - this takes precedence over other statuses
