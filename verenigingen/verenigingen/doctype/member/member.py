@@ -1274,22 +1274,30 @@ def create_and_link_mandate(member, iban, bic=None, account_holder_name=None,
     
     mandate.insert(ignore_permissions=True)
     
-    # Now link this mandate to the member using a direct database update
-    # This avoids issues with document state management
+    # Check if a link for this mandate already exists and delete it to avoid duplicates
+    frappe.db.delete("Member SEPA Mandate Link", {
+        "parent": member,
+        "sepa_mandate": mandate.name
+    })
+    
+    # Now update all mandate links to set is_current=0
+    frappe.db.sql("""
+        UPDATE `tabMember SEPA Mandate Link`
+        SET is_current = 0
+        WHERE parent = %s
+    """, (member,))
+    
+    # Add the new mandate link
     frappe.db.sql("""
         INSERT INTO `tabMember SEPA Mandate Link`
         (name, parent, parentfield, parenttype, sepa_mandate, is_current, mandate_reference, status, valid_from)
         VALUES (%s, %s, 'sepa_mandates', 'Member', %s, 1, %s, %s, %s)
     """, (frappe.generate_hash(), member, mandate.name, mandate.mandate_id, 'Active', mandate.sign_date))
     
-    # Update any existing mandates to not be current
-    frappe.db.sql("""
-        UPDATE `tabMember SEPA Mandate Link`
-        SET is_current = 0
-        WHERE parent = %s AND sepa_mandate != %s
-    """, (member, mandate.name))
-    
     # Commit the transaction to ensure all changes are saved
     frappe.db.commit()
+    
+    # Clear document cache to ensure fresh data on reload
+    frappe.clear_document_cache("Member", member)
     
     return mandate.name
