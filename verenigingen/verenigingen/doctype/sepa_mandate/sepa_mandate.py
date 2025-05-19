@@ -14,6 +14,10 @@ class SEPAMandate(Document):
         self.validate_iban()
         self.sync_status_and_active_flag()
         
+    def before_save(self):
+        """This is called just before saving the document"""
+        self.sync_status_and_active_flag()
+        
     def sync_status_and_active_flag(self):
         """Ensure status and is_active flag are in sync"""
         # First sync the is_active flag based on status
