@@ -30,6 +30,19 @@ class ChapterRole(Document):
                     indicator="orange",
                     alert=True
                 )
+    def after_save(self):
+        """Update chapter heads if this is a chair role"""
+        # Check if this is a chair role and was modified
+        if self.is_chair and self.is_active and self.has_value_changed('is_chair'):
+            # Find chapters using this role and update their heads
+            try:
+                from vereiningen.verenigingen.doctype.chapter_role.chapter_role import update_chapters_with_role
+                update_chapters_with_role(self.name)
+            except Exception as e:
+                frappe.log_error(
+                    message=f"Error updating chapters from ChapterRole.after_save: {str(e)}",
+                    title="ChapterRole after_save Error"
+                )
 
 @frappe.whitelist()
 def update_chapters_with_role(role):
