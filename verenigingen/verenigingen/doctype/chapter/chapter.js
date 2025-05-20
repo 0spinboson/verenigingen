@@ -108,6 +108,9 @@ frappe.ui.form.on('Chapter Board Member', {
                         );
                     }
                 });
+                
+                // Add member to chapter's members if not already there
+                add_board_member_to_members(frm, row.member);
             });
         }
     },
@@ -150,6 +153,38 @@ frappe.ui.form.on('Chapter Board Member', {
         }
     }
 });
+
+// Function to add a board member to the chapter's members list
+function add_board_member_to_members(frm, member_id) {
+    // Check if the member is already in the members list
+    let already_member = false;
+    
+    if (frm.doc.members) {
+        for (let i = 0; i < frm.doc.members.length; i++) {
+            if (frm.doc.members[i].member === member_id) {
+                already_member = true;
+                break;
+            }
+        }
+    }
+    
+    // If not already a member, add them
+    if (!already_member) {
+        frappe.db.get_doc("Member", member_id).then(member_doc => {
+            let new_member = frm.add_child("members");
+            new_member.member = member_id;
+            new_member.member_name = member_doc.full_name;
+            new_member.enabled = 1;
+            
+            frm.refresh_field("members");
+            
+            frappe.show_alert({
+                message: __("Board member {0} added to chapter members list", [member_doc.full_name]),
+                indicator: "green"
+            }, 5);
+        });
+    }
+}
 
 // Function to send email to board members
 function send_email_to_board_members(frm) {
@@ -406,6 +441,9 @@ function add_new_board_member(frm) {
                     frm.refresh_field('board_members');
                     d.hide();
                     
+                    // Add board member to chapter's members list
+                    add_board_member_to_members(frm, values.member);
+                    
                     // Check if there are other active members with the same role
                     check_for_duplicate_roles(frm, child);
                     
@@ -657,7 +695,7 @@ function show_chapter_stats(frm) {
                 stats.recent_memberships.forEach(function(membership) {
                     html += '<tr>';
                     html += '<td>' + membership.member + '</td>';
-                    html += '<td>' + frappe.datetime.str_to_user(membership.start_date) + '</td>';
+                    html += '<td>' + frappe.format_date(membership.start_date) + '</td>';
                     html += '<td>' + membership.status + '</td>';
                     html += '</tr>';
                 });
