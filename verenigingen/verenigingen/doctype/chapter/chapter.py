@@ -135,11 +135,32 @@ class Chapter(WebsiteGenerator):
             # If role doesn't exist or has no permissions level
             return False
     
+    # Update the get_context method to use Member instead of User
     def get_context(self, context):
         context.no_cache = True
         context.show_sidebar = True
         context.parents = [dict(label='View All Chapters',
             route='chapters', title='View Chapters')]
+        
+        # Convert chapter members to use Member doctype
+        chapter_members = []
+        for member in self.members:
+            if member.enabled:
+                try:
+                    member_doc = frappe.get_doc("Member", member.member)
+                    chapter_members.append({
+                        "name": member.member,
+                        "full_name": member_doc.full_name,
+                        "introduction": member.introduction,
+                        "website_url": member.website_url,
+                        "enabled": member.enabled
+                    })
+                except:
+                    # Handle case where member might have been deleted
+                    pass
+        
+        # Add members to context for template
+        context.members = chapter_members
         
         # Add board members to context for template
         context.board_members = self.get_board_members()
@@ -207,12 +228,35 @@ class Chapter(WebsiteGenerator):
             "is_active": 1
         })
         
+        # Also add to chapter members if not already a member
+        self._add_to_members(member)
+        
         self.save()
         
         # Notify the member
         self.notify_board_member_added(member, role)
         
         return True
+
+    # Helper method to add board member to members
+    def _add_to_members(self, member_id):
+        """Add a board member to chapter members if not already there"""
+        # Check if already a member
+        for member in self.members:
+            if member.member == member_id:
+                if not member.enabled:
+                    # Re-enable if disabled
+                    member.enabled = 1
+                    member.leave_reason = None
+                return
+        
+        # Not a member yet, add them
+        member_doc = frappe.get_doc("Member", member_id)
+        self.append("members", {
+            "member": member_id,
+            "member_name": member_doc.full_name,
+            "enabled": 1
+        })
     
     @frappe.whitelist()
     def remove_board_member(self, member, end_date=None):
@@ -238,6 +282,81 @@ class Chapter(WebsiteGenerator):
         self.notify_board_member_removed(member)
         
         return True
+
+    def add_member(self, member_id, introduction=None, website_url=None):
+        """Add a member to this chapter"""
+        if not member_id:
+            frappe.throw(_("Member ID is required"))
+            
+        # Check if member already exists in chapter
+        for member in self.members:
+            if member.member == member_id:
+                # Already a member - just ensure enabled
+                if not member.enabled:
+                    member.enabled = 1
+                    member.leave_reason = None
+                    self.save()
+                    return True
+                return False
+        
+        # Get member details
+        member_doc = frappe.get_doc("Member", member_id)
+        
+        # Add to members table
+        self.append("members", {
+            "member": member_id,
+            "member_name": member_doc.full_name,
+            "introduction": introduction,
+            "website_url": website_url,
+            "enabled": 1
+        })
+        
+        self.save()
+        return True
+    
+    def remove_member(self, member_id, leave_reason=None):
+        """Remove or disable a member from this chapter"""
+        if not member_id:
+            frappe.throw(_("Member ID is required"))
+            
+        # Find the member in the table
+        for i, member in enumerate(self.members):
+            if member.member == member_id:
+                if leave_reason:
+                    # Disable with reason
+                    member.enabled = 0
+                    member.leave_reason = leave_reason
+                    self.save()
+                else:
+                    # Remove completely
+                    self.members.remove(member)
+                    self.save()
+                return True
+        
+        return False
+    
+    def get_members(self, include_disabled=False):
+        """Get list of members with details"""
+        members = []
+        
+        for member in self.members:
+            if include_disabled or member.enabled:
+                try:
+                    member_doc = frappe.get_doc("Member", member.member)
+                    members.append({
+                        "id": member.member,
+                        "name": member_doc.full_name,
+                        "email": member_doc.email,
+                        "enabled": member.enabled,
+                        "introduction": member.introduction,
+                        "website_url": member.website_url,
+                        # Add other relevant fields
+                    })
+                except:
+                    # Handle case where member might have been deleted
+                    pass
+                    
+        return members
     
     @frappe.whitelist()
     def transition_board_role(self, member, new_role, transition_date=None):
@@ -399,12 +518,13 @@ def get_chapter_permission_query_conditions(user=None):
     # Default - show published chapters
     return "`tabChapter`.published = 1"
 
+# Update leave function to use Member instead of User
 @frappe.whitelist()
-def leave(title, user_id, leave_reason):
+def leave(title, member_id, leave_reason):
     """Leave a chapter"""
     chapter = frappe.get_doc("Chapter", title)
     for member in chapter.members:
-        if member.user == user_id:
+        if member.member == member_id:
             member.enabled = 0
             member.leave_reason = leave_reason
     chapter.save(ignore_permissions=1)
