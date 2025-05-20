@@ -3,12 +3,19 @@
 		<a href={{ doc.route }}>
 			<h3>{{ doc.name }}</h3>
 			<p>
-				<span class="label"> Chapter Head : {{ frappe.db.get_value('User', chapter_head, 'full_name') }} </span>
+				<span class="label"> Chapter Head : 
+				{% if chapter_head %}
+					{% set head_doc = frappe.get_doc('Member', chapter_head) %}
+					{{ head_doc.full_name }}
+				{% else %}
+					Not Assigned
+				{% endif %}
+				</span>
 				<span class="label">
 					{% if members %}
 						{% set index = [] %}
-						{% for user in members %}
-							{% if user.enabled == 1 %}
+						{% for member in members %}
+							{% if member.enabled == 1 %}
 								{% set __ = index.append(1) %}
 							{% endif %}
 						{% endfor %}
