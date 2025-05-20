@@ -16,7 +16,7 @@ class TestChapterRole(FrappeTestCase):
         # Clean up any existing test roles
         self.cleanup_test_data()
         
-        # Create a test role
+        # Create a test role explicitly NOT as chair
         self.test_role = frappe.get_doc({
             "doctype": "Chapter Role",
             "role_name": self.role_name,
@@ -98,18 +98,32 @@ class TestChapterRole(FrappeTestCase):
             "email": f"test{self.unique_id}@example.com"
         })
         member.insert(ignore_permissions=True)
+
+        # Create a different member to use as initial chapter head
+        other_member = frappe.get_doc({
+            "doctype": "Member",
+            "first_name": f"Other",
+            "last_name": f"Member {self.unique_id}",
+            "email": f"other{self.unique_id}@example.com"
+        })
+        other_member.insert(ignore_permissions=True)
         
-        # Create test chapter
+        # Create test chapter with the other member as chapter head
         chapter = frappe.get_doc({
             "doctype": "Chapter",
             "name": f"Test Chapter {self.unique_id}",
             "region": "Test Region",
             "introduction": "Test Chapter for Chair Role Test",
-            "published": 1
+            "published": 1,
+            "chapter_head": other_member.name  # Set initial chapter head explicitly
         })
         chapter.insert(ignore_permissions=True)
         
-        # Add member as board member with the test role
+        # Verify initial chapter head is the other member
+        self.assertEqual(chapter.chapter_head, other_member.name, 
+                      "Initial chapter head should be the other member")
+        
+        # Add our test member as board member with the test role
         chapter.append("board_members", {
             "member": member.name,
             "member_name": member.full_name,
@@ -119,121 +133,26 @@ class TestChapterRole(FrappeTestCase):
             "is_active": 1
         })
         chapter.save()
+        chapter.reload()
         
-        # Initially, chapter head should not be set
-        self.assertNotEqual(chapter.chapter_head, member.name, 
-                         "Chapter head should not be set before role is chair")
+        # The chapter head should still be the other member since test_role is not a chair role
+        self.assertEqual(chapter.chapter_head, other_member.name, 
+                      "Chapter head should remain the other member before role is chair")
         
         # Update the role to be chair
         self.test_role.is_chair = 1
         self.test_role.save()
         
-        # Get the Chapter class directly to check/add the update_chapter_head method
-        try:
-            # First try normal import
-            from verenigingen.verenigingen.doctype.chapter.chapter import Chapter
-            
-            # Check if update_chapter_head method exists, add it if not
-            if not hasattr(Chapter, "update_chapter_head"):
-                def update_chapter_head(self):
-                    """Update chapter_head based on the board member with a chair role"""
-                    if not self.board_members:
-                        return
-                    
-                    chair_found = False
-                    
-                    # Find active board members with roles marked as chair
-                    for board_member in self.board_members:
-                        if not board_member.is_active or not board_member.chapter_role:
-                            continue
-                            
-                        try:
-                            # Get the role document
-                            role = frappe.get_doc("Chapter Role", board_member.chapter_role)
-                            
-                            # Check if this role is marked as chair
-                            if role.is_chair:
-                                self.chapter_head = board_member.member
-                                chair_found = True
-                                break
-                        except frappe.DoesNotExistError:
-                            # Role might have been deleted
-                            continue
-                    
-                    # If no chair role found, try to find a role with "Chair" in the name
-                    if not chair_found:
-                        for board_member in self.board_members:
-                            if not board_member.is_active or not board_member.chapter_role:
-                                continue
-                                
-                            # Check if role name contains "Chair"
-                            if "chair" in board_member.chapter_role.lower():
-                                self.chapter_head = board_member.member
-                                chair_found = True
-                                break
-                
-                # Add the method to the Chapter class
-                Chapter.update_chapter_head = update_chapter_head
-                
-        except ImportError:
-            # If we can't import directly, use a different approach
-            # Create a new instance for this specific chapter and add the method
-            chapter_instance = frappe.get_doc("Chapter", chapter.name)
-            
-            def update_chapter_head(self):
-                """Update chapter_head based on the board member with a chair role"""
-                if not self.board_members:
-                    return
-                
-                chair_found = False
-                
-                # Find active board members with roles marked as chair
-                for board_member in self.board_members:
-                    if not board_member.is_active or not board_member.chapter_role:
-                        continue
-                        
-                    try:
-                        # Get the role document
-                        role = frappe.get_doc("Chapter Role", board_member.chapter_role)
-                        
-                        # Check if this role is marked as chair
-                        if role.is_chair:
-                            self.chapter_head = board_member.member
-                            chair_found = True
-                            break
-                    except frappe.DoesNotExistError:
-                        # Role might have been deleted
-                        continue
-                
-                # If no chair role found, try to find a role with "Chair" in the name
-                if not chair_found:
-                    for board_member in self.board_members:
-                        if not board_member.is_active or not board_member.chapter_role:
-                            continue
-                            
-                        # Check if role name contains "Chair"
-                        if "chair" in board_member.chapter_role.lower():
-                            self.chapter_head = board_member.member
-                            chair_found = True
-                            break
-            
-            # Add the method to this specific instance
-            chapter_instance.update_chapter_head = update_chapter_head.__get__(chapter_instance, chapter_instance.__class__)
-            
-            # Update the chapter head
-            chapter_instance.update_chapter_head()
-            chapter_instance.save()
-        
-        # Now call update_chapters_with_role to update all chapters with this role
+        # Call the update function
         result = update_chapters_with_role(self.test_role.name)
         
-        # Reload chapter to verify changes
+        # Reload chapter to see changes
         chapter.reload()
         
-        # Verify chapter head is now set to the member
+        # Now chapter head should be updated to our test member
         self.assertEqual(chapter.chapter_head, member.name, 
-                      "Chapter head should be set to the board member with chair role")
+                      "Chapter head should be updated to the board member with chair role")
         
         # Verify that the update function returns correctly
         self.assertEqual(result["chapters_found"], 1, "Should find one chapter with this role")
-        self.assertTrue(result["chapters_updated"] >= 0, "Should update chapters if needed")
+        self.assertEqual(result["chapters_updated"], 1, "Should update one chapter")
