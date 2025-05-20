@@ -6,9 +6,78 @@
 {% if meetup_embed_html %}
 	{{ meetup_embed_html }}
 {% endif %}
+
+<h3>Chapter Head</h3>
+<div style="margin-bottom: 30px; max-width: 600px" class="with-border">
+
+<table class="table table-bordered small" style="max-width: 600px;">
+	{% if chapter_head_member %}
+	<tr>
+		<td style='width: 15%'>Name</td>
+		<td>
+			<b>{{ chapter_head_member.full_name }}</b>
+			{% if frappe.user_has_role('System Manager') or is_board_member %}
+			<a href="/app/member/{{ chapter_head_member.name }}" class="btn btn-xs btn-default pull-right">
+				<i class="fa fa-external-link"></i> View Profile
+			</a>
+			{% endif %}
+		</td>
+	</tr>
+	<tr>
+		<td>Email</td>
+		<td>{{ chapter_head_member.email or '' }}</td>
+	</tr>
+	<tr>
+		<td>Phone</td>
+		<td>{{ chapter_head_member.mobile_no or chapter_head_member.phone or '' }}</td>
+	</tr>
+	{% else %}
+	<tr>
+		<td colspan="2">
+			<div class="text-muted">No chapter head assigned yet. This will be automatically set based on board members with a Chair role.</div>
+		</td>
+	</tr>
+	{% endif %}
+</table>
+</div>
+
+{% if board_members %}
+<h3>Chapter Board</h3>
+<div style="margin-bottom: 30px; max-width: 600px" class="with-border">
+    <table class="table table-bordered table-condensed">
+        <thead>
+            <tr>
+                <th>Role</th>
+                <th>Name</th>
+                <th>Since</th>
+                {% if is_board_member or frappe.user_has_role('System Manager') %}
+                <th>Actions</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for board_member in board_members %}
+                <tr>
+                    <td>{{ board_member.role }}</td>
+                    <td>{{ board_member.member_name }}</td>
+                    <td>{{ frappe.format_date(board_member.from_date) }}</td>
+                    {% if is_board_member or frappe.user_has_role('System Manager') %}
+                    <td>
+                        <a href="/app/member/{{ board_member.member }}" class="btn btn-xs btn-default">
+                            <i class="fa fa-user"></i> View
+                        </a>
+                    </td>
+                    {% endif %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+
 <h3>Member Details</h3>
 
-{% if members  %}
+{% if members %}
 	<table class="table" style="max-width: 600px;">
 		{% set index = [1] %}
 		{% for member in members %}
@@ -24,6 +93,12 @@
 								<div class="pull-right">
 								{% if member.website_url %}
 									<a href="{{ member.website_url }}">{{ member.website_url | truncate (50) or '' }}</a>
+								{% endif %}
+								
+								{% if is_board_member or frappe.user_has_role('System Manager') %}
+								<a href="/app/member/{{ member.name }}" class="btn btn-xs btn-default">
+									<i class="fa fa-user"></i> View
+								</a>
 								{% endif %}
 							</div>
 							<div class="clearfix"></div>
@@ -46,27 +121,7 @@
 	<p>No member yet.</p>
 {% endif %}
 
-<h3>Chapter Head</h3>
-<div style="margin-bottom: 30px; max-width: 600px" class="with-border">
-
-<table class="table table-bordered small" style="max-width: 600px;">
-	{% set doc = frappe.get_doc('Member', chapter_head) %}
-	<tr>
-		<td style='width: 15%'>Name</td>
-		<td><b>{{ doc.full_name }}<b></td>
-	</tr>
-	<tr>
-		<td>Email</td>
-		<td>{{ doc.email or '' }}</td>
-	</tr>
-	<tr>
-		<td>Phone</td>
-		<td>{{ doc.mobile_no or doc.phone or '' }}</td>
-	</tr>
-</table>
-</div>
-
-{% if address  %}
+{% if address %}
 <h3>Address</h3>
 <div style="margin-bottom: 30px; max-width: 600px" class="with-border">
 <p>{{ address or ''}}</p>
@@ -75,30 +130,6 @@
 
 <p style="margin: 20px 0 30px;"><a href="/verenigingen/join-chapter?name={{ name }}" class='btn btn-primary'>Join this Chapter</a></p>
 <p style="margin: 20px 0 30px;"><a href="/verenigingen/leave-chapter?name={{ name }}" class=''>Leave this Chapter</a></p>
-
-{% if board_members %}
-<h3>Chapter Board</h3>
-<div style="margin-bottom: 30px; max-width: 600px" class="with-border">
-    <table class="table table-bordered table-condensed">
-        <thead>
-            <tr>
-                <th>Role</th>
-                <th>Name</th>
-                <th>Since</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for board_member in board_members %}
-                <tr>
-                    <td>{{ board_member.role }}</td>
-                    <td>{{ board_member.member_name }}</td>
-                    <td>{{ frappe.format_date(board_member.from_date) }}</td>
-                </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
-{% endif %}
 
 {% if is_board_member %}
 <div class="board-member-actions">
