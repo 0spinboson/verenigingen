@@ -3,7 +3,7 @@ import unittest
 import random
 import string
 from frappe.tests.utils import FrappeTestCase
-from vereiningen.verenigingen.doctype.chapter_role.chapter_role import update_chapters_with_role
+from verenigingen.verenigingen.doctype.chapter_role.chapter_role import update_chapters_with_role
 
 class TestChapterRole(FrappeTestCase):
     def setUp(self):
