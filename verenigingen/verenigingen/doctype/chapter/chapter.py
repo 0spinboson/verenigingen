@@ -688,3 +688,87 @@ def is_chapter_management_enabled():
         # Default to enabled if setting doesn't exist
         return True
 
+# New server-side methods for Chapter.py
+
+@frappe.whitelist()
+def assign_member_to_chapter(member, chapter, note=None):
+    """
+    Assign a member to a chapter - both setting primary_chapter and adding to chapter's members
+    """
+    if not member or not chapter:
+        frappe.throw(_("Member and Chapter are required"))
+        
+    # Update member's primary chapter
+    frappe.db.set_value("Member", member, "primary_chapter", chapter)
+    
+    # Add member to chapter's members list
+    chapter_doc = frappe.get_doc("Chapter", chapter)
+    added = chapter_doc.add_member(member)
+    
+    # Log the change if a note was provided
+    if note:
+        frappe.get_doc({
+            "doctype": "Comment",
+            "comment_type": "Info",
+            "reference_doctype": "Member",
+            "reference_name": member,
+            "content": _("Changed chapter to {0}. Note: {1}").format(chapter, note)
+        }).insert(ignore_permissions=True)
+    
+    return {"success": True, "added_to_members": added}
+
+@frappe.whitelist()
+def join_chapter(member_name, chapter_name, introduction=None, website_url=None):
+    """
+    Web method for a member to join a chapter via portal
+    """
+    # First verify if the member exists
+    if not frappe.db.exists("Member", member_name):
+        frappe.throw(_("Invalid member"))
+        
+    # Get member's email to verify permission
+    member = frappe.get_doc("Member", member_name)
+    
+    # Check if user email matches member email for permission
+    user_email = frappe.session.user
+    if user_email != "Administrator" and user_email != member.email:
+        frappe.throw(_("You don't have permission to perform this action"))
+    
+    # Add member to chapter
+    chapter = frappe.get_doc("Chapter", chapter_name)
+    added = chapter.add_member(member_name, introduction, website_url)
+    
+    # If this is the first chapter for the member, set as primary chapter
+    if not member.primary_chapter:
+        member.primary_chapter = chapter_name
+        member.save(ignore_permissions=True)
+    
+    return {"success": True, "added": added}
+
+@frappe.whitelist()
+def leave_chapter(member_name, chapter_name, leave_reason=None):
+    """
+    Web method for a member to leave a chapter via portal
+    """
+    # First verify if the member exists
+    if not frappe.db.exists("Member", member_name):
+        frappe.throw(_("Invalid member"))
+        
+    # Get member's email to verify permission
+    member = frappe.get_doc("Member", member_name)
+    
+    # Check if user email matches member email for permission
+    user_email = frappe.session.user
+    if user_email != "Administrator" and user_email != member.email:
+        frappe.throw(_("You don't have permission to perform this action"))
+    
+    # Remove member from chapter
+    chapter = frappe.get_doc("Chapter", chapter_name)
+    removed = chapter.remove_member(member_name, leave_reason)
+    
+    # If this was the primary chapter for the member, clear it
+    if member.primary_chapter == chapter_name:
+        member.primary_chapter = None
+        member.save(ignore_permissions=True)
+    
+    return {"success": True, "removed": removed}
