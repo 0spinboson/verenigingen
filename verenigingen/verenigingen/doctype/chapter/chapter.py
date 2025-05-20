@@ -70,11 +70,13 @@ class Chapter(WebsiteGenerator):
     def update_chapter_head(self):
         """Update chapter_head based on the board member with a chair role"""
         if not self.board_members:
+            # If no board members, clear chapter head
+            self.chapter_head = None
             return
         
         chair_found = False
         
-        # First, find active board members with roles marked as chair (is_chair=1)
+        # First, find active board members with roles marked as chair
         for board_member in self.board_members:
             if not board_member.is_active or not board_member.chapter_role:
                 continue
@@ -83,14 +85,20 @@ class Chapter(WebsiteGenerator):
                 # Get the role document
                 role = frappe.get_doc("Chapter Role", board_member.chapter_role)
                 
-                # Check if this role is marked as chair - ONLY USE is_chair FLAG
-                if role.is_chair:
+                # Check if this role is marked as chair
+                if role.is_chair and role.is_active:
                     self.chapter_head = board_member.member
                     chair_found = True
                     break
             except frappe.DoesNotExistError:
                 # Role might have been deleted
                 continue
+        
+        # If no chair found, clear chapter head
+        if not chair_found:
+            self.chapter_head = None
+    
+        return chair_found
 
     def get_board_members(self, include_inactive=False, role=None):
         """Get list of board members, optionally filtered by role"""
