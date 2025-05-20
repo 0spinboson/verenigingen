@@ -887,17 +887,15 @@ function suggest_single_chapter(frm, chapter, location_data) {
         __('Based on your location in {0}, we suggest joining the {1} chapter. Would you like to join this chapter?', 
         [location_text || 'your area', chapter.name]),
         function() {
-            // Yes - set primary chapter
+            // Yes - set primary chapter and add member to the chapter's members list
             frappe.call({
-                method: 'frappe.client.set_value',
+                method: 'verenigingen.verenigingen.doctype.chapter.chapter.assign_member_to_chapter',
                 args: {
-                    doctype: 'Member',
-                    name: frm.doc.name,
-                    fieldname: 'primary_chapter',
-                    value: chapter.name
+                    member: frm.doc.name,
+                    chapter: chapter.name
                 },
                 callback: function(r) {
-                    if(!r.exc) {
+                    if (!r.exc) {
                         frappe.msgprint(__('You have joined the {0} chapter', [chapter.name]));
                         frm.reload_doc();
                     }
@@ -979,33 +977,16 @@ function show_chapter_selector(frm, suggested_chapters) {
                         return;
                     }
                     
+                    // Call new method that both sets primary_chapter and adds to chapter members
                     frappe.call({
-                        method: 'frappe.client.set_value',
+                        method: 'verenigingen.verenigingen.doctype.chapter.chapter.assign_member_to_chapter',
                         args: {
-                            doctype: 'Member',
-                            name: frm.doc.name,
-                            fieldname: 'primary_chapter',
-                            value: values.chapter
+                            member: frm.doc.name,
+                            chapter: values.chapter,
+                            note: values.note
                         },
                         callback: function(r) {
                             if(!r.exc) {
-                                // Log the change if a note was provided
-                                if (values.note) {
-                                    frappe.call({
-                                        method: 'frappe.client.insert',
-                                        args: {
-                                            doc: {
-                                                doctype: 'Comment',
-                                                comment_type: 'Info',
-                                                reference_doctype: 'Member',
-                                                reference_name: frm.doc.name,
-                                                content: __('Changed chapter to {0}. Note: {1}', 
-                                                    [values.chapter, values.note])
-                                            }
-                                        }
-                                    });
-                                }
-                                
                                 frappe.msgprint(__('Successfully joined the {0} chapter', [values.chapter]));
                                 frm.reload_doc();
                                 d.hide();
