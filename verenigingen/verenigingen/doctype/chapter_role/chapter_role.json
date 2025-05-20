@@ -8,6 +8,7 @@
     "role_name",
     "description",
     "permissions_level",
+    "is_chair",
     "is_active"
   ],
   "fields": [
@@ -29,6 +30,13 @@
       "fieldtype": "Select",
       "label": "Permissions Level",
       "options": "Basic\nFinancial\nAdmin"
+    },
+    {
+      "default": "0",
+      "fieldname": "is_chair",
+      "fieldtype": "Check",
+      "label": "Is Chapter Chair",
+      "description": "Indicates if this role represents the Chair/Head of the chapter"
     },
     {
       "default": "1",
