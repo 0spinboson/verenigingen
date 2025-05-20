@@ -12,7 +12,7 @@ class Chapter(WebsiteGenerator):
         # Keep existing validation code
         self.validate_board_members()
         self.validate_postal_codes()
-        
+        self.update_chapter_head()
         if not self.route:
             self.route = 'chapters/' + self.scrub(self.name)
     
@@ -66,7 +66,43 @@ class Chapter(WebsiteGenerator):
         
         # Join valid patterns back together
         self.postal_codes = ', '.join(valid_patterns)
-    
+
+    def update_chapter_head(self):
+        """Update chapter_head based on the board member with a chair role"""
+        if not self.board_members:
+            return
+        
+        chair_found = False
+        
+        # First, find active board members with roles marked as chair
+        for board_member in self.board_members:
+            if not board_member.is_active or not board_member.chapter_role:
+                continue
+                
+            try:
+                # Get the role document
+                role = frappe.get_doc("Chapter Role", board_member.chapter_role)
+                
+                # Check if this role is marked as chair
+                if role.is_chair:
+                    self.chapter_head = board_member.member
+                    chair_found = True
+                    break
+            except frappe.DoesNotExistError:
+                # Role might have been deleted
+                continue
+        
+        # If no chair role found, try to find a role with "Chair" in the name
+        if not chair_found:
+            for board_member in self.board_members:
+                if not board_member.is_active or not board_member.chapter_role:
+                    continue
+                    
+                # Check if role name contains "Chair"
+                if "chair" in board_member.chapter_role.lower():
+                    self.chapter_head = board_member.member
+                    chair_found = True
+                    break
     def get_board_members(self, include_inactive=False, role=None):
         """Get list of board members, optionally filtered by role"""
         members = []
