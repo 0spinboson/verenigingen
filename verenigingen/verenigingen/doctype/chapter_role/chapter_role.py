@@ -1,76 +1,95 @@
 # verenigingen/verenigingen/doctype/chapter_role/chapter_role.py
 from frappe.model.document import Document
+import frappe
+from frappe import _
 
 class ChapterRole(Document):
     def validate(self):
-        # Keep existing validation code
-        self.validate_board_members()
-        self.validate_postal_codes()
-        
-        # Update chapter head based on chair role
-        self.update_chapter_head()
-        
-        if not self.route:
-            self.route = 'chapters/' + self.scrub(self.name)
+        """Validate chapter role settings"""
+        self.validate_chair_role()
     
-    def update_chapter_head(self):
-        """Update chapter_head based on the board member with a chair role"""
-        if not self.board_members:
-            return
-        
-        chair_found = False
-        
-        # First, find active board members with roles marked as chair
-        for board_member in self.board_members:
-            if not board_member.is_active or not board_member.chapter_role:
-                continue
-                
-            try:
-                # Get the role document
-                role = frappe.get_doc("Chapter Role", board_member.chapter_role)
-                
-                # Check if this role is marked as chair
-                if role.is_chair:
-                    self.chapter_head = board_member.member
-                    chair_found = True
-                    break
-            except frappe.DoesNotExistError:
-                # Role might have been deleted
-                continue
-        
-        # If no chair role found, try to find a role with "Chair" in the name
-        if not chair_found:
-            for board_member in self.board_members:
-                if not board_member.is_active or not board_member.chapter_role:
-                    continue
-                    
-                # Check if role name contains "Chair"
-                if "chair" in board_member.chapter_role.lower():
-                    self.chapter_head = board_member.member
-                    chair_found = True
-                    break
-    
-    def get_context(self, context):
-        # Keep existing code
-        context.no_cache = True
-        context.show_sidebar = True
-        context.parents = [dict(label='View All Chapters',
-            route='chapters', title='View Chapters')]
-        
-        # Add board members to context for template
-        context.board_members = self.get_board_members()
-        
-        # Get chapter head details for template
-        if self.chapter_head:
-            try:
-                context.chapter_head_member = frappe.get_doc("Member", self.chapter_head)
-            except frappe.DoesNotExistError:
-                context.chapter_head_member = None
-        else:
-            context.chapter_head_member = None
+    def validate_chair_role(self):
+        """Validate chair role settings"""
+        if self.is_chair and self.is_active:
+            # Check for other chair roles
+            other_chair_roles = frappe.get_all(
+                "Chapter Role",
+                filters={
+                    "is_chair": 1,
+                    "is_active": 1,
+                    "name": ["!=", self.name]
+                },
+                fields=["name", "role_name"]
+            )
             
-        # Check if current user is a board member
-        context.is_board_member = self.is_board_member()
-        context.board_role = self.get_member_role()
-        
-        return context
+            if other_chair_roles:
+                # Just log a message - we allow multiple chair roles but warn the user
+                frappe.msgprint(
+                    _("There are other roles also marked as Chair: {0}. Having multiple chair roles may cause confusion.")
+                    .format(", ".join([r.role_name for r in other_chair_roles])),
+                    indicator="orange",
+                    alert=True
+                )
+
+@frappe.whitelist()
+def update_chapters_with_role(role):
+    """
+    Update all chapters that have board members with this role
+    This is used to update the chapter_head field when a role is marked as chair
+    """
+    if not frappe.db.exists("Chapter Role", role):
+        frappe.throw(_("Invalid Chapter Role"))
+    
+    # Get the role document
+    role_doc = frappe.get_doc("Chapter Role", role)
+    
+    # Find chapters that have board members with this role
+    chapter_board_members = frappe.get_all(
+        "Chapter Board Member",
+        filters={
+            "chapter_role": role,
+            "is_active": 1
+        },
+        fields=["parent"],
+        distinct=True
+    )
+    
+    chapters_found = 0
+    chapters_updated = 0
+    
+    for cbm in chapter_board_members:
+        try:
+            chapters_found += 1
+            chapter = frappe.get_doc("Chapter", cbm.parent)
+            original_head = chapter.chapter_head
+            
+            # Call the update method
+            chapter.update_chapter_head()
+            
+            # If chapter_head changed, save the doc
+            if chapter.chapter_head != original_head:
+                chapter.save(ignore_permissions=True)
+                chapters_updated += 1
+                
+                # Log the change
+                frappe.get_doc({
+                    "doctype": "Comment",
+                    "comment_type": "Info",
+                    "reference_doctype": "Chapter",
+                    "reference_name": chapter.name,
+                    "content": _("Chapter Head changed from {0} to {1} due to chair role update")
+                        .format(original_head or "None", chapter.chapter_head or "None")
+                }).insert(ignore_permissions=True)
+                
+        except Exception as e:
+            frappe.log_error(
+                message=f"Error updating chapter {cbm.parent} with role {role}: {str(e)}",
+                title="Chapter Head Update Error"
+            )
+    
+    return {
+        "chapters_found": chapters_found,
+        "chapters_updated": chapters_updated,
+        "role": role,
+        "is_chair": role_doc.is_chair
+    }
