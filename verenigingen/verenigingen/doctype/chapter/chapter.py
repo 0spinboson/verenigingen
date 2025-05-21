@@ -347,64 +347,41 @@ class Chapter(WebsiteGenerator):
                 
         # Find the active board membership
         found = False
+        board_member_data = None
         for board_member in self.board_members:
             if board_member.volunteer == volunteer and board_member.is_active:
                 board_member.is_active = 0
                 board_member.to_date = end_date
                 found = True
                 
-                # Update volunteer's assignment history
-                update_volunteer_assignment_history(volunteer, self.name, board_member.chapter_role, 
-                                                  board_member.from_date, end_date)
+                # Store board member data for history update
+                board_member_data = {
+                    'volunteer': board_member.volunteer,
+                    'chapter_role': board_member.chapter_role,
+                    'from_date': board_member.from_date
+                }
                 break
-                    
+                
         if not found:
             frappe.throw(_("Volunteer {0} is not an active board member").format(volunteer))
                 
         self.save()
+        
+        # Update volunteer's assignment history using the standalone function
+        if board_member_data:
+            update_volunteer_assignment_history(
+                board_member_data['volunteer'], 
+                self.name, 
+                board_member_data['chapter_role'], 
+                board_member_data['from_date'], 
+                end_date
+            )
         
         # Notify the volunteer
         self.notify_board_member_removed(volunteer)
         
         return True
     
-    # Add this new function to handle updating volunteer assignment history
-    def update_volunteer_assignment_history(volunteer_id, chapter_name, role, start_date, end_date):
-        """Update volunteer's assignment history when removed from board"""
-        try:
-            volunteer = frappe.get_doc("Volunteer", volunteer_id)
-            
-            # Check if we already have this assignment in history
-            for assignment in volunteer.assignment_history:
-                if (assignment.reference_doctype == "Chapter" and 
-                    assignment.reference_name == chapter_name and
-                    assignment.role == role and
-                    getdate(assignment.start_date) == getdate(start_date)):
-                    
-                    # Already in history, just update end date and status
-                    assignment.end_date = end_date
-                    assignment.status = "Completed"
-                    volunteer.save(ignore_permissions=True)
-                    return
-            
-            # Not found in history, add new entry
-            volunteer.append("assignment_history", {
-                "assignment_type": "Board Position",
-                "reference_doctype": "Chapter",
-                "reference_name": chapter_name,
-                "role": role,
-                "start_date": start_date,
-                "end_date": end_date,
-                "status": "Completed"
-            })
-            
-            volunteer.save(ignore_permissions=True)
-            frappe.db.commit()
-            
-        except Exception as e:
-            frappe.log_error(f"Error updating volunteer assignment history: {str(e)}", 
-                           "Volunteer Assignment Error")
-
     def add_member(self, member_id, introduction=None, website_url=None):
         """Add a member to this chapter"""
         if not member_id:
