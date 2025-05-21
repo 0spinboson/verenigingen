@@ -18,13 +18,25 @@ class Chapter(WebsiteGenerator):
     
     def validate_board_members(self):
         """Validate board members data"""
-        # Ensure each role occurs only once for active board members
-        active_roles = {}
+        # Get all roles that are marked as unique
+        unique_roles = {}
+        all_roles = frappe.get_all("Chapter Role", 
+                                filters={"is_active": 1}, 
+                                fields=["name", "is_unique"])
+        
+        for role in all_roles:
+            if role.get("is_unique"):
+                unique_roles[role.name] = True
+        
+        # Ensure each unique role occurs only once for active board members
+        active_unique_roles = {}
         for member in self.board_members:
             if member.is_active:
-                if member.chapter_role in active_roles:
-                    frappe.throw(_("Role '{0}' is assigned to multiple active board members").format(member.chapter_role))
-                active_roles[member.chapter_role] = member.volunteer
+                # Only enforce uniqueness for roles marked as unique
+                if member.chapter_role in unique_roles:
+                    if member.chapter_role in active_unique_roles:
+                        frappe.throw(_("Unique role '{0}' is assigned to multiple active board members").format(member.chapter_role))
+                    active_unique_roles[member.chapter_role] = member.volunteer
                 
                 # Check dates
                 if member.to_date and getdate(member.from_date) > getdate(member.to_date):
