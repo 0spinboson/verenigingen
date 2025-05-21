@@ -99,9 +99,13 @@ class Chapter(WebsiteGenerator):
                 
                 # Check if this role is marked as chair
                 if role.is_chair and role.is_active:
-                    self.chapter_head = board_member.member
-                    chair_found = True
-                    break
+                    # Now we need to get the member ID from the volunteer
+                    if board_member.volunteer:
+                        member_id = frappe.db.get_value("Volunteer", board_member.volunteer, "member")
+                        if member_id:
+                            self.chapter_head = member_id
+                            chair_found = True
+                            break
             except frappe.DoesNotExistError:
                 # Role might have been deleted
                 continue
@@ -109,53 +113,85 @@ class Chapter(WebsiteGenerator):
         # If no chair found, clear chapter head
         if not chair_found:
             self.chapter_head = None
-    
+        
         return chair_found
 
     def get_board_members(self, include_inactive=False, role=None):
         """Get list of board members, optionally filtered by role"""
         members = []
-        for member in self.board_members:
-            if (include_inactive or member.is_active) and (not role or member.chapter_role == role):
+        for board_member in self.board_members:
+            if (include_inactive or board_member.is_active) and (not role or board_member.chapter_role == role):
+                # Get the member ID associated with this volunteer
+                member_id = None
+                if board_member.volunteer:
+                    member_id = frappe.db.get_value("Volunteer", board_member.volunteer, "member")
+                
                 members.append({
-                    "member": member.member,
-                    "member_name": member.member_name,
-                    "email": member.email,
-                    "role": member.chapter_role,
-                    "from_date": member.from_date,
-                    "to_date": member.to_date,
-                    "is_active": member.is_active
+                    "volunteer": board_member.volunteer,
+                    "volunteer_name": board_member.volunteer_name,
+                    "member": member_id,
+                    "email": board_member.email,
+                    "role": board_member.chapter_role,
+                    "from_date": board_member.from_date,
+                    "to_date": board_member.to_date,
+                    "is_active": board_member.is_active
                 })
         return members
     
-    def is_board_member(self, member_name=None, user=None):
-        """Check if a member/user is on the board of this chapter"""
-        if not member_name and not user:
+    def is_board_member(self, member_name=None, user=None, volunteer_name=None):
+        """Check if a member/user/volunteer is on the board of this chapter"""
+        if not member_name and not user and not volunteer_name:
             user = frappe.session.user
             member_name = frappe.db.get_value("Member", {"user": user}, "name")
-            
-        if not member_name:
-            return False
-            
-        for member in self.board_members:
-            if member.member == member_name and member.is_active:
-                return True
+        
+        # If we have a member but not a volunteer, try to find the associated volunteer
+        if member_name and not volunteer_name:
+            volunteer_name = frappe.db.get_value("Volunteer", {"member": member_name}, "name")
                 
+        if volunteer_name:
+            # Check if this volunteer is on the board
+            for board_member in self.board_members:
+                if board_member.volunteer == volunteer_name and board_member.is_active:
+                    return True
+        
+        # If we couldn't find by volunteer, and we have a member name, let's try to match board members by their member
+        if member_name:
+            # Get all volunteer IDs associated with this member
+            volunteer_ids = [v.name for v in frappe.get_all("Volunteer", filters={"member": member_name})]
+            
+            # Check if any of these volunteers are on the board
+            for board_member in self.board_members:
+                if board_member.volunteer in volunteer_ids and board_member.is_active:
+                    return True
+                    
         return False
     
-    def get_member_role(self, member_name=None, user=None):
-        """Get the board role of a member/user"""
-        if not member_name and not user:
+    def get_member_role(self, member_name=None, user=None, volunteer_name=None):
+        """Get the board role of a member/user/volunteer"""
+        if not member_name and not user and not volunteer_name:
             user = frappe.session.user
             member_name = frappe.db.get_value("Member", {"user": user}, "name")
-            
-        if not member_name:
-            return None
-            
-        for member in self.board_members:
-            if member.member == member_name and member.is_active:
-                return member.chapter_role
+        
+        # If we have a member but not a volunteer, try to find the associated volunteer
+        if member_name and not volunteer_name:
+            volunteer_name = frappe.db.get_value("Volunteer", {"member": member_name}, "name")
                 
+        if volunteer_name:
+            # Check if this volunteer is on the board
+            for board_member in self.board_members:
+                if board_member.volunteer == volunteer_name and board_member.is_active:
+                    return board_member.chapter_role
+        
+        # If we couldn't find by volunteer, and we have a member name, let's try to match board members by their member
+        if member_name:
+            # Get all volunteer IDs associated with this member
+            volunteer_ids = [v.name for v in frappe.get_all("Volunteer", filters={"member": member_name})]
+            
+            # Check if any of these volunteers are on the board
+            for board_member in self.board_members:
+                if board_member.volunteer in volunteer_ids and board_member.is_active:
+                    return board_member.chapter_role
+                    
         return None
     
     def can_view_member_payments(self, member_name=None, user=None):
