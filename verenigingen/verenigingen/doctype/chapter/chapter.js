@@ -74,43 +74,25 @@ frappe.ui.form.on('Chapter', {
 
 // Add to Chapter Board Member child table
 frappe.ui.form.on('Chapter Board Member', {
-    member: function(frm, cdt, cdn) {
+    volunteer: function(frm, cdt, cdn) {
         var row = locals[cdt][cdn];
-        if (row.member) {
-            // Fetch member details
-            frappe.db.get_doc("Member", row.member).then(doc => {
-                frappe.model.set_value(cdt, cdn, 'member_name', doc.full_name);
+        if (row.volunteer) {
+            // Fetch volunteer details
+            frappe.db.get_doc("Volunteer", row.volunteer).then(doc => {
+                frappe.model.set_value(cdt, cdn, 'volunteer_name', doc.volunteer_name);
                 frappe.model.set_value(cdt, cdn, 'email', doc.email);
                 
-                // Check if member has a volunteer record
-                frappe.db.get_value("Volunteer", {"member": row.member}, "name", function(r) {
-                    if (r && r.name) {
-                        // Member already has a volunteer record
-                        frappe.show_alert({
-                            message: __("Member is already a volunteer. Board role will be reflected in their volunteer record."),
-                            indicator: 'blue'
-                        }, 5);
-                    } else {
-                        // Ask if user wants to create a volunteer record
-                        frappe.confirm(
-                            __("Would you like to create a volunteer record for this board member?"),
-                            function() {
-                                // Yes - create volunteer record
-                                create_volunteer_record(frm, row.member);
-                            },
-                            function() {
-                                // No - do nothing
-                                frappe.show_alert({
-                                    message: __("No volunteer record created. You can create one later if needed."),
-                                    indicator: 'orange'
-                                }, 5);
-                            }
-                        );
-                    }
-                });
-                
-                // Add member to chapter's members if not already there
-                add_board_member_to_members(frm, row.member);
+                // Check if volunteer has a member record
+                if (doc.member) {
+                    // Add volunteer's member to chapter's members if not already there
+                    add_board_member_to_members(frm, row.volunteer);
+                } else {
+                    // Alert that this volunteer doesn't have a member record
+                    frappe.show_alert({
+                        message: __("Warning: This volunteer doesn't have an associated member record."),
+                        indicator: 'orange'
+                    }, 5);
+                }
             });
         }
     },
@@ -155,35 +137,69 @@ frappe.ui.form.on('Chapter Board Member', {
 });
 
 // Function to add a board member to the chapter's members list
-function add_board_member_to_members(frm, member_id) {
-    // Check if the member is already in the members list
-    let already_member = false;
-    
-    if (frm.doc.members) {
-        for (let i = 0; i < frm.doc.members.length; i++) {
-            if (frm.doc.members[i].member === member_id) {
-                already_member = true;
-                break;
+function add_board_member_to_members(frm, volunteer_id) {
+    // First, we need to get the member associated with this volunteer
+    frappe.call({
+        method: 'frappe.client.get_value',
+        args: {
+            doctype: 'Volunteer',
+            filters: { name: volunteer_id },
+            fieldname: 'member'
+        },
+        callback: function(r) {
+            if (!r.message || !r.message.member) {
+                frappe.msgprint(__("Could not find member associated with this volunteer"));
+                return;
+            }
+            
+            let member_id = r.message.member;
+            
+            // Check if the member is already in the members list
+            let already_member = false;
+            let member_entry = null;
+            
+            if (frm.doc.members) {
+                for (let i = 0; i < frm.doc.members.length; i++) {
+                    if (frm.doc.members[i].member === member_id) {
+                        already_member = true;
+                        member_entry = frm.doc.members[i];
+                        break;
+                    }
+                }
+            }
+            
+            // If already a member, just make sure they're enabled
+            if (already_member) {
+                if (!member_entry.enabled) {
+                    // Re-enable if disabled
+                    frappe.model.set_value(member_entry.doctype, member_entry.name, 'enabled', 1);
+                    frappe.model.set_value(member_entry.doctype, member_entry.name, 'leave_reason', null);
+                    
+                    frm.refresh_field("members");
+                    
+                    frappe.show_alert({
+                        message: __("Board member's chapter membership has been re-enabled"),
+                        indicator: "green"
+                    }, 5);
+                }
+            } else {
+                // Not a member yet, add them
+                frappe.db.get_doc("Member", member_id).then(member_doc => {
+                    let new_member = frm.add_child("members");
+                    new_member.member = member_id;
+                    new_member.member_name = member_doc.full_name;
+                    new_member.enabled = 1;
+                    
+                    frm.refresh_field("members");
+                    
+                    frappe.show_alert({
+                        message: __("Board member {0} added to chapter members list", [member_doc.full_name]),
+                        indicator: "green"
+                    }, 5);
+                });
             }
         }
-    }
-    
-    // If not already a member, add them
-    if (!already_member) {
-        frappe.db.get_doc("Member", member_id).then(member_doc => {
-            let new_member = frm.add_child("members");
-            new_member.member = member_id;
-            new_member.member_name = member_doc.full_name;
-            new_member.enabled = 1;
-            
-            frm.refresh_field("members");
-            
-            frappe.show_alert({
-                message: __("Board member {0} added to chapter members list", [member_doc.full_name]),
-                indicator: "green"
-            }, 5);
-        });
-    }
+    });
 }
 
 // Function to send email to board members
@@ -390,15 +406,16 @@ function add_new_board_member(frm) {
             title: __('Add New Board Member'),
             fields: [
                 {
-                    fieldname: 'member',
+                    fieldname: 'volunteer',
                     fieldtype: 'Link',
-                    label: __('Member'),
-                    options: 'Member',
+                    label: __('Volunteer'),
+                    options: 'Volunteer',
                     reqd: 1,
                     get_query: function() {
                         return {
+                            query: "verenigingen.verenigingen.doctype.chapter.chapter.get_volunteers_for_chapter",
                             filters: {
-                                'primary_chapter': frm.doc.name
+                                'chapter': frm.doc.name
                             }
                         };
                     }
@@ -427,45 +444,25 @@ function add_new_board_member(frm) {
             primary_action: function(values) {
                 // Add new row to board_members
                 var child = frm.add_child('board_members');
-                frappe.model.set_value(child.doctype, child.name, 'member', values.member);
+                frappe.model.set_value(child.doctype, child.name, 'volunteer', values.volunteer);
                 frappe.model.set_value(child.doctype, child.name, 'chapter_role', values.chapter_role);
                 frappe.model.set_value(child.doctype, child.name, 'from_date', values.from_date);
                 frappe.model.set_value(child.doctype, child.name, 'to_date', values.to_date);
                 frappe.model.set_value(child.doctype, child.name, 'is_active', 1);
                 
-                // Fetch member details
-                frappe.db.get_doc("Member", values.member).then(doc => {
-                    frappe.model.set_value(child.doctype, child.name, 'member_name', doc.full_name);
+                // Fetch volunteer details
+                frappe.db.get_doc("Volunteer", values.volunteer).then(doc => {
+                    frappe.model.set_value(child.doctype, child.name, 'volunteer_name', doc.volunteer_name);
                     frappe.model.set_value(child.doctype, child.name, 'email', doc.email);
                     
                     frm.refresh_field('board_members');
                     d.hide();
                     
                     // Add board member to chapter's members list
-                    add_board_member_to_members(frm, values.member);
+                    add_board_member_to_members(frm, values.volunteer);
                     
                     // Check if there are other active members with the same role
                     check_for_duplicate_roles(frm, child);
-                    
-                    // Create volunteer record if applicable
-                    frappe.db.get_value("Volunteer", {"member": values.member}, "name", function(r) {
-                        if (r && r.name) {
-                            // Member already has a volunteer record
-                            frappe.show_alert({
-                                message: __("Board position will be reflected in the volunteer's assignments"),
-                                indicator: 'blue'
-                            }, 5);
-                        } else {
-                            // Ask if user wants to create a volunteer record
-                            frappe.confirm(
-                                __("Would you like to create a volunteer record for this board member?"),
-                                function() {
-                                    // Yes - create volunteer record
-                                    create_volunteer_record(frm, values.member);
-                                }
-                            );
-                        }
-                    });
                 });
             }
         });
