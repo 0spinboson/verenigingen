@@ -1,5 +1,6 @@
 // For license information, please see license.txt
 
+frappe.ui.form.on('Chapter', {
 refresh: function(frm) {
     // Add button to view chapter members
     frm.add_custom_button(__('View Members'), function() {
@@ -99,7 +100,7 @@ refresh: function(frm) {
     // Add members summary section
     update_members_summary(frm);
 }
-
+}
 // Add to Chapter Board Member child table
 frappe.ui.form.on('Chapter Board Member', {
     volunteer: function(frm, cdt, cdn) {
@@ -669,14 +670,14 @@ function show_transition_dialog(frm) {
         primary_action_label: __('Transition Role'),
         primary_action: function(values) {
             // Extract member name from the select option
-            var member = values.current_member.split(' | ')[0];
+            var volunteer = values.current_volunteer.split(' | ')[0];
             
             // Call the server method to transition role
             frappe.call({
                 method: 'transition_board_role',
                 doc: frm.doc,
                 args: {
-                    member: member,
+                    volunteer: volunteer,
                     new_role: values.new_role,
                     transition_date: values.transition_date
                 },
@@ -813,7 +814,7 @@ function get_active_board_members(frm) {
     if (frm.doc.board_members) {
         frm.doc.board_members.forEach(function(member) {
             if (member.is_active) {
-                options.push(member.member + ' | ' + member.member_name + ' (' + member.chapter_role + ')');
+                options.push(member.volunteer + ' | ' + member.volunteer_name + ' (' + member.chapter_role + ')');
             }
         });
     }
