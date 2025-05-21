@@ -100,6 +100,7 @@ refresh: function(frm) {
     // Add members summary section
     update_members_summary(frm);
 }
+});
 
 // Add to Chapter Board Member child table
 frappe.ui.form.on('Chapter Board Member', {
@@ -579,7 +580,7 @@ function manage_board_members(frm) {
                     label: __('Add New Board Member')
                 },
                 {
-                    fieldname: 'member',
+                    fieldname: 'volunteer',
                     fieldtype: 'Link',
                     label: __('Member'),
                     options: 'Member',
@@ -612,7 +613,7 @@ function manage_board_members(frm) {
                     method: 'add_board_member',
                     doc: frm.doc,
                     args: {
-                        member: values.member,
+                        member: values.volunteer,
                         role: values.chapter_role,
                         from_date: values.from_date,
                         to_date: values.to_date
@@ -646,7 +647,7 @@ function show_transition_dialog(frm) {
         title: __('Transition Board Role'),
         fields: [
             {
-                fieldname: 'current_member',
+                fieldname: 'current_volunteer',
                 fieldtype: 'Select',
                 label: __('Current Board Member'),
                 options: active_members,
