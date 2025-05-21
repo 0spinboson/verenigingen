@@ -100,7 +100,7 @@ refresh: function(frm) {
     // Add members summary section
     update_members_summary(frm);
 }
-}
+
 // Add to Chapter Board Member child table
 frappe.ui.form.on('Chapter Board Member', {
     volunteer: function(frm, cdt, cdn) {
