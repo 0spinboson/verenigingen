@@ -9,6 +9,7 @@
     "description",
     "permissions_level",
     "is_chair",
+    "is_unique",
     "is_active"
   ],
   "fields": [
@@ -37,6 +38,13 @@
       "fieldtype": "Check",
       "label": "Is Chapter Chair",
       "description": "Indicates if this role represents the Chair/Head of the chapter"
+    },
+    {
+      "default": "0",
+      "fieldname": "is_unique",
+      "fieldtype": "Check",
+      "label": "Is Unique Role",
+      "description": "If checked, only one person can have this role at a time (e.g., Chair, Treasurer)"
     },
     {
       "default": "1",
