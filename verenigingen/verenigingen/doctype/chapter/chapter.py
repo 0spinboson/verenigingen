@@ -24,15 +24,15 @@ class Chapter(WebsiteGenerator):
             if member.is_active:
                 if member.chapter_role in active_roles:
                     frappe.throw(_("Role '{0}' is assigned to multiple active board members").format(member.chapter_role))
-                active_roles[member.chapter_role] = member.member
+                active_roles[member.chapter_role] = member.volunteer
                 
                 # Check dates
                 if member.to_date and getdate(member.from_date) > getdate(member.to_date):
-                    frappe.throw(_("Board member {0} has start date after end date").format(member.member_name))
+                    frappe.throw(_("Board member {0} has start date after end date").format(member.volunteer_name))
                 
-                # Validate member exists
-                if not frappe.db.exists("Member", member.member):
-                    frappe.throw(_("Member {0} does not exist").format(member.member))
+                # Validate volunteer exists
+                if not frappe.db.exists("Volunteer", member.volunteer):
+                    frappe.throw(_("Volunteer {0} does not exist").format(member.volunteer))
     
     def validate_postal_codes(self):
         """Validate postal code patterns"""
@@ -805,3 +805,109 @@ def leave_chapter(member_name, chapter_name, leave_reason=None):
         member.save(ignore_permissions=True)
     
     return {"success": True, "removed": removed}
+
+# Add this to chapter.py
+
+@frappe.whitelist()
+def get_volunteers_for_chapter(doctype, txt, searchfield, start, page_len, filters):
+    """Get volunteers that have members in this chapter"""
+    chapter = filters.get('chapter')
+    
+    # Get members that belong to this chapter
+    members = frappe.db.sql("""
+        SELECT member
+        FROM `tabChapter Member`
+        WHERE parent = %s AND enabled = 1
+    """, (chapter,), as_dict=True)
+    
+    member_ids = [m.member for m in members]
+    
+    if not member_ids:
+        return []
+    
+    # Find volunteers related to these members
+    volunteers = frappe.db.sql("""
+        SELECT name, volunteer_name, email
+        FROM `tabVolunteer`
+        WHERE member IN (%s) AND status = 'Active'
+        AND (volunteer_name LIKE %s OR email LIKE %s)
+        ORDER BY volunteer_name
+        LIMIT %s, %s
+    """ % (", ".join(["%s"] * len(member_ids)), "%s", "%s", "%s", "%s"),
+        tuple(member_ids) + ("%" + txt + "%", "%" + txt + "%", start, page_len), as_dict=True)
+    
+    return [(v.name, v.volunteer_name, v.email) for v in volunteers]
+
+# Helper method to add board member to members - update this in chapter.py
+def _add_to_members(self, member_id):
+    """Add a board member to chapter members if not already there"""
+    # Check if already a member
+    already_member = False
+    for member in self.members:
+        if member.member == member_id:
+            already_member = True
+            # If disabled, re-enable
+            if not member.enabled:
+                member.enabled = 1
+                member.leave_reason = None
+            break
+    
+    # Not a member yet, add them
+    if not already_member:
+        member_doc = frappe.get_doc("Member", member_id)
+        self.append("members", {
+            "member": member_id,
+            "member_name": member_doc.full_name,
+            "enabled": 1
+        })
+        return True
+    
+    return False
+
+@frappe.whitelist()
+def add_board_member(self, volunteer, role, from_date=None, to_date=None):
+    """Add a new board member to this chapter"""
+    if not from_date:
+        from_date = today()
+    
+    # Check if volunteer exists
+    if not frappe.db.exists("Volunteer", volunteer):
+        frappe.throw(_("Volunteer {0} does not exist").format(volunteer))
+    
+    # Get volunteer details
+    volunteer_doc = frappe.get_doc("Volunteer", volunteer)
+    
+    # Check if volunteer has a member
+    if not volunteer_doc.member:
+        frappe.throw(_("Volunteer {0} does not have an associated member").format(volunteer_doc.volunteer_name))
+    
+    # Get member details
+    member_id = volunteer_doc.member
+    member_doc = frappe.get_doc("Member", member_id)
+    
+    # First deactivate any existing board member with the same role
+    for board_member in self.board_members:
+        if board_member.chapter_role == role and board_member.is_active:
+            board_member.is_active = 0
+            board_member.to_date = from_date
+    
+    # Add new board member
+    self.append("board_members", {
+        "volunteer": volunteer,
+        "volunteer_name": volunteer_doc.volunteer_name,
+        "email": volunteer_doc.email,
+        "chapter_role": role,
+        "from_date": from_date,
+        "to_date": to_date,
+        "is_active": 1
+    })
+    
+    # Also add to chapter members if not already a member
+    self._add_to_members(member_id)
+    
+    self.save()
+    
+    # Notify the volunteer
+    self.notify_board_member_added(volunteer, role)
+    
+    return True
