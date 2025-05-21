@@ -153,35 +153,52 @@ frappe.ui.form.on('Chapter Board Member', {
         }
     },
 
-    is_active: function(frm, cdt, cdn) {
-        var row = locals[cdt][cdn];
-        if (row.is_active) {
-            check_for_duplicate_roles(frm, row);
-        } else {
-            // When deactivating, set to_date if not already set
-            if (!row.to_date) {
-                frappe.model.set_value(cdt, cdn, 'to_date', frappe.datetime.get_today());
-                
-                // Show confirmation to user
-                frappe.show_alert({
-                    message: __("Board member deactivated. End date set to today."),
-                    indicator: 'orange'
-                }, 5);
-                
-                // Prompt user to confirm the change
-                frappe.confirm(
-                    __('Do you want to record this board position in the volunteer\'s assignment history?'),
-                    function() {
-                        // User confirmed - board role will be added to history via server-side code
-                        frappe.show_alert({
-                            message: __("Board assignment will be recorded in volunteer history"),
-                            indicator: 'green'
-                        }, 3);
+    
+is_active: function(frm, cdt, cdn) {
+    var row = locals[cdt][cdn];
+    if (row.is_active) {
+        check_for_duplicate_roles(frm, row);
+    } else {
+        // When deactivating, set to_date if not already set
+        if (!row.to_date) {
+            frappe.model.set_value(cdt, cdn, 'to_date', frappe.datetime.get_today());
+            
+            // Show confirmation to user
+            frappe.show_alert({
+                message: __("Board member deactivated. End date set to today."),
+                indicator: 'orange'
+            }, 5);
+            
+            // Prompt user to confirm the change and update assignment history
+            frappe.confirm(
+                __('Do you want to record this board position in the volunteer\'s assignment history?'),
+                function() {
+                    // User confirmed - update volunteer history
+                    if (row.volunteer) {
+                        frappe.call({
+                            method: 'verenigingen.verenigingen.doctype.chapter.chapter.update_volunteer_assignment_history',
+                            args: {
+                                'volunteer_id': row.volunteer,
+                                'chapter_name': frm.doc.name,
+                                'role': row.chapter_role,
+                                'start_date': row.from_date,
+                                'end_date': row.to_date || frappe.datetime.get_today()
+                            },
+                            callback: function(r) {
+                                if (r.message) {
+                                    frappe.show_alert({
+                                        message: __("Board assignment recorded in volunteer history"),
+                                        indicator: 'green'
+                                    }, 3);
+                                }
+                            }
+                        });
                     }
-                );
-            }
+                }
+            );
         }
     }
+}
 });
 
 // Function to add a board member to the chapter's members list
@@ -580,11 +597,19 @@ function manage_board_members(frm) {
                     label: __('Add New Board Member')
                 },
                 {
-                    fieldname: 'volunteer',
+                    fieldname: 'volunteer',  // Changed from 'member' to 'volunteer'
                     fieldtype: 'Link',
-                    label: __('Member'),
-                    options: 'Member',
-                    reqd: 1
+                    label: __('Volunteer'),  // Changed label
+                    options: 'Volunteer',   // Changed options
+                    reqd: 1,
+                    get_query: function() {
+                        return {
+                            query: "verenigingen.verenigingen.doctype.chapter.chapter.get_volunteers_for_chapter",
+                            filters: {
+                                'chapter': frm.doc.name
+                            }
+                        };
+                    }
                 },
                 {
                     fieldname: 'chapter_role',
@@ -613,7 +638,7 @@ function manage_board_members(frm) {
                     method: 'add_board_member',
                     doc: frm.doc,
                     args: {
-                        member: values.volunteer,
+                        volunteer: values.volunteer,  // Changed from 'member' to 'volunteer'
                         role: values.chapter_role,
                         from_date: values.from_date,
                         to_date: values.to_date
