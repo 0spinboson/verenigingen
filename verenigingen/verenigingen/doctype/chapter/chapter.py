@@ -478,9 +478,16 @@ class Chapter(WebsiteGenerator):
         # Add new role
         return self.add_board_member(member, new_role, transition_date)
     
-    def notify_board_member_added(self, member, role):
-        """Send notification when a member is added to the board"""
-        member_doc = frappe.get_doc("Member", member)
+    def notify_board_member_added(self, volunteer, role):
+        """Send notification when a volunteer is added to the board"""
+        # Get volunteer details first
+        volunteer_doc = frappe.get_doc("Volunteer", volunteer)
+        
+        # Then get member details if volunteer has a member
+        if not volunteer_doc.member:
+            return
+            
+        member_doc = frappe.get_doc("Member", volunteer_doc.member)
         
         if not member_doc.email:
             return
@@ -493,6 +500,7 @@ class Chapter(WebsiteGenerator):
         # Prepare context for email
         context = {
             "member": member_doc,
+            "volunteer": volunteer_doc,
             "chapter": self,
             "role": role
         }
@@ -510,9 +518,16 @@ class Chapter(WebsiteGenerator):
         except Exception as e:
             frappe.logger().error(f"Failed to send board role notification: {str(e)}")
     
-    def notify_board_member_removed(self, member):
-        """Send notification when a member is removed from the board"""
-        member_doc = frappe.get_doc("Member", member)
+    def notify_board_member_removed(self, volunteer):
+        """Send notification when a volunteer is removed from the board"""
+        # Get volunteer details first
+        volunteer_doc = frappe.get_doc("Volunteer", volunteer)
+        
+        # Then get member details if volunteer has a member
+        if not volunteer_doc.member:
+            return
+            
+        member_doc = frappe.get_doc("Member", volunteer_doc.member)
         
         if not member_doc.email:
             return
@@ -525,6 +540,7 @@ class Chapter(WebsiteGenerator):
         # Prepare context for email
         context = {
             "member": member_doc,
+            "volunteer": volunteer_doc,
             "chapter": self
         }
         
