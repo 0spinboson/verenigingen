@@ -44,9 +44,9 @@ frappe.ui.form.on('Chapter', {
         // Custom button for board members table
         if (frm.fields_dict['board_members']) {
             frm.fields_dict['board_members'].grid.add_custom_button(__('Add Board Member'), 
-                function() {
-                    add_new_board_member(frm);
-                }
+                                                                    function() {
+                                                                        add_new_board_member(frm);
+                                                                    }
             );
         }
         
@@ -57,20 +57,8 @@ frappe.ui.form.on('Chapter', {
         
         // Add members summary section
         update_members_summary(frm);
-    },
-    
-    validate: function(frm) {
-        validate_board_members(frm);
-    },
-    
-    postal_codes: function(frm) {
-        // When postal codes change, validate and show preview
-        if (frm.doc.postal_codes) {
-            validate_postal_codes(frm);
-            show_postal_code_preview(frm);
-        }
-    },
-    if (frm.fields_dict.board_members && frm.fields_dict.board_members.grid) {
+        
+        if (frm.fields_dict.board_members && frm.fields_dict.board_members.grid) {
             frm.fields_dict.board_members.grid.wrapper.on('click', '.grid-delete-row', function(e) {
                 var row = $(this).closest('.grid-row');
                 if (!row.length) return;
@@ -85,33 +73,48 @@ frappe.ui.form.on('Chapter', {
                 setTimeout(function() {
                     frappe.confirm(
                         __('Do you want to record this board position in the volunteer\'s assignment history before removing?'),
-                        function() {
-                            // Yes - update volunteer history
-                            if (board_member.volunteer) {
-                                frappe.call({
-                                    method: 'verenigingen.verenigingen.doctype.chapter.chapter.update_volunteer_assignment_history',
-                                    args: {
-                                        'volunteer_id': board_member.volunteer,
-                                        'chapter_name': frm.doc.name,
-                                        'role': board_member.chapter_role,
-                                        'start_date': board_member.from_date,
-                                        'end_date': frappe.datetime.get_today()
-                                    },
-                                    callback: function(r) {
-                                        if (r.message) {
-                                            frappe.show_alert({
-                                                message: __("Board assignment recorded in volunteer history"),
-                                                indicator: 'green'
-                                            }, 3);
-                                        }
-                                    }
-                                });
-                            }
-                        }
+                                   function() {
+                                       // Yes - update volunteer history
+                                       if (board_member.volunteer) {
+                                           frappe.call({
+                                               method: 'verenigingen.verenigingen.doctype.chapter.chapter.update_volunteer_assignment_history',
+                                               args: {
+                                                   'volunteer_id': board_member.volunteer,
+                                                   'chapter_name': frm.doc.name,
+                                                   'role': board_member.chapter_role,
+                                                   'start_date': board_member.from_date,
+                                                   'end_date': frappe.datetime.get_today()
+                                               },
+                                               callback: function(r) {
+                                                   if (r.message) {
+                                                       frappe.show_alert({
+                                                           message: __("Board assignment recorded in volunteer history"),
+                                                                         indicator: 'green'
+                                                       }, 3);
+                                                   }
+                                               }
+                                           });
+                                       }
+                                   }
                     );
                 }, 100);
             });
         }
+    },
+    
+    validate: function(frm) {
+        validate_board_members(frm);
+    },
+    
+    postal_codes: function(frm) {
+        // When postal codes change, validate and show preview
+        if (frm.doc.postal_codes) {
+            validate_postal_codes(frm);
+            show_postal_code_preview(frm);
+        }
+    }
+    
+}
 });
 
 // Add to Chapter Board Member child table
