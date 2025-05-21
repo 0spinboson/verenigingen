@@ -16,7 +16,7 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
         # Create test data in the right order
         self.create_test_chapter_roles()
         self.create_test_chapter()
-        self.create_test_members()
+        self.create_test_members_and_volunteers()
         
     def tearDown(self):
         # Clean up test data in reverse order to avoid link errors
@@ -50,12 +50,18 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
             except Exception as e:
                 print(f"Error deleting chapter {self.test_chapter.name}: {e}")
         
-        # Delete the chapter head member
+        # Delete the chapter head member and volunteer
         if hasattr(self, 'chapter_head_member') and self.chapter_head_member:
             try:
                 frappe.delete_doc("Member", self.chapter_head_member.name, force=True, ignore_permissions=True)
             except Exception as e:
                 print(f"Error deleting chapter head {self.chapter_head_member.name}: {e}")
+        
+        if hasattr(self, 'chapter_head_volunteer') and self.chapter_head_volunteer:
+            try:
+                frappe.delete_doc("Volunteer", self.chapter_head_volunteer.name, force=True, ignore_permissions=True)
+            except Exception as e:
+                print(f"Error deleting chapter head volunteer {self.chapter_head_volunteer.name}: {e}")
         
         # Delete chapter roles
         for role in ["Chair", "Secretary", "Treasurer", "New Role"]:
@@ -67,15 +73,22 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
 
     def create_test_chapter_roles(self):
         """Create test chapter roles for use in board memberships"""
-        roles = ["Chair", "Secretary", "Treasurer", "New Role"]
+        roles = [
+            {"name": "Chair", "is_chair": 1, "is_unique": 1},
+            {"name": "Secretary", "is_unique": 1},
+            {"name": "Treasurer", "is_unique": 1},
+            {"name": "New Role", "is_unique": 0}
+        ]
         
-        for role in roles:
-            if not frappe.db.exists("Chapter Role", role):
+        for role_data in roles:
+            if not frappe.db.exists("Chapter Role", role_data["name"]):
                 role_doc = frappe.get_doc({
                     "doctype": "Chapter Role",
-                    "name": role,
-                    "role_name": role,
+                    "name": role_data["name"],
+                    "role_name": role_data["name"],
                     "permissions_level": "Admin",
+                    "is_chair": role_data.get("is_chair", 0),
+                    "is_unique": role_data.get("is_unique", 0),
                     "is_active": 1
                 })
                 role_doc.insert(ignore_permissions=True)
@@ -94,6 +107,17 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
         })
         self.chapter_head_member.insert(ignore_permissions=True)
         
+        # Create volunteer for chapter head
+        self.chapter_head_volunteer = frappe.get_doc({
+            "doctype": "Volunteer",
+            "volunteer_name": f"Chapter Head Volunteer {self.test_id[:8]}",
+            "email": f"chapterheadv{self.test_id[:8]}@example.org",
+            "member": self.chapter_head_member.name,
+            "status": "Active",
+            "start_date": today()
+        })
+        self.chapter_head_volunteer.insert(ignore_permissions=True)
+        
         # Generate a unique name for the test chapter
         test_chapter_name = f"TestChapter{self.test_id[:8]}"
         
@@ -109,8 +133,8 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
         
         return self.test_chapter
         
-    def create_test_members(self):
-        """Create test members with unique names using UUID"""
+    def create_test_members_and_volunteers(self):
+        """Create test members and volunteers with unique names using UUID"""
         for i in range(3):
             # Unique email with UUID
             email = f"boardmember{i}{self.test_id}@example.com"
@@ -124,15 +148,14 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
             })
             member.insert(ignore_permissions=True)
             self.test_members.append(member)
-        
-        # Create a volunteer for first member
-        if self.test_members:
-            unique_name = f"TestVol{self.test_id[:8]}"
+            
+            # Create volunteer for member
+            volunteer_name = f"TestVol{i}{self.test_id[:6]}"
             volunteer = frappe.get_doc({
                 "doctype": "Volunteer",
-                "volunteer_name": unique_name,
-                "email": f"{unique_name.lower()}@example.org",
-                "member": self.test_members[0].name,
+                "volunteer_name": volunteer_name,
+                "email": f"{volunteer_name.lower()}@example.org",
+                "member": member.name,
                 "status": "Active",
                 "start_date": today()
             })
@@ -140,22 +163,25 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
             self.test_volunteers.append(volunteer.name)
     
     def add_board_members_to_chapter(self):
-        """Add test members as board members to test chapter"""
+        """Add test volunteers as board members to test chapter"""
         # Define board roles
         roles = ["Chair", "Secretary", "Treasurer"]
         
-        # Add each member with a role
-        for i, member in enumerate(self.test_members):
+        # Add each volunteer with a role
+        for i, volunteer_name in enumerate(self.test_volunteers):
             role = roles[i % len(roles)]
             
             # Verify the role exists
             if not frappe.db.exists("Chapter Role", role):
                 frappe.throw(f"Test chapter role {role} does not exist")
             
+            # Get volunteer details
+            volunteer = frappe.get_doc("Volunteer", volunteer_name)
+            
             self.test_chapter.append("board_members", {
-                "member": member.name,
-                "member_name": member.full_name,
-                "email": member.email,
+                "volunteer": volunteer_name,
+                "volunteer_name": volunteer.volunteer_name,
+                "email": volunteer.email,
                 "chapter_role": role,
                 "from_date": today(),
                 "is_active": 1
@@ -188,64 +214,64 @@ class TestChapterVolunteerIntegration(unittest.TestCase):
         
         self.assertTrue(has_board_assignment, "Volunteer should have a board position assignment")
 
-    def test_create_volunteer_from_board_member(self):
-        """Test creating a volunteer record from a board member"""
-        # Add board members to chapter
-        self.add_board_members_to_chapter()
-        
-        # Select a member that doesn't have a volunteer yet
-        member_to_check = self.test_members[1].name
-        
-        # First make sure this member doesn't already have a volunteer
-        existing_volunteer = frappe.db.exists("Volunteer", {"member": member_to_check})
-        if existing_volunteer:
-            frappe.delete_doc("Volunteer", existing_volunteer, force=True, ignore_permissions=True)
-        
-        # Run the sync
-        sync_chapter_board_members()
-        
-        # Check if a volunteer was created
-        volunteer_exists = frappe.db.exists("Volunteer", {"member": member_to_check})
-        
-        # Add to test_volunteers if created
-        if volunteer_exists:
-            self.test_volunteers.append(volunteer_exists)
-        
-        self.assertTrue(volunteer_exists, f"Volunteer should be created for member {member_to_check}")
-
-    def test_board_role_change(self):
-        """Test role changes for board members sync to volunteer assignments"""
-        # Add board members to chapter
-        self.add_board_members_to_chapter()
-        
-        # Run initial sync
-        sync_chapter_board_members()
-        
-        # Change a board member's role
-        for board_member in self.test_chapter.board_members:
-            if board_member.member == self.test_members[0].name:
-                board_member.chapter_role = "New Role"
-                break
-        
+    def test_duplicate_roles_validation(self):
+        """Test validation of duplicate unique roles"""
+        # Add first board member with Chair role (unique)
+        self.test_chapter.append("board_members", {
+            "volunteer": self.test_volunteers[0],
+            "volunteer_name": frappe.get_value("Volunteer", self.test_volunteers[0], "volunteer_name"),
+            "email": frappe.get_value("Volunteer", self.test_volunteers[0], "email"),
+            "chapter_role": "Chair",  # Unique role
+            "from_date": today(),
+            "is_active": 1
+        })
         self.test_chapter.save(ignore_permissions=True)
         
-        # Run sync again
-        sync_chapter_board_members()
+        # Try to add another board member with same unique role
+        # This should fail validation
+        with self.assertRaises(Exception):
+            self.test_chapter.append("board_members", {
+                "volunteer": self.test_volunteers[1],
+                "volunteer_name": frappe.get_value("Volunteer", self.test_volunteers[1], "volunteer_name"),
+                "email": frappe.get_value("Volunteer", self.test_volunteers[1], "email"),
+                "chapter_role": "Chair",  # Same unique role
+                "from_date": today(),
+                "is_active": 1
+            })
+            self.test_chapter.save(ignore_permissions=True)
+    
+    def test_non_unique_roles(self):
+        """Test that non-unique roles can be assigned to multiple people"""
+        # Add first board member with non-unique role
+        self.test_chapter.append("board_members", {
+            "volunteer": self.test_volunteers[0],
+            "volunteer_name": frappe.get_value("Volunteer", self.test_volunteers[0], "volunteer_name"),
+            "email": frappe.get_value("Volunteer", self.test_volunteers[0], "email"),
+            "chapter_role": "New Role",  # Non-unique role
+            "from_date": today(),
+            "is_active": 1
+        })
+        self.test_chapter.save(ignore_permissions=True)
         
-        # Get volunteer and check for updated role
-        volunteer = frappe.get_doc("Volunteer", self.test_volunteers[0])
-        
-        # Get aggregated assignments
-        assignments = volunteer.get_aggregated_assignments()
-        
-        # Check if there's an assignment with the new role
-        has_new_role = False
-        for assignment in assignments:
-            if (assignment.get('source_type') == "Board Position" and 
-                assignment.get('source_doctype') == "Chapter" and
-                assignment.get('source_name') == self.test_chapter.name and
-                assignment.get('role') == "New Role"):
-                has_new_role = True
-                break
-        
-        self.assertTrue(has_new_role, "Volunteer assignment should be updated with new role")
+        # Add another board member with same non-unique role
+        # This should succeed
+        try:
+            self.test_chapter.append("board_members", {
+                "volunteer": self.test_volunteers[1],
+                "volunteer_name": frappe.get_value("Volunteer", self.test_volunteers[1], "volunteer_name"),
+                "email": frappe.get_value("Volunteer", self.test_volunteers[1], "email"),
+                "chapter_role": "New Role",  # Same non-unique role
+                "from_date": today(),
+                "is_active": 1
+            })
+            self.test_chapter.save(ignore_permissions=True)
+            
+            # Count board members with this role
+            count = 0
+            for member in self.test_chapter.board_members:
+                if member.chapter_role == "New Role" and member.is_active:
+                    count += 1
+                    
+            self.assertEqual(count, 2, "Should allow two active board members with the same non-unique role")
+        except Exception as e:
+            self.fail(f"Failed to add multiple board members with non-unique role: {str(e)}")
