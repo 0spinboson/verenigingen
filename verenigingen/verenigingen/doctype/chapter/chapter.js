@@ -338,55 +338,94 @@ function send_email_to_chapter_members(frm) {
 
 // Function to check for duplicate active roles
 function check_for_duplicate_roles(frm, current_row) {
-    // Check for duplicate active roles
-    var active_roles = {};
-    
-    frm.doc.board_members.forEach(function(member) {
-        if (member.is_active && member.chapter_role && 
-            member.name !== current_row.name) {
-            if (member.chapter_role === current_row.chapter_role) {
-                frappe.msgprint(__("Role '{0}' is already assigned to {1}", 
-                    [current_row.chapter_role, member.member_name]));
-                
-                // Ask if user wants to deactivate the existing role
-                frappe.confirm(
-                    __('Do you want to deactivate the existing assignment to {0}?', [member.member_name]),
-                    function() {
-                        // Yes - deactivate existing role
-                        frappe.model.set_value(member.doctype, member.name, 'is_active', 0);
-                        frappe.model.set_value(member.doctype, member.name, 'to_date', frappe.datetime.get_today());
-                    }
-                );
+    // First check if this role requires uniqueness
+    frappe.db.get_value('Chapter Role', current_row.chapter_role, 'is_unique', function(r) {
+        if (r && r.is_unique) {
+            // This is a unique role, check for duplicates
+            var found_duplicate = false;
+            
+            frm.doc.board_members.forEach(function(member) {
+                if (member.is_active && member.chapter_role && 
+                    member.name !== current_row.name && 
+                    member.chapter_role === current_row.chapter_role) {
+                    
+                    found_duplicate = true;
+                    
+                    frappe.msgprint(__("Role '{0}' is already assigned to {1}. This role can only be assigned to one person at a time.", 
+                        [current_row.chapter_role, member.volunteer_name]));
+                    
+                    // Ask if user wants to deactivate the existing role
+                    frappe.confirm(
+                        __('Do you want to deactivate the existing assignment to {0}?', [member.volunteer_name]),
+                        function() {
+                            // Yes - deactivate existing role
+                            frappe.model.set_value(member.doctype, member.name, 'is_active', 0);
+                            frappe.model.set_value(member.doctype, member.name, 'to_date', frappe.datetime.get_today());
+                        }
+                    );
+                }
+            });
+            
+            // If no duplicate found, everything is fine
+            if (!found_duplicate) {
+                frappe.show_alert({
+                    message: __("Role '{0}' assigned to {1}", [current_row.chapter_role, current_row.volunteer_name]),
+                    indicator: 'green'
+                }, 3);
             }
-            active_roles[member.chapter_role] = member.member;
+        } else {
+            // Non-unique role, just display a confirmation
+            frappe.show_alert({
+                message: __("Role '{0}' assigned to {1}", [current_row.chapter_role, current_row.volunteer_name]),
+                indicator: 'green'
+            }, 3);
         }
     });
 }
 
 // Function to validate board members on save
 function validate_board_members(frm) {
-    // Check for duplicate active roles on save
-    var active_roles = {};
-    var has_error = false;
-    
-    frm.doc.board_members.forEach(function(member) {
-        if (member.is_active && member.chapter_role) {
-            if (active_roles[member.chapter_role]) {
-                frappe.msgprint(__("Role '{0}' is assigned to multiple active board members", [member.chapter_role]));
-                has_error = true;
-            }
-            active_roles[member.chapter_role] = member.member;
+    // Load all unique roles first
+    return new Promise(function(resolve, reject) {
+        frappe.db.get_list('Chapter Role', {
+            fields: ['name', 'is_unique'],
+            filters: { 'is_active': 1 }
+        }).then(function(roles) {
+            // Create a dictionary of roles that are unique
+            var unique_roles = {};
+            roles.forEach(function(role) {
+                if (role.is_unique) {
+                    unique_roles[role.name] = true;
+                }
+            });
             
-            // Check dates
-            if (member.to_date && 
-                frappe.datetime.str_to_obj(member.from_date) > frappe.datetime.str_to_obj(member.to_date)) {
-                frappe.msgprint(__("Board member {0} has start date after end date", [member.member_name]));
-                has_error = true;
-            }
-        }
+            // Check for duplicate active roles on save (only for unique roles)
+            var active_unique_roles = {};
+            var has_error = false;
+            
+            frm.doc.board_members.forEach(function(member) {
+                if (member.is_active && member.chapter_role) {
+                    // Only enforce uniqueness for roles marked as unique
+                    if (unique_roles[member.chapter_role]) {
+                        if (active_unique_roles[member.chapter_role]) {
+                            frappe.msgprint(__("Unique role '{0}' is assigned to multiple active board members", [member.chapter_role]));
+                            has_error = true;
+                        }
+                        active_unique_roles[member.chapter_role] = member.volunteer;
+                    }
+                    
+                    // Check dates
+                    if (member.to_date && 
+                        frappe.datetime.str_to_obj(member.from_date) > frappe.datetime.str_to_obj(member.to_date)) {
+                        frappe.msgprint(__("Board member {0} has start date after end date", [member.volunteer_name]));
+                        has_error = true;
+                    }
+                }
+            });
+            
+            resolve(!has_error);
+        });
     });
-    
-    return !has_error;
 }
 
 // Function to add a new board member
