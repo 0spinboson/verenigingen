@@ -5,8 +5,8 @@
   "editable_grid": 1,
   "engine": "InnoDB",
   "field_order": [
-    "member",
-    "member_name",
+    "volunteer",
+    "volunteer_name",
     "email",
     "chapter_role",
     "column_break_4",
@@ -17,23 +17,23 @@
   ],
   "fields": [
     {
-      "fieldname": "member",
+      "fieldname": "volunteer",
       "fieldtype": "Link",
       "in_list_view": 1,
-      "label": "Member",
-      "options": "Member",
+      "label": "Volunteer",
+      "options": "Volunteer",
       "reqd": 1
     },
     {
-      "fetch_from": "member.full_name",
-      "fieldname": "member_name",
+      "fetch_from": "volunteer.volunteer_name",
+      "fieldname": "volunteer_name",
       "fieldtype": "Data",
       "in_list_view": 1,
-      "label": "Member Name",
+      "label": "Volunteer Name",
       "read_only": 1
     },
     {
-      "fetch_from": "member.email",
+      "fetch_from": "volunteer.email",
       "fieldname": "email",
       "fieldtype": "Data",
       "label": "Email",
