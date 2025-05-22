@@ -75,7 +75,7 @@ def process_expired_memberships():
         "Membership",
         filters={
             "status": "Active",
-            "end_date": ["<", today()],
+            "renewal_date": ["<", today()],
             "docstatus": 1
         },
         fields=["name"]
@@ -114,7 +114,7 @@ def send_renewal_reminders():
             "Membership",
             filters={
                 "status": "Active",
-                "end_date": expiry_date,
+                "renewal_date": expiry_date,
                 "docstatus": 1
             },
             fields=["name", "member", "member_name", "email", "membership_type", "end_date"]
