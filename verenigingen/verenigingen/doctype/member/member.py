@@ -24,7 +24,9 @@ class Member(Document):
     def validate(self):
         self.validate_name()
         self.update_full_name()
-        self.update_membership_status()
+        if not self.is_new():
+            self.update_membership_status()
+
         self.calculate_age()
         self.validate_payment_method()
         self.set_payment_reference()
