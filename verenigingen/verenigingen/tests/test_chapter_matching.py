@@ -201,7 +201,7 @@ class TestChapterMatching(VereningingenTestCase):
         self.assertTrue(result["matches_by_region"])
         self.assertEqual(result["matches_by_region"][0].name, "Region Test")
     
-def test_postal_code_matching(self):
+    def test_postal_code_matching(self):
         """Test matching chapters based on postal code"""
         # Test matching by postal code range
         amsterdam_chapter = frappe.get_doc("Chapter", "Test Amsterdam")
