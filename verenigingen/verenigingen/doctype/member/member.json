@@ -296,7 +296,7 @@
    "read_only": 1
   },
   {
-   "fetch_from": "current_membership_details.end_date",
+   "fetch_from": "current_membership_details.renewal_date",
    "fieldname": "current_membership_end",
    "fieldtype": "Date",
    "label": "End Date",
