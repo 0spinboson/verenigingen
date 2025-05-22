@@ -117,7 +117,7 @@ def send_renewal_reminders():
                 "renewal_date": expiry_date,
                 "docstatus": 1
             },
-            fields=["name", "member", "member_name", "email", "membership_type", "end_date"]
+            fields=["name", "member", "member_name", "email", "membership_type", "renewal_date"]
         )
         
         for membership in memberships:
@@ -174,7 +174,7 @@ def process_auto_renewals():
         "Membership",
         filters={
             "status": "Active",
-            "end_date": today(),
+            "renenwal_date": today(),
             "auto_renew": 1,
             "docstatus": 1
         },
