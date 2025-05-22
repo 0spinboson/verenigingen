@@ -16,6 +16,7 @@ class Chapter(WebsiteGenerator):
         if not self.route:
             self.route = 'chapters/' + self.scrub(self.name)
 
+        # NEW: Check for board member status changes
         self.check_board_member_changes()
         self.check_board_member_additions()
     
@@ -49,44 +50,44 @@ class Chapter(WebsiteGenerator):
                 if not frappe.db.exists("Volunteer", member.volunteer):
                     frappe.throw(_("Volunteer {0} does not exist").format(member.volunteer))
 
-ef check_board_member_changes(self):
-    """Check for board members being deactivated and update volunteer history"""
-    if self.is_new():
-        return
+    def check_board_member_changes(self):
+        """Check for board members being deactivated and update volunteer history"""
+        if self.is_new():
+            return
+            
+        # Get the previous version of the document
+        old_doc = self.get_doc_before_save()
+        if not old_doc:
+            return
+            
+        # Create lookup for old board members
+        old_board_members = {bm.name: bm for bm in old_doc.board_members if bm.name}
         
-    # Get the previous version of the document
-    old_doc = self.get_doc_before_save()
-    if not old_doc:
-        return
-        
-    # Create lookup for old board members
-    old_board_members = {bm.name: bm for bm in old_doc.board_members if bm.name}
-    
-    # Check each current board member
-    for board_member in self.board_members:
-        if not board_member.name:
-            continue
-            
-        old_board_member = old_board_members.get(board_member.name)
-        if not old_board_member:
-            continue
-            
-        # Check if board member was deactivated
-        if (old_board_member.is_active == 1 and 
-            board_member.is_active == 0 and 
-            board_member.volunteer):
-            
-            # Set to_date if not already set
-            if not board_member.to_date:
-                board_member.to_date = today()
-            
-            # Update volunteer assignment history
-            self.update_volunteer_assignment_history_on_deactivation(
-                board_member.volunteer,
-                board_member.chapter_role,
-                board_member.from_date,
-                board_member.to_date
-            )
+        # Check each current board member
+        for board_member in self.board_members:
+            if not board_member.name:
+                continue
+                
+            old_board_member = old_board_members.get(board_member.name)
+            if not old_board_member:
+                continue
+                
+            # Check if board member was deactivated
+            if (old_board_member.is_active == 1 and 
+                board_member.is_active == 0 and 
+                board_member.volunteer):
+                
+                # Set to_date if not already set
+                if not board_member.to_date:
+                    board_member.to_date = today()
+                
+                # Update volunteer assignment history
+                self.update_volunteer_assignment_history_on_deactivation(
+                    board_member.volunteer,
+                    board_member.chapter_role,
+                    board_member.from_date,
+                    board_member.to_date
+                )
 
     def update_volunteer_assignment_history_on_deactivation(self, volunteer_id, role, start_date, end_date):
         """Update volunteer assignment history when board member is deactivated"""
@@ -127,6 +128,71 @@ ef check_board_member_changes(self):
         except Exception as e:
             frappe.log_error(
                 message=f"Error updating volunteer assignment history: {str(e)}\nVolunteer: {volunteer_id}, Chapter: {self.name}",
+                title="Volunteer Assignment History Error"
+            )
+
+    def check_board_member_additions(self):
+        """Check for new board members and update volunteer history"""
+        if self.is_new():
+            # For new chapters, add all active board members to history
+            for board_member in self.board_members:
+                if board_member.is_active and board_member.volunteer:
+                    self.add_volunteer_assignment_history_on_activation(
+                        board_member.volunteer,
+                        board_member.chapter_role,
+                        board_member.from_date
+                    )
+            return
+            
+        # Get the previous version of the document
+        old_doc = self.get_doc_before_save()
+        if not old_doc:
+            return
+            
+        # Create lookup for old board members
+        old_board_member_volunteers = {bm.volunteer for bm in old_doc.board_members if bm.volunteer and bm.is_active}
+        
+        # Check for new active board members
+        for board_member in self.board_members:
+            if (board_member.is_active and 
+                board_member.volunteer and 
+                board_member.volunteer not in old_board_member_volunteers):
+                
+                self.add_volunteer_assignment_history_on_activation(
+                    board_member.volunteer,
+                    board_member.chapter_role,
+                    board_member.from_date
+                )
+    
+    def add_volunteer_assignment_history_on_activation(self, volunteer_id, role, start_date):
+        """Add active assignment to volunteer history when joining board"""
+        try:
+            volunteer = frappe.get_doc("Volunteer", volunteer_id)
+            
+            # Check if this assignment already exists as active
+            for assignment in volunteer.assignment_history:
+                if (assignment.reference_doctype == "Chapter" and 
+                    assignment.reference_name == self.name and
+                    assignment.role == role and
+                    assignment.status == "Active"):
+                    return  # Already exists
+            
+            # Add new active assignment
+            volunteer.append("assignment_history", {
+                "assignment_type": "Board Position",
+                "reference_doctype": "Chapter",
+                "reference_name": self.name,
+                "role": role,
+                "start_date": start_date,
+                "status": "Active"
+            })
+            
+            volunteer.save(ignore_permissions=True)
+            frappe.logger().info(f"Added active assignment history for {volunteer_id} - Chapter: {self.name}, Role: {role}")
+            
+        except Exception as e:
+            frappe.log_error(
+                message=f"Error adding volunteer assignment history: {str(e)}\nVolunteer: {volunteer_id}, Chapter: {self.name}",
                 title="Volunteer Assignment History Error"
             )
 
@@ -199,71 +265,6 @@ ef check_board_member_changes(self):
             self.chapter_head = None
         
         return chair_found
-
-    def check_board_member_additions(self):
-        """Check for new board members and update volunteer history"""
-        if self.is_new():
-            # For new chapters, add all active board members to history
-            for board_member in self.board_members:
-                if board_member.is_active and board_member.volunteer:
-                    self.add_volunteer_assignment_history_on_activation(
-                        board_member.volunteer,
-                        board_member.chapter_role,
-                        board_member.from_date
-                    )
-            return
-            
-        # Get the previous version of the document
-        old_doc = self.get_doc_before_save()
-        if not old_doc:
-            return
-            
-        # Create lookup for old board members
-        old_board_member_volunteers = {bm.volunteer for bm in old_doc.board_members if bm.volunteer and bm.is_active}
-        
-        # Check for new active board members
-        for board_member in self.board_members:
-            if (board_member.is_active and 
-                board_member.volunteer and 
-                board_member.volunteer not in old_board_member_volunteers):
-                
-                self.add_volunteer_assignment_history_on_activation(
-                    board_member.volunteer,
-                    board_member.chapter_role,
-                    board_member.from_date
-                )
-    
-    def add_volunteer_assignment_history_on_activation(self, volunteer_id, role, start_date):
-        """Add active assignment to volunteer history when joining board"""
-        try:
-            volunteer = frappe.get_doc("Volunteer", volunteer_id)
-            
-            # Check if this assignment already exists as active
-            for assignment in volunteer.assignment_history:
-                if (assignment.reference_doctype == "Chapter" and 
-                    assignment.reference_name == self.name and
-                    assignment.role == role and
-                    assignment.status == "Active"):
-                    return  # Already exists
-            
-            # Add new active assignment
-            volunteer.append("assignment_history", {
-                "assignment_type": "Board Position",
-                "reference_doctype": "Chapter",
-                "reference_name": self.name,
-                "role": role,
-                "start_date": start_date,
-                "status": "Active"
-            })
-            
-            volunteer.save(ignore_permissions=True)
-            frappe.logger().info(f"Added active assignment history for {volunteer_id} - Chapter: {self.name}, Role: {role}")
-            
-        except Exception as e:
-            frappe.log_error(
-                message=f"Error adding volunteer assignment history: {str(e)}\nVolunteer: {volunteer_id}, Chapter: {self.name}",
-                title="Volunteer Assignment History Error"
-            )
     
     def get_board_members(self, include_inactive=False, role=None):
         """Get list of board members, optionally filtered by role"""
@@ -429,29 +430,37 @@ ef check_board_member_changes(self):
         return False
         
     @frappe.whitelist()
-    def add_board_member(self, member, role, from_date=None, to_date=None):
+    def add_board_member(self, volunteer, role, from_date=None, to_date=None):
         """Add a new board member to this chapter"""
         if not from_date:
             from_date = today()
-            
-        # Check if member exists
-        if not frappe.db.exists("Member", member):
-            frappe.throw(_("Member {0} does not exist").format(member))
-            
+        
+        # Check if volunteer exists
+        if not frappe.db.exists("Volunteer", volunteer):
+            frappe.throw(_("Volunteer {0} does not exist").format(volunteer))
+        
+        # Get volunteer details
+        volunteer_doc = frappe.get_doc("Volunteer", volunteer)
+        
+        # Check if volunteer has a member
+        if not volunteer_doc.member:
+            frappe.throw(_("Volunteer {0} does not have an associated member").format(volunteer_doc.volunteer_name))
+        
         # Get member details
-        member_doc = frappe.get_doc("Member", member)
+        member_id = volunteer_doc.member
+        member_doc = frappe.get_doc("Member", member_id)
         
         # First deactivate any existing board member with the same role
         for board_member in self.board_members:
             if board_member.chapter_role == role and board_member.is_active:
                 board_member.is_active = 0
                 board_member.to_date = from_date
-                
+        
         # Add new board member
         self.append("board_members", {
-            "member": member,
-            "member_name": member_doc.full_name,
-            "email": member_doc.email,
+            "volunteer": volunteer,
+            "volunteer_name": volunteer_doc.volunteer_name,
+            "email": volunteer_doc.email,
             "chapter_role": role,
             "from_date": from_date,
             "to_date": to_date,
@@ -459,12 +468,12 @@ ef check_board_member_changes(self):
         })
         
         # Also add to chapter members if not already a member
-        self._add_to_members(member)
+        self._add_to_members(member_id)
         
         self.save()
         
-        # Notify the member
-        self.notify_board_member_added(member, role)
+        # Notify the volunteer
+        self.notify_board_member_added(volunteer, role)
         
         return True
 
@@ -607,7 +616,7 @@ ef check_board_member_changes(self):
         return members
     
     @frappe.whitelist()
-    def transition_board_role(self, member, new_role, transition_date=None):
+    def transition_board_role(self, volunteer, new_role, transition_date=None):
         """Change a board member's role"""
         if not transition_date:
             transition_date = today()
@@ -615,17 +624,17 @@ ef check_board_member_changes(self):
         # Find the current role
         current_role = None
         for board_member in self.board_members:
-            if board_member.member == member and board_member.is_active:
+            if board_member.volunteer == volunteer and board_member.is_active:
                 current_role = board_member.chapter_role
                 board_member.is_active = 0
                 board_member.to_date = transition_date
                 break
                 
         if not current_role:
-            frappe.throw(_("Member {0} is not an active board member").format(member))
+            frappe.throw(_("Volunteer {0} is not an active board member").format(volunteer))
             
         # Add new role
-        return self.add_board_member(member, new_role, transition_date)
+        return self.add_board_member(volunteer, new_role, transition_date)
     
     def notify_board_member_added(self, volunteer, role):
         """Send notification when a volunteer is added to the board"""
@@ -724,6 +733,8 @@ ef check_board_member_changes(self):
                     "member_name": member.member_name
                 }
         return roles
+
+# Functions outside the Chapter class
 
 def validate_chapter_access(doc, method=None):
     """
@@ -1037,8 +1048,6 @@ def leave_chapter(member_name, chapter_name, leave_reason=None):
     
     return {"success": True, "removed": removed}
 
-# Add this to chapter.py
-
 @frappe.whitelist()
 def get_volunteers_for_chapter(doctype, txt, searchfield, start, page_len, filters):
     """Get volunteers that have members in this chapter"""
@@ -1068,83 +1077,6 @@ def get_volunteers_for_chapter(doctype, txt, searchfield, start, page_len, filte
         tuple(member_ids) + ("%" + txt + "%", "%" + txt + "%", start, page_len), as_dict=True)
     
     return [(v.name, v.volunteer_name, v.email) for v in volunteers]
-
-# Helper method to add board member to members - update this in chapter.py
-def _add_to_members(self, member_id):
-    """Add a board member to chapter members if not already there"""
-    # Check if already a member
-    already_member = False
-    for member in self.members:
-        if member.member == member_id:
-            already_member = True
-            # If disabled, re-enable
-            if not member.enabled:
-                member.enabled = 1
-                member.leave_reason = None
-            break
-    
-    # Not a member yet, add them
-    if not already_member:
-        member_doc = frappe.get_doc("Member", member_id)
-        self.append("members", {
-            "member": member_id,
-            "member_name": member_doc.full_name,
-            "enabled": 1
-        })
-        return True
-    
-    return False
-
-@frappe.whitelist()
-def add_board_member(self, volunteer, role, from_date=None, to_date=None):
-    """Add a new board member to this chapter"""
-    if not from_date:
-        from_date = today()
-    
-    # Check if volunteer exists
-    if not frappe.db.exists("Volunteer", volunteer):
-        frappe.throw(_("Volunteer {0} does not exist").format(volunteer))
-    
-    # Get volunteer details
-    volunteer_doc = frappe.get_doc("Volunteer", volunteer)
-    
-    # Check if volunteer has a member
-    if not volunteer_doc.member:
-        frappe.throw(_("Volunteer {0} does not have an associated member").format(volunteer_doc.volunteer_name))
-    
-    # Get member details
-    member_id = volunteer_doc.member
-    member_doc = frappe.get_doc("Member", member_id)
-    
-    # First deactivate any existing board member with the same role
-    for board_member in self.board_members:
-        if board_member.chapter_role == role and board_member.is_active:
-            board_member.is_active = 0
-            board_member.to_date = from_date
-    
-    # Add new board member
-    self.append("board_members", {
-        "volunteer": volunteer,
-        "volunteer_name": volunteer_doc.volunteer_name,
-        "email": volunteer_doc.email,
-        "chapter_role": role,
-        "from_date": from_date,
-        "to_date": to_date,
-        "is_active": 1
-    })
-    
-    # Also add to chapter members if not already a member
-    self._add_to_members(member_id)
-    
-    self.save()
-    
-    # Notify the volunteer
-    self.notify_board_member_added(volunteer, role)
-    
-    return True
-# Add this to chapter.py at the bottom, outside the Chapter class
-
-# Replace the existing update_volunteer_assignment_history function in chapter.py
 
 @frappe.whitelist()
 def update_volunteer_assignment_history(volunteer_id, chapter_name, role, start_date, end_date=None):
