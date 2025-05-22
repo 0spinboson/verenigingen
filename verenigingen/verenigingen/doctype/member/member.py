@@ -1439,7 +1439,9 @@ def derive_bic_from_iban(iban):
 @frappe.whitelist()
 def check_mandate_iban_mismatch(member, current_iban):
     """
-    Check if there's an existing SEPA mandate with a different IBAN than the current one
+    Check if we should show SEPA mandate creation popup:
+    1. No existing mandate at all (first-time setup)
+    2. Existing mandate with different IBAN (bank account change)
     """
     frappe.logger().debug(f"check_mandate_iban_mismatch called with member={member}, current_iban={current_iban}")
     
@@ -1463,31 +1465,42 @@ def check_mandate_iban_mismatch(member, current_iban):
     
     frappe.logger().debug(f"Found {len(existing_mandates)} active mandates")
     
+    # SCENARIO 1: No existing mandates - show popup for first-time setup
     if not existing_mandates:
-        # No existing mandates - no popup needed
-        frappe.logger().debug("No existing mandates found")
-        return {"show_popup": False, "reason": "no_existing_mandates"}
+        frappe.logger().debug("No existing mandates found - showing first-time setup popup")
+        return {
+            "show_popup": True,
+            "reason": "no_existing_mandates",
+            "scenario": "first_time_setup",
+            "message": "No SEPA mandate found. Create one for Direct Debit payments?"
+        }
     
-    # Check if any existing mandate has a different IBAN
+    # SCENARIO 2: Check if any existing mandate has a different IBAN
     for mandate in existing_mandates:
         mandate_iban_normalized = mandate.iban.replace(' ', '').upper() if mandate.iban else ''
         
         frappe.logger().debug(f"Comparing mandate IBAN '{mandate_iban_normalized}' with current '{current_iban_normalized}'")
         
         if mandate_iban_normalized and mandate_iban_normalized != current_iban_normalized:
-            # Found a mismatch - show popup
+            # Found a mismatch - show popup for bank account change
             frappe.logger().debug(f"IBAN mismatch found in mandate {mandate.name}")
             return {
                 "show_popup": True,
                 "existing_mandate": mandate.name,
                 "existing_iban": mandate.iban,
                 "current_iban": current_iban,
-                "reason": "iban_mismatch"
+                "reason": "iban_mismatch",
+                "scenario": "bank_account_change",
+                "message": f"Your IBAN differs from existing mandate. Create new mandate?"
             }
     
-    # All existing mandates have the same IBAN - no popup needed
+    # SCENARIO 3: All existing mandates have the same IBAN - no popup needed
     frappe.logger().debug("All existing mandates have matching IBAN")
-    return {"show_popup": False, "reason": "iban_matches"}
+    return {
+        "show_popup": False, 
+        "reason": "iban_matches",
+        "scenario": "no_change_needed"
+    }
 
 @frappe.whitelist()
 def create_and_link_mandate_enhanced(member, mandate_id, iban, bic=None, account_holder_name=None, 
