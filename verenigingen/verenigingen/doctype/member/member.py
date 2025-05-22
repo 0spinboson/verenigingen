@@ -24,9 +24,7 @@ class Member(Document):
     def validate(self):
         self.validate_name()
         self.update_full_name()
-        if not self.get("__islocal"):
-            self.update_membership_status()
-
+        self.update_membership_status()
         self.calculate_age()
         self.validate_payment_method()
         self.set_payment_reference()
@@ -314,8 +312,8 @@ class Member(Document):
             self.full_name = full_name
             
     def update_membership_status(self):
-        # Skip membership status update for new members
-        if self.is_new():
+        # Skip membership status update for new members or if name is not set
+        if not self.name or not frappe.db.exists("Member", self.name):
             return
             
         # Update the membership status section
@@ -354,7 +352,6 @@ class Member(Document):
                     # Optionally add to notes
                     if not self.notes:
                         self.notes = f"<p>Time remaining: {time_remaining_text}</p>"
-                    # Otherwise, consider updating notes or custom fields
             
     def get_active_membership(self):
         """Get currently active membership for this member"""
