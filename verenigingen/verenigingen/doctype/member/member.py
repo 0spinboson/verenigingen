@@ -661,27 +661,16 @@ class Member(Document):
     def validate_bank_details(self):
         """Validate bank details if payment method is Direct Debit"""
         if self.payment_method == "Direct Debit":
-            # Find the current SEPA mandate
-            current_mandate = None
-            for mandate_link in self.sepa_mandates:
-                if mandate_link.is_current and mandate_link.status == "Active":
-                    try:
-                        mandate = frappe.get_doc("SEPA Mandate", mandate_link.sepa_mandate)
-                        if mandate.status == "Active" and mandate.is_active:
-                            current_mandate = mandate
-                            break
-                    except frappe.DoesNotExistError:
-                        continue
-            
-            # Use bank details from current mandate if available
-            if current_mandate:
-                self.iban = current_mandate.iban
-                self.bic = current_mandate.bic
-                self.bank_account_name = current_mandate.account_holder_name
-            
-            # Validate IBAN format
+            # Validate IBAN format if provided
             if self.iban:
                 self.iban = self.validate_iban_format(self.iban)
+            
+            # Check if we have required fields for Direct Debit
+            if not self.iban:
+                frappe.throw(_("IBAN is required for Direct Debit payment method"))
+            
+            if not self.bank_account_name:
+                frappe.throw(_("Account Holder Name is required for Direct Debit payment method"))
     
     def validate_iban_format(self, iban):
         """Basic IBAN validation and formatting"""
