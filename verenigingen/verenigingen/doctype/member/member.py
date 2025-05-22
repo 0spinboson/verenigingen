@@ -24,7 +24,7 @@ class Member(Document):
     def validate(self):
         self.validate_name()
         self.update_full_name()
-        if not self.is_new():
+        if self.name and frappe.db.exists("Member", self.name):
             self.update_membership_status()
 
         self.calculate_age()
