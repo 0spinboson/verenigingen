@@ -390,15 +390,21 @@ frappe.ui.form.on('Member', {
         if (!frm.is_new()) {
             // Add button to create new SEPA mandate
             frm.add_custom_button(__('Create SEPA Mandate'), function() {
-                frappe.call({
-                    method: 'create_sepa_mandate',
-                    doc: frm.doc,
-                    callback: function(r) {
-                        if (r.message) {
-                            frappe.set_route('Form', 'SEPA Mandate', r.message);
-                        }
-                    }
-                });
+                const suggestedReference = generateMandateReference(frm.doc);
+                frappe.route_options = {
+                    'member': frm.doc.name,
+                    'member_name': frm.doc.full_name,
+                    'mandate_id': suggestedReference,
+                    'account_holder_name': frm.doc.bank_account_name || frm.doc.full_name,
+                    'iban': frm.doc.iban || '',
+                    'bic': frm.doc.bic || '',
+                    'sign_date': frappe.datetime.get_today(),
+                    'used_for_memberships': 1,
+                    'used_for_donations': 0,
+                    'mandate_type': 'RCUR'
+                };
+                
+                frappe.new_doc('SEPA Mandate');
             }, __('Actions'));
             
             // Add button to view SEPA mandates
@@ -701,27 +707,36 @@ frappe.ui.form.on('Member', {
     },
     
     after_save: function(frm) {
-        // Only proceed if we have direct debit with bank details
-        if (frm.doc.payment_method === 'Direct Debit' && 
-            frm.doc.iban && frm.doc.bank_account_name) {
+            console.log('Member after_save triggered');
             
-            // Store the IBAN normalized value in a custom property for comparison
-            const currentIbanNormalized = frm.doc.iban.replace(/\s+/g, '').toUpperCase();
-            
-            // Initialize previous value if it doesn't exist
-            if (!frm._previous_iban_normalized) {
-                frm._previous_iban_normalized = currentIbanNormalized;
-            }
-            
-            // Only check for mandate if normalized IBAN actually changed
-            if (frm._previous_iban_normalized !== currentIbanNormalized) {
-                // Update stored value before checking for mandate
-                frm._previous_iban_normalized = currentIbanNormalized;
+            // Only proceed if we have direct debit with bank details
+            if (frm.doc.payment_method === 'Direct Debit' && 
+                frm.doc.iban && frm.doc.bank_account_name) {
                 
-                // Only check for mandate if IBAN actually changed
-                checkForExistingMandate(frm);
+                console.log('Direct debit conditions met - checking mandates');
+                
+                // Store the IBAN normalized value for comparison
+                const currentIbanNormalized = frm.doc.iban.replace(/\s+/g, '').toUpperCase();
+                console.log('Current IBAN normalized:', currentIbanNormalized);
+                
+                // Initialize previous value if it doesn't exist
+                if (!frm._previous_iban_normalized) {
+                    frm._previous_iban_normalized = currentIbanNormalized;
+                    console.log('Initialized previous IBAN');
+                }
+                
+                // Only check for mandate if normalized IBAN actually changed
+                if (frm._previous_iban_normalized !== currentIbanNormalized) {
+                    console.log('IBAN changed - checking for mandate mismatch');
+                    // Update stored value before checking for mandate
+                    frm._previous_iban_normalized = currentIbanNormalized;
+                    
+                    // Check for IBAN mismatch with existing mandates
+                    checkForMandateIbanMismatch(frm);
+                } else {
+                    console.log('IBAN not changed - skipping mandate check');
+                }
             }
-        }
     },
     
     bank_account_name: function(frm) {
@@ -730,6 +745,62 @@ frappe.ui.form.on('Member', {
         // We'll check for mandates after save
     }
 });
+
+// New function to check for IBAN mismatch with existing mandates
+function checkForMandateIbanMismatch(frm) {
+    console.log('checkForMandateIbanMismatch called');
+    
+    // Skip if conditions aren't met
+    if (frm.doc.payment_method !== 'Direct Debit' || !frm.doc.iban || !frm.doc.bank_account_name) {
+        console.log('Skipping mandate check - conditions not met');
+        return;
+    }
+    
+    // Prevent multiple dialogs
+    if (window._sepa_mandate_dialog_shown) {
+        console.log('Dialog already shown - skipping');
+        return;
+    }
+    
+    // Set the flag to prevent multiple dialogs
+    window._sepa_mandate_dialog_shown = true;
+    console.log('Set dialog shown flag to true');
+    
+    // Check for existing mandates and IBAN mismatch
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.member.member.check_mandate_iban_mismatch',
+        args: {
+            member: frm.doc.name,
+            current_iban: frm.doc.iban
+        },
+        callback: function(r) {
+            console.log('Server response for mandate IBAN check:', r);
+            
+            if (r.message && r.message.show_popup) {
+                console.log('IBAN mismatch detected - showing dialog');
+                
+                let message = __('The IBAN you entered differs from your existing SEPA mandate.');
+                if (r.message.existing_iban) {
+                    message += '\n' + __('Current mandate IBAN: {0}', [r.message.existing_iban]);
+                    message += '\n' + __('New IBAN: {0}', [frm.doc.iban]);
+                }
+                message += '\n\n' + __('Would you like to create a new SEPA mandate for the new bank account?');
+                
+                setTimeout(() => {
+                    showMandateCreationDialog(frm, message, r.message);
+                }, 1000);
+            } else {
+                console.log('No IBAN mismatch or no existing mandate');
+                // Reset the flag if no mandate needed
+                window._sepa_mandate_dialog_shown = false;
+            }
+        },
+        error: function(r) {
+            console.error('Error checking mandate IBAN mismatch:', r);
+            window._sepa_mandate_dialog_shown = false;
+        }
+    });
+}
 
 // Handlers for the Member SEPA Mandate Link child table
 frappe.ui.form.on('Member SEPA Mandate Link', {
@@ -799,6 +870,196 @@ function suggest_chapter_from_address(frm) {
             });
         }
     });
+}
+
+// Enhanced mandate creation dialog with prefilled values
+function showMandateCreationDialog(frm, message = null, serverData = null) {
+    console.log('showMandateCreationDialog called with serverData:', serverData);
+    
+    // Generate suggested mandate reference
+    const suggestedReference = generateMandateReference(frm.doc);
+    
+    const confirmMessage = message || __('Would you like to create a new SEPA mandate for this bank account?');
+    
+    frappe.confirm(
+        confirmMessage,
+        function() {
+            console.log('User confirmed mandate creation');
+            
+            const d = new frappe.ui.Dialog({
+                title: __('Create SEPA Mandate'),
+                fields: [
+                    {
+                        label: __('Mandate Reference'),
+                        fieldname: 'mandate_id',
+                        fieldtype: 'Data',
+                        default: suggestedReference,
+                        reqd: 1,
+                        description: __('Unique identifier for this mandate')
+                    },
+                    {
+                        label: __('IBAN'),
+                        fieldname: 'iban',
+                        fieldtype: 'Data',
+                        default: frm.doc.iban,
+                        reqd: 1,
+                        read_only: 1
+                    },
+                    {
+                        label: __('BIC/SWIFT'),
+                        fieldname: 'bic',
+                        fieldtype: 'Data',
+                        default: frm.doc.bic || '',
+                        description: __('Will be auto-derived if left empty')
+                    },
+                    {
+                        label: __('Account Holder Name'),
+                        fieldname: 'account_holder_name',
+                        fieldtype: 'Data',
+                        default: frm.doc.bank_account_name || frm.doc.full_name,
+                        reqd: 1
+                    },
+                    {
+                        label: __('Sign Date'),
+                        fieldname: 'sign_date',
+                        fieldtype: 'Date',
+                        default: frappe.datetime.get_today(),
+                        reqd: 1
+                    },
+                    {
+                        label: __('Mandate Type'),
+                        fieldname: 'mandate_type',
+                        fieldtype: 'Select',
+                        options: [
+                            {label: __('Recurring payments (recommended)'), value: 'RCUR'},
+                            {label: __('One-off payment'), value: 'OOFF'}
+                        ],
+                        default: 'RCUR',
+                        reqd: 1
+                    },
+                    {
+                        label: __('Usage'),
+                        fieldname: 'usage_section',
+                        fieldtype: 'Section Break'
+                    },
+                    {
+                        label: __('Use for Memberships'),
+                        fieldname: 'used_for_memberships',
+                        fieldtype: 'Check',
+                        default: 1
+                    },
+                    {
+                        label: __('Use for Donations'),
+                        fieldname: 'used_for_donations',
+                        fieldtype: 'Check',
+                        default: 0
+                    },
+                    {
+                        label: __('Notes'),
+                        fieldname: 'notes_section',
+                        fieldtype: 'Section Break'
+                    },
+                    {
+                        label: __('Additional Notes'),
+                        fieldname: 'notes',
+                        fieldtype: 'Small Text',
+                        default: serverData && serverData.existing_mandate ? 
+                            __('Replacing mandate due to bank account change') : ''
+                    }
+                ],
+                primary_action_label: __('Create Mandate'),
+                primary_action(values) {
+                    console.log('Creating mandate with values:', values);
+                    
+                    // If there's an existing mandate that we're replacing, mark it as replaced
+                    const additionalArgs = {};
+                    if (serverData && serverData.existing_mandate) {
+                        additionalArgs.replace_mandate = serverData.existing_mandate;
+                    }
+                    
+                    frappe.call({
+                        method: 'verenigingen.verenigingen.doctype.member.member.create_and_link_mandate_enhanced',
+                        args: {
+                            member: frm.doc.name,
+                            mandate_id: values.mandate_id,
+                            iban: values.iban,
+                            bic: values.bic || '',
+                            account_holder_name: values.account_holder_name,
+                            mandate_type: values.mandate_type,
+                            sign_date: values.sign_date,
+                            used_for_memberships: values.used_for_memberships,
+                            used_for_donations: values.used_for_donations,
+                            notes: values.notes,
+                            ...additionalArgs
+                        },
+                        callback: function(r) {
+                            console.log('Mandate creation response:', r);
+                            if (r.message) {
+                                let alertMessage = __('SEPA Mandate {0} created successfully', [values.mandate_id]);
+                                if (serverData && serverData.existing_mandate) {
+                                    alertMessage += '. ' + __('Previous mandate has been marked as replaced.');
+                                }
+                                
+                                frappe.show_alert({
+                                    message: alertMessage,
+                                    indicator: 'green'
+                                }, 7);
+                                
+                                // Wait a moment then reload the form
+                                setTimeout(() => {
+                                    window._sepa_mandate_dialog_shown = false;
+                                    frm.reload_doc();
+                                }, 1500);
+                            }
+                        },
+                        error: function(r) {
+                            console.error('Error creating mandate:', r);
+                            window._sepa_mandate_dialog_shown = false;
+                        }
+                    });
+                    d.hide();
+                }
+            });
+            
+            d.show();
+            
+            // Auto-derive BIC when IBAN changes
+            d.fields_dict.iban.df.onchange = function() {
+                const iban = d.get_value('iban');
+                if (iban && !d.get_value('bic')) {
+                    frappe.call({
+                        method: 'verenigingen.verenigingen.doctype.member.member.derive_bic_from_iban',
+                        args: { iban: iban },
+                        callback: function(r) {
+                            if (r.message && r.message.bic) {
+                                d.set_value('bic', r.message.bic);
+                            }
+                        }
+                    });
+                }
+            };
+        },
+        function() {
+            console.log('User declined mandate creation');
+            window._sepa_mandate_dialog_shown = false;
+            frappe.show_alert(__('No new SEPA mandate created. The existing mandate will remain active.'), 5);
+        }
+    );
+}
+
+// Function to generate a suggested mandate reference
+function generateMandateReference(memberDoc) {
+    // Format: M-[MemberID]-[YYYYMMDD]-[Random3Digits]
+    const today = new Date();
+    const dateStr = today.getFullYear().toString() + 
+                   (today.getMonth() + 1).toString().padStart(2, '0') + 
+                   today.getDate().toString().padStart(2, '0');
+    
+    const randomSuffix = Math.floor(Math.random() * 900) + 100; // 3-digit random number
+    
+    let memberId = memberDoc.member_id || memberDoc.name.replace('Assoc-Member-', '').replace(/-/g, '');
+    
+    return `M-${memberId}-${dateStr}-${randomSuffix}`;
 }
 
 // Main function to suggest chapters for a member
