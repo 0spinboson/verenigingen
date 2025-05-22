@@ -15,6 +15,9 @@ class Chapter(WebsiteGenerator):
         self.update_chapter_head()
         if not self.route:
             self.route = 'chapters/' + self.scrub(self.name)
+
+        self.check_board_member_changes()
+        self.check_board_member_additions()
     
     def validate_board_members(self):
         """Validate board members data"""
@@ -116,6 +119,71 @@ class Chapter(WebsiteGenerator):
         
         return chair_found
 
+    def check_board_member_additions(self):
+        """Check for new board members and update volunteer history"""
+        if self.is_new():
+            # For new chapters, add all active board members to history
+            for board_member in self.board_members:
+                if board_member.is_active and board_member.volunteer:
+                    self.add_volunteer_assignment_history_on_activation(
+                        board_member.volunteer,
+                        board_member.chapter_role,
+                        board_member.from_date
+                    )
+            return
+            
+        # Get the previous version of the document
+        old_doc = self.get_doc_before_save()
+        if not old_doc:
+            return
+            
+        # Create lookup for old board members
+        old_board_member_volunteers = {bm.volunteer for bm in old_doc.board_members if bm.volunteer and bm.is_active}
+        
+        # Check for new active board members
+        for board_member in self.board_members:
+            if (board_member.is_active and 
+                board_member.volunteer and 
+                board_member.volunteer not in old_board_member_volunteers):
+                
+                self.add_volunteer_assignment_history_on_activation(
+                    board_member.volunteer,
+                    board_member.chapter_role,
+                    board_member.from_date
+                )
+    
+    def add_volunteer_assignment_history_on_activation(self, volunteer_id, role, start_date):
+        """Add active assignment to volunteer history when joining board"""
+        try:
+            volunteer = frappe.get_doc("Volunteer", volunteer_id)
+            
+            # Check if this assignment already exists as active
+            for assignment in volunteer.assignment_history:
+                if (assignment.reference_doctype == "Chapter" and 
+                    assignment.reference_name == self.name and
+                    assignment.role == role and
+                    assignment.status == "Active"):
+                    return  # Already exists
+            
+            # Add new active assignment
+            volunteer.append("assignment_history", {
+                "assignment_type": "Board Position",
+                "reference_doctype": "Chapter",
+                "reference_name": self.name,
+                "role": role,
+                "start_date": start_date,
+                "status": "Active"
+            })
+            
+            volunteer.save(ignore_permissions=True)
+            frappe.logger().info(f"Added active assignment history for {volunteer_id} - Chapter: {self.name}, Role: {role}")
+            
+        except Exception as e:
+            frappe.log_error(
+                message=f"Error adding volunteer assignment history: {str(e)}\nVolunteer: {volunteer_id}, Chapter: {self.name}",
+                title="Volunteer Assignment History Error"
+            )
+    
     def get_board_members(self, include_inactive=False, role=None):
         """Get list of board members, optionally filtered by role"""
         members = []
