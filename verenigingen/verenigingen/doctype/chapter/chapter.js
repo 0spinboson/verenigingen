@@ -58,36 +58,12 @@ refresh: function(frm) {
             if (!idx) return;
             
             var board_member = frm.doc.board_members[idx-1]; // idx is 1-based, array is 0-based
-            if (!board_member || !board_member.is_active) return;
+            if (!board_member || !board_member.is_active || !board_member.volunteer) return;
             
-            // If this is an active board member, prompt user to confirm and set end date
+            // If this is an active board member with a volunteer, update history before deletion
             setTimeout(function() {
-                frappe.confirm(
-                    __('Do you want to record this board position in the volunteer\'s assignment history before removing?'),
-                    function() {
-                        // Yes - update volunteer history
-                        if (board_member.volunteer) {
-                            frappe.call({
-                                method: 'verenigingen.verenigingen.doctype.chapter.chapter.update_volunteer_assignment_history',
-                                args: {
-                                    'volunteer_id': board_member.volunteer,
-                                    'chapter_name': frm.doc.name,
-                                    'role': board_member.chapter_role,
-                                    'start_date': board_member.from_date,
-                                    'end_date': frappe.datetime.get_today()
-                                },
-                                callback: function(r) {
-                                    if (r.message) {
-                                        frappe.show_alert({
-                                            message: __("Board assignment recorded in volunteer history"),
-                                            indicator: 'green'
-                                        }, 3);
-                                    }
-                                }
-                            });
-                        }
-                    }
-                );
+                // Automatically update volunteer history before deletion
+                update_volunteer_history_from_board_change(frm, board_member);
             }, 100);
         });
     }
@@ -154,51 +130,16 @@ frappe.ui.form.on('Chapter Board Member', {
     },
 
     
-is_active: function(frm, cdt, cdn) {
-    var row = locals[cdt][cdn];
-    if (row.is_active) {
-        check_for_duplicate_roles(frm, row);
-    } else {
-        // When deactivating, set to_date if not already set
-        if (!row.to_date) {
-            frappe.model.set_value(cdt, cdn, 'to_date', frappe.datetime.get_today());
-            
-            // Show confirmation to user
-            frappe.show_alert({
-                message: __("Board member deactivated. End date set to today."),
-                indicator: 'orange'
-            }, 5);
-            
-            // Prompt user to confirm the change and update assignment history
-            frappe.confirm(
-                __('Do you want to record this board position in the volunteer\'s assignment history?'),
-                function() {
-                    // User confirmed - update volunteer history
-                    if (row.volunteer) {
-                        frappe.call({
-                            method: 'verenigingen.verenigingen.doctype.chapter.chapter.update_volunteer_assignment_history',
-                            args: {
-                                'volunteer_id': row.volunteer,
-                                'chapter_name': frm.doc.name,
-                                'role': row.chapter_role,
-                                'start_date': row.from_date,
-                                'end_date': row.to_date || frappe.datetime.get_today()
-                            },
-                            callback: function(r) {
-                                if (r.message) {
-                                    frappe.show_alert({
-                                        message: __("Board assignment recorded in volunteer history"),
-                                        indicator: 'green'
-                                    }, 3);
-                                }
-                            }
-                        });
-                    }
-                }
-            );
+frappe.ui.form.on('Chapter Board Member', {
+    is_active: function(frm, cdt, cdn) {
+        var row = locals[cdt][cdn];
+        if (row.is_active) {
+            check_for_duplicate_roles(frm, row);
+        } else {
+            // When deactivating, handle the board member removal
+            handle_board_member_deactivation(frm, row);
         }
     }
-}
 });
 
 // Function to add a board member to the chapter's members list
@@ -996,6 +937,63 @@ function update_members_summary(frm) {
                     $header.append(`<span class="member-count">${summary}</span>`);
                 }
             }
+        }
+    });
+}
+
+function handle_board_member_deactivation(frm, row) {
+    // Set to_date if not already set
+    if (!row.to_date) {
+        frappe.model.set_value(row.doctype, row.name, 'to_date', frappe.datetime.get_today());
+    }
+    
+    // Show confirmation to user
+    frappe.show_alert({
+        message: __("Board member deactivated. End date set to today."),
+        indicator: 'orange'
+    }, 5);
+    
+    // Only prompt for volunteer history if we have a volunteer
+    if (row.volunteer) {
+        // Automatically update volunteer history (no user prompt needed)
+        update_volunteer_history_from_board_change(frm, row);
+    }
+}
+
+// Add this new function to chapter.js
+function update_volunteer_history_from_board_change(frm, board_member) {
+    if (!board_member.volunteer) {
+        return;
+    }
+    
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.chapter.chapter.update_volunteer_assignment_history',
+        args: {
+            'volunteer_id': board_member.volunteer,
+            'chapter_name': frm.doc.name,
+            'role': board_member.chapter_role,
+            'start_date': board_member.from_date,
+            'end_date': board_member.to_date || frappe.datetime.get_today()
+        },
+        callback: function(r) {
+            if (r.message) {
+                frappe.show_alert({
+                    message: __("Board assignment recorded in volunteer history"),
+                    indicator: 'green'
+                }, 3);
+            } else {
+                frappe.show_alert({
+                    message: __("Failed to update volunteer history. Please check the logs."),
+                    indicator: 'red'
+                }, 5);
+            }
+        },
+        error: function(r) {
+            console.error("Error updating volunteer history:", r);
+            frappe.show_alert({
+                message: __("Error updating volunteer history. Please try again."),
+                indicator: 'red'
+            }, 5);
         }
     });
 }
