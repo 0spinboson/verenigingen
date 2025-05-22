@@ -846,23 +846,43 @@ class Member(Document):
                 
     @frappe.whitelist()
     def create_sepa_mandate(self):
-        """Create a new SEPA mandate for this member"""
+        """
+        Create a new SEPA mandate for this member with enhanced prefilling
+        """
+        # Generate suggested mandate reference
+        mandate_ref_result = generate_mandate_reference(self.name)
+        suggested_reference = mandate_ref_result.get("mandate_reference", f"M-{self.member_id}-{frappe.utils.today().replace('-', '')}")
+        
         mandate = frappe.new_doc("SEPA Mandate")
         mandate.member = self.name
         mandate.member_name = self.full_name
-        mandate.account_holder_name = self.full_name
+        mandate.mandate_id = suggested_reference
+        mandate.account_holder_name = self.bank_account_name or self.full_name
         mandate.sign_date = frappe.utils.today()
+        
+        # Prefill bank details if available on member
+        if hasattr(self, 'iban') and self.iban:
+            mandate.iban = self.iban
+        if hasattr(self, 'bic') and self.bic:
+            mandate.bic = self.bic
         
         # Set default usage
         mandate.used_for_memberships = 1
-        mandate.used_for_donations = 1
+        mandate.used_for_donations = 0  # Conservative default
+        mandate.mandate_type = "RCUR"  # Recurring by default
+        
+        # Add creation note
+        mandate.notes = f"Created from Member {self.name} on {frappe.utils.today()}"
         
         mandate.insert()
         
-        # Add to member's mandate links
+        # Add to member's mandate links as non-current (user needs to activate)
         self.append("sepa_mandates", {
             "sepa_mandate": mandate.name,
-            "is_current": 0  # Not current by default - user will need to fill in bank details
+            "mandate_reference": mandate.mandate_id,
+            "is_current": 0,  # Not current by default - user will need to review and activate
+            "status": "Draft",
+            "valid_from": mandate.sign_date
         })
         
         self.save()
@@ -1414,3 +1434,255 @@ def derive_bic_from_iban(iban):
             bic = bank_code[:4] + country_code + 'X'
     
     return {"bic": bic}
+# Add these methods to your member.py file
+
+@frappe.whitelist()
+def check_mandate_iban_mismatch(member, current_iban):
+    """
+    Check if there's an existing SEPA mandate with a different IBAN than the current one
+    """
+    frappe.logger().debug(f"check_mandate_iban_mismatch called with member={member}, current_iban={current_iban}")
+    
+    if not member or not current_iban:
+        return {"show_popup": False, "error": "Missing parameters"}
+    
+    # Normalize current IBAN for comparison
+    current_iban_normalized = current_iban.replace(' ', '').upper()
+    
+    # Get all active SEPA mandates for this member
+    existing_mandates = frappe.get_all(
+        "SEPA Mandate",
+        filters={
+            "member": member,
+            "status": "Active",
+            "is_active": 1
+        },
+        fields=["name", "mandate_id", "iban", "creation"],
+        order_by="creation desc"
+    )
+    
+    frappe.logger().debug(f"Found {len(existing_mandates)} active mandates")
+    
+    if not existing_mandates:
+        # No existing mandates - no popup needed
+        frappe.logger().debug("No existing mandates found")
+        return {"show_popup": False, "reason": "no_existing_mandates"}
+    
+    # Check if any existing mandate has a different IBAN
+    for mandate in existing_mandates:
+        mandate_iban_normalized = mandate.iban.replace(' ', '').upper() if mandate.iban else ''
+        
+        frappe.logger().debug(f"Comparing mandate IBAN '{mandate_iban_normalized}' with current '{current_iban_normalized}'")
+        
+        if mandate_iban_normalized and mandate_iban_normalized != current_iban_normalized:
+            # Found a mismatch - show popup
+            frappe.logger().debug(f"IBAN mismatch found in mandate {mandate.name}")
+            return {
+                "show_popup": True,
+                "existing_mandate": mandate.name,
+                "existing_iban": mandate.iban,
+                "current_iban": current_iban,
+                "reason": "iban_mismatch"
+            }
+    
+    # All existing mandates have the same IBAN - no popup needed
+    frappe.logger().debug("All existing mandates have matching IBAN")
+    return {"show_popup": False, "reason": "iban_matches"}
+
+@frappe.whitelist()
+def create_and_link_mandate_enhanced(member, mandate_id, iban, bic=None, account_holder_name=None, 
+                                   mandate_type="RCUR", sign_date=None, 
+                                   used_for_memberships=1, used_for_donations=0,
+                                   notes=None, replace_mandate=None):
+    """
+    Enhanced version of create_and_link_mandate with better mandate management
+    """
+    if not member or not iban or not mandate_id:
+        frappe.throw(_("Member, IBAN, and Mandate ID are required"))
+    
+    if not sign_date:
+        sign_date = frappe.utils.today()
+    
+    # Get member details
+    member_doc = frappe.get_doc("Member", member)
+    if not account_holder_name:
+        account_holder_name = member_doc.full_name
+    
+    # Check if mandate ID already exists
+    if frappe.db.exists("SEPA Mandate", {"mandate_id": mandate_id}):
+        frappe.throw(_("Mandate ID {0} already exists. Please use a different reference.").format(mandate_id))
+    
+    # If replacing an existing mandate, mark it as replaced
+    if replace_mandate:
+        try:
+            old_mandate = frappe.get_doc("SEPA Mandate", replace_mandate)
+            old_mandate.status = "Replaced"
+            old_mandate.is_active = 0
+            old_mandate.replacement_date = frappe.utils.today()
+            old_mandate.replacement_reason = "Bank account change"
+            if notes:
+                old_mandate.notes = (old_mandate.notes or '') + f"\nReplaced on {frappe.utils.today()}: {notes}"
+            old_mandate.save(ignore_permissions=True)
+            frappe.logger().debug(f"Marked mandate {replace_mandate} as replaced")
+        except Exception as e:
+            frappe.logger().error(f"Error replacing mandate {replace_mandate}: {str(e)}")
+    
+    # Handle other existing mandates based on usage
+    existing_mandates = frappe.get_all(
+        "SEPA Mandate",
+        filters={
+            "member": member,
+            "status": "Active",
+            "is_active": 1,
+            "name": ["!=", replace_mandate] if replace_mandate else ["!=", ""]
+        },
+        fields=["name", "used_for_memberships", "used_for_donations"]
+    )
+    
+    # Suspend conflicting mandates
+    for mandate_data in existing_mandates:
+        mandate = frappe.get_doc("SEPA Mandate", mandate_data.name)
+        should_suspend = False
+        
+        # If new mandate is for memberships, suspend existing membership mandates
+        if used_for_memberships and mandate.used_for_memberships:
+            should_suspend = True
+            
+        # If new mandate is for donations, suspend existing donation mandates
+        if used_for_donations and mandate.used_for_donations:
+            should_suspend = True
+            
+        if should_suspend:
+            mandate.status = "Superseded"
+            mandate.is_active = 0
+            mandate.superseded_date = frappe.utils.today()
+            mandate.superseded_by = mandate_id
+            mandate.save(ignore_permissions=True)
+            frappe.logger().debug(f"Superseded mandate {mandate.name}")
+    
+    # Create new mandate
+    mandate = frappe.new_doc("SEPA Mandate")
+    mandate.mandate_id = mandate_id
+    mandate.member = member
+    mandate.member_name = member_doc.full_name
+    mandate.account_holder_name = account_holder_name
+    mandate.iban = iban
+    
+    # Auto-derive BIC if not provided
+    if not bic:
+        bic_result = derive_bic_from_iban(iban)
+        if bic_result and bic_result.get('bic'):
+            bic = bic_result['bic']
+    
+    if bic:
+        mandate.bic = bic
+        
+    mandate.sign_date = sign_date
+    mandate.mandate_type = mandate_type
+    
+    # Set usage flags
+    mandate.used_for_memberships = 1 if used_for_memberships else 0
+    mandate.used_for_donations = 1 if used_for_donations else 0
+    
+    # Set status to active
+    mandate.status = "Active"
+    mandate.is_active = 1
+    
+    # Add notes
+    if notes:
+        mandate.notes = notes
+        
+    # Add creation context
+    creation_notes = f"Created via member form on {frappe.utils.today()}"
+    if replace_mandate:
+        creation_notes += f" (replacing {replace_mandate})"
+    
+    mandate.notes = (mandate.notes + "\n" + creation_notes) if mandate.notes else creation_notes
+    
+    mandate.insert(ignore_permissions=True)
+    
+    # Clean up existing mandate links for this member
+    frappe.db.delete("Member SEPA Mandate Link", {
+        "parent": member,
+        "sepa_mandate": mandate.name
+    })
+    
+    # Set all existing mandate links to not current
+    frappe.db.sql("""
+        UPDATE `tabMember SEPA Mandate Link`
+        SET is_current = 0
+        WHERE parent = %s
+    """, (member,))
+    
+    # Add the new mandate link
+    frappe.db.sql("""
+        INSERT INTO `tabMember SEPA Mandate Link`
+        (name, parent, parentfield, parenttype, sepa_mandate, is_current, mandate_reference, status, valid_from)
+        VALUES (%s, %s, 'sepa_mandates', 'Member', %s, 1, %s, %s, %s)
+    """, (
+        frappe.generate_hash(), 
+        member, 
+        mandate.name, 
+        mandate.mandate_id, 
+        'Active', 
+        mandate.sign_date
+    ))
+    
+    # Commit the transaction
+    frappe.db.commit()
+    
+    # Clear document cache
+    frappe.clear_document_cache("Member", member)
+    
+    frappe.logger().debug(f"Created and linked mandate {mandate.name} with ID {mandate_id}")
+    
+    return {
+        "mandate_name": mandate.name,
+        "mandate_id": mandate_id,
+        "replaced_mandate": replace_mandate,
+        "superseded_mandates": len([m for m in existing_mandates if used_for_memberships and m.used_for_memberships or used_for_donations and m.used_for_donations])
+    }
+
+@frappe.whitelist()
+def generate_mandate_reference(member):
+    """
+    Generate a suggested mandate reference for a member
+    """
+    member_doc = frappe.get_doc("Member", member)
+    
+    # Get member ID or fallback
+    member_id = member_doc.member_id or member_doc.name.replace('Assoc-Member-', '').replace('-', '')
+    
+    # Generate timestamp
+    from datetime import datetime
+    now = datetime.now()
+    date_str = now.strftime('%Y%m%d')
+    
+    # Find next sequential number for today
+    existing_mandates_today = frappe.get_all(
+        "SEPA Mandate",
+        filters={
+            "mandate_id": ["like", f"M-{member_id}-{date_str}-%"],
+            "creation": [">=", now.strftime('%Y-%m-%d 00:00:00')]
+        },
+        fields=["mandate_id"]
+    )
+    
+    sequence = len(existing_mandates_today) + 1
+    sequence_str = str(sequence).zfill(3)  # 3-digit sequence with leading zeros
+    
+    suggested_reference = f"M-{member_id}-{date_str}-{sequence_str}"
+    
+    return {"mandate_reference": suggested_reference}
+
+@frappe.whitelist()
+def validate_mandate_reference(mandate_id):
+    """
+    Validate if a mandate reference is available
+    """
+    exists = frappe.db.exists("SEPA Mandate", {"mandate_id": mandate_id})
+    
+    return {
+        "available": not bool(exists),
+        "exists": bool(exists)
+    }
