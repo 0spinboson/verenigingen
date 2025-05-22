@@ -126,7 +126,6 @@ doc_events = {
     "Subscription": {
         "on_update": [
             "verenigingen.verenigingen.doctype.membership.membership.update_membership_from_subscription",
-            "verenigingen.utils.setup_dutch_tax_exemption"
         ]
     },
     "Chapter": {
