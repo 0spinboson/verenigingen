@@ -314,15 +314,27 @@ class Member(Document):
             self.full_name = full_name
             
     def update_membership_status(self):
+        # Skip membership status update for new members
+        if self.is_new():
+            return
+            
         # Update the membership status section
         active_membership = self.get_active_membership()
         
         if active_membership:
             self.current_membership_details = active_membership.name
             
-            if active_membership.end_date:
+            # Check if membership has an end date field (could be end_date, to_date, expiry_date, etc.)
+            end_date_value = None
+            for field_name in ['end_date', 'to_date', 'expiry_date', 'valid_until', 'valid_to']:
+                if hasattr(active_membership, field_name):
+                    end_date_value = getattr(active_membership, field_name)
+                    if end_date_value:
+                        break
+            
+            if end_date_value:
                 # Calculate time remaining until end date
-                days_left = date_diff(active_membership.end_date, getdate(today()))
+                days_left = date_diff(end_date_value, getdate(today()))
                 
                 # Don't set time_remaining directly if field doesn't exist
                 # Instead, perhaps add it to notes or a custom field
@@ -349,7 +361,6 @@ class Member(Document):
                     # Optionally add to notes
                     if not self.notes:
                         self.notes = f"<p>Time remaining: {time_remaining_text}</p>"
-                    # Otherwise, consider updating notes or custom fields
             
     def get_active_membership(self):
         """Get currently active membership for this member"""
