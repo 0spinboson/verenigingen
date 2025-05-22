@@ -324,17 +324,10 @@ class Member(Document):
         if active_membership:
             self.current_membership_details = active_membership.name
             
-            # Check if membership has an end date field (could be end_date, to_date, expiry_date, etc.)
-            end_date_value = None
-            for field_name in ['end_date', 'to_date', 'expiry_date', 'valid_until', 'valid_to']:
-                if hasattr(active_membership, field_name):
-                    end_date_value = getattr(active_membership, field_name)
-                    if end_date_value:
-                        break
-            
-            if end_date_value:
-                # Calculate time remaining until end date
-                days_left = date_diff(end_date_value, getdate(today()))
+            # Use renewal_date instead of end_date (since that's what exists in Membership doctype)
+            if hasattr(active_membership, 'renewal_date') and active_membership.renewal_date:
+                # Calculate time remaining until renewal date
+                days_left = date_diff(active_membership.renewal_date, getdate(today()))
                 
                 # Don't set time_remaining directly if field doesn't exist
                 # Instead, perhaps add it to notes or a custom field
@@ -361,6 +354,7 @@ class Member(Document):
                     # Optionally add to notes
                     if not self.notes:
                         self.notes = f"<p>Time remaining: {time_remaining_text}</p>"
+                    # Otherwise, consider updating notes or custom fields
             
     def get_active_membership(self):
         """Get currently active membership for this member"""
@@ -371,7 +365,7 @@ class Member(Document):
                 "status": "Active",
                 "docstatus": 1
             },
-            fields=["name", "membership_type", "start_date", "end_date", "status"],
+            fields=["name", "membership_type", "start_date", "renewal_date", "status"],
             order_by="start_date desc"
         )
         
