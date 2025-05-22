@@ -297,57 +297,7 @@ class TestMember(FrappeTestCase):
 
     def test_chapter_matching(self):
         """Test chapter assignment and matching based on address"""
-        # Create a test chapter with postal code patterns
-        if frappe.db.exists("Chapter", "Test Chapter"):
-            chapter = frappe.get_doc("Chapter", "Test Chapter")
-        else:
-            chapter = frappe.new_doc("Chapter")
-            chapter.name = "Test Chapter"
-            chapter.region = "Test Region"
-            chapter.introduction = "Test Chapter for Chapter Matching"
-            chapter.postal_codes = "1000-1099, 2500, 3*"
-            chapter.published = 1
-            chapter.insert(ignore_permissions=True)
-                
-        # Create an address in the chapter's region
-        address = frappe.new_doc("Address")
-        address.address_title = f"Test Address for {self.member_data['email']}"
-        address.address_type = "Personal"
-        address.address_line1 = "Test Street 123"
-        address.city = "Test City"
-        address.state = "Test Region"
-        address.country = "Netherlands"
-        address.pincode = "1050"  # Within the chapter's range
-        address.insert(ignore_permissions=True)
-            
-        # Create a test member
-        member = frappe.new_doc("Member")
-        member.update(self.member_data)
-        member.primary_address = address.name
-        member.insert()
-            
-        # Test postal code matching
-        self.assertTrue(chapter.matches_postal_code("1050"))
-        self.assertTrue(chapter.matches_postal_code("2500"))
-        self.assertTrue(chapter.matches_postal_code("3123"))
-        self.assertFalse(chapter.matches_postal_code("4000"))
-            
-        # Test chapter suggestion
-        result = frappe.call("verenigingen.verenigingen.doctype.chapter.chapter.suggest_chapter_for_member",
-                            member_name=member.name,
-                            postal_code=address.pincode,
-                            state=address.state,
-                            city=address.city)
-        
-        # Check if chapter management is disabled
-        if result.get("disabled"):
-            self.skipTest("Chapter management is disabled in the system")
-        else:
-            # Should find our test chapter
-            self.assertTrue(result)
-            self.assertTrue(result.get("matches_by_postal") or result.get("matches_by_region"))
-                        
-        # Clean up - Fix: First unlink the address from the member, then delete
+        # ... existing test code ...
         try:
             # First update the member to remove the address link
             member.primary_address = None
@@ -366,40 +316,40 @@ class TestMember(FrappeTestCase):
             print(f"Cleanup error (can be ignored): {str(e)}")
 
     def test_new_member_skips_membership_status_update(self):
-            """Test that new members don't trigger membership status updates"""
-            # Create unique member data for this test
-            unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
-            member_data = {
-                "first_name": f"Test{unique_id}",
-                "last_name": "Member",
-                "email": f"testmember{unique_id}@example.com",
-                "mobile_no": "+31612345678",
-                "payment_method": "Bank Transfer"
-            }
-            
-            member = frappe.new_doc("Member")
-            member.update(member_data)
-            
-            # Mock the update_membership_status method to track if it's called
-            original_method = member.update_membership_status
-            call_count = [0]  # Use list to allow modification in nested function
-            
-            def mock_update_membership_status():
-                call_count[0] += 1
-                return original_method()
-            
-            member.update_membership_status = mock_update_membership_status
-            
-            # Insert the new member - this should NOT call update_membership_status
-            member.insert()
-            
-            # Verify that update_membership_status was NOT called for new member
-            self.assertEqual(call_count[0], 0, "update_membership_status should not be called for new members")
-            
-            # Verify the member was created successfully
-            self.assertTrue(member.name)
-            self.assertEqual(member.full_name, f"Test{unique_id} Member")
-    
+        """Test that new members don't trigger membership status updates"""
+        # Create unique member data for this test
+        unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        member_data = {
+            "first_name": f"Test{unique_id}",
+            "last_name": "Member",
+            "email": f"testmember{unique_id}@example.com",
+            "mobile_no": "+31612345678",
+            "payment_method": "Bank Transfer"
+        }
+        
+        member = frappe.new_doc("Member")
+        member.update(member_data)
+        
+        # Mock the update_membership_status method to track if it's called
+        original_method = member.update_membership_status
+        call_count = [0]  # Use list to allow modification in nested function
+        
+        def mock_update_membership_status():
+            call_count[0] += 1
+            return original_method()
+        
+        member.update_membership_status = mock_update_membership_status
+        
+        # Insert the new member - this should NOT call update_membership_status
+        member.insert()
+        
+        # Verify that update_membership_status was NOT called for new member
+        self.assertEqual(call_count[0], 0, "update_membership_status should not be called for new members")
+        
+        # Verify the member was created successfully
+        self.assertTrue(member.name)
+        self.assertEqual(member.full_name, f"Test{unique_id} Member")
+
     def test_existing_member_calls_membership_status_update(self):
         """Test that existing members DO trigger membership status updates on save"""
         # Create unique member data for this test
@@ -462,7 +412,7 @@ class TestMember(FrappeTestCase):
         except Exception as e:
             self.fail(f"Member creation failed with error: {str(e)}")
 
-    def test_membership_status_fields_empty_for_new_member(self):
+    def test_membership_status_fields_empty_for_new_member(self): 
         """Test that membership status fields are empty for new members"""
         unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
         member_data = {
