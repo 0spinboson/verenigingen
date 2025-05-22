@@ -106,15 +106,15 @@ class Volunteer(Document):
             SELECT tm.name as membership_id, tm.parent as team, tm.role, 
                    tm.role_type, tm.from_date, tm.to_date, tm.status,
                    t.name as team_name, t.team_type
-            FROM `tabVolunteer Team Member` tm
-            JOIN `tabVolunteer Team` t ON tm.parent = t.name
+            FROM `tabTeam Member` tm
+            JOIN `tabTeam` t ON tm.parent = t.name
             WHERE tm.volunteer = %s AND tm.status = 'Active'
         """, (self.name,), as_dict=True)
         
         for membership in team_memberships:
             team_assignments.append({
                 "source_type": "Team",
-                "source_doctype": "Volunteer Team",
+                "source_doctype": "Team",
                 "source_name": membership.team,
                 "source_doctype_display": f"{membership.team_type or 'Team'}",
                 "source_name_display": membership.team_name,
@@ -123,7 +123,7 @@ class Volunteer(Document):
                 "end_date": membership.to_date,
                 "is_active": membership.status == "Active",
                 "editable": False,
-                "source_link": f"/app/volunteer-team/{membership.team}"
+                "source_link": f"/app/team/{membership.team}"
             })
             
         return team_assignments
@@ -243,7 +243,7 @@ class Volunteer(Document):
             SELECT 'Team' as assignment_type, tm.role, 
                    tm.parent as reference, tm.from_date as start_date, 
                    tm.to_date as end_date, tm.status
-            FROM `tabVolunteer Team Member` tm
+            FROM `tabTeam Member` tm
             WHERE tm.volunteer = %s
         """, (self.name,), as_dict=True)
         
