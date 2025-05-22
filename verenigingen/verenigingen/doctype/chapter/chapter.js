@@ -34,6 +34,11 @@ refresh: function(frm) {
         frm.add_custom_button(__('Sync with Volunteer System'), function() {
             sync_board_with_volunteer_system(frm);
         }, __('Board'));
+
+        // Add bulk board member management button
+        frm.add_custom_button(__('Bulk Remove Board Members'), function() {
+            show_bulk_board_member_dialog(frm);
+        }, __('Board'));
     }
     
     // Add chapter statistics button
@@ -46,6 +51,13 @@ refresh: function(frm) {
         frm.fields_dict['board_members'].grid.add_custom_button(__('Add Board Member'), 
             function() {
                 add_new_board_member(frm);
+            }
+        );
+
+        // Add bulk operations button to grid
+        frm.fields_dict['board_members'].grid.add_custom_button(__('Bulk Operations'), 
+            function() {
+                show_bulk_operations_dialog(frm);
             }
         );
         
@@ -66,6 +78,9 @@ refresh: function(frm) {
                 update_volunteer_history_from_board_change(frm, board_member);
             }, 100);
         });
+
+        // Add selection functionality to board members grid
+        enhance_board_members_grid_with_selection(frm);
     }
     
     // Add postal code visualization
@@ -139,6 +154,351 @@ frappe.ui.form.on('Chapter Board Member', {
         }
     }
 });
+
+// Function to enhance board members grid with selection functionality
+function enhance_board_members_grid_with_selection(frm) {
+    // Add CSS for selection styling
+    if (!$('#board-member-selection-css').length) {
+        $('<style id="board-member-selection-css">' +
+          '.board-member-selected { background-color: #e8f4fd !important; }' +
+          '.board-member-checkbox { margin-right: 10px; }' +
+          '.bulk-actions-bar { background: #f8f9fa; padding: 10px; margin-bottom: 10px; border-radius: 4px; }' +
+          '</style>').appendTo('head');
+    }
+
+    // Add selection controls above the grid
+    setTimeout(function() {
+        var $grid = frm.fields_dict.board_members.grid.wrapper;
+        var $existing_bar = $grid.find('.bulk-actions-bar');
+        
+        if ($existing_bar.length === 0) {
+            var $bulk_bar = $('<div class="bulk-actions-bar" style="display: none;">' +
+                '<button class="btn btn-xs btn-default" onclick="select_all_active_board_members(\'' + frm.docname + '\')">' + __('Select All Active') + '</button> ' +
+                '<button class="btn btn-xs btn-default" onclick="deselect_all_board_members(\'' + frm.docname + '\')">' + __('Deselect All') + '</button> ' +
+                '<span style="margin: 0 15px;">|</span>' +
+                '<button class="btn btn-xs btn-danger" onclick="bulk_remove_selected_board_members(\'' + frm.docname + '\')">' + __('Remove Selected') + '</button> ' +
+                '<button class="btn btn-xs btn-warning" onclick="bulk_deactivate_selected_board_members(\'' + frm.docname + '\')">' + __('Deactivate Selected') + '</button>' +
+                '</div>');
+            
+            $grid.find('.grid-body').before($bulk_bar);
+        }
+
+        // Add checkboxes to each row
+        add_selection_checkboxes_to_board_members(frm);
+    }, 500);
+}
+
+// Function to add checkboxes to board member rows
+function add_selection_checkboxes_to_board_members(frm) {
+    var $grid = frm.fields_dict.board_members.grid.wrapper;
+    
+    $grid.find('.grid-row').each(function() {
+        var $row = $(this);
+        var idx = $row.attr('data-idx');
+        
+        if (idx && !$row.find('.board-member-checkbox').length) {
+            var board_member = frm.doc.board_members[idx-1];
+            if (board_member && board_member.is_active) {
+                var $checkbox = $('<input type="checkbox" class="board-member-checkbox" data-idx="' + idx + '">');
+                
+                $checkbox.change(function() {
+                    var is_checked = $(this).is(':checked');
+                    if (is_checked) {
+                        $row.addClass('board-member-selected');
+                    } else {
+                        $row.removeClass('board-member-selected');
+                    }
+                    
+                    // Show/hide bulk actions bar
+                    var selected_count = $grid.find('.board-member-checkbox:checked').length;
+                    if (selected_count > 0) {
+                        $grid.find('.bulk-actions-bar').show();
+                    } else {
+                        $grid.find('.bulk-actions-bar').hide();
+                    }
+                });
+                
+                $row.find('.data-row').first().prepend($checkbox);
+            }
+        }
+    });
+}
+
+// Global functions for selection (need to be global for onclick handlers)
+window.select_all_active_board_members = function(docname) {
+    var frm = frappe.get_form('Chapter', docname);
+    var $grid = frm.fields_dict.board_members.grid.wrapper;
+    
+    $grid.find('.board-member-checkbox').each(function() {
+        var idx = $(this).attr('data-idx');
+        var board_member = frm.doc.board_members[idx-1];
+        if (board_member && board_member.is_active) {
+            $(this).prop('checked', true).trigger('change');
+        }
+    });
+};
+
+window.deselect_all_board_members = function(docname) {
+    var frm = frappe.get_form('Chapter', docname);
+    var $grid = frm.fields_dict.board_members.grid.wrapper;
+    
+    $grid.find('.board-member-checkbox:checked').prop('checked', false).trigger('change');
+};
+
+window.bulk_remove_selected_board_members = function(docname) {
+    var frm = frappe.get_form('Chapter', docname);
+    var selected_members = get_selected_board_members(frm);
+    
+    if (selected_members.length === 0) {
+        frappe.msgprint(__('No board members selected'));
+        return;
+    }
+    
+    show_bulk_removal_dialog(frm, selected_members, 'remove');
+};
+
+window.bulk_deactivate_selected_board_members = function(docname) {
+    var frm = frappe.get_form('Chapter', docname);
+    var selected_members = get_selected_board_members(frm);
+    
+    if (selected_members.length === 0) {
+        frappe.msgprint(__('No board members selected'));
+        return;
+    }
+    
+    show_bulk_removal_dialog(frm, selected_members, 'deactivate');
+};
+
+// Function to get selected board members
+function get_selected_board_members(frm) {
+    var selected = [];
+    var $grid = frm.fields_dict.board_members.grid.wrapper;
+    
+    $grid.find('.board-member-checkbox:checked').each(function() {
+        var idx = $(this).attr('data-idx');
+        var board_member = frm.doc.board_members[idx-1];
+        if (board_member) {
+            selected.push({
+                idx: idx,
+                volunteer: board_member.volunteer,
+                volunteer_name: board_member.volunteer_name,
+                chapter_role: board_member.chapter_role,
+                from_date: board_member.from_date,
+                data: board_member
+            });
+        }
+    });
+    
+    return selected;
+}
+
+// Function to show bulk removal dialog
+function show_bulk_removal_dialog(frm, selected_members, action) {
+    var action_label = action === 'remove' ? __('Remove') : __('Deactivate');
+    var action_description = action === 'remove' ? 
+        __('This will permanently remove the selected board members from the chapter.') :
+        __('This will deactivate the selected board members (they will remain in the list but marked as inactive).');
+    
+    var members_list = selected_members.map(function(member) {
+        return '• ' + member.volunteer_name + ' (' + member.chapter_role + ')';
+    }).join('\n');
+    
+    var d = new frappe.ui.Dialog({
+        title: action_label + ' ' + __('Board Members'),
+        fields: [
+            {
+                fieldtype: 'HTML',
+                options: '<p>' + action_description + '</p>' +
+                        '<p><strong>' + __('Selected Members:') + '</strong></p>' +
+                        '<pre>' + members_list + '</pre>'
+            },
+            {
+                fieldname: 'end_date',
+                fieldtype: 'Date',
+                label: __('End Date'),
+                default: frappe.datetime.get_today(),
+                reqd: 1
+            },
+            {
+                fieldname: 'reason',
+                fieldtype: 'Small Text',
+                label: __('Reason for ') + action_label.toLowerCase(),
+                description: __('Optional reason for this action')
+            }
+        ],
+        primary_action_label: action_label + ' ' + selected_members.length + ' ' + __('Members'),
+        primary_action: function() {
+            var values = d.get_values();
+            
+            // Prepare data for bulk operation
+            var bulk_data = selected_members.map(function(member) {
+                return {
+                    volunteer: member.volunteer,
+                    chapter_role: member.chapter_role,
+                    from_date: member.from_date,
+                    end_date: values.end_date,
+                    reason: values.reason
+                };
+            });
+            
+            // Call appropriate bulk method
+            var method = action === 'remove' ? 'bulk_remove_board_members' : 'bulk_deactivate_board_members';
+            
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.chapter.chapter.' + method,
+                args: {
+                    chapter_name: frm.doc.name,
+                    board_members: bulk_data
+                },
+                freeze: true,
+                freeze_message: __(action === 'remove' ? 'Removing' : 'Deactivating') + ' ' + __('board members...'),
+                callback: function(r) {
+                    if (r.message && r.message.success) {
+                        frappe.show_alert({
+                            message: __('{0} board members {1} successfully', [r.message.processed, action === 'remove' ? 'removed' : 'deactivated']),
+                            indicator: 'green'
+                        }, 5);
+                        
+                        d.hide();
+                        frm.reload_doc();
+                    } else {
+                        frappe.msgprint(__('Error processing board members. Please check the error log.'));
+                    }
+                },
+                error: function() {
+                    frappe.msgprint(__('Failed to process board members. Please try again.'));
+                }
+            });
+        }
+    });
+    
+    d.show();
+}
+
+// Function to show bulk board member dialog (alternative approach)
+function show_bulk_board_member_dialog(frm) {
+    if (!frm.doc.board_members || frm.doc.board_members.length === 0) {
+        frappe.msgprint(__('No board members found'));
+        return;
+    }
+    
+    var active_members = frm.doc.board_members.filter(function(member) {
+        return member.is_active;
+    });
+    
+    if (active_members.length === 0) {
+        frappe.msgprint(__('No active board members found'));
+        return;
+    }
+    
+    // Create options for multiselect
+    var member_options = active_members.map(function(member) {
+        return {
+            label: member.volunteer_name + ' (' + member.chapter_role + ')',
+            value: member.volunteer,
+            description: 'From: ' + frappe.datetime.str_to_user(member.from_date)
+        };
+    });
+    
+    var d = new frappe.ui.Dialog({
+        title: __('Bulk Board Member Operations'),
+        fields: [
+            {
+                fieldname: 'selected_members',
+                fieldtype: 'MultiSelectPills',
+                label: __('Select Board Members'),
+                options: member_options,
+                reqd: 1
+            },
+            {
+                fieldname: 'action',
+                fieldtype: 'Select',
+                label: __('Action'),
+                options: 'Deactivate\nRemove',
+                default: 'Deactivate',
+                reqd: 1
+            },
+            {
+                fieldname: 'end_date',
+                fieldtype: 'Date',
+                label: __('End Date'),
+                default: frappe.datetime.get_today(),
+                reqd: 1
+            },
+            {
+                fieldname: 'reason',
+                fieldtype: 'Small Text',
+                label: __('Reason'),
+                description: __('Optional reason for this action')
+            }
+        ],
+        primary_action_label: __('Process Selected Members'),
+        primary_action: function() {
+            var values = d.get_values();
+            
+            if (!values.selected_members || values.selected_members.length === 0) {
+                frappe.msgprint(__('Please select at least one board member'));
+                return;
+            }
+            
+            // Find selected board members data
+            var selected_data = [];
+            values.selected_members.forEach(function(volunteer_id) {
+                var member = active_members.find(function(m) { return m.volunteer === volunteer_id; });
+                if (member) {
+                    selected_data.push({
+                        volunteer: member.volunteer,
+                        chapter_role: member.chapter_role,
+                        from_date: member.from_date,
+                        end_date: values.end_date,
+                        reason: values.reason
+                    });
+                }
+            });
+            
+            var method = values.action === 'Remove' ? 'bulk_remove_board_members' : 'bulk_deactivate_board_members';
+            
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.chapter.chapter.' + method,
+                args: {
+                    chapter_name: frm.doc.name,
+                    board_members: selected_data
+                },
+                freeze: true,
+                freeze_message: __('Processing board members...'),
+                callback: function(r) {
+                    if (r.message && r.message.success) {
+                        frappe.show_alert({
+                            message: __('{0} board members processed successfully', [r.message.processed]),
+                            indicator: 'green'
+                        }, 5);
+                        
+                        d.hide();
+                        frm.reload_doc();
+                    } else {
+                        frappe.msgprint(__('Error processing board members. Please check the error log.'));
+                    }
+                }
+            });
+        }
+    });
+    
+    d.show();
+}
+
+// Function to show bulk operations dialog (grid-based)
+function show_bulk_operations_dialog(frm) {
+    // Refresh the selection UI first
+    setTimeout(function() {
+        enhance_board_members_grid_with_selection(frm);
+    }, 100);
+    
+    frappe.msgprint({
+        title: __('Bulk Operations'),
+        message: __('Use the checkboxes next to board members to select them, then use the bulk action buttons that appear above the grid.'),
+        indicator: 'blue'
+    });
+}
 
 // Function to handle board member deactivation
 function handle_board_member_deactivation(frm, row) {
