@@ -68,20 +68,17 @@ class Volunteer(Document):
     
     def get_board_assignments(self):
         """Get board assignments from Chapter Board Member"""
-        if not self.member:
-            return []
-            
         board_assignments = []
         
-        # Query board memberships for this member
+        # Query board memberships for this volunteer directly
         board_memberships = frappe.db.sql("""
             SELECT cbm.name as membership_id, cbm.parent as chapter, cbm.chapter_role as role, 
                    cbm.from_date, cbm.to_date, cbm.is_active,
                    c.name as chapter_name
             FROM `tabChapter Board Member` cbm
             JOIN `tabChapter` c ON cbm.parent = c.name
-            WHERE cbm.member = %s AND cbm.is_active = 1
-        """, (self.member,), as_dict=True)
+            WHERE cbm.volunteer = %s AND cbm.is_active = 1
+        """, (self.name,), as_dict=True)
         
         for membership in board_memberships:
             board_assignments.append({
