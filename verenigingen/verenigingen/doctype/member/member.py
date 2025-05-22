@@ -1518,10 +1518,10 @@ def create_and_link_mandate_enhanced(member, mandate_id, iban, bic=None, account
     if replace_mandate:
         try:
             old_mandate = frappe.get_doc("SEPA Mandate", replace_mandate)
-            old_mandate.status = "Replaced"
+            old_mandate.status = "Cancelled"
             old_mandate.is_active = 0
-            old_mandate.replacement_date = frappe.utils.today()
-            old_mandate.replacement_reason = "Bank account change"
+            old_mandate.cancelled_date = frappe.utils.today()
+            old_mandate.cancelled_reason = "Bank account change"
             if notes:
                 old_mandate.notes = (old_mandate.notes or '') + f"\nReplaced on {frappe.utils.today()}: {notes}"
             old_mandate.save(ignore_permissions=True)
