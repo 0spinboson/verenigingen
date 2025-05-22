@@ -380,9 +380,6 @@ class Membership(Document):
             subscription.party = member.customer
             subscription.start_date = getdate(self.start_date)
             
-            # IMPORTANT: Don't set end_date to match manually created subscriptions
-            # This is the key change - we're removing the end date calculation and assignment
-            
             # Set company
             subscription.company = frappe.defaults.get_global_default('company') or '_Test Company'
             
