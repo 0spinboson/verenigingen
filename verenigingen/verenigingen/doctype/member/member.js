@@ -746,7 +746,8 @@ frappe.ui.form.on('Member', {
     }
 });
 
-// New function to check for IBAN mismatch with existing mandates
+// Updated JavaScript to handle both scenarios
+
 function checkForMandateIbanMismatch(frm) {
     console.log('checkForMandateIbanMismatch called');
     
@@ -777,20 +778,28 @@ function checkForMandateIbanMismatch(frm) {
             console.log('Server response for mandate IBAN check:', r);
             
             if (r.message && r.message.show_popup) {
-                console.log('IBAN mismatch detected - showing dialog');
+                console.log(`Showing dialog for scenario: ${r.message.scenario}`);
                 
-                let message = __('The IBAN you entered differs from your existing SEPA mandate.');
-                if (r.message.existing_iban) {
-                    message += '\n' + __('Current mandate IBAN: {0}', [r.message.existing_iban]);
-                    message += '\n' + __('New IBAN: {0}', [frm.doc.iban]);
+                let message;
+                
+                // Customize message based on scenario
+                if (r.message.scenario === 'first_time_setup') {
+                    message = __('You have selected Direct Debit as payment method but no SEPA mandate exists yet.') + 
+                             '\n\n' + __('Would you like to create a SEPA mandate for this bank account?');
+                } else if (r.message.scenario === 'bank_account_change') {
+                    message = __('The IBAN you entered differs from your existing SEPA mandate.') + 
+                             '\n' + __('Current mandate IBAN: {0}', [r.message.existing_iban]) +
+                             '\n' + __('New IBAN: {0}', [frm.doc.iban]) +
+                             '\n\n' + __('Would you like to create a new SEPA mandate for the new bank account?');
+                } else {
+                    message = r.message.message || __('Would you like to create a SEPA mandate?');
                 }
-                message += '\n\n' + __('Would you like to create a new SEPA mandate for the new bank account?');
                 
                 setTimeout(() => {
                     showMandateCreationDialog(frm, message, r.message);
                 }, 1000);
             } else {
-                console.log('No IBAN mismatch or no existing mandate');
+                console.log('No popup needed:', r.message?.reason);
                 // Reset the flag if no mandate needed
                 window._sepa_mandate_dialog_shown = false;
             }
@@ -800,6 +809,20 @@ function checkForMandateIbanMismatch(frm) {
             window._sepa_mandate_dialog_shown = false;
         }
     });
+}
+
+// Helper function to get default notes based on scenario
+function getDefaultNotes(serverData) {
+    if (!serverData) return '';
+    
+    switch (serverData.scenario) {
+        case 'first_time_setup':
+            return 'Initial SEPA mandate setup for Direct Debit payments';
+        case 'bank_account_change':
+            return 'New mandate due to bank account change';
+        default:
+            return '';
+    }
 }
 
 // Handlers for the Member SEPA Mandate Link child table
