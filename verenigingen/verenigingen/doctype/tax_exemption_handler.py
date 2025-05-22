@@ -9,34 +9,41 @@ def handle_tax_exemption():
     if not settings.get("tax_exempt_for_contributions"):
         return
     
-    # Check for existing 0% tax template
-    tax_template_name = "Tax Exempt - 0%"
+    # Get company for proper naming
+    company = settings.company
+    if not company:
+        company = frappe.defaults.get_global_default('company')
+    
+    if not company:
+        frappe.msgprint(_("No company found, skipping tax template creation"))
+        return
+    
+    # Check for existing template with proper naming (ERPNext appends company abbreviation)
+    company_abbr = frappe.db.get_value("Company", company, "abbr")
+    tax_template_name = f"Tax Exempt - 0% - {company_abbr}"
+    
     if frappe.db.exists("Sales Taxes and Charges Template", tax_template_name):
-        # Template already exists, no need to create it again
+        # Template already exists, update default tax template setting if needed
+        if not settings.default_tax_template:
+            settings.default_tax_template = tax_template_name
+            settings.save()
         return
     
     # Create the tax template only if it doesn't exist
-    create_tax_exempt_template(tax_template_name)
+    create_tax_exempt_template(tax_template_name, company)
+    
+    # Set as default tax template
+    settings.default_tax_template = tax_template_name
+    settings.save()
     
     frappe.msgprint(_("Created tax exempt template: {0}").format(tax_template_name))
 
-def create_tax_exempt_template(template_name):
+def create_tax_exempt_template(template_name, company):
     """Create a 0% tax template for tax-exempt contributions and donations"""
     try:
-        # Get company
-        settings = frappe.get_single("Verenigingen Settings")
-        company = settings.company
-        if not company:
-            company = frappe.defaults.get_global_default('company')
-        
-        if not company:
-            frappe.msgprint(_("No company found, skipping tax template creation"))
-            return
-        
         # Create tax template
         tax_template = frappe.new_doc("Sales Taxes and Charges Template")
-        tax_template.title = template_name
-        tax_template.name = template_name
+        tax_template.title = "Tax Exempt - 0%"  # Title without company abbreviation
         tax_template.is_default = 0
         tax_template.company = company
         
