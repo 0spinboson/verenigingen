@@ -6,6 +6,7 @@ from frappe import _
 from frappe.website.website_generator import WebsiteGenerator
 from frappe.utils import getdate, today, add_days, date_diff, now
 import re
+import json
 
 class Chapter(WebsiteGenerator):
     def validate(self):
@@ -733,6 +734,188 @@ class Chapter(WebsiteGenerator):
                     "member_name": member.member_name
                 }
         return roles
+
+    # NEW BULK OPERATIONS METHODS
+    @frappe.whitelist()
+    def bulk_remove_board_members(self, board_members):
+        """Bulk remove board members from chapter"""
+        if not board_members:
+            return {"success": False, "error": "No board members specified"}
+        
+        if isinstance(board_members, str):
+            board_members = json.loads(board_members)
+        
+        processed_count = 0
+        errors = []
+        
+        try:
+            for member_data in board_members:
+                try:
+                    volunteer = member_data.get('volunteer')
+                    end_date = member_data.get('end_date')
+                    reason = member_data.get('reason', '')
+                    
+                    if not volunteer:
+                        errors.append("Missing volunteer ID")
+                        continue
+                    
+                    # Find and remove the board member
+                    removed = False
+                    for board_member in self.board_members[:]:  # Create a copy to iterate safely
+                        if (board_member.volunteer == volunteer and 
+                            board_member.is_active and
+                            board_member.chapter_role == member_data.get('chapter_role') and
+                            str(board_member.from_date) == str(member_data.get('from_date'))):
+                            
+                            # Store data for history update before removal
+                            history_data = {
+                                'volunteer': board_member.volunteer,
+                                'chapter_role': board_member.chapter_role,
+                                'from_date': board_member.from_date,
+                                'end_date': end_date
+                            }
+                            
+                            # Remove the board member completely
+                            self.board_members.remove(board_member)
+                            removed = True
+                            processed_count += 1
+                            
+                            # Update volunteer assignment history
+                            try:
+                                update_volunteer_assignment_history(
+                                    history_data['volunteer'],
+                                    self.name,
+                                    history_data['chapter_role'],
+                                    history_data['from_date'],
+                                    history_data['end_date']
+                                )
+                            except Exception as e:
+                                frappe.log_error(
+                                    message=f"Error updating volunteer history for {volunteer}: {str(e)}",
+                                    title="Bulk Board Member Removal - History Update Error"
+                                )
+                            
+                            break
+                    
+                    if not removed:
+                        errors.append(f"Active board member not found for volunteer {volunteer}")
+                        
+                except Exception as e:
+                    errors.append(f"Error processing volunteer {member_data.get('volunteer', 'unknown')}: {str(e)}")
+                    frappe.log_error(
+                        message=f"Error in bulk board member removal: {str(e)}",
+                        title="Bulk Board Member Removal Error"
+                    )
+            
+            # Save the chapter document
+            self.save()
+            
+            return {
+                "success": True,
+                "processed": processed_count,
+                "errors": errors
+            }
+            
+        except Exception as e:
+            frappe.log_error(
+                message=f"Critical error in bulk_remove_board_members: {str(e)}",
+                title="Bulk Board Member Removal Critical Error"
+            )
+            return {
+                "success": False,
+                "error": str(e),
+                "processed": processed_count
+            }
+
+    @frappe.whitelist()
+    def bulk_deactivate_board_members(self, board_members):
+        """Bulk deactivate board members (keep in list but mark inactive)"""
+        if not board_members:
+            return {"success": False, "error": "No board members specified"}
+        
+        if isinstance(board_members, str):
+            board_members = json.loads(board_members)
+        
+        processed_count = 0
+        errors = []
+        
+        try:
+            for member_data in board_members:
+                try:
+                    volunteer = member_data.get('volunteer')
+                    end_date = member_data.get('end_date')
+                    reason = member_data.get('reason', '')
+                    
+                    if not volunteer:
+                        errors.append("Missing volunteer ID")
+                        continue
+                    
+                    # Find and deactivate the board member
+                    deactivated = False
+                    for board_member in self.board_members:
+                        if (board_member.volunteer == volunteer and 
+                            board_member.is_active and
+                            board_member.chapter_role == member_data.get('chapter_role') and
+                            str(board_member.from_date) == str(member_data.get('from_date'))):
+                            
+                            # Deactivate the board member
+                            board_member.is_active = 0
+                            board_member.to_date = end_date
+                            
+                            # Add reason to notes if provided
+                            if reason:
+                                existing_notes = board_member.notes or ""
+                                board_member.notes = f"{existing_notes}\nDeactivated: {reason}".strip()
+                            
+                            deactivated = True
+                            processed_count += 1
+                            
+                            # Update volunteer assignment history
+                            try:
+                                update_volunteer_assignment_history(
+                                    board_member.volunteer,
+                                    self.name,
+                                    board_member.chapter_role,
+                                    board_member.from_date,
+                                    end_date
+                                )
+                            except Exception as e:
+                                frappe.log_error(
+                                    message=f"Error updating volunteer history for {volunteer}: {str(e)}",
+                                    title="Bulk Board Member Deactivation - History Update Error"
+                                )
+                            
+                            break
+                    
+                    if not deactivated:
+                        errors.append(f"Active board member not found for volunteer {volunteer}")
+                        
+                except Exception as e:
+                    errors.append(f"Error processing volunteer {member_data.get('volunteer', 'unknown')}: {str(e)}")
+                    frappe.log_error(
+                        message=f"Error in bulk board member deactivation: {str(e)}",
+                        title="Bulk Board Member Deactivation Error"
+                    )
+            
+            # Save the chapter document
+            self.save()
+            
+            return {
+                "success": True,
+                "processed": processed_count,
+                "errors": errors
+            }
+            
+        except Exception as e:
+            frappe.log_error(
+                message=f"Critical error in bulk_deactivate_board_members: {str(e)}",
+                title="Bulk Board Member Deactivation Critical Error"
+            )
+            return {
+                "success": False,
+                "error": str(e),
+                "processed": processed_count
+            }
 
 # Functions outside the Chapter class
 
