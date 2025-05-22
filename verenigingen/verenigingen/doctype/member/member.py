@@ -884,11 +884,12 @@ def get_board_memberships(member_name):
     if not is_chapter_management_enabled():
         return []
         
-    # Query directly using SQL to bypass permission checks
+    # Query using volunteer relationship since Chapter Board Member links to Volunteer, not Member
     board_memberships = frappe.db.sql("""
         SELECT cbm.parent, cbm.chapter_role 
         FROM `tabChapter Board Member` cbm
-        WHERE cbm.member = %s AND cbm.is_active = 1
+        JOIN `tabVolunteer` v ON cbm.volunteer = v.name
+        WHERE v.member = %s AND cbm.is_active = 1
     """, (member_name,), as_dict=True)
     
     return board_memberships
