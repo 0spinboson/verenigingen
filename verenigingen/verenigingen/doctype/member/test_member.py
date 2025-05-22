@@ -364,3 +364,122 @@ class TestMember(FrappeTestCase):
                 frappe.delete_doc("Address", address.name, force=True)
         except Exception as e:
             print(f"Cleanup error (can be ignored): {str(e)}")
+
+    def test_new_member_skips_membership_status_update(self):
+            """Test that new members don't trigger membership status updates"""
+            # Create unique member data for this test
+            unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+            member_data = {
+                "first_name": f"Test{unique_id}",
+                "last_name": "Member",
+                "email": f"testmember{unique_id}@example.com",
+                "mobile_no": "+31612345678",
+                "payment_method": "Bank Transfer"
+            }
+            
+            member = frappe.new_doc("Member")
+            member.update(member_data)
+            
+            # Mock the update_membership_status method to track if it's called
+            original_method = member.update_membership_status
+            call_count = [0]  # Use list to allow modification in nested function
+            
+            def mock_update_membership_status():
+                call_count[0] += 1
+                return original_method()
+            
+            member.update_membership_status = mock_update_membership_status
+            
+            # Insert the new member - this should NOT call update_membership_status
+            member.insert()
+            
+            # Verify that update_membership_status was NOT called for new member
+            self.assertEqual(call_count[0], 0, "update_membership_status should not be called for new members")
+            
+            # Verify the member was created successfully
+            self.assertTrue(member.name)
+            self.assertEqual(member.full_name, f"Test{unique_id} Member")
+    
+        def test_existing_member_calls_membership_status_update(self):
+            """Test that existing members DO trigger membership status updates on save"""
+            # Create unique member data for this test
+            unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+            member_data = {
+                "first_name": f"Test{unique_id}",
+                "last_name": "Member",
+                "email": f"testmember{unique_id}@example.com",
+                "mobile_no": "+31612345678",
+                "payment_method": "Bank Transfer"
+            }
+            
+            # First create and save the member
+            member = frappe.new_doc("Member")
+            member.update(member_data)
+            member.insert()
+            
+            # Now test updating an existing member
+            member.reload()  # Ensure it's not considered "new"
+            
+            # Mock the update_membership_status method to track if it's called
+            original_method = member.update_membership_status
+            call_count = [0]  # Use list to allow modification in nested function
+            
+            def mock_update_membership_status():
+                call_count[0] += 1
+                # Don't call original method to avoid the database error for this test
+                pass
+            
+            member.update_membership_status = mock_update_membership_status
+            
+            # Update something and save - this SHOULD call update_membership_status
+            member.mobile_no = "+31687654321"
+            member.save()
+            
+            # Verify that update_membership_status WAS called for existing member
+            self.assertEqual(call_count[0], 1, "update_membership_status should be called for existing members")
+    
+        def test_member_creation_no_database_error(self):
+            """Test that creating a new member doesn't cause database errors"""
+            # This is a regression test for the original issue
+            unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+            member_data = {
+                "first_name": f"Test{unique_id}",
+                "last_name": "Member",
+                "email": f"testmember{unique_id}@example.com",
+                "mobile_no": "+31612345678",
+                "payment_method": "Bank Transfer"
+            }
+            
+            # This should not raise any database errors
+            member = frappe.new_doc("Member")
+            member.update(member_data)
+            
+            try:
+                member.insert()
+                # If we get here, the fix worked
+                self.assertTrue(member.name)
+                self.assertEqual(member.status, "Active")  # Default status
+            except Exception as e:
+                self.fail(f"Member creation failed with error: {str(e)}")
+    
+        def test_membership_status_fields_empty_for_new_member(self):
+            """Test that membership status fields are empty for new members"""
+            unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+            member_data = {
+                "first_name": f"Test{unique_id}",
+                "last_name": "Member",
+                "email": f"testmember{unique_id}@example.com",
+                "mobile_no": "+31612345678",
+                "payment_method": "Bank Transfer"
+            }
+            
+            member = frappe.new_doc("Member")
+            member.update(member_data)
+            member.insert()
+            
+            # These fields should be empty for new members
+            self.assertFalse(member.current_membership_details)
+            self.assertFalse(member.current_membership_type)
+            self.assertFalse(member.current_membership_start)
+            self.assertFalse(member.current_membership_end)
+            self.assertFalse(member.membership_status)
