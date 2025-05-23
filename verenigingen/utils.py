@@ -165,6 +165,8 @@ class DutchTaxExemptionHandler:
     
     # Replace the create_dutch_tax_templates function in your utils.py with this fixed version:
     
+# Replace the create_dutch_tax_templates function in your utils.py with this fixed version:
+
     def create_dutch_tax_templates(self):
         """
         Create tax templates for different Dutch BTW exemption scenarios
@@ -173,16 +175,21 @@ class DutchTaxExemptionHandler:
         for exemption_type, description in BTW_CODES.items():
             template_name = f"BTW {exemption_type}"
             
-            if frappe.db.exists("Sales Taxes and Charges Template", template_name):
+            # Check for existing template with company abbreviation
+            company_doc = frappe.get_doc("Company", self.company)
+            full_template_name = f"{template_name} - {company_doc.abbr}"
+            
+            # Check if template already exists (with or without company abbr)
+            if (frappe.db.exists("Sales Taxes and Charges Template", template_name) or 
+                frappe.db.exists("Sales Taxes and Charges Template", full_template_name)):
                 continue
                 
             # Create template
             tax_template = frappe.new_doc("Sales Taxes and Charges Template")
-            tax_template.title = template_name
-            tax_template.name = template_name
+            tax_template.title = template_name  # Let ERPNext auto-generate the name
+            # DON'T set tax_template.name - let ERPNext handle it
             tax_template.is_default = 0
             tax_template.company = self.company
-            # REMOVED: tax_template.tax_category = "BTW Vrijgesteld"  # This was causing the error
             
             # Add documentation
             tax_template.description = description
@@ -197,11 +204,18 @@ class DutchTaxExemptionHandler:
                 "reporting_category": BTW_REPORTING_CATEGORIES.get(exemption_type, "None")
             })
             
-            tax_template.save()
+            try:
+                tax_template.save()
+                frappe.logger().info(f"Created BTW tax template: {tax_template.name}")
+            except frappe.exceptions.DuplicateEntryError:
+                # Template already exists, skip
+                frappe.logger().info(f"BTW tax template {template_name} already exists, skipping")
+                continue
             
             # Set specific template as default for contributions if it's the membership template
             if exemption_type == "EXEMPT_MEMBERSHIP" and not frappe.db.get_single_value("Verenigingen Settings", "default_tax_template"):
-                self.settings.default_tax_template = template_name
+                # Use the actual created template name
+                self.settings.default_tax_template = tax_template.name
                 self.settings.save()
     
     def setup_btw_codes_in_accounts(self):
