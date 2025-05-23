@@ -435,17 +435,27 @@ def apply_btw_exemption(docname, doctype="Sales Invoice", exemption_type=None):
 def on_update_verenigingen_settings(doc, method=None):
     """
     Hook function called when Verenigingen Settings is updated
-    This function is called whenever the Verenigingen Settings document is saved/updated
-    It triggers the Dutch tax exemption setup if tax exemption is enabled
+    Only runs tax setup when tax exemption setting is actually changed
     """
     try:
-        # Call the existing tax exemption setup function
-        setup_dutch_tax_exemption(doc, method)
+        # Only run tax setup if the doc is a Verenigingen Settings doc 
+        # and tax exemption is enabled
+        if hasattr(doc, 'doctype') and doc.doctype == "Verenigingen Settings":
+            if doc.get("tax_exempt_for_contributions"):
+                frappe.logger().info("Tax exemption enabled, setting up tax templates")
+                setup_dutch_tax_exemption(doc, method)
+            else:
+                frappe.logger().info("Tax exemption disabled, skipping tax template setup")
+        else:
+            # This is just a member ID counter update, don't run tax setup
+            frappe.logger().debug("Settings update from member creation, skipping tax setup")
+            
     except Exception as e:
-        # Log error but don't fail the settings update
-        frappe.log_error(f"Error in on_update_verenigingen_settings: {str(e)}", 
-                       "Verenigingen Settings Update Error")
-        frappe.logger().error(f"Error updating Verenigigen settings: {str(e)}")
+        # Log error but don't fail the settings update or member creation
+        frappe.log_error(f"Error in tax exemption setup: {str(e)}", 
+                       "Tax Exemption Setup Error")
+        frappe.logger().warning(f"Tax exemption setup failed but continuing: {str(e)}")
+        # Don't re-raise the error so member creation can continue
 
 def generate_btw_report(start_date, end_date):
     """
