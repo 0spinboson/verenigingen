@@ -196,6 +196,68 @@ frappe.ui.form.on('Member', {
                         frm.dashboard.add_indicator(__("Member of {0}", [frm.doc.primary_chapter]), "blue");
                     }
                     
+                    // Add debug button for testing postal code matching (remove in production)
+                    if (frappe.boot.developer_mode) {
+                        frm.add_custom_button(__('Debug Postal Code'), function() {
+                            if (!frm.doc.primary_address) {
+                                frappe.msgprint(__('Please set a primary address first'));
+                                return;
+                            }
+                            
+                            // Get address and test postal code matching
+                            frappe.call({
+                                method: 'frappe.client.get',
+                                args: {
+                                    doctype: 'Address',
+                                    name: frm.doc.primary_address
+                                },
+                                callback: function(r) {
+                                    if (r.message && r.message.pincode) {
+                                        frappe.call({
+                                            method: 'verenigingen.verenigingen.doctype.member.member.debug_postal_code_matching',
+                                            args: {
+                                                postal_code: r.message.pincode
+                                            },
+                                            callback: function(debug_r) {
+                                                console.log('Postal code debug results:', debug_r.message);
+                                                
+                                                let message = `<div><strong>Postal Code Debug Results for ${r.message.pincode}</strong><br><br>`;
+                                                message += `Total chapters: ${debug_r.message.total_chapters}<br>`;
+                                                message += `Matching chapters: ${debug_r.message.matching_chapters.length}<br><br>`;
+                                                
+                                                if (debug_r.message.matching_chapters.length > 0) {
+                                                    message += '<strong>Matching Chapters:</strong><ul>';
+                                                    debug_r.message.matching_chapters.forEach(function(chapter) {
+                                                        message += `<li>${chapter.name} (${chapter.region}) - Patterns: ${chapter.postal_codes}</li>`;
+                                                    });
+                                                    message += '</ul><br>';
+                                                }
+                                                
+                                                if (debug_r.message.non_matching_chapters.length > 0) {
+                                                    message += '<strong>Non-matching Chapters (first 5):</strong><ul>';
+                                                    debug_r.message.non_matching_chapters.slice(0, 5).forEach(function(chapter) {
+                                                        message += `<li>${chapter.name} - ${chapter.reason}</li>`;
+                                                    });
+                                                    message += '</ul>';
+                                                }
+                                                
+                                                message += '</div>';
+                                                
+                                                frappe.msgprint({
+                                                    title: 'Postal Code Debug Results',
+                                                    message: message,
+                                                    indicator: debug_r.message.matching_chapters.length > 0 ? 'green' : 'orange'
+                                                });
+                                            }
+                                        });
+                                    } else {
+                                        frappe.msgprint(__('No postal code found in the address'));
+                                    }
+                                }
+                            });
+                        }, __('Debug'));
+                    }
+                    
                     // Check if user is a board member of any chapter
                     frappe.call({
                         method: 'verenigingen.verenigingen.doctype.member.member.get_board_memberships',
@@ -282,43 +344,7 @@ frappe.ui.form.on('Member', {
                 }
             });
         }, __('Actions'));
-        primary_chapter: function(frm) {
-            // When primary chapter is changed, automatically assign member to that chapter
-            if (frm.doc.primary_chapter && !frm.doc.__islocal && !frm._chapter_assignment_in_progress) {
-                // Prevent infinite loops
-                frm._chapter_assignment_in_progress = true;
-                
-                frappe.call({
-                    method: 'verenigingen.verenigingen.doctype.chapter.chapter.assign_member_to_chapter',
-                    args: {
-                        member: frm.doc.name,
-                        chapter: frm.doc.primary_chapter,
-                        note: 'Chapter updated via member form'
-                    },
-                    callback: function(r) {
-                        frm._chapter_assignment_in_progress = false;
-                        
-                        if (r.message && r.message.success) {
-                            if (r.message.added_to_members) {
-                                frappe.show_alert({
-                                    message: __('Added to {0} chapter members list', [frm.doc.primary_chapter]),
-                                    indicator: 'green'
-                                }, 5);
-                            } else {
-                                frappe.show_alert({
-                                    message: __('Already a member of {0} chapter', [frm.doc.primary_chapter]),
-                                    indicator: 'blue'
-                                }, 3);
-                            }
-                        }
-                    },
-                    error: function(r) {
-                        frm._chapter_assignment_in_progress = false;
-                        console.error('Error assigning member to chapter:', r);
-                    }
-                });
-            }
-        },
+        
         // Add button to create a new membership
         frm.add_custom_button(__('Create Membership'), function() {
             frappe.new_doc('Membership', {
@@ -587,6 +613,44 @@ frappe.ui.form.on('Member', {
         }
     },
     
+    primary_chapter: function(frm) {
+        // When primary chapter is changed, automatically assign member to that chapter
+        if (frm.doc.primary_chapter && !frm.doc.__islocal && !frm._chapter_assignment_in_progress) {
+            // Prevent infinite loops
+            frm._chapter_assignment_in_progress = true;
+            
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.chapter.chapter.assign_member_to_chapter',
+                args: {
+                    member: frm.doc.name,
+                    chapter: frm.doc.primary_chapter,
+                    note: 'Chapter updated via member form'
+                },
+                callback: function(r) {
+                    frm._chapter_assignment_in_progress = false;
+                    
+                    if (r.message && r.message.success) {
+                        if (r.message.added_to_members) {
+                            frappe.show_alert({
+                                message: __('Added to {0} chapter members list', [frm.doc.primary_chapter]),
+                                indicator: 'green'
+                            }, 5);
+                        } else {
+                            frappe.show_alert({
+                                message: __('Already a member of {0} chapter', [frm.doc.primary_chapter]),
+                                indicator: 'blue'
+                            }, 3);
+                        }
+                    }
+                },
+                error: function(r) {
+                    frm._chapter_assignment_in_progress = false;
+                    console.error('Error assigning member to chapter:', r);
+                }
+            });
+        }
+    },
+    
     primary_address: function(frm) {
         // If address is set, always check for chapter suggestions (not just when chapter is empty)
         if (frm.doc.primary_address && !frm.doc.__islocal) {
@@ -599,25 +663,6 @@ frappe.ui.form.on('Member', {
                         setTimeout(function() {
                             suggest_chapter_from_address(frm);
                         }, 500);
-                    }
-                }
-            });
-        }
-    },
-    
-    // Add a new trigger for after_save to handle address updates
-    after_save: function(frm) {
-        // ... existing after_save code ...
-        
-        // Check for chapter suggestions after save if address exists but no chapter
-        if (frm.doc.primary_address && !frm.doc.primary_chapter) {
-            frappe.call({
-                method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
-                callback: function(r) {
-                    if (r.message) {
-                        setTimeout(function() {
-                            suggest_chapter_from_address(frm);
-                        }, 1000);
                     }
                 }
             });
@@ -717,6 +762,20 @@ frappe.ui.form.on('Member', {
     
     after_save: function(frm) {
         console.log('Member after_save triggered');
+        
+        // Check for chapter suggestions after save if address exists but no chapter
+        if (frm.doc.primary_address && !frm.doc.primary_chapter) {
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
+                callback: function(r) {
+                    if (r.message) {
+                        setTimeout(function() {
+                            suggest_chapter_from_address(frm);
+                        }, 1000);
+                    }
+                }
+            });
+        }
         
         // Only check for mandate popup if:
         // 1. Document is saved (not new)
@@ -1063,6 +1122,7 @@ function generateMandateReference(memberDoc) {
     return `M-${memberId}-${dateStr}-${randomSuffix}`;
 }
 
+// Function to suggest chapters based on address
 function suggest_chapter_from_address(frm) {
     console.log('suggest_chapter_from_address called for address:', frm.doc.primary_address);
     
@@ -1126,7 +1186,7 @@ function suggest_chapter_from_address(frm) {
     });
 }
 
-// Also improve the main suggestion function
+// Main function to suggest chapters for a member
 function suggest_chapter_for_member(frm, location_data) {
     console.log('suggest_chapter_for_member called with location_data:', location_data);
     
