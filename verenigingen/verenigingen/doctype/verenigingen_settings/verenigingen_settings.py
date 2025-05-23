@@ -36,3 +36,20 @@ def get_plans_for_membership(*args, **kwargs):
 	controller = get_payment_gateway_controller("Razorpay")
 	plans = controller.get_plans()
 	return [plan.get("item") for plan in plans.get("items")]
+# Add this function to verenigingen/verenigingen/doctype/verenigingen_settings/verenigingen_settings.py
+
+@frappe.whitelist()
+def get_income_account_query(doctype, txt, searchfield, start, page_len, filters):
+    """Filter for income accounts only"""
+    company = filters.get('company') or frappe.defaults.get_global_default('company')
+    
+    return frappe.db.sql("""
+        SELECT name, account_name
+        FROM `tabAccount`
+        WHERE company = %s
+        AND account_type = 'Income Account'
+        AND is_group = 0
+        AND (name LIKE %s OR account_name LIKE %s)
+        ORDER BY name
+        LIMIT %s OFFSET %s
+    """, (company, "%" + txt + "%", "%" + txt + "%", page_len, start))
