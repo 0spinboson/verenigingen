@@ -510,8 +510,6 @@ def apply_tax_exemption_from_source(doc, method=None):
     
     # If BTW fields exist, use the full Dutch tax handler
     try:
-        # Import here to avoid circular imports
-        from verenigingen.utils import DutchTaxExemptionHandler
         handler = DutchTaxExemptionHandler()
         
         # For membership-related invoices
