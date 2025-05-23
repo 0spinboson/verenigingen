@@ -54,7 +54,7 @@ frappe.ui.form.on('Volunteer', {
         frm.set_query("reference_doctype", "assignment_history", function() {
             return {
                 filters: {
-                    "name": ["in", ["Chapter", "Volunteer Team", "Event", "Volunteer Activity", "Commission"]]
+                    "name": ["in", ["Chapter", "Team", "Event", "Volunteer Activity", "Commission"]]
                 }
             };
         });
