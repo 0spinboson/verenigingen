@@ -588,14 +588,36 @@ frappe.ui.form.on('Member', {
     },
     
     primary_address: function(frm) {
-        // If address is set and chapter is not, suggest chapter
-        if (frm.doc.primary_address && !frm.doc.primary_chapter) {
+        // If address is set, always check for chapter suggestions (not just when chapter is empty)
+        if (frm.doc.primary_address && !frm.doc.__islocal) {
             // First check if chapter management is enabled
             frappe.call({
                 method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
                 callback: function(r) {
                     if (r.message) {
-                        suggest_chapter_from_address(frm);
+                        // Add a small delay to ensure address is fully loaded
+                        setTimeout(function() {
+                            suggest_chapter_from_address(frm);
+                        }, 500);
+                    }
+                }
+            });
+        }
+    },
+    
+    // Add a new trigger for after_save to handle address updates
+    after_save: function(frm) {
+        // ... existing after_save code ...
+        
+        // Check for chapter suggestions after save if address exists but no chapter
+        if (frm.doc.primary_address && !frm.doc.primary_chapter) {
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
+                callback: function(r) {
+                    if (r.message) {
+                        setTimeout(function() {
+                            suggest_chapter_from_address(frm);
+                        }, 1000);
                     }
                 }
             });
@@ -1041,42 +1063,73 @@ function generateMandateReference(memberDoc) {
     return `M-${memberId}-${dateStr}-${randomSuffix}`;
 }
 
-// Function to suggest chapters based on address
 function suggest_chapter_from_address(frm) {
-    // First check if chapter management is enabled
+    console.log('suggest_chapter_from_address called for address:', frm.doc.primary_address);
+    
+    if (!frm.doc.primary_address) {
+        console.log('No primary address set');
+        return;
+    }
+    
+    // Get the address details
     frappe.call({
-        method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
+        method: 'frappe.client.get',
+        args: {
+            doctype: 'Address',
+            name: frm.doc.primary_address
+        },
         callback: function(r) {
-            if (!r.message) {
-                return;
-            }
+            console.log('Address response:', r);
             
-            // Get the address details
-            frappe.call({
-                method: 'frappe.client.get',
-                args: {
-                    doctype: 'Address',
-                    name: frm.doc.primary_address
-                },
-                callback: function(r) {
-                    if (r.message) {
-                        const address = r.message;
-                        
-                        // Call the suggestion function with address details
-                        suggest_chapter_for_member(frm, {
-                            postal_code: address.pincode,
-                            state: address.state,
-                            city: address.city
-                        });
-                    }
+            if (r.message) {
+                const address = r.message;
+                
+                // Debug log the address data
+                console.log('Address data:', {
+                    pincode: address.pincode,
+                    state: address.state,
+                    city: address.city,
+                    country: address.country
+                });
+                
+                // Check if we have a postal code
+                if (!address.pincode) {
+                    console.log('No postal code found in address');
+                    frappe.show_alert({
+                        message: __('No postal code found in address. Please add a postal code to enable chapter suggestions.'),
+                        indicator: 'orange'
+                    }, 5);
+                    return;
                 }
-            });
+                
+                // Call the suggestion function with address details
+                suggest_chapter_for_member(frm, {
+                    postal_code: address.pincode,
+                    state: address.state,
+                    city: address.city
+                });
+            } else {
+                console.log('No address data received');
+                frappe.show_alert({
+                    message: __('Could not load address details for chapter suggestion'),
+                    indicator: 'red'
+                }, 5);
+            }
+        },
+        error: function(r) {
+            console.error('Error loading address:', r);
+            frappe.show_alert({
+                message: __('Error loading address details'),
+                indicator: 'red'
+            }, 5);
         }
     });
 }
 
-// Main function to suggest chapters for a member
+// Also improve the main suggestion function
 function suggest_chapter_for_member(frm, location_data) {
+    console.log('suggest_chapter_for_member called with location_data:', location_data);
+    
     // First check if chapter management is enabled
     frappe.call({
         method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
@@ -1094,10 +1147,12 @@ function suggest_chapter_for_member(frm, location_data) {
                 city = location_data.city;
             }
             
-            // If we have a primary address but no location data, fetch it
-            if (!location_data && frm.doc.primary_address) {
-                return suggest_chapter_from_address(frm);
-            }
+            console.log('Calling server method with:', {
+                member_name: frm.doc.name,
+                postal_code: postal_code,
+                state: state,
+                city: city
+            });
             
             // Call server method to find matching chapters
             frappe.call({
@@ -1109,7 +1164,10 @@ function suggest_chapter_for_member(frm, location_data) {
                     city: city || null
                 },
                 callback: function(r) {
+                    console.log('Chapter suggestion response:', r);
+                    
                     if (!r.message) {
+                        console.log('No chapter suggestions returned');
                         // If no suggestions, show the simple chapter selector
                         show_chapter_selector(frm);
                         return;
@@ -1121,6 +1179,14 @@ function suggest_chapter_for_member(frm, location_data) {
                         frappe.msgprint(__('Chapter management is disabled in system settings.'));
                         return;
                     }
+                    
+                    // Debug log the results
+                    console.log('Chapter suggestion results:', {
+                        matches_by_postal: results.matches_by_postal?.length || 0,
+                        matches_by_region: results.matches_by_region?.length || 0,
+                        matches_by_city: results.matches_by_city?.length || 0,
+                        all_chapters: results.all_chapters?.length || 0
+                    });
                     
                     // Prioritize matches in this order: postal > region > city
                     let best_matches = results.matches_by_postal?.length ? results.matches_by_postal :
@@ -1135,9 +1201,22 @@ function suggest_chapter_for_member(frm, location_data) {
                         // Multiple matches - show selection with matches highlighted
                         show_chapter_selector(frm, best_matches);
                     } else {
+                        console.log('No matching chapters found');
+                        frappe.show_alert({
+                            message: __('No chapters found matching postal code {0}. Showing all available chapters.', [postal_code]),
+                            indicator: 'blue'
+                        }, 5);
                         // No matches - show standard selector
                         show_chapter_selector(frm);
                     }
+                },
+                error: function(r) {
+                    console.error('Error getting chapter suggestions:', r);
+                    frappe.show_alert({
+                        message: __('Error finding chapter suggestions. Showing all chapters.'),
+                        indicator: 'orange'
+                    }, 5);
+                    show_chapter_selector(frm);
                 }
             });
         }
