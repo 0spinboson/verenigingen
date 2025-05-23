@@ -71,6 +71,15 @@
    "reqd": 1
   },
   {
+   "fieldname": "subscription_income_account",
+   "fieldtype": "Link",
+   "label": "Subscription Income Account",
+   "options": "Account",
+   "description": "Income account for subscription revenue recognition (required for subscriptions)",
+   "mandatory_depends_on": "eval:doc.allow_invoicing",
+   "get_query": "verenigingen.verenigingen.doctype.verenigingen_settings.verenigingen_settings.get_income_account_query"
+  },
+  {
    "fieldname": "enable_chapter_management",
    "fieldtype": "Check",
    "label": "Enable Chapter Management",
