@@ -368,6 +368,495 @@ class MembershipTerminationRequest(Document):
             "details": details,
             "system_action": 1 if is_system else 0
         })
+    def execute_system_updates(self):
+        """Execute comprehensive automatic system updates"""
+        results = {}
+        
+        # Get member document
+        member_doc = frappe.get_doc("Member", self.member)
+        
+        # 1. Enhanced SEPA mandate cancellation with payment processing cleanup
+        if self.cancel_sepa_mandates:
+            results['sepa_mandates'] = self.cancel_member_sepa_mandates_enhanced(member_doc)
+        
+        # 2. Cancel/update active memberships
+        results['memberships'] = self.cancel_active_memberships(member_doc)
+        
+        # 3. Process outstanding invoices and payments  
+        results['invoices'] = self.process_outstanding_invoices(member_doc)
+        
+        # 4. End board/committee positions with enhanced history tracking
+        if self.end_board_positions:
+            results['positions'] = self.end_all_positions_enhanced(member_doc)
+        
+        # 5. Update customer status and payment methods
+        results['customer_updates'] = self.update_customer_status(member_doc)
+        
+        # 6. Handle subscription cancellations
+        results['subscriptions'] = self.cancel_member_subscriptions(member_doc)
+        
+        # 7. Create comprehensive termination summary
+        self.create_termination_summary(member_doc, results)
+        
+        return results
+    
+    def cancel_member_sepa_mandates_enhanced(self, member_doc):
+        """Enhanced SEPA mandate cancellation with payment processing cleanup"""
+        active_mandates = frappe.get_all(
+            "SEPA Mandate",
+            filters={
+                "member": member_doc.name,
+                "status": "Active",
+                "is_active": 1
+            },
+            fields=["name", "mandate_id", "used_for_memberships", "used_for_donations"]
+        )
+        
+        cancelled_mandates = []
+        
+        for mandate_data in active_mandates:
+            mandate = frappe.get_doc("SEPA Mandate", mandate_data.name)
+            
+            # Store original details for logging
+            original_details = {
+                "mandate_id": mandate.mandate_id,
+                "used_for_memberships": mandate.used_for_memberships,
+                "used_for_donations": mandate.used_for_donations
+            }
+            
+            # Cancel the mandate
+            mandate.status = "Cancelled"
+            mandate.is_active = 0
+            mandate.cancelled_date = self.termination_date or today()
+            mandate.cancelled_reason = f"Membership terminated - Request: {self.name}"
+            
+            # Add termination note
+            if mandate.notes:
+                mandate.notes += f"\n\nCancelled due to membership termination on {self.termination_date or today()}"
+            else:
+                mandate.notes = f"Cancelled due to membership termination on {self.termination_date or today()}"
+            
+            mandate.save()
+            cancelled_mandates.append(original_details)
+            
+            # Log in audit trail
+            self.add_audit_entry(
+                "SEPA Mandate Cancelled", 
+                f"Mandate {mandate.mandate_id} cancelled automatically",
+                is_system=True
+            )
+        
+        # Cancel any pending direct debit entries
+        self.cancel_pending_direct_debits(member_doc)
+        
+        return len(cancelled_mandates)
+    
+    def cancel_pending_direct_debits(self, member_doc):
+        """Cancel any pending direct debit entries for this member"""
+        # Look for pending direct debit batch entries
+        try:
+            pending_entries = frappe.get_all(
+                "Direct Debit Batch Entry",  # Assuming this doctype exists
+                filters={
+                    "member": member_doc.name,
+                    "status": ["in", ["Pending", "Draft"]]
+                },
+                fields=["name", "parent"]
+            )
+            
+            for entry in pending_entries:
+                entry_doc = frappe.get_doc("Direct Debit Batch Entry", entry.name)
+                entry_doc.status = "Cancelled"
+                entry_doc.cancellation_reason = f"Member terminated - Request: {self.name}"
+                entry_doc.save()
+                
+                self.add_audit_entry(
+                    "Direct Debit Entry Cancelled", 
+                    f"Cancelled pending direct debit entry in batch {entry.parent}",
+                    is_system=True
+                )
+        except Exception as e:
+            # Log error but don't fail the entire process
+            frappe.log_error(f"Error cancelling direct debit entries: {str(e)}", "Termination Direct Debit Cleanup")
+    
+    def cancel_active_memberships(self, member_doc):
+        """Cancel all active memberships for this member"""
+        active_memberships = frappe.get_all(
+            "Membership",
+            filters={
+                "member": member_doc.name,
+                "status": ["in", ["Active", "Pending"]],
+                "docstatus": 1
+            },
+            fields=["name", "status", "membership_type", "start_date"]
+        )
+        
+        cancelled_memberships = []
+        
+        for membership_data in active_memberships:
+            membership = frappe.get_doc("Membership", membership_data.name)
+            
+            # Set cancellation details
+            membership.status = "Cancelled"
+            membership.cancellation_date = self.termination_date or today()
+            membership.cancellation_reason = f"Membership terminated - Request: {self.name}"
+            membership.cancellation_type = "Immediate"
+            
+            # Use the flags to allow update after submit
+            membership.flags.ignore_validate_update_after_submit = True
+            membership.save()
+            
+            cancelled_memberships.append({
+                "name": membership.name,
+                "type": membership.membership_type,
+                "start_date": membership.start_date
+            })
+            
+            # Cancel associated subscription if exists
+            if membership.subscription:
+                self.cancel_membership_subscription(membership.subscription)
+            
+            self.add_audit_entry(
+                "Membership Cancelled", 
+                f"Cancelled membership {membership.name} ({membership.membership_type})",
+                is_system=True
+            )
+        
+        return len(cancelled_memberships)
+    
+    def cancel_membership_subscription(self, subscription_name):
+        """Cancel a specific subscription"""
+        try:
+            subscription = frappe.get_doc("Subscription", subscription_name)
+            if subscription.status != "Cancelled":
+                subscription.flags.ignore_permissions = True
+                subscription.cancel_subscription()
+                
+                self.add_audit_entry(
+                    "Subscription Cancelled", 
+                    f"Cancelled subscription {subscription_name}",
+                    is_system=True
+                )
+        except Exception as e:
+            frappe.log_error(f"Error cancelling subscription {subscription_name}: {str(e)}", "Termination Subscription Cancellation")
+    
+    def process_outstanding_invoices(self, member_doc):
+        """Process outstanding invoices for terminated member"""
+        if not member_doc.customer:
+            return {"processed": 0, "action": "No customer linked"}
+        
+        # Get unpaid invoices
+        outstanding_invoices = frappe.get_all(
+            "Sales Invoice",
+            filters={
+                "customer": member_doc.customer,
+                "docstatus": 1,
+                "status": ["in", ["Unpaid", "Overdue", "Partially Paid"]]
+            },
+            fields=["name", "grand_total", "outstanding_amount", "posting_date"]
+        )
+        
+        invoice_actions = []
+        
+        for invoice_data in outstanding_invoices:
+            invoice = frappe.get_doc("Sales Invoice", invoice_data.name)
+            
+            # Add note to invoice about member termination
+            if invoice.remarks:
+                invoice.remarks += f"\n\nMember terminated on {self.termination_date or today()} - Request: {self.name}"
+            else:
+                invoice.remarks = f"Member terminated on {self.termination_date or today()} - Request: {self.name}"
+            
+            # For membership-related invoices, mark as uncollectable if configured
+            if hasattr(invoice, 'membership') and invoice.membership:
+                invoice.custom_uncollectable = 1
+                invoice.custom_uncollectable_reason = "Member terminated"
+                
+            invoice.flags.ignore_validate_update_after_submit = True
+            invoice.save()
+            
+            invoice_actions.append({
+                "invoice": invoice.name,
+                "outstanding": invoice.outstanding_amount,
+                "action": "Marked with termination note"
+            })
+            
+            self.add_audit_entry(
+                "Invoice Updated", 
+                f"Updated invoice {invoice.name} with termination note",
+                is_system=True
+            )
+        
+        return {
+            "processed": len(invoice_actions),
+            "invoices": invoice_actions
+        }
+    
+    def end_all_positions_enhanced(self, member_doc):
+        """Enhanced board position management with comprehensive history tracking"""
+        
+        # Get volunteer record for this member
+        volunteer_records = frappe.get_all(
+            "Volunteer",
+            filters={"member": member_doc.name},
+            fields=["name"]
+        )
+        
+        positions_ended = []
+        
+        for volunteer_record in volunteer_records:
+            # End board positions
+            board_positions = frappe.get_all(
+                "Chapter Board Member",
+                filters={
+                    "volunteer": volunteer_record.name,
+                    "is_active": 1
+                },
+                fields=["name", "parent", "chapter_role", "from_date"]
+            )
+            
+            for position in board_positions:
+                board_member = frappe.get_doc("Chapter Board Member", position.name)
+                
+                # Store position details for logging
+                position_details = {
+                    "chapter": position.parent,
+                    "role": position.chapter_role,
+                    "from_date": position.from_date,
+                    "to_date": self.termination_date or today()
+                }
+                
+                # End the position
+                board_member.is_active = 0
+                board_member.to_date = self.termination_date or today()
+                board_member.save()
+                
+                positions_ended.append(position_details)
+                
+                # Update volunteer assignment history using the existing method
+                try:
+                    frappe.call(
+                        "verenigingen.verenigingen.doctype.chapter.chapter.update_volunteer_assignment_history",
+                        volunteer_id=volunteer_record.name,
+                        chapter_name=position.parent,
+                        role=position.chapter_role,
+                        start_date=position.from_date,
+                        end_date=self.termination_date or today()
+                    )
+                except Exception as e:
+                    frappe.log_error(f"Error updating volunteer history: {str(e)}", "Termination Volunteer History Update")
+                
+                self.add_audit_entry(
+                    "Board Position Ended", 
+                    f"Ended {position.chapter_role} at {position.parent}",
+                    is_system=True
+                )
+        
+        return len(positions_ended)
+    
+    def update_customer_status(self, member_doc):
+        """Update customer record with termination information"""
+        if not member_doc.customer:
+            return {"action": "No customer to update"}
+        
+        try:
+            customer = frappe.get_doc("Customer", member_doc.customer)
+            
+            # Add termination note to customer
+            termination_note = f"Member terminated on {self.termination_date or today()} - Type: {self.termination_type}"
+            
+            if customer.customer_details:
+                customer.customer_details += f"\n\n{termination_note}"  
+            else:
+                customer.customer_details = termination_note
+            
+            # Set customer as inactive for disciplinary terminations
+            if self.requires_secondary_approval:
+                customer.disabled = 1
+                
+            customer.save()
+            
+            self.add_audit_entry(
+                "Customer Updated", 
+                f"Updated customer {customer.name} with termination details",
+                is_system=True
+            )
+            
+            return {"action": "Customer updated", "disabled": customer.disabled}
+            
+        except Exception as e:
+            frappe.log_error(f"Error updating customer: {str(e)}", "Termination Customer Update")
+            return {"action": "Error updating customer", "error": str(e)}
+    
+    def cancel_member_subscriptions(self, member_doc):
+        """Cancel all active subscriptions for this member"""
+        if not member_doc.customer:
+            return {"cancelled": 0}
+        
+        # Find subscriptions for this customer
+        active_subscriptions = frappe.get_all(
+            "Subscription",
+            filters={
+                "party_type": "Customer",
+                "party": member_doc.customer,
+                "status": ["in", ["Active", "Past Due"]]
+            },
+            fields=["name", "status"]
+        )
+        
+        cancelled_count = 0
+        
+        for sub_data in active_subscriptions:
+            try:
+                subscription = frappe.get_doc("Subscription", sub_data.name)
+                subscription.flags.ignore_permissions = True
+                subscription.cancel_subscription()
+                cancelled_count += 1
+                
+                self.add_audit_entry(
+                    "Subscription Cancelled", 
+                    f"Cancelled subscription {subscription.name}",
+                    is_system=True
+                )
+                
+            except Exception as e:
+                frappe.log_error(f"Error cancelling subscription {sub_data.name}: {str(e)}", "Termination Subscription Cancellation")
+        
+        return {"cancelled": cancelled_count}
+    
+    def create_termination_summary(self, member_doc, results):
+        """Create comprehensive termination summary"""
+        
+        summary_lines = [
+            f"Membership Termination Summary for {member_doc.full_name}",
+            f"Executed on: {now()}",
+            f"Termination Type: {self.termination_type}",
+            f"Request: {self.name}",
+            "",
+            "System Updates Performed:"
+        ]
+        
+        if results.get('sepa_mandates', 0) > 0:
+            summary_lines.append(f"• Cancelled {results['sepa_mandates']} SEPA mandate(s)")
+        
+        if results.get('memberships', 0) > 0:
+            summary_lines.append(f"• Cancelled {results['memberships']} active membership(s)")
+        
+        if results.get('positions', 0) > 0:
+            summary_lines.append(f"• Ended {results['positions']} board position(s)")
+        
+        if results.get('invoices', {}).get('processed', 0) > 0:
+            summary_lines.append(f"• Updated {results['invoices']['processed']} outstanding invoice(s)")
+        
+        if results.get('subscriptions', {}).get('cancelled', 0) > 0:
+            summary_lines.append(f"• Cancelled {results['subscriptions']['cancelled']} subscription(s)")
+        
+        summary_lines.append("")
+        summary_lines.append("Customer Status:")
+        if results.get('customer_updates', {}).get('disabled'):
+            summary_lines.append("• Customer account disabled")
+        else:
+            summary_lines.append("• Customer account marked with termination note")
+        
+        # Store summary in execution notes
+        self.execution_notes = "\n".join(summary_lines)
+        
+        # Also log as audit entry
+        self.add_audit_entry(
+            "Termination Summary Created", 
+            f"Comprehensive termination completed with {sum([v for v in results.values() if isinstance(v, int)])} system updates",
+            is_system=True
+        )
+    
+    # Enhanced notification system
+    def send_approval_notification(self):
+        """Enhanced notification when approval is required"""
+        if not self.secondary_approver:
+            return
+        
+        # Get approver details
+        approver = frappe.get_doc("User", self.secondary_approver)
+        
+        if not approver.email:
+            return
+        
+        # Enhanced email with better formatting and more details
+        subject = f"🚨 Urgent: Disciplinary Termination Approval Required - {self.member_name}"
+        
+        # Get member details for context
+        member_doc = frappe.get_doc("Member", self.member)
+        
+        message = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px;">
+            <h2 style="color: #d73527;">Disciplinary Termination Approval Required</h2>
+            
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <h3>Member Details</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr><td style="padding: 5px;"><strong>Name:</strong></td><td style="padding: 5px;">{self.member_name}</td></tr>
+                    <tr><td style="padding: 5px;"><strong>Member ID:</strong></td><td style="padding: 5px;">{self.member}</td></tr>
+                    <tr><td style="padding: 5px;"><strong>Email:</strong></td><td style="padding: 5px;">{member_doc.email or 'Not provided'}</td></tr>
+                    <tr><td style="padding: 5px;"><strong>Primary Chapter:</strong></td><td style="padding: 5px;">{getattr(member_doc, 'primary_chapter', 'Not assigned') or 'Not assigned'}</td></tr>
+                </table>
+            </div>
+            
+            <div style="background: #fff3cd; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #ffc107;">
+                <h3>Termination Details</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr><td style="padding: 5px;"><strong>Type:</strong></td><td style="padding: 5px;"><span style="background: #dc3545; color: white; padding: 2px 8px; border-radius: 3px;">{self.termination_type}</span></td></tr>
+                    <tr><td style="padding: 5px;"><strong>Requested By:</strong></td><td style="padding: 5px;">{self.requested_by}</td></tr>
+                    <tr><td style="padding: 5px;"><strong>Request Date:</strong></td><td style="padding: 5px;">{frappe.format_date(self.request_date)}</td></tr>
+                    <tr><td style="padding: 5px;"><strong>Reason:</strong></td><td style="padding: 5px;">{self.termination_reason}</td></tr>
+                </table>
+            </div>
+            
+            {f'<div style="background: #f8d7da; padding: 15px; border-radius: 5px; margin: 20px 0;"><h4>Documentation:</h4><div style="white-space: pre-wrap;">{self.disciplinary_documentation}</div></div>' if self.disciplinary_documentation else ''}
+            
+            <div style="background: #e7f3ff; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <h3>Required Action</h3>
+                <p>This disciplinary termination requires your approval as an Association Manager. Please review the documentation and either approve or reject this request.</p>
+                
+                <p><strong>⚠️ Important:</strong> Approved disciplinary terminations will:</p>
+                <ul>
+                    <li>Cancel all SEPA mandates immediately</li>
+                    <li>End all board/committee positions</li>
+                    <li>Cancel active memberships and subscriptions</li>
+                    <li>Be recorded in the expulsion report for governance oversight</li>
+                </ul>
+            </div>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="/app/membership-termination-request/{self.name}" 
+                   style="background: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                    Review and Approve/Reject Request
+                </a>
+            </div>
+            
+            <div style="font-size: 12px; color: #6c757d; margin-top: 30px;">
+                <p>This is an automated notification from the membership termination system.</p>
+                <p>Request ID: {self.name} | Generated: {now()}</p>
+            </div>
+        </div>
+        """
+        
+        try:
+            frappe.sendmail(
+                recipients=[approver.email],
+                subject=subject,
+                message=message,
+                reference_doctype=self.doctype,
+                reference_name=self.name,
+                header=["Termination Approval Required", "red"]
+            )
+            
+            self.add_audit_entry(
+                "Approval Notification Sent", 
+                f"Enhanced notification sent to {approver.email}",
+                is_system=True
+            )
+            
+        except Exception as e:
+            frappe.log_error(f"Failed to send enhanced approval notification: {str(e)}", "Termination Approval Notification")
 
 # Server-side methods
 @frappe.whitelist()
@@ -520,3 +1009,63 @@ def generate_expulsion_report(date_range=None, chapter=None):
     """
     
     return frappe.db.sql(query, filter_values, as_dict=True)
+
+
+@frappe.whitelist()
+def get_termination_impact_preview(member):
+    """Get preview of what will be affected by termination"""
+    member_doc = frappe.get_doc("Member", member)
+    
+    impact = {
+        "sepa_mandates": 0,
+        "active_memberships": 0,
+        "board_positions": 0,
+        "outstanding_invoices": 0,
+        "subscriptions": 0,
+        "customer_linked": bool(member_doc.customer)
+    }
+    
+    # Count SEPA mandates
+    impact["sepa_mandates"] = frappe.db.count("SEPA Mandate", {
+        "member": member,
+        "status": "Active",
+        "is_active": 1
+    })
+    
+    # Count active memberships
+    impact["active_memberships"] = frappe.db.count("Membership", {
+        "member": member,
+        "status": ["in", ["Active", "Pending"]],
+        "docstatus": 1
+    })
+    
+    # Count board positions
+    if volunteer_records := frappe.get_all("Volunteer", filters={"member": member}, fields=["name"]):
+        for volunteer in volunteer_records:
+            impact["board_positions"] += frappe.db.count("Chapter Board Member", {
+                "volunteer": volunteer.name,
+                "is_active": 1
+            })
+    
+    # Count outstanding invoices
+    if member_doc.customer:
+        impact["outstanding_invoices"] = frappe.db.count("Sales Invoice", {
+            "customer": member_doc.customer,
+            "docstatus": 1,
+            "status": ["in", ["Unpaid", "Overdue", "Partially Paid"]]
+        })
+        
+        # Count active subscriptions
+        impact["subscriptions"] = frappe.db.count("Subscription", {
+            "party_type": "Customer",
+            "party": member_doc.customer,
+            "status": ["in", ["Active", "Past Due"]]
+        })
+    
+    return impact
+
+@frappe.whitelist()
+def execute_termination_request(request_name):
+    """Standalone method to execute a termination request"""
+    request = frappe.get_doc("Membership Termination Request", request_name)
+    return request.execute_termination()
