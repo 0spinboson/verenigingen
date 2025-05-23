@@ -282,7 +282,43 @@ frappe.ui.form.on('Member', {
                 }
             });
         }, __('Actions'));
-        
+        primary_chapter: function(frm) {
+            // When primary chapter is changed, automatically assign member to that chapter
+            if (frm.doc.primary_chapter && !frm.doc.__islocal && !frm._chapter_assignment_in_progress) {
+                // Prevent infinite loops
+                frm._chapter_assignment_in_progress = true;
+                
+                frappe.call({
+                    method: 'verenigingen.verenigingen.doctype.chapter.chapter.assign_member_to_chapter',
+                    args: {
+                        member: frm.doc.name,
+                        chapter: frm.doc.primary_chapter,
+                        note: 'Chapter updated via member form'
+                    },
+                    callback: function(r) {
+                        frm._chapter_assignment_in_progress = false;
+                        
+                        if (r.message && r.message.success) {
+                            if (r.message.added_to_members) {
+                                frappe.show_alert({
+                                    message: __('Added to {0} chapter members list', [frm.doc.primary_chapter]),
+                                    indicator: 'green'
+                                }, 5);
+                            } else {
+                                frappe.show_alert({
+                                    message: __('Already a member of {0} chapter', [frm.doc.primary_chapter]),
+                                    indicator: 'blue'
+                                }, 3);
+                            }
+                        }
+                    },
+                    error: function(r) {
+                        frm._chapter_assignment_in_progress = false;
+                        console.error('Error assigning member to chapter:', r);
+                    }
+                });
+            }
+        },
         // Add button to create a new membership
         frm.add_custom_button(__('Create Membership'), function() {
             frappe.new_doc('Membership', {
