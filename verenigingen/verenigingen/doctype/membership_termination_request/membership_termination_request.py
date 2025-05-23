@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import getdate, today, now, add_days
+from frappe.utils import getdate, today, now, add_days, date_diff
 
 class MembershipTerminationRequest(Document):
     def validate(self):
@@ -1500,10 +1500,7 @@ def add_to_member_py():
         
         return readiness
 
-import frappe
-from frappe import _
-from frappe.model.document import Document
-from frappe.utils import getdate, today, now, add_days, date_diff
+
 
 class TerminationAppealsProcess(Document):
     def validate(self):
