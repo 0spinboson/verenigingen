@@ -19,9 +19,7 @@ frappe.ui.form.on('Volunteer Assignment', {
         if(child.assignment_type === 'Board Position') {
             frappe.model.set_value(cdt, cdn, 'reference_doctype', 'Chapter');
         } else if(child.assignment_type === 'Team') {
-            frappe.model.set_value(cdt, cdn, 'reference_doctype', 'Volunteer Team');
-        } else if(child.assignment_type === 'Committee') {
-            frappe.model.set_value(cdt, cdn, 'reference_doctype', 'Volunteer Team');
+            frappe.model.set_value(cdt, cdn, 'reference_doctype', 'Team');
         } else if(child.assignment_type === 'Event') {
             frappe.model.set_value(cdt, cdn, 'reference_doctype', 'Event');
         } else if(child.assignment_type === 'Commission') {
