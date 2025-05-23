@@ -132,7 +132,7 @@ doc_events = {
         "validate": "verenigingen.verenigingen.doctype.chapter.chapter.validate_chapter_access",
     },
     "Verenigingen Settings": {
-        "on_update": "verenigingen.verenigingen.doctype.tax_exemption_handler.on_update_verenigingen_settings",
+        "on_update": "verenigingen.utils.on_update_verenigingen_settings",
     },
     "Payment Entry": {
         "on_submit": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history",
