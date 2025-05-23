@@ -1069,3 +1069,433 @@ def execute_termination_request(request_name):
     """Standalone method to execute a termination request"""
     request = frappe.get_doc("Membership Termination Request", request_name)
     return request.execute_termination()
+
+@frappe.whitelist()
+def get_member_termination_status_enhanced(member):
+    """Get enhanced termination status for a member with detailed information"""
+    
+    # Check for active termination requests
+    pending_requests = frappe.get_all(
+        "Membership Termination Request",
+        filters={
+            "member": member,
+            "status": ["in", ["Draft", "Pending Approval", "Approved"]]
+        },
+        fields=["name", "status", "termination_type", "request_date", "termination_date", "requested_by"],
+        order_by="request_date desc"
+    )
+    
+    # Check for executed terminations
+    executed_requests = frappe.get_all(
+        "Membership Termination Request",
+        filters={
+            "member": member,
+            "status": "Executed"
+        },
+        fields=["name", "termination_type", "execution_date", "termination_date", "executed_by"],
+        limit=1,
+        order_by="execution_date desc"
+    )
+    
+    # Get additional context
+    member_doc = frappe.get_doc("Member", member)
+    
+    # Check if member has any active system records
+    active_systems = check_active_member_systems(member)
+    
+    result = {
+        "pending_requests": pending_requests,
+        "executed_requests": executed_requests,
+        "is_terminated": len(executed_requests) > 0,
+        "termination_date": executed_requests[0].execution_date if executed_requests else None,
+        "termination_type": executed_requests[0].termination_type if executed_requests else None,
+        "has_pending": len(pending_requests) > 0,
+        "active_systems": active_systems,
+        "member_name": member_doc.full_name
+    }
+    
+    return result
+
+def check_active_member_systems(member):
+    """Check what systems still have active records for this member"""
+    active_systems = {
+        "sepa_mandates": 0,
+        "memberships": 0,
+        "board_positions": 0,
+        "subscriptions": 0,
+        "outstanding_invoices": 0
+    }
+    
+    member_doc = frappe.get_doc("Member", member)
+    
+    # Count active SEPA mandates
+    active_systems["sepa_mandates"] = frappe.db.count("SEPA Mandate", {
+        "member": member,
+        "status": "Active",
+        "is_active": 1
+    })
+    
+    # Count active memberships
+    active_systems["memberships"] = frappe.db.count("Membership", {
+        "member": member,
+        "status": ["in", ["Active", "Pending"]],
+        "docstatus": 1
+    })
+    
+    # Count board positions
+    volunteer_records = frappe.get_all("Volunteer", filters={"member": member}, fields=["name"])
+    for volunteer in volunteer_records:
+        active_systems["board_positions"] += frappe.db.count("Chapter Board Member", {
+            "volunteer": volunteer.name,
+            "is_active": 1
+        })
+    
+    # Count customer-related records
+    if member_doc.customer:
+        active_systems["outstanding_invoices"] = frappe.db.count("Sales Invoice", {
+            "customer": member_doc.customer,
+            "docstatus": 1,
+            "status": ["in", ["Unpaid", "Overdue", "Partially Paid"]]
+        })
+        
+        active_systems["subscriptions"] = frappe.db.count("Subscription", {
+            "party_type": "Customer",
+            "party": member_doc.customer,
+            "status": ["in", ["Active", "Past Due"]]
+        })
+    
+    return active_systems
+
+@frappe.whitelist()
+def get_termination_statistics():
+    """Get system-wide termination statistics for reporting"""
+    
+    # Get counts by status
+    status_counts = {}
+    for status in ["Draft", "Pending Approval", "Approved", "Rejected", "Executed"]:
+        status_counts[status] = frappe.db.count("Membership Termination Request", {"status": status})
+    
+    # Get counts by type
+    type_counts = {}
+    termination_types = ["Voluntary", "Non-payment", "Deceased", "Policy Violation", "Disciplinary Action", "Expulsion"]
+    for t_type in termination_types:
+        type_counts[t_type] = frappe.db.count("Membership Termination Request", {"termination_type": t_type})
+    
+    # Get recent activity (last 30 days)
+    recent_requests = frappe.db.count("Membership Termination Request", {
+        "request_date": [">=", add_days(today(), -30)]
+    })
+    
+    recent_executions = frappe.db.count("Membership Termination Request", {
+        "status": "Executed",
+        "execution_date": [">=", add_days(today(), -30)]
+    })
+    
+    # Get pending approvals
+    pending_approvals = frappe.db.count("Membership Termination Request", {
+        "status": "Pending Approval"
+    })
+    
+    return {
+        "status_counts": status_counts,
+        "type_counts": type_counts,
+        "recent_activity": {
+            "requests": recent_requests,
+            "executions": recent_executions
+        },
+        "pending_approvals": pending_approvals,
+        "total_requests": sum(status_counts.values())
+    }
+
+@frappe.whitelist()
+def bulk_execute_termination_requests(request_names):
+    """Execute multiple approved termination requests"""
+    if isinstance(request_names, str):
+        import json
+        request_names = json.loads(request_names)
+    
+    results = {
+        "successful": [],
+        "failed": [],
+        "total": len(request_names)
+    }
+    
+    for request_name in request_names:
+        try:
+            request = frappe.get_doc("Membership Termination Request", request_name)
+            
+            if request.status != "Approved":
+                results["failed"].append({
+                    "request": request_name,
+                    "error": "Request is not in approved status"
+                })
+                continue
+            
+            # Execute the termination
+            success = request.execute_termination()
+            
+            if success:
+                results["successful"].append({
+                    "request": request_name,
+                    "member": request.member_name
+                })
+            else:
+                results["failed"].append({
+                    "request": request_name,
+                    "error": "Execution failed"
+                })
+                
+        except Exception as e:
+            results["failed"].append({
+                "request": request_name,
+                "error": str(e)
+            })
+            frappe.log_error(f"Bulk execution error for {request_name}: {str(e)}", "Bulk Termination Execution")
+    
+    return results
+
+@frappe.whitelist()
+def get_termination_audit_report(filters=None):
+    """Generate comprehensive audit report of termination activities"""
+    
+    # Build base query
+    query = """
+        SELECT 
+            mtr.name as request_id,
+            mtr.member,
+            mtr.member_name,
+            mtr.termination_type,
+            mtr.status,
+            mtr.request_date,
+            mtr.requested_by,
+            mtr.approved_by,
+            mtr.approval_date,
+            mtr.executed_by,
+            mtr.execution_date,
+            mtr.sepa_mandates_cancelled,
+            mtr.positions_ended,
+            mtr.termination_reason
+        FROM `tabMembership Termination Request` mtr
+        WHERE 1=1
+    """
+    
+    query_params = []
+    
+    # Apply filters if provided
+    if filters:
+        if filters.get('date_range'):
+            start_date, end_date = filters['date_range'].split(',')
+            query += " AND mtr.request_date BETWEEN %s AND %s"
+            query_params.extend([start_date, end_date])
+        
+        if filters.get('status'):
+            query += " AND mtr.status = %s"
+            query_params.append(filters['status'])
+        
+        if filters.get('termination_type'):
+            query += " AND mtr.termination_type = %s"
+            query_params.append(filters['termination_type'])
+        
+        if filters.get('requested_by'):
+            query += " AND mtr.requested_by = %s"
+            query_params.append(filters['requested_by'])
+    
+    query += " ORDER BY mtr.request_date DESC"
+    
+    # Execute query
+    data = frappe.db.sql(query, query_params, as_dict=True)
+    
+    # Enhance data with audit trail information
+    for record in data:
+        # Get audit trail count
+        record['audit_entries'] = frappe.db.count("Termination Audit Entry", {
+            "parent": record['request_id']
+        })
+        
+        # Calculate processing time if executed
+        if record['execution_date'] and record['request_date']:
+            delta = frappe.utils.date_diff(record['execution_date'], record['request_date'])
+            record['processing_days'] = delta
+    
+    return data
+
+@frappe.whitelist()
+def get_expulsion_governance_report(filters=None):
+    """Generate governance report for expulsions and disciplinary actions"""
+    
+    query = """
+        SELECT 
+            ere.name,
+            ere.member_name,
+            ere.member_id,
+            ere.expulsion_date,
+            ere.expulsion_type,
+            ere.chapter_involved,
+            ere.initiated_by,
+            ere.approved_by,
+            ere.status,
+            ere.under_appeal,
+            ere.appeal_date,
+            mtr.name as termination_request,
+            mtr.disciplinary_documentation,
+            mtr.execution_date
+        FROM `tabExpulsion Report Entry` ere
+        LEFT JOIN `tabMembership Termination Request` mtr ON ere.member_id = mtr.member
+        WHERE ere.expulsion_type IN ('Policy Violation', 'Disciplinary Action', 'Expulsion')
+    """
+    
+    query_params = []
+    
+    if filters:
+        if filters.get('date_range'):
+            start_date, end_date = filters['date_range'].split(',')
+            query += " AND ere.expulsion_date BETWEEN %s AND %s"
+            query_params.extend([start_date, end_date])
+        
+        if filters.get('chapter'):
+            query += " AND ere.chapter_involved = %s"
+            query_params.append(filters['chapter'])
+        
+        if filters.get('status'):
+            query += " AND ere.status = %s"
+            query_params.append(filters['status'])
+    
+    query += " ORDER BY ere.expulsion_date DESC"
+    
+    data = frappe.db.sql(query, query_params, as_dict=True)
+    
+    # Add summary statistics
+    summary = {
+        "total_expulsions": len(data),
+        "by_type": {},
+        "by_status": {},
+        "under_appeal": len([r for r in data if r['under_appeal']]),
+        "chapters_involved": len(set([r['chapter_involved'] for r in data if r['chapter_involved']]))
+    }
+    
+    # Calculate breakdown by type and status
+    for record in data:
+        # By type
+        if record['expulsion_type'] not in summary['by_type']:
+            summary['by_type'][record['expulsion_type']] = 0
+        summary['by_type'][record['expulsion_type']] += 1
+        
+        # By status
+        if record['status'] not in summary['by_status']:
+            summary['by_status'][record['status']] = 0
+        summary['by_status'][record['status']] += 1
+    
+    return {
+        "data": data,
+        "summary": summary
+    }
+
+@frappe.whitelist()
+def validate_termination_permissions_enhanced(member, termination_type, user=None):
+    """Enhanced permission validation with detailed feedback"""
+    if not user:
+        user = frappe.session.user
+    
+    user_roles = frappe.get_roles(user)
+    member_doc = frappe.get_doc("Member", member)
+    
+    result = {
+        "can_initiate": False,
+        "can_approve": False,
+        "requires_secondary_approval": False,
+        "reasons": [],
+        "user_roles": user_roles,
+        "member_details": {
+            "name": member_doc.full_name,
+            "primary_chapter": getattr(member_doc, 'primary_chapter', None)
+        }
+    }
+    
+    # Check basic initiation permissions
+    if ("System Manager" in user_roles or 
+        "Association Manager" in user_roles or 
+        "Verenigingen Manager" in user_roles):
+        result["can_initiate"] = True
+        result["reasons"].append("User has administrative role")
+    elif is_chapter_board_member(user):
+        result["can_initiate"] = True
+        result["reasons"].append("User is a chapter board member")
+    else:
+        result["reasons"].append("User lacks required roles or board membership")
+    
+    # Check termination type specific rules
+    disciplinary_types = ['Policy Violation', 'Disciplinary Action', 'Expulsion']
+    
+    if termination_type in disciplinary_types:
+        result["requires_secondary_approval"] = True
+        result["reasons"].append("Disciplinary terminations require secondary approval")
+        
+        # Check approval permissions
+        if ("System Manager" in user_roles or 
+            "Association Manager" in user_roles or 
+            "Verenigingen Manager" in user_roles):
+            result["can_approve"] = True
+            result["reasons"].append("User can approve disciplinary terminations")
+        else:
+            result["reasons"].append("User cannot approve disciplinary terminations")
+    else:
+        result["can_approve"] = result["can_initiate"]
+        result["reasons"].append("Standard terminations can be self-approved")
+    
+    # Check for any existing termination requests
+    existing_requests = frappe.get_all(
+        "Membership Termination Request",
+        filters={
+            "member": member,
+            "status": ["in", ["Draft", "Pending Approval", "Approved"]]
+        },
+        limit=1
+    )
+    
+    if existing_requests:
+        result["existing_request"] = True
+        result["reasons"].append("Member already has pending termination request")
+    
+    return result
+
+# Add method to member.py for integration
+def add_to_member_py():
+    """
+    Add this method to the Member class in member.py
+    """
+    @frappe.whitelist()
+    def get_termination_readiness_check(self):
+        """Check if member is ready for termination and what would be affected"""
+        
+        readiness = {
+            "can_terminate": True,
+            "warnings": [],
+            "blockers": [],
+            "impact": {}
+        }
+        
+        # Check for active systems
+        impact = get_termination_impact_preview(self.name)
+        readiness["impact"] = impact
+        
+        # Check for blockers
+        if impact["board_positions"] > 0:
+            readiness["warnings"].append(f"Member holds {impact['board_positions']} board position(s)")
+        
+        if impact["outstanding_invoices"] > 5:  # More than 5 outstanding invoices
+            readiness["warnings"].append(f"Member has {impact['outstanding_invoices']} outstanding invoices")
+        
+        # Check for pending termination requests
+        pending = frappe.get_all(
+            "Membership Termination Request",
+            filters={
+                "member": self.name,
+                "status": ["in", ["Draft", "Pending Approval", "Approved"]]
+            }
+        )
+        
+        if pending:
+            readiness["can_terminate"] = False
+            readiness["blockers"].append("Member already has pending termination request")
+        
+        return readiness
