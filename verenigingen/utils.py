@@ -163,24 +163,12 @@ class DutchTaxExemptionHandler:
         
         frappe.msgprint(_("Dutch BTW exemption templates and settings have been created"))
     
-# Find this part in your utils.py file and replace it:
-
+    # Replace the create_dutch_tax_templates function in your utils.py with this fixed version:
+    
     def create_dutch_tax_templates(self):
         """
         Create tax templates for different Dutch BTW exemption scenarios
         """
-        # Create BTW Vrijgesteld tax category if it doesn't exist
-        tax_category_name = "BTW Vrijgesteld"
-        if not frappe.db.exists("Tax Category", tax_category_name):
-            try:
-                tax_category = frappe.new_doc("Tax Category")
-                tax_category.title = tax_category_name
-                tax_category.insert()
-                frappe.logger().info(f"Created tax category: {tax_category_name}")
-            except Exception as e:
-                frappe.logger().error(f"Could not create tax category {tax_category_name}: {str(e)}")
-                tax_category_name = None  # Don't use tax category if creation fails
-        
         # Create templates for different exemption types
         for exemption_type, description in BTW_CODES.items():
             template_name = f"BTW {exemption_type}"
@@ -194,10 +182,7 @@ class DutchTaxExemptionHandler:
             tax_template.name = template_name
             tax_template.is_default = 0
             tax_template.company = self.company
-            
-            # Only set tax category if it exists
-            if tax_category_name:
-                tax_template.tax_category = tax_category_name
+            # REMOVED: tax_template.tax_category = "BTW Vrijgesteld"  # This was causing the error
             
             # Add documentation
             tax_template.description = description
