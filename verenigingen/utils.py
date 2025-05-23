@@ -416,6 +416,21 @@ def apply_btw_exemption(docname, doctype="Sales Invoice", exemption_type=None):
     
     return doc
 
+def on_update_verenigingen_settings(doc, method=None):
+    """
+    Hook function called when Verenigingen Settings is updated
+    This function is called whenever the Verenigingen Settings document is saved/updated
+    It triggers the Dutch tax exemption setup if tax exemption is enabled
+    """
+    try:
+        # Call the existing tax exemption setup function
+        setup_dutch_tax_exemption(doc, method)
+    except Exception as e:
+        # Log error but don't fail the settings update
+        frappe.log_error(f"Error in on_update_verenigingen_settings: {str(e)}", 
+                       "Verenigingen Settings Update Error")
+        frappe.logger().error(f"Error updating Verenigigen settings: {str(e)}")
+
 def generate_btw_report(start_date, end_date):
     """
     Generate Dutch BTW (VAT) report for the specified period
