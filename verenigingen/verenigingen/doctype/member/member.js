@@ -457,6 +457,35 @@ frappe.ui.form.on('Member', {
             }
         }
 
+        // ENHANCED MEMBERSHIP TERMINATION INTEGRATION
+        if (!frm.doc.__islocal && frm.doc.docstatus !== 2) {
+            
+            // Get termination impact preview
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_termination_impact_preview',
+                args: {
+                    member: frm.doc.name
+                },
+                callback: function(r) {
+                    if (r.message) {
+                        // Store impact data for use in termination dialog
+                        frm._termination_impact = r.message;
+                        
+                        // Add enhanced termination button with impact preview
+                        add_enhanced_termination_button(frm, r.message);
+                    }
+                }
+            });
+            
+            // Check for active termination requests with enhanced status display
+            check_termination_status_enhanced(frm);
+            
+            // Add termination history button
+            frm.add_custom_button(__('Termination History'), function() {
+                show_termination_history(frm);
+            }, __('View'));
+        }
+
         // Attach triggers to name fields dynamically
         ['first_name', 'middle_name', 'last_name'].forEach(field => {
             frm.fields_dict[field].df.onchange = () => frm.trigger('update_full_name');
@@ -795,6 +824,431 @@ frappe.ui.form.on('Member', {
         }
     }
 });
+
+// ENHANCED TERMINATION FUNCTIONALITY
+
+function add_enhanced_termination_button(frm, impact) {
+    // Create context-aware termination button
+    let button_class = 'btn-danger';
+    let button_text = __('Terminate Membership');
+    
+    // Adjust button based on impact
+    if (impact.board_positions > 0) {
+        button_text += ` (${impact.board_positions} positions)`;
+        button_class = 'btn-warning'; // More visible for board members
+    }
+    
+    frm.add_custom_button(button_text, function() {
+        show_enhanced_termination_dialog_v2(frm.doc.name, frm.doc.full_name, impact);
+    }, __('Actions')).addClass(button_class);
+}
+
+function check_termination_status_enhanced(frm) {
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_member_termination_status_enhanced',
+        args: {
+            member: frm.doc.name
+        },
+        callback: function(r) {
+            if (r.message) {
+                const status = r.message;
+                
+                // Add appropriate indicators
+                if (status.is_terminated) {
+                    frm.dashboard.add_indicator(
+                        __('Membership Terminated'), 
+                        'red'
+                    );
+                    
+                    // Add terminated date to dashboard
+                    if (status.termination_date) {
+                        frm.dashboard.add_indicator(
+                            __('Terminated on {0}', [frappe.datetime.str_to_user(status.termination_date)]), 
+                            'gray'
+                        );
+                    }
+                } else if (status.pending_requests.length > 0) {
+                    const pending = status.pending_requests[0];
+                    
+                    if (pending.status === 'Pending Approval') {
+                        frm.dashboard.add_indicator(
+                            __('Termination Pending Approval'), 
+                            'orange'
+                        );
+                    } else if (pending.status === 'Approved') {
+                        frm.dashboard.add_indicator(
+                            __('Termination Approved - Awaiting Execution'), 
+                            'yellow'
+                        );
+                    }
+                    
+                    // Add link to view the request
+                    frm.add_custom_button(__('View Pending Termination'), function() {
+                        frappe.set_route('Form', 'Membership Termination Request', pending.name);
+                    }, __('View')).addClass('btn-warning');
+                }
+            }
+        }
+    });
+}
+
+function show_enhanced_termination_dialog_v2(member_id, member_name, impact) {
+    // Create impact summary HTML
+    const impact_html = create_impact_summary_html(impact);
+    
+    const dialog = new frappe.ui.Dialog({
+        title: __('Terminate Membership: {0}', [member_name]),
+        size: 'large',
+        fields: [
+            {
+                fieldtype: 'HTML',
+                options: `<div class="alert alert-info">
+                    <h5>${__('Termination Impact Assessment')}</h5>
+                    ${impact_html}
+                </div>`
+            },
+            {
+                fieldtype: 'Section Break',
+                label: __('Termination Type')
+            },
+            {
+                fieldname: 'termination_type',
+                fieldtype: 'Select',
+                label: __('Termination Type'),
+                options: [
+                    'Voluntary',
+                    'Non-payment', 
+                    'Deceased',
+                    '--- Disciplinary ---',
+                    'Policy Violation',
+                    'Disciplinary Action',
+                    'Expulsion'
+                ],
+                reqd: 1,
+                onchange: function() {
+                    toggle_dialog_fields_v2(dialog, this.value, impact);
+                }
+            },
+            {
+                fieldtype: 'Section Break',
+                label: __('Reason & Documentation')
+            },
+            {
+                fieldname: 'termination_reason',
+                fieldtype: 'Small Text',
+                label: __('Termination Reason'),
+                reqd: 1
+            },
+            {
+                fieldname: 'disciplinary_documentation',
+                fieldtype: 'Text Editor',
+                label: __('Documentation Required'),
+                depends_on: 'eval:["Policy Violation", "Disciplinary Action", "Expulsion"].includes(termination_type)',
+                mandatory_depends_on: 'eval:["Policy Violation", "Disciplinary Action", "Expulsion"].includes(termination_type)',
+                description: __('Required for disciplinary actions - will be included in expulsion report')
+            },
+            {
+                fieldtype: 'Section Break',
+                label: __('Approval'),
+                depends_on: 'eval:["Policy Violation", "Disciplinary Action", "Expulsion"].includes(termination_type)'
+            },
+            {
+                fieldname: 'secondary_approver',
+                fieldtype: 'Link',
+                label: __('Secondary Approver'),
+                options: 'User', 
+                depends_on: 'eval:["Policy Violation", "Disciplinary Action", "Expulsion"].includes(termination_type)',
+                mandatory_depends_on: 'eval:["Policy Violation", "Disciplinary Action", "Expulsion"].includes(termination_type)',
+                get_query: function() {
+                    return {
+                        query: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_eligible_approvers'
+                    };
+                }
+            },
+            {
+                fieldtype: 'Section Break',
+                label: __('System Updates')
+            },
+            {
+                fieldname: 'cancel_sepa_mandates',
+                fieldtype: 'Check',
+                label: __('Cancel SEPA Mandates ({0} found)', [impact.sepa_mandates]),
+                default: impact.sepa_mandates > 0 ? 1 : 0,
+                description: impact.sepa_mandates > 0 ? __('Will cancel {0} active mandates', [impact.sepa_mandates]) : __('No active mandates found')
+            },
+            {
+                fieldname: 'end_board_positions',
+                fieldtype: 'Check',
+                label: __('End Board/Committee Positions ({0} found)', [impact.board_positions]),
+                default: impact.board_positions > 0 ? 1 : 0,
+                description: impact.board_positions > 0 ? __('Will end {0} active positions', [impact.board_positions]) : __('No active positions found')
+            },
+            {
+                fieldname: 'cancel_memberships',
+                fieldtype: 'Check',
+                label: __('Cancel Active Memberships ({0} found)', [impact.active_memberships]),
+                default: impact.active_memberships > 0 ? 1 : 0,
+                description: impact.active_memberships > 0 ? __('Will cancel {0} memberships', [impact.active_memberships]) : __('No active memberships found')
+            },
+            {
+                fieldname: 'process_invoices',
+                fieldtype: 'Check',
+                label: __('Process Outstanding Invoices ({0} found)', [impact.outstanding_invoices]),
+                default: impact.outstanding_invoices > 0 ? 1 : 0,
+                description: impact.outstanding_invoices > 0 ? __('Will update {0} unpaid invoices', [impact.outstanding_invoices]) : __('No outstanding invoices found')
+            },
+            {
+                fieldname: 'cancel_subscriptions',
+                fieldtype: 'Check',
+                label: __('Cancel Subscriptions ({0} found)', [impact.subscriptions]),
+                default: impact.subscriptions > 0 ? 1 : 0,
+                description: impact.subscriptions > 0 ? __('Will cancel {0} active subscriptions', [impact.subscriptions]) : __('No active subscriptions found')
+            }
+        ],
+        primary_action_label: __('Create Termination Request'),
+        primary_action: function(values) {
+            create_termination_request_v2(member_id, member_name, values, dialog);
+        }
+    });
+    
+    dialog.show();
+}
+
+function create_impact_summary_html(impact) {
+    let html = '<div class="row">';
+    
+    // SEPA Mandates
+    html += `<div class="col-sm-4">
+        <div class="text-center">
+            <div class="h4 ${impact.sepa_mandates > 0 ? 'text-warning' : 'text-muted'}">${impact.sepa_mandates}</div>
+            <div class="small">SEPA Mandates</div>
+        </div>
+    </div>`;
+    
+    // Board Positions  
+    html += `<div class="col-sm-4">
+        <div class="text-center">
+            <div class="h4 ${impact.board_positions > 0 ? 'text-danger' : 'text-muted'}">${impact.board_positions}</div>
+            <div class="small">Board Positions</div>
+        </div>
+    </div>`;
+    
+    // Memberships
+    html += `<div class="col-sm-4">
+        <div class="text-center">
+            <div class="h4 ${impact.active_memberships > 0 ? 'text-info' : 'text-muted'}">${impact.active_memberships}</div>
+            <div class="small">Active Memberships</div>
+        </div>
+    </div>`;
+    
+    html += '</div><div class="row mt-2">';
+    
+    // Outstanding Invoices
+    html += `<div class="col-sm-6">
+        <div class="text-center">
+            <div class="h4 ${impact.outstanding_invoices > 0 ? 'text-warning' : 'text-muted'}">${impact.outstanding_invoices}</div>
+            <div class="small">Outstanding Invoices</div>
+        </div>
+    </div>`;
+    
+    // Subscriptions
+    html += `<div class="col-sm-6">
+        <div class="text-center">
+            <div class="h4 ${impact.subscriptions > 0 ? 'text-primary' : 'text-muted'}">${impact.subscriptions}</div>
+            <div class="small">Active Subscriptions</div>
+        </div>
+    </div>`;
+    
+    html += '</div>';
+    
+    if (impact.board_positions > 0) {
+        html += `<div class="alert alert-warning mt-3">
+            <strong>${__('Important:')}</strong> ${__('This member holds {0} board position(s). Termination will automatically end these positions and update chapter records.', [impact.board_positions])}
+        </div>`;
+    }
+    
+    return html;
+}
+
+function toggle_dialog_fields_v2(dialog, termination_type, impact) {
+    const disciplinary_types = ['Policy Violation', 'Disciplinary Action', 'Expulsion'];
+    const is_disciplinary = disciplinary_types.includes(termination_type);
+    
+    // Toggle visibility of disciplinary-specific fields
+    dialog.fields_dict.disciplinary_documentation.df.hidden = !is_disciplinary;
+    dialog.fields_dict.secondary_approver.df.hidden = !is_disciplinary;
+    
+    // Update system update defaults based on type
+    if (is_disciplinary) {
+        // Disciplinary terminations should do everything by default
+        dialog.set_value('cancel_sepa_mandates', impact.sepa_mandates > 0 ? 1 : 0);
+        dialog.set_value('end_board_positions', impact.board_positions > 0 ? 1 : 0);
+        dialog.set_value('cancel_memberships', impact.active_memberships > 0 ? 1 : 0);
+        dialog.set_value('process_invoices', impact.outstanding_invoices > 0 ? 1 : 0);
+        dialog.set_value('cancel_subscriptions', impact.subscriptions > 0 ? 1 : 0);
+    }
+    
+    // Refresh the dialog to show/hide fields
+    dialog.refresh();
+}
+
+function create_termination_request_v2(member_id, member_name, values, dialog) {
+    // Prepare termination data with enhanced system updates
+    const termination_data = {
+        termination_type: values.termination_type,
+        termination_reason: values.termination_reason,
+        documentation: values.disciplinary_documentation,
+        secondary_approver: values.secondary_approver,
+        cancel_sepa_mandates: values.cancel_sepa_mandates,
+        end_board_positions: values.end_board_positions,
+        cancel_memberships: values.cancel_memberships,
+        process_invoices: values.process_invoices,
+        cancel_subscriptions: values.cancel_subscriptions
+    };
+    
+    // Show confirmation with impact summary
+    const confirmation_msg = create_confirmation_message(values, termination_data);
+    
+    frappe.confirm(
+        confirmation_msg,
+        function() {
+            // User confirmed - proceed with creation
+            const disciplinary_types = ['Policy Violation', 'Disciplinary Action', 'Expulsion'];
+            const is_disciplinary = disciplinary_types.includes(values.termination_type);
+            
+            if (is_disciplinary) {
+                // Use disciplinary workflow
+                frappe.call({
+                    method: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.initiate_disciplinary_termination',
+                    args: {
+                        member_id: member_id,
+                        termination_data: termination_data
+                    },
+                    callback: function(r) {
+                        if (r.message) {
+                            dialog.hide();
+                            frappe.set_route('Form', 'Membership Termination Request', r.message.request_id);
+                        }
+                    }
+                });
+            } else {
+                // Standard workflow - create request directly
+                frappe.new_doc('Membership Termination Request', {
+                    member: member_id,
+                    member_name: member_name,
+                    termination_type: values.termination_type,
+                    termination_reason: values.termination_reason,
+                    cancel_sepa_mandates: values.cancel_sepa_mandates,
+                    end_board_positions: values.end_board_positions,
+                    cancel_memberships: values.cancel_memberships,
+                    process_invoices: values.process_invoices,
+                    cancel_subscriptions: values.cancel_subscriptions
+                });
+                dialog.hide();
+            }
+        }
+    );
+}
+
+function create_confirmation_message(values, termination_data) {
+    let msg = __('Are you sure you want to terminate membership for {0}?', [values.member_name || 'this member']);
+    msg += '<br><br><strong>' + __('The following actions will be performed:') + '</strong><ul>';
+    
+    if (termination_data.cancel_sepa_mandates) {
+        msg += '<li>' + __('Cancel all SEPA mandates') + '</li>';
+    }
+    if (termination_data.end_board_positions) {
+        msg += '<li>' + __('End all board/committee positions') + '</li>';
+    }
+    if (termination_data.cancel_memberships) {
+        msg += '<li>' + __('Cancel active memberships') + '</li>';
+    }
+    if (termination_data.process_invoices) {
+        msg += '<li>' + __('Update outstanding invoices') + '</li>';
+    }
+    if (termination_data.cancel_subscriptions) {
+        msg += '<li>' + __('Cancel active subscriptions') + '</li>';
+    }
+    
+    msg += '</ul>';
+    
+    if (['Policy Violation', 'Disciplinary Action', 'Expulsion'].includes(values.termination_type)) {
+        msg += '<br><div class="alert alert-warning">';
+        msg += '<strong>' + __('Note:') + '</strong> ';
+        msg += __('Disciplinary terminations require secondary approval and will be recorded in the expulsion report.');
+        msg += '</div>';
+    }
+    
+    return msg;
+}
+
+function show_termination_history(frm) {
+    frappe.call({
+        method: 'frappe.client.get_list',
+        args: {
+            doctype: 'Membership Termination Request',
+            filters: {
+                member: frm.doc.name
+            },
+            fields: ['name', 'status', 'termination_type', 'request_date', 'execution_date', 'requested_by'],
+            order_by: 'request_date desc'
+        },
+        callback: function(r) {
+            if (r.message && r.message.length) {
+                show_termination_history_dialog(r.message, frm.doc.full_name);
+            } else {
+                frappe.msgprint(__('No termination history found for this member.'));
+            }
+        }
+    });
+}
+
+function show_termination_history_dialog(history, member_name) {
+    let html = '<div class="termination-history">';
+    html += '<table class="table table-bordered table-condensed">';
+    html += '<thead><tr>';
+    html += '<th>' + __('Request') + '</th>';
+    html += '<th>' + __('Type') + '</th>';
+    html += '<th>' + __('Status') + '</th>';
+    html += '<th>' + __('Requested By') + '</th>';
+    html += '<th>' + __('Request Date') + '</th>';
+    html += '<th>' + __('Execution Date') + '</th>';
+    html += '</tr></thead><tbody>';
+    
+    history.forEach(function(record) {
+        const status_color = {
+            'Draft': 'blue',
+            'Pending Approval': 'yellow',
+            'Approved': 'green', 
+            'Rejected': 'red',
+            'Executed': 'gray'
+        }[record.status] || 'gray';
+        
+        const type_color = ['Policy Violation', 'Disciplinary Action', 'Expulsion'].includes(record.termination_type) ? 'red' : 'blue';
+        
+        html += '<tr>';
+        html += '<td><a href="/app/membership-termination-request/' + record.name + '">' + record.name + '</a></td>';
+        html += '<td><span class="indicator ' + type_color + '">' + record.termination_type + '</span></td>';
+        html += '<td><span class="indicator ' + status_color + '">' + record.status + '</span></td>';
+        html += '<td>' + record.requested_by + '</td>';
+        html += '<td>' + frappe.datetime.str_to_user(record.request_date) + '</td>';
+        html += '<td>' + (record.execution_date ? frappe.datetime.str_to_user(record.execution_date) : '-') + '</td>';
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table></div>';
+    
+    const dialog = new frappe.ui.Dialog({
+        title: __('Termination History: {0}', [member_name]),
+        size: 'large',
+        fields: [{
+            fieldtype: 'HTML',
+            options: html
+        }]
+    });
+    
+    dialog.show();
+}
 
 // Handlers for the Member SEPA Mandate Link child table
 frappe.ui.form.on('Member SEPA Mandate Link', {
