@@ -7,6 +7,7 @@ class Member(Document):
     def before_save(self):
         if not self.member_id:
             self.member_id = self.generate_member_id()
+        self.handle_chapter_assignment()
 
     def generate_member_id(self):
         settings = frappe.get_single("Verenigingen Settings")
@@ -55,7 +56,35 @@ class Member(Document):
                 self.age = None
         except Exception as e:
             frappe.log_error(f"Error calculating age: {str(e)}", "Member Error")
-
+    def handle_chapter_assignment(self):
+        """Handle automatic chapter assignment when primary_chapter changes"""
+        if not self.primary_chapter or self.is_new():
+            return
+            
+        # Check if primary_chapter has changed
+        if self.has_value_changed('primary_chapter'):
+            old_chapter = self.get_doc_before_save().primary_chapter if self.get_doc_before_save() else None
+            new_chapter = self.primary_chapter
+            
+            frappe.logger().info(f"Member {self.name} chapter changing from {old_chapter} to {new_chapter}")
+            
+            # Remove from old chapter if exists
+            if old_chapter:
+                try:
+                    old_chapter_doc = frappe.get_doc("Chapter", old_chapter)
+                    old_chapter_doc.remove_member(self.name, "Changed to different chapter")
+                    frappe.logger().info(f"Removed {self.name} from old chapter {old_chapter}")
+                except Exception as e:
+                    frappe.logger().error(f"Error removing member from old chapter: {str(e)}")
+            
+            # Add to new chapter
+            if new_chapter:
+                try:
+                    new_chapter_doc = frappe.get_doc("Chapter", new_chapter)
+                    added = new_chapter_doc.add_member(self.name)
+                    frappe.logger().info(f"Added {self.name} to new chapter {new_chapter}, result: {added}")
+                except Exception as e:
+                    frappe.logger().error(f"Error adding member to new chapter: {str(e)}")
     @frappe.whitelist()
     def load_payment_history(self):
         """
@@ -1688,3 +1717,56 @@ def validate_mandate_reference(mandate_id):
         "available": not bool(exists),
         "exists": bool(exists)
     }
+
+@frappe.whitelist()
+def debug_postal_code_matching(postal_code):
+    """Debug function to test postal code matching"""
+    if not postal_code:
+        return {"error": "No postal code provided"}
+    
+    # Get all published chapters
+    chapters = frappe.get_all(
+        "Chapter",
+        filters={"published": 1},
+        fields=["name", "region", "postal_codes"]
+    )
+    
+    results = {
+        "postal_code": postal_code,
+        "total_chapters": len(chapters),
+        "matching_chapters": [],
+        "non_matching_chapters": []
+    }
+    
+    for chapter in chapters:
+        if not chapter.get("postal_codes"):
+            results["non_matching_chapters"].append({
+                "name": chapter.name,
+                "reason": "No postal codes defined"
+            })
+            continue
+            
+        # Create chapter object to use the matching method
+        try:
+            chapter_doc = frappe.get_doc("Chapter", chapter.name)
+            matches = chapter_doc.matches_postal_code(postal_code)
+            
+            if matches:
+                results["matching_chapters"].append({
+                    "name": chapter.name,
+                    "region": chapter.region,
+                    "postal_codes": chapter.postal_codes
+                })
+            else:
+                results["non_matching_chapters"].append({
+                    "name": chapter.name,
+                    "postal_codes": chapter.postal_codes,
+                    "reason": "No match"
+                })
+        except Exception as e:
+            results["non_matching_chapters"].append({
+                "name": chapter.name,
+                "reason": f"Error: {str(e)}"
+            })
+    
+    return results
