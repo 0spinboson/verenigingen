@@ -5,7 +5,7 @@ from __future__ import unicode_literals
 import frappe
 from frappe import _
 from frappe.utils import getdate, flt
-from verenigingen.verenigingen.utils.dutch_tax_handler import generate_btw_report
+from verenigingen.utils import generate_btw_report
 
 def execute(filters=None):
     if not filters:
