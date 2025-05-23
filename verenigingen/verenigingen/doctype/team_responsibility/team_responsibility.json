@@ -26,7 +26,7 @@
       "fieldname": "assigned_to",
       "fieldtype": "Link",
       "label": "Assigned To",
-      "options": "Volunteer Team Member"
+      "options": "Team Member"
     },
     {
       "default": "Pending",
