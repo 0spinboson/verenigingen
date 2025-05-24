@@ -16,13 +16,13 @@ def setup_complete_termination_system():
     try:
         # Step 2: Setup workflows
         print("⚙️ Step 2: Setting up workflows...")
-        from verenigingen.verenigingen.workflow_states import setup_termination_workflow
+        from verenigingen.workflow_states import setup_termination_workflow
         setup_termination_workflow()
         print("✅ Workflows created successfully")
         
         # Step 3: Setup email templates
         print("📧 Step 3: Setting up email templates...")
-        from verenigingen.verenigingen.workflow_states import setup_email_templates
+        from verenigingen.workflow_states import setup_email_templates
         setup_email_templates()
         print("✅ Email templates created successfully")
         
