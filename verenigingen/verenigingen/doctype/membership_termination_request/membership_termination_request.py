@@ -41,7 +41,7 @@ class MembershipTerminationRequest(Document):
         can_initiate = (
             "System Manager" in user_roles or
             "Association Manager" in user_roles or
-            "Verenigingen Manager" in user_roles or
+            "Association Manager" in user_roles or
             self.is_chapter_board_member()
         )
         
@@ -54,7 +54,7 @@ class MembershipTerminationRequest(Document):
             can_approve = (
                 "System Manager" in approver_roles or
                 "Association Manager" in approver_roles or
-                "Verenigingen Manager" in approver_roles
+                "Association Manager" in approver_roles
             )
             
             if not can_approve:
@@ -873,7 +873,7 @@ def get_termination_permissions(termination_type, user=None):
             'can_initiate': (
                 "System Manager" in user_roles or
                 "Association Manager" in user_roles or
-                "Verenigingen Manager" in user_roles or
+                "Association Manager" in user_roles or
                 is_chapter_board_member(user)
             ),
             'requires_secondary_approval': False,
@@ -886,14 +886,14 @@ def get_termination_permissions(termination_type, user=None):
             'can_initiate': (
                 "System Manager" in user_roles or
                 "Association Manager" in user_roles or
-                "Verenigingen Manager" in user_roles or
+                "Association Manager" in user_roles or
                 is_chapter_board_member(user)
             ),
             'requires_secondary_approval': True,
             'can_approve': (
                 "System Manager" in user_roles or
                 "Association Manager" in user_roles or
-                "Verenigingen Manager" in user_roles
+                "Association Manager" in user_roles
             ),
             'requires_documentation': True
         }
@@ -960,7 +960,7 @@ def get_eligible_approvers(doctype, txt, searchfield, start, page_len, filters):
         FROM `tabUser` u
         JOIN `tabHas Role` hr ON u.name = hr.parent
         WHERE 
-            hr.role IN ('Association Manager', 'System Manager', 'Verenigingen Manager')
+            hr.role IN ('Association Manager', 'System Manager', 'Association Manager')
             AND u.enabled = 1
             AND u.name != 'Administrator'
             AND u.name != 'Guest'
@@ -1414,7 +1414,7 @@ def validate_termination_permissions_enhanced(member, termination_type, user=Non
     # Check basic initiation permissions
     if ("System Manager" in user_roles or 
         "Association Manager" in user_roles or 
-        "Verenigingen Manager" in user_roles):
+        "Association Manager" in user_roles):
         result["can_initiate"] = True
         result["reasons"].append("User has administrative role")
     elif is_chapter_board_member(user):
@@ -1433,7 +1433,7 @@ def validate_termination_permissions_enhanced(member, termination_type, user=Non
         # Check approval permissions
         if ("System Manager" in user_roles or 
             "Association Manager" in user_roles or 
-            "Verenigingen Manager" in user_roles):
+            "Association Manager" in user_roles):
             result["can_approve"] = True
             result["reasons"].append("User can approve disciplinary terminations")
         else:
@@ -1623,7 +1623,7 @@ class TerminationAppealsProcess(Document):
         eligible_reviewers = frappe.get_all(
             "Has Role",
             filters={
-                "role": ["in", ["Association Manager", "System Manager", "Verenigingen Manager"]],
+                "role": ["in", ["Association Manager", "System Manager", "Association Manager"]],
                 "parenttype": "User"
             },
             fields=["parent"]

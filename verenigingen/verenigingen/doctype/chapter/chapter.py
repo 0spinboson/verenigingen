@@ -952,9 +952,9 @@ def validate_chapter_access(doc, method=None):
     if doc.name == settings.national_board_chapter:
         # This is the National Board chapter
         
-        # Check if the user is an Association Manager but not a Verenigingen Manager
+        # Check if the user is an Association Manager but not a Association Manager
         if ("Association Manager" in frappe.get_roles() and 
-            "Verenigingen Manager" not in frappe.get_roles()):
+            "Association Manager" not in frappe.get_roles()):
             frappe.throw(_("Association Managers cannot edit the National Board chapter. Please contact an administrator."))
 
 def get_list_context(context):
@@ -970,7 +970,7 @@ def get_chapter_permission_query_conditions(user=None):
     if not user:
         user = frappe.session.user
         
-    if "System Manager" in frappe.get_roles(user) or "Verenigingen Manager" in frappe.get_roles(user):
+    if "System Manager" in frappe.get_roles(user) or "Association Manager" in frappe.get_roles(user):
         # Admins can see all chapters
         return ""
         
