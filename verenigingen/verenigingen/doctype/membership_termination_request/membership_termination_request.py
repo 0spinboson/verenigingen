@@ -873,7 +873,6 @@ def get_termination_permissions(termination_type, user=None):
             'can_initiate': (
                 "System Manager" in user_roles or
                 "Association Manager" in user_roles or
-                "Association Manager" in user_roles or
                 is_chapter_board_member(user)
             ),
             'requires_secondary_approval': False,
@@ -886,13 +885,11 @@ def get_termination_permissions(termination_type, user=None):
             'can_initiate': (
                 "System Manager" in user_roles or
                 "Association Manager" in user_roles or
-                "Association Manager" in user_roles or
                 is_chapter_board_member(user)
             ),
             'requires_secondary_approval': True,
             'can_approve': (
                 "System Manager" in user_roles or
-                "Association Manager" in user_roles or
                 "Association Manager" in user_roles
             ),
             'requires_documentation': True
@@ -960,7 +957,7 @@ def get_eligible_approvers(doctype, txt, searchfield, start, page_len, filters):
         FROM `tabUser` u
         JOIN `tabHas Role` hr ON u.name = hr.parent
         WHERE 
-            hr.role IN ('Association Manager', 'System Manager', 'Association Manager')
+            hr.role IN ('System Manager', 'Association Manager')
             AND u.enabled = 1
             AND u.name != 'Administrator'
             AND u.name != 'Guest'

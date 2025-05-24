@@ -41,7 +41,7 @@ def validate_approver_permissions(approver_user):
     """Validate that the approver has the required permissions"""
     approver_roles = frappe.get_roles(approver_user)
     
-    if not any(role in ["System Manager", "Association Manager", "Association Manager"] for role in approver_roles):
+    if not any(role in ["System Manager", "Association Manager"] for role in approver_roles):
         # Check if national board member
         settings = frappe.get_single("Verenigingen Settings")
         if settings and settings.national_board_chapter:
