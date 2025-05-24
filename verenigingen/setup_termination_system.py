@@ -14,22 +14,28 @@ def setup_complete_termination_system():
     print("🚀 Starting Enhanced Membership Termination System Setup...")
     
     try:
-        # Step 2: Setup workflows
-        print("⚙️ Step 2: Setting up workflows...")
-        from verenigingen.workflow_states import setup_termination_workflow
+        # Step 1: Create standard roles first (needed for workflows)
+        print("🔐 Step 1: Setting up roles and permissions...")
+        setup_roles_and_permissions()
+        print("✅ Roles and permissions configured")
+        
+        # Step 2: Create custom fields
+        print("📝 Step 2: Creating custom fields...")
+        from verenigingen.verenigingen.custom_fields import create_custom_fields
+        create_custom_fields()
+        print("✅ Custom fields created successfully")
+        
+        # Step 3: Setup workflows (now that roles exist)
+        print("⚙️ Step 3: Setting up workflows...")
+        from verenigingen.verenigingen.workflow_states import setup_termination_workflow
         setup_termination_workflow()
         print("✅ Workflows created successfully")
         
-        # Step 3: Setup email templates
-        print("📧 Step 3: Setting up email templates...")
-        from verenigingen.workflow_states import setup_email_templates
+        # Step 4: Setup email templates
+        print("📧 Step 4: Setting up email templates...")
+        from verenigingen.verenigingen.workflow_states import setup_email_templates
         setup_email_templates()
         print("✅ Email templates created successfully")
-        
-        # Step 4: Create standard roles and permissions
-        print("🔐 Step 4: Setting up roles and permissions...")
-        setup_roles_and_permissions()
-        print("✅ Roles and permissions configured")
         
         # Step 5: Setup system settings
         print("⚙️ Step 5: Configuring system settings...")
@@ -80,10 +86,10 @@ def setup_complete_termination_system():
 def setup_roles_and_permissions():
     """Setup roles and permissions for the termination system"""
     
-    # Define role permissions
+    # Define role permissions (simplified to use existing roles)
     role_permissions = {
-        "Termination Manager": {
-            "description": "Can manage all aspects of membership terminations",
+        "Association Manager": {
+            "description": "Can manage all aspects of membership terminations and appeals",
             "doctypes": {
                 "Membership Termination Request": ["read", "write", "create", "delete", "submit", "cancel"],
                 "Termination Appeals Process": ["read", "write", "create", "delete", "submit"],
@@ -271,8 +277,8 @@ def validate_system_setup():
     
     # Check that roles exist
     required_roles = [
-        "Termination Manager",
-        "Appeals Reviewer",
+        "Association Manager",
+        "Appeals Reviewer", 
         "Governance Auditor"
     ]
     
