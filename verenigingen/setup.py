@@ -141,11 +141,6 @@ def execute_after_install():
         # Log the successful setup
         frappe.logger().info("Verenigingen setup completed successfully")
         print("Verenigingen app setup completed successfully")
-        
-    except Exception as e:
-        frappe.logger().error(f"Error during Verenigingen setup: {str(e)}")
-        print(f"Error during setup: {str(e)}")
-        # Don't throw error to avoid installation failure
 
 def setup_tax_exemption_on_install():
     """Set up tax exemption during installation if enabled"""
