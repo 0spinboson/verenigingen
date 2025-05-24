@@ -221,24 +221,6 @@ def fix_btw_installation():
         frappe.msgprint(_("Error fixing BTW installation: {0}").format(str(e)))
         return False
 
-def execute_after_install_with_termination():
-    """
-    Enhanced version of execute_after_install that includes termination system
-    Replace the existing execute_after_install() function with this one
-    """
-    try:
-        # Execute existing setup first
-        setup_verenigingen()
-        
-        # Set up tax exemption templates if enabled
-        setup_tax_exemption_on_install()
-        
-        # NEW: Set up termination system
-        setup_termination_system_integration()
-        
-        # Log the successful setup
-        frappe.logger().info("Verenigingen setup (with termination system) completed successfully")
-        print("Verenigingen app setup completed successfully")
         
     except Exception as e:
         frappe.logger().error(f"Error during Verenigingen setup: {str(e)}")
