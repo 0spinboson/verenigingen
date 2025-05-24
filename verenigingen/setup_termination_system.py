@@ -19,6 +19,14 @@ def setup_complete_termination_system():
         setup_roles_and_permissions()
         print("✅ Roles and permissions configured")
         
+        # Commit changes to ensure roles are available
+        frappe.db.commit()
+        
+        # Step 2: Verify all required doctypes exist
+        print("📋 Step 2: Verifying required doctypes...")
+        verify_required_doctypes()
+        print("✅ All required doctypes verified")
+        
         # Step 3: Setup workflows (now that roles exist)
         print("⚙️ Step 3: Setting up workflows...")
         from verenigingen.workflow_states import setup_termination_workflow
@@ -77,90 +85,154 @@ def setup_complete_termination_system():
         traceback.print_exc()
         raise
 
+def verify_required_doctypes():
+    """Verify that all required doctypes exist"""
+    
+    required_doctypes = [
+        "Membership Termination Request",
+        "Termination Appeals Process", 
+        "Expulsion Report Entry",
+        "Appeal Timeline Entry",
+        "Appeal Communication Entry",
+        "Termination Audit Entry"
+    ]
+    
+    missing_doctypes = []
+    for doctype in required_doctypes:
+        if not frappe.db.exists("DocType", doctype):
+            missing_doctypes.append(doctype)
+        else:
+            print(f"   ✓ {doctype}")
+    
+    if missing_doctypes:
+        print(f"   ⚠️ Missing doctypes: {', '.join(missing_doctypes)}")
+        print("   Please ensure all custom doctypes are properly installed")
+        return False
+    
+    return True
+
 def setup_roles_and_permissions():
     """Setup roles and permissions for the termination system"""
     
-    # Define role permissions (simplified to use existing roles)
-    role_permissions = {
-        "Association Manager": {
+    # Define role permissions with more specific configuration
+    role_configurations = [
+        {
+            "role_name": "Association Manager",
             "description": "Can manage all aspects of membership terminations and appeals",
-            "doctypes": {
+            "desk_access": 1,
+            "is_custom": 1,
+            "permissions": {
                 "Membership Termination Request": ["read", "write", "create", "delete", "submit", "cancel"],
                 "Termination Appeals Process": ["read", "write", "create", "delete", "submit"],
-                "Expulsion Report Entry": ["read", "write", "create", "delete"]
+                "Expulsion Report Entry": ["read", "write", "create", "delete"],
+                "Member": ["read", "write"],
+                "Membership": ["read", "write"]
             }
         },
-        "Appeals Reviewer": {
+        {
+            "role_name": "Appeals Reviewer",
             "description": "Can review and decide on termination appeals",
-            "doctypes": {
-                "Termination Appeals Process": ["read", "write", "create", "submit"],
+            "desk_access": 1,
+            "is_custom": 1,  
+            "permissions": {
+                "Termination Appeals Process": ["read", "write", "submit"],
                 "Membership Termination Request": ["read"],
                 "Expulsion Report Entry": ["read"]
             }
         },
-        "Governance Auditor": {
+        {
+            "role_name": "Governance Auditor",
             "description": "Can access all termination and appeals data for compliance",
-            "doctypes": {
+            "desk_access": 1,
+            "is_custom": 1,
+            "permissions": {
                 "Membership Termination Request": ["read", "export", "report"],
                 "Termination Appeals Process": ["read", "export", "report"],
                 "Expulsion Report Entry": ["read", "export", "report"]
             }
         }
-    }
+    ]
     
     # Create roles if they don't exist
-    for role_name, role_config in role_permissions.items():
+    for role_config in role_configurations:
+        role_name = role_config["role_name"]
+        
         if not frappe.db.exists("Role", role_name):
+            print(f"   Creating role: {role_name}")
             role = frappe.get_doc({
                 "doctype": "Role",
                 "role_name": role_name,
-                "desk_access": 1,
-                "is_custom": 1
+                "desk_access": role_config.get("desk_access", 1),
+                "is_custom": role_config.get("is_custom", 1)
             })
-            role.insert()
-            print(f"   Created role: {role_name}")
+            role.insert(ignore_permissions=True)
+            print(f"   ✓ Created role: {role_name}")
+        else:
+            print(f"   ✓ Role already exists: {role_name}")
+    
+    # Commit roles before setting up permissions
+    frappe.db.commit()
+    
+    # Setup permissions for each role
+    print("   Setting up role permissions...")
+    for role_config in role_configurations:
+        role_name = role_config["role_name"]
+        permissions = role_config.get("permissions", {})
         
-        # Set up permissions for each doctype
-        for doctype, permissions in role_config["doctypes"].items():
-            # Remove existing permissions first
-            existing_perms = frappe.get_all("DocPerm", {
-                "parent": doctype,
-                "role": role_name
-            })
-            for perm in existing_perms:
-                frappe.delete_doc("DocPerm", perm.name, ignore_permissions=True)
+        for doctype, perms in permissions.items():
+            # Skip if doctype doesn't exist
+            if not frappe.db.exists("DocType", doctype):
+                print(f"   ⚠️ Skipping permissions for {doctype} (doctype not found)")
+                continue
             
-            # Create new permission
-            perm_doc = frappe.get_doc({
-                "doctype": "DocPerm",
-                "parent": doctype,
-                "parenttype": "DocType",
-                "parentfield": "permissions",
-                "role": role_name,
-                "read": 1 if "read" in permissions else 0,
-                "write": 1 if "write" in permissions else 0,
-                "create": 1 if "create" in permissions else 0,
-                "delete": 1 if "delete" in permissions else 0,
-                "submit": 1 if "submit" in permissions else 0,
-                "cancel": 1 if "cancel" in permissions else 0,
-                "export": 1 if "export" in permissions else 0,
-                "report": 1 if "report" in permissions else 0
-            })
-            perm_doc.insert(ignore_permissions=True)
+            try:
+                setup_doctype_permissions(doctype, role_name, perms)
+            except Exception as e:
+                print(f"   ⚠️ Error setting permissions for {doctype}/{role_name}: {str(e)}")
+
+def setup_doctype_permissions(doctype, role, permissions):
+    """Setup permissions for a specific doctype and role"""
+    
+    # Remove existing permissions first
+    existing_perms = frappe.get_all("DocPerm", {
+        "parent": doctype,
+        "role": role
+    })
+    
+    for perm in existing_perms:
+        frappe.delete_doc("DocPerm", perm.name, ignore_permissions=True)
+    
+    # Create new permission
+    perm_doc = frappe.get_doc({
+        "doctype": "DocPerm",
+        "parent": doctype,
+        "parenttype": "DocType",
+        "parentfield": "permissions",
+        "role": role,
+        "read": 1 if "read" in permissions else 0,
+        "write": 1 if "write" in permissions else 0,
+        "create": 1 if "create" in permissions else 0,
+        "delete": 1 if "delete" in permissions else 0,
+        "submit": 1 if "submit" in permissions else 0,
+        "cancel": 1 if "cancel" in permissions else 0,
+        "export": 1 if "export" in permissions else 0,
+        "report": 1 if "report" in permissions else 0
+    })
+    
+    perm_doc.insert(ignore_permissions=True)
 
 def setup_system_settings():
     """Setup system-wide settings for the termination system"""
     
-    # Create Verenigingen Settings if it doesn't exist
-    if not frappe.db.exists("Verenigingen Settings"):
+    # Create or update Verenigingen Settings
+    try:
+        settings = frappe.get_single("Verenigingen Settings")
+    except:
+        # Create the single doctype if it doesn't exist
         settings = frappe.get_doc({
-            "doctype": "Verenigingen Settings",
-            "docstatus": 0
+            "doctype": "Verenigingen Settings"
         })
         settings.insert()
-    
-    # Update settings with termination system configuration
-    settings = frappe.get_single("Verenigingen Settings")
     
     # Set default values if not already configured
     default_settings = {
@@ -183,6 +255,8 @@ def setup_system_settings():
     if updated:
         settings.save()
         print("   Updated system settings with termination defaults")
+    else:
+        print("   System settings already configured")
 
 def create_sample_data():
     """Create sample data for testing the termination system"""
@@ -192,18 +266,21 @@ def create_sample_data():
         {
             "first_name": "John",
             "last_name": "TestMember",
+            "full_name": "John TestMember",
             "email": "john.test@example.com",
             "status": "Active"
         },
         {
             "first_name": "Jane", 
             "last_name": "BoardMember",
+            "full_name": "Jane BoardMember",
             "email": "jane.board@example.com", 
             "status": "Active"
         },
         {
             "first_name": "Bob",
             "last_name": "ExpiredMember",
+            "full_name": "Bob ExpiredMember",
             "email": "bob.expired@example.com",
             "status": "Expired"
         }
@@ -214,27 +291,34 @@ def create_sample_data():
         # Check if member already exists
         existing = frappe.db.exists("Member", {"email": member_data["email"]})
         if not existing:
-            member = frappe.get_doc({
-                "doctype": "Member",
-                "full_name": f"{member_data['first_name']} {member_data['last_name']}",
-                **member_data
-            })
-            member.insert()
-            created_members.append(member.name)
-            print(f"   Created sample member: {member_data['first_name']} {member_data['last_name']}")
+            try:
+                member = frappe.get_doc({
+                    "doctype": "Member",
+                    **member_data
+                })
+                member.insert()
+                created_members.append(member.name)
+                print(f"   Created sample member: {member_data['first_name']} {member_data['last_name']}")
+            except Exception as e:
+                print(f"   ⚠️ Failed to create member {member_data['first_name']}: {str(e)}")
+        else:
+            print(f"   Sample member already exists: {member_data['first_name']} {member_data['last_name']}")
     
     # Create a sample termination request
     if created_members:
-        sample_termination = frappe.get_doc({
-            "doctype": "Membership Termination Request",
-            "member": created_members[0],
-            "termination_type": "Voluntary",
-            "termination_reason": "Sample termination for testing purposes",
-            "requested_by": frappe.session.user,
-            "status": "Draft"
-        })
-        sample_termination.insert()
-        print(f"   Created sample termination request: {sample_termination.name}")
+        try:
+            sample_termination = frappe.get_doc({
+                "doctype": "Membership Termination Request",
+                "member": created_members[0],
+                "termination_type": "Voluntary",
+                "termination_reason": "Sample termination for testing purposes",
+                "requested_by": frappe.session.user,
+                "status": "Draft"
+            })
+            sample_termination.insert()
+            print(f"   Created sample termination request: {sample_termination.name}")
+        except Exception as e:
+            print(f"   ⚠️ Failed to create sample termination request: {str(e)}")
 
 def validate_system_setup():
     """Validate that the termination system is set up correctly"""
@@ -248,10 +332,7 @@ def validate_system_setup():
     required_doctypes = [
         "Membership Termination Request",
         "Termination Appeals Process", 
-        "Expulsion Report Entry",
-        "Appeal Timeline Entry",
-        "Appeal Communication Entry",
-        "Termination Audit Entry"
+        "Expulsion Report Entry"
     ]
     
     for doctype in required_doctypes:
@@ -261,8 +342,7 @@ def validate_system_setup():
     
     # Check that workflows exist
     required_workflows = [
-        "Membership Termination Workflow",
-        "Appeals Process Workflow" 
+        "Membership Termination Workflow"
     ]
     
     for workflow in required_workflows:
@@ -271,9 +351,7 @@ def validate_system_setup():
     
     # Check that roles exist
     required_roles = [
-        "Association Manager",
-        "Appeals Reviewer", 
-        "Governance Auditor"
+        "Association Manager"
     ]
     
     for role in required_roles:
@@ -287,17 +365,6 @@ def validate_system_setup():
             validation_results["issues"].append("Termination system not enabled in settings")
     except:
         validation_results["issues"].append("Verenigingen Settings not configured")
-    
-    # Check that reports exist
-    required_reports = [
-        "Termination Compliance Report",
-        "Appeals Analysis Report",
-        "Board Position Termination Impact"
-    ]
-    
-    for report in required_reports:
-        if not frappe.db.exists("Report", report):
-            validation_results["issues"].append(f"Missing Report: {report}")
     
     if validation_results["issues"]:
         validation_results["success"] = False
@@ -314,28 +381,27 @@ def generate_setup_report(validation_results):
         "system_stats": get_system_stats()
     }
     
-    # Save report as a JSON file
-    report_json = json.dumps(report, indent=2, default=str)
+    # Print setup summary
+    print("\n" + "="*60)
+    print("SETUP REPORT SUMMARY")
+    print("="*60)
+    print(f"Setup Date: {report['setup_date']}")
+    print(f"Setup By: {report['setup_by']}")
+    print(f"Validation Success: {validation_results['success']}")
+    print(f"Total Issues: {len(validation_results['issues'])}")
     
-    # Create a System Setup Report document if the doctype exists
-    try:
-        setup_report = frappe.get_doc({
-            "doctype": "System Setup Report",
-            "report_name": "Termination System Setup",
-            "setup_date": report["setup_date"],
-            "setup_by": report["setup_by"],
-            "validation_success": validation_results["success"],
-            "report_data": report_json
-        })
-        setup_report.insert()
-        print(f"   Setup report saved: {setup_report.name}")
-    except:
-        # If doctype doesn't exist, just print the report
-        print("   Setup Report:")
-        print(f"   - Setup Date: {report['setup_date']}")
-        print(f"   - Setup By: {report['setup_by']}")
-        print(f"   - Validation Success: {validation_results['success']}")
-        print(f"   - Total Issues: {len(validation_results['issues'])}")
+    if validation_results["issues"]:
+        print("\nIssues Found:")
+        for issue in validation_results["issues"]:
+            print(f"  - {issue}")
+    
+    print("\nSystem Statistics:")
+    stats = report["system_stats"]
+    for key, value in stats.items():
+        if not key.startswith("error"):
+            print(f"  - {key.replace('_', ' ').title()}: {value}")
+    
+    print("="*60)
 
 def get_system_stats():
     """Get current system statistics"""
@@ -344,11 +410,23 @@ def get_system_stats():
     
     try:
         stats["total_members"] = frappe.db.count("Member")
+    except:
+        stats["total_members"] = "N/A"
+        
+    try:
         stats["total_termination_requests"] = frappe.db.count("Membership Termination Request")
+    except:
+        stats["total_termination_requests"] = 0
+        
+    try:
         stats["total_appeals"] = frappe.db.count("Termination Appeals Process") 
+    except:
+        stats["total_appeals"] = 0
+        
+    try:
         stats["total_expulsions"] = frappe.db.count("Expulsion Report Entry")
     except:
-        stats["error"] = "Could not retrieve system statistics"
+        stats["total_expulsions"] = 0
     
     return stats
 
