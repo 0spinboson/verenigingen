@@ -1,52 +1,99 @@
+# File: verenigingen/verenigingen/setup_termination_system.py
+"""
+Setup utility for the Enhanced Membership Termination System
+Run this script after deployment to initialize all components
+"""
+
 import frappe
 from frappe import _
+import json
 
-def run_setup():
-    """Run the termination system setup"""
+def setup_complete_termination_system():
+    """Complete setup of the termination system"""
     
-    print("🚀 TERMINATION SYSTEM SETUP")
-    print("=" * 40)
+    print("🚀 Starting Enhanced Membership Termination System Setup...")
     
     try:
-        # Step 1: Run diagnostics first
-        print("\n📋 Step 1: Running diagnostics...")
-        diagnostic_result = run_diagnostics_internal()
+        # Step 1: Create standard roles first (needed for workflows)
+        print("🔐 Step 1: Setting up roles and permissions...")
+        setup_roles_and_permissions()
+        print("✅ Roles and permissions configured")
         
-        if not diagnostic_result:
-            print("⚠️ Diagnostics found issues, but continuing with setup...")
+        # Commit changes to ensure roles are available
+        frappe.db.commit()
         
-        # Step 2: Setup termination system
-        print("\n📋 Step 2: Setting up termination system...")
-        from verenigingen.setup import setup_termination_system
-        setup_termination_system()
+        # Step 2: Verify all required doctypes exist
+        print("📋 Step 2: Verifying required doctypes...")
+        verify_required_doctypes()
+        print("✅ All required doctypes verified")
         
-        # Step 3: Verify setup
-        print("\n📋 Step 3: Verifying setup...")
-        verify_setup()
+        # Step 3: Setup workflows (now that roles exist)
+        print("⚙️ Step 3: Setting up workflows...")
+        try:
+            from verenigingen.workflow_states import setup_with_debug
+            workflow_success = setup_with_debug()
+            if workflow_success:
+                print("✅ Workflows created successfully")
+            else:
+                print("⚠️ Workflow creation had issues but setup continues")
+        except Exception as e:
+            print(f"⚠️ Workflow setup failed: {str(e)}")
+            print("   Continuing with rest of setup...")
         
-        print("\n🎉 TERMINATION SYSTEM SETUP COMPLETED!")
+        # Step 4: Setup email templates
+        print("📧 Step 4: Setting up email templates...")
+        from verenigingen.workflow_states import setup_email_templates
+        setup_email_templates()
+        print("✅ Email templates created successfully")
+        
+        # Step 5: Setup system settings
+        print("⚙️ Step 5: Configuring system settings...")
+        setup_system_settings()
+        print("✅ System settings configured")
+        
+        # Step 6: Create sample data (if requested)
+        create_sample = input("Create sample data for testing? (y/N): ").lower() == 'y'
+        if create_sample:
+            print("🧪 Step 6: Creating sample test data...")
+            create_sample_data()
+            print("✅ Sample data created")
+        else:
+            print("⏭️ Step 6: Skipped sample data creation")
+        
+        # Step 7: Validate system
+        print("🔍 Step 7: Validating system setup...")
+        validation_results = validate_system_setup()
+        
+        if validation_results["success"]:
+            print("✅ System validation passed")
+        else:
+            print("⚠️ System validation found issues:")
+            for issue in validation_results["issues"]:
+                print(f"   - {issue}")
+        
+        # Step 8: Generate setup report
+        print("📊 Step 8: Generating setup report...")
+        generate_setup_report(validation_results)
+        
+        print("\n🎉 Enhanced Membership Termination System setup completed!")
+        print("\n📋 Next Steps:")
+        print("1. Review the setup report for any issues")
+        print("2. Test the system with sample data")
+        print("3. Configure user permissions as needed")
+        print("4. Setup scheduled jobs for notifications")
+        print("5. Train users on the new system")
+        
+        frappe.db.commit()
         
     except Exception as e:
-        print(f"\n❌ SETUP FAILED: {str(e)}")
+        frappe.db.rollback()
+        print(f"❌ Setup failed: {str(e)}")
         import traceback
         traceback.print_exc()
+        raise
 
-def run_diagnostics():
-    """Run comprehensive diagnostics"""
-    
-    print("🔍 TERMINATION SYSTEM DIAGNOSTICS")
-    print("=" * 40)
-    
-    return run_diagnostics_internal()
-
-def run_diagnostics_internal():
-    """Internal diagnostics function"""
-    
-    all_good = True
-    
-    # 1. Check required doctypes
-    print("\n1. DOCTYPE CHECK")
-    print("-" * 15)
+def verify_required_doctypes():
+    """Verify that all required doctypes exist"""
     
     required_doctypes = [
         "Membership Termination Request",
@@ -57,254 +104,348 @@ def run_diagnostics_internal():
         "Termination Audit Entry"
     ]
     
+    missing_doctypes = []
     for doctype in required_doctypes:
-        if frappe.db.exists("DocType", doctype):
-            print(f"   ✅ {doctype}")
+        if not frappe.db.exists("DocType", doctype):
+            missing_doctypes.append(doctype)
         else:
-            print(f"   ❌ {doctype} - MISSING")
-            all_good = False
+            print(f"   ✓ {doctype}")
     
-    # 2. Check roles
-    print("\n2. ROLE CHECK")
-    print("-" * 12)
+    if missing_doctypes:
+        print(f"   ⚠️ Missing doctypes: {', '.join(missing_doctypes)}")
+        print("   Please ensure all custom doctypes are properly installed")
+        return False
     
-    required_roles = ["System Manager", "Association Manager"]
+    return True
+
+def setup_roles_and_permissions():
+    """Setup roles and permissions for the termination system"""
     
-    for role in required_roles:
-        if frappe.db.exists("Role", role):
-            print(f"   ✅ {role}")
-        else:
-            print(f"   ❌ {role} - MISSING")
-            all_good = False
-    
-    # 3. Check settings
-    print("\n3. SETTINGS CHECK")
-    print("-" * 15)
-    
-    if frappe.db.exists("Verenigingen Settings", "Verenigingen Settings"):
-        print("   ✅ Verenigingen Settings exists")
-        
-        settings = frappe.get_single("Verenigingen Settings")
-        if hasattr(settings, 'enable_termination_system'):
-            if settings.enable_termination_system:
-                print("   ✅ Termination system enabled")
-            else:
-                print("   ⚠️ Termination system disabled")
-        else:
-            print("   ⚠️ Termination system field missing")
-    else:
-        print("   ❌ Verenigingen Settings missing")
-        all_good = False
-    
-    # 4. Check workflows
-    print("\n4. WORKFLOW CHECK")
-    print("-" * 15)
-    
-    workflows = frappe.get_all("Workflow", fields=["name", "document_type", "is_active"])
-    termination_workflows = [w for w in workflows if "Termination" in w.name or "Appeal" in w.name]
-    
-    if termination_workflows:
-        for wf in termination_workflows:
-            status = "✅" if wf.is_active else "⚠️"
-            print(f"   {status} {wf.name} ({wf.document_type})")
-    else:
-        print("   ⚠️ No termination workflows found")
-    
-    # 5. Check email templates
-    print("\n5. EMAIL TEMPLATE CHECK")
-    print("-" * 20)
-    
-    template_names = [
-        "Termination Approval Required",
-        "Appeal Acknowledgment",
-        "Appeal Decision Notification"
+    # Define role permissions with more specific configuration
+    role_configurations = [
+        {
+            "role_name": "Association Manager",
+            "description": "Can manage all aspects of membership terminations and appeals",
+            "desk_access": 1,
+            "is_custom": 1,
+            "permissions": {
+                "Membership Termination Request": ["read", "write", "create", "delete", "submit", "cancel"],
+                "Termination Appeals Process": ["read", "write", "create", "delete", "submit"],
+                "Expulsion Report Entry": ["read", "write", "create", "delete"],
+                "Member": ["read", "write"],
+                "Membership": ["read", "write"]
+            }
+        },
+        {
+            "role_name": "Appeals Reviewer",
+            "description": "Can review and decide on termination appeals",
+            "desk_access": 1,
+            "is_custom": 1,  
+            "permissions": {
+                "Termination Appeals Process": ["read", "write", "submit"],
+                "Membership Termination Request": ["read"],
+                "Expulsion Report Entry": ["read"]
+            }
+        },
+        {
+            "role_name": "Governance Auditor",
+            "description": "Can access all termination and appeals data for compliance",
+            "desk_access": 1,
+            "is_custom": 1,
+            "permissions": {
+                "Membership Termination Request": ["read", "export", "report"],
+                "Termination Appeals Process": ["read", "export", "report"],
+                "Expulsion Report Entry": ["read", "export", "report"]
+            }
+        }
     ]
     
-    for template in template_names:
-        if frappe.db.exists("Email Template", template):
-            print(f"   ✅ {template}")
-        else:
-            print(f"   ⚠️ {template} - MISSING")
-    
-    # 6. Summary
-    print("\n" + "=" * 40)
-    if all_good:
-        print("✅ ALL DIAGNOSTICS PASSED")
-    else:
-        print("⚠️ SOME ISSUES FOUND")
-        print("   Please review the items marked with ❌")
-    print("=" * 40)
-    
-    return all_good
-
-def run_full_setup():
-    """Run full enhanced setup"""
-    
-    print("🚀 FULL VERENIGINGEN SETUP")
-    print("=" * 30)
-    
-    try:
-        from verenigingen.setup import execute_after_install_with_termination
-        execute_after_install_with_termination()
+    # Create roles if they don't exist
+    for role_config in role_configurations:
+        role_name = role_config["role_name"]
         
-        print("\n🎉 FULL SETUP COMPLETED!")
-        
-    except Exception as e:
-        print(f"\n❌ FULL SETUP FAILED: {str(e)}")
-        import traceback
-        traceback.print_exc()
-
-def verify_setup():
-    """Verify the setup was successful"""
-    
-    print("🔍 Verifying setup...")
-    
-    # Check workflows
-    workflows = ["Membership Termination Workflow", "Termination Appeals Workflow"]
-    workflow_count = 0
-    
-    for workflow in workflows:
-        if frappe.db.exists("Workflow", workflow):
-            workflow_count += 1
-            print(f"   ✅ {workflow} exists")
-        else:
-            print(f"   ❌ {workflow} missing")
-    
-    # Check email templates
-    templates = ["Termination Approval Required", "Appeal Acknowledgment"]
-    template_count = 0
-    
-    for template in templates:
-        if frappe.db.exists("Email Template", template):
-            template_count += 1
-            print(f"   ✅ {template} exists")
-        else:
-            print(f"   ❌ {template} missing")
-    
-    # Check roles
-    if frappe.db.exists("Role", "Association Manager"):
-        print("   ✅ Association Manager role exists")
-    else:
-        print("   ❌ Association Manager role missing")
-    
-    # Check settings
-    try:
-        settings = frappe.get_single("Verenigingen Settings")
-        if hasattr(settings, 'enable_termination_system') and settings.enable_termination_system:
-            print("   ✅ Termination system enabled in settings")
-        else:
-            print("   ⚠️ Termination system not enabled in settings")
-    except:
-        print("   ❌ Could not check settings")
-    
-    print(f"\n📊 Setup Summary:")
-    print(f"   - Workflows: {workflow_count}/2")
-    print(f"   - Email Templates: {template_count}/2")
-    print(f"   - Roles: {'✅' if frappe.db.exists('Role', 'Association Manager') else '❌'}")
-
-def fix_common_issues():
-    """Fix common setup issues"""
-    
-    print("🔧 FIXING COMMON ISSUES")
-    print("=" * 25)
-    
-    fixes_applied = 0
-    
-    # Fix 1: Create Association Manager role
-    if not frappe.db.exists("Role", "Association Manager"):
-        print("🔧 Creating Association Manager role...")
-        try:
+        if not frappe.db.exists("Role", role_name):
+            print(f"   Creating role: {role_name}")
             role = frappe.get_doc({
                 "doctype": "Role",
-                "role_name": "Association Manager",
-                "desk_access": 1,
-                "is_custom": 1
+                "role_name": role_name,
+                "desk_access": role_config.get("desk_access", 1),
+                "is_custom": role_config.get("is_custom", 1)
             })
             role.insert(ignore_permissions=True)
-            frappe.db.commit()
-            print("   ✅ Association Manager role created")
-            fixes_applied += 1
-        except Exception as e:
-            print(f"   ❌ Could not create role: {str(e)}")
-    
-    # Fix 2: Enable termination system in settings
-    try:
-        settings = frappe.get_single("Verenigingen Settings")
-        if hasattr(settings, 'enable_termination_system'):
-            if not settings.enable_termination_system:
-                settings.enable_termination_system = 1
-                settings.save(ignore_permissions=True)
-                frappe.db.commit()
-                print("   ✅ Enabled termination system in settings")
-                fixes_applied += 1
+            print(f"   ✓ Created role: {role_name}")
         else:
-            print("   ⚠️ Termination system field not found in settings")
-    except Exception as e:
-        print(f"   ⚠️ Could not update settings: {str(e)}")
+            print(f"   ✓ Role already exists: {role_name}")
     
-    print(f"\n🔧 Applied {fixes_applied} fixes")
-
-def reset_workflows():
-    """Reset/recreate workflows"""
-    
-    print("🔄 RESETTING WORKFLOWS")
-    print("=" * 20)
-    
-    workflows_to_reset = [
-        "Membership Termination Workflow",
-        "Termination Appeals Workflow"
-    ]
-    
-    for workflow_name in workflows_to_reset:
-        if frappe.db.exists("Workflow", workflow_name):
-            print(f"🗑️ Removing existing workflow: {workflow_name}")
-            try:
-                frappe.delete_doc("Workflow", workflow_name, force=True)
-                print(f"   ✅ Removed {workflow_name}")
-            except Exception as e:
-                print(f"   ❌ Could not remove {workflow_name}: {str(e)}")
-    
+    # Commit roles before setting up permissions
     frappe.db.commit()
     
-    print("🔄 Recreating workflows...")
+    # Setup permissions for each role
+    print("   Setting up role permissions...")
+    for role_config in role_configurations:
+        role_name = role_config["role_name"]
+        permissions = role_config.get("permissions", {})
+        
+        for doctype, perms in permissions.items():
+            # Skip if doctype doesn't exist
+            if not frappe.db.exists("DocType", doctype):
+                print(f"   ⚠️ Skipping permissions for {doctype} (doctype not found)")
+                continue
+            
+            try:
+                setup_doctype_permissions(doctype, role_name, perms)
+            except Exception as e:
+                print(f"   ⚠️ Error setting permissions for {doctype}/{role_name}: {str(e)}")
+
+def setup_doctype_permissions(doctype, role, permissions):
+    """Setup permissions for a specific doctype and role"""
+    
+    # Remove existing permissions first
+    existing_perms = frappe.get_all("DocPerm", {
+        "parent": doctype,
+        "role": role
+    })
+    
+    for perm in existing_perms:
+        frappe.delete_doc("DocPerm", perm.name, ignore_permissions=True)
+    
+    # Create new permission
+    perm_doc = frappe.get_doc({
+        "doctype": "DocPerm",
+        "parent": doctype,
+        "parenttype": "DocType",
+        "parentfield": "permissions",
+        "role": role,
+        "read": 1 if "read" in permissions else 0,
+        "write": 1 if "write" in permissions else 0,
+        "create": 1 if "create" in permissions else 0,
+        "delete": 1 if "delete" in permissions else 0,
+        "submit": 1 if "submit" in permissions else 0,
+        "cancel": 1 if "cancel" in permissions else 0,
+        "export": 1 if "export" in permissions else 0,
+        "report": 1 if "report" in permissions else 0
+    })
+    
+    perm_doc.insert(ignore_permissions=True)
+
+def setup_system_settings():
+    """Setup system-wide settings for the termination system"""
+    
+    # Create or update Verenigingen Settings
     try:
-        from verenigingen.workflow_states import setup_with_debug
-        success = setup_with_debug()
-        if success:
-            print("   ✅ Workflows recreated successfully")
+        settings = frappe.get_single("Verenigingen Settings")
+    except:
+        # Create the single doctype if it doesn't exist
+        settings = frappe.get_doc({
+            "doctype": "Verenigingen Settings"
+        })
+        settings.insert()
+    
+    # Set default values if not already configured
+    default_settings = {
+        "enable_termination_system": 1,
+        "appeal_deadline_days": 30,
+        "appeal_review_days": 60,
+        "require_secondary_approval": 1,
+        "auto_cancel_sepa_mandates": 1,
+        "auto_end_board_positions": 1,
+        "send_termination_notifications": 1,
+        "termination_grace_period_days": 30
+    }
+    
+    updated = False
+    for setting, value in default_settings.items():
+        if not hasattr(settings, setting) or not getattr(settings, setting):
+            setattr(settings, setting, value)
+            updated = True
+    
+    if updated:
+        settings.save()
+        print("   Updated system settings with termination defaults")
+    else:
+        print("   System settings already configured")
+
+def create_sample_data():
+    """Create sample data for testing the termination system"""
+    
+    # Create sample members for testing
+    sample_members = [
+        {
+            "first_name": "John",
+            "last_name": "TestMember",
+            "full_name": "John TestMember",
+            "email": "john.test@example.com",
+            "status": "Active"
+        },
+        {
+            "first_name": "Jane", 
+            "last_name": "BoardMember",
+            "full_name": "Jane BoardMember",
+            "email": "jane.board@example.com", 
+            "status": "Active"
+        },
+        {
+            "first_name": "Bob",
+            "last_name": "ExpiredMember",
+            "full_name": "Bob ExpiredMember",
+            "email": "bob.expired@example.com",
+            "status": "Expired"
+        }
+    ]
+    
+    created_members = []
+    for member_data in sample_members:
+        # Check if member already exists
+        existing = frappe.db.exists("Member", {"email": member_data["email"]})
+        if not existing:
+            try:
+                member = frappe.get_doc({
+                    "doctype": "Member",
+                    **member_data
+                })
+                member.insert()
+                created_members.append(member.name)
+                print(f"   Created sample member: {member_data['first_name']} {member_data['last_name']}")
+            except Exception as e:
+                print(f"   ⚠️ Failed to create member {member_data['first_name']}: {str(e)}")
         else:
-            print("   ⚠️ Workflow recreation had issues")
-    except Exception as e:
-        print(f"   ❌ Could not recreate workflows: {str(e)}")
+            print(f"   Sample member already exists: {member_data['first_name']} {member_data['last_name']}")
+    
+    # Create a sample termination request
+    if created_members:
+        try:
+            sample_termination = frappe.get_doc({
+                "doctype": "Membership Termination Request",
+                "member": created_members[0],
+                "termination_type": "Voluntary",
+                "termination_reason": "Sample termination for testing purposes",
+                "requested_by": frappe.session.user,
+                "status": "Draft"
+            })
+            sample_termination.insert()
+            print(f"   Created sample termination request: {sample_termination.name}")
+        except Exception as e:
+            print(f"   ⚠️ Failed to create sample termination request: {str(e)}")
 
-# API endpoints that can be called from the web interface
-@frappe.whitelist()
-def api_run_setup():
-    """API endpoint to run setup"""
+def validate_system_setup():
+    """Validate that the termination system is set up correctly"""
+    
+    validation_results = {
+        "success": True,
+        "issues": []
+    }
+    
+    # Check that all required doctypes exist
+    required_doctypes = [
+        "Membership Termination Request",
+        "Termination Appeals Process", 
+        "Expulsion Report Entry"
+    ]
+    
+    for doctype in required_doctypes:
+        if not frappe.db.exists("DocType", doctype):
+            validation_results["success"] = False
+            validation_results["issues"].append(f"Missing DocType: {doctype}")
+    
+    # Check that workflows exist
+    required_workflows = [
+        "Membership Termination Workflow"
+    ]
+    
+    for workflow in required_workflows:
+        if not frappe.db.exists("Workflow", workflow):
+            validation_results["issues"].append(f"Missing Workflow: {workflow}")
+    
+    # Check that roles exist
+    required_roles = [
+        "Association Manager"
+    ]
+    
+    for role in required_roles:
+        if not frappe.db.exists("Role", role):
+            validation_results["issues"].append(f"Missing Role: {role}")
+    
+    # Check system settings
     try:
-        run_setup()
-        return {"success": True, "message": "Setup completed successfully"}
+        settings = frappe.get_single("Verenigingen Settings")
+        if not hasattr(settings, 'enable_termination_system') or not settings.enable_termination_system:
+            validation_results["issues"].append("Termination system not enabled in settings")
+    except:
+        validation_results["issues"].append("Verenigingen Settings not configured")
+    
+    if validation_results["issues"]:
+        validation_results["success"] = False
+    
+    return validation_results
+
+def generate_setup_report(validation_results):
+    """Generate a comprehensive setup report"""
+    
+    report = {
+        "setup_date": frappe.utils.now(),
+        "setup_by": frappe.session.user,
+        "validation_results": validation_results,
+        "system_stats": get_system_stats()
+    }
+    
+    # Print setup summary
+    print("\n" + "="*60)
+    print("SETUP REPORT SUMMARY")
+    print("="*60)
+    print(f"Setup Date: {report['setup_date']}")
+    print(f"Setup By: {report['setup_by']}")
+    print(f"Validation Success: {validation_results['success']}")
+    print(f"Total Issues: {len(validation_results['issues'])}")
+    
+    if validation_results["issues"]:
+        print("\nIssues Found:")
+        for issue in validation_results["issues"]:
+            print(f"  - {issue}")
+    
+    print("\nSystem Statistics:")
+    stats = report["system_stats"]
+    for key, value in stats.items():
+        if not key.startswith("error"):
+            print(f"  - {key.replace('_', ' ').title()}: {value}")
+    
+    print("="*60)
+
+def get_system_stats():
+    """Get current system statistics"""
+    
+    stats = {}
+    
+    try:
+        stats["total_members"] = frappe.db.count("Member")
+    except:
+        stats["total_members"] = "N/A"
+        
+    try:
+        stats["total_termination_requests"] = frappe.db.count("Membership Termination Request")
+    except:
+        stats["total_termination_requests"] = 0
+        
+    try:
+        stats["total_appeals"] = frappe.db.count("Termination Appeals Process") 
+    except:
+        stats["total_appeals"] = 0
+        
+    try:
+        stats["total_expulsions"] = frappe.db.count("Expulsion Report Entry")
+    except:
+        stats["total_expulsions"] = 0
+    
+    return stats
+
+@frappe.whitelist()
+def run_termination_system_setup():
+    """API endpoint to run the setup"""
+    try:
+        setup_complete_termination_system()
+        return {"success": True, "message": "Termination system setup completed successfully"}
     except Exception as e:
         return {"success": False, "message": str(e)}
 
-@frappe.whitelist()
-def api_run_diagnostics():
-    """API endpoint to run diagnostics"""
-    try:
-        result = run_diagnostics()
-        return {"success": True, "diagnostics_passed": result}
-    except Exception as e:
-        return {"success": False, "message": str(e)}
-
-@frappe.whitelist()
-def api_fix_issues():
-    """API endpoint to fix common issues"""
-    try:
-        fix_common_issues()
-        return {"success": True, "message": "Common issues fixed"}
-    except Exception as e:
-        return {"success": False, "message": str(e)}
-
-# Main execution
 if __name__ == "__main__":
-    run_setup()
+    # Run the setup when script is executed directly
+    setup_complete_termination_system()
