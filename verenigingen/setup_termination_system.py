@@ -14,12 +14,6 @@ def setup_complete_termination_system():
     print("🚀 Starting Enhanced Membership Termination System Setup...")
     
     try:
-        # Step 1: Create custom fields
-        print("📝 Step 1: Creating custom fields...")
-        from verenigingen.verenigingen.custom_fields import create_custom_fields
-        create_custom_fields()
-        print("✅ Custom fields created successfully")
-        
         # Step 2: Setup workflows
         print("⚙️ Step 2: Setting up workflows...")
         from verenigingen.verenigingen.workflow_states import setup_termination_workflow
