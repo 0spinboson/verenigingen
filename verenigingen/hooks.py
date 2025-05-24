@@ -47,32 +47,119 @@ doctype_js = {
 
 # Home Pages
 # ----------
-def get_additional_hooks():
-    """Additional hooks for the termination system"""
-    return {
-        "doc_events": {
-            "Membership Termination Request": {
-                "validate": "verenigingen.verenigingen.validations.validate_termination_request",
-                "on_submit": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.on_submit_termination",
-                "on_cancel": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.on_cancel_termination"
-            },
-            "Termination Appeals Process": {
-                "validate": "verenigingen.verenigingen.validations.validate_appeal_filing",
-                "after_insert": "verenigingen.verenigingen.doctype.termination_appeals_process.termination_appeals_process.after_appeal_insert"
-            },
-            "Member": {
-                "before_save": "verenigingen.verenigingen.doctype.member.member.update_termination_status_display"
-            }
+
+# Enhanced hooks configuration that includes both original and termination system hooks
+def get_doc_events():
+    """Get all document events including termination system"""
+    
+    # Base doc events
+    base_events = {
+        "Membership": {
+            "on_submit": "verenigingen.verenigingen.doctype.membership.membership.on_submit",
+            "on_cancel": "verenigingen.verenigingen.doctype.membership.membership.on_cancel"
         },
-        "scheduler_events": {
-            "daily": [
-                "verenigingen.verenigingen.notification.overdue_appeal_reviews.send_overdue_appeal_notifications"
-            ],
-            "weekly": [
-                "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.generate_weekly_governance_report"
+        "Subscription": {
+            "on_update": [
+                "verenigingen.verenigingen.doctype.membership.membership.update_membership_from_subscription",
             ]
+        },
+        "Chapter": {
+            "validate": "verenigingen.verenigingen.doctype.chapter.chapter.validate_chapter_access",
+        },
+        "Verenigingen Settings": {
+            "on_update": "verenigingen.utils.on_update_verenigingen_settings",
+        },
+        "Payment Entry": {
+            "on_submit": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history",
+            "on_cancel": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history",
+            "on_trash": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history"
+        },
+        "Sales Invoice": {
+            "before_validate": [
+                "verenigingen.utils.apply_tax_exemption_from_source"
+            ],
+            "on_submit": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history_from_invoice",
+            "on_update_after_submit": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history_from_invoice",
+            "on_cancel": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history_from_invoice"
         }
     }
+    
+    # Add termination system events
+    termination_events = get_termination_doc_events()
+    
+    # Merge the events
+    for doctype, events in termination_events.items():
+        if doctype in base_events:
+            # Merge events for existing doctypes
+            for event, handler in events.items():
+                if event in base_events[doctype]:
+                    # Convert to list if not already
+                    if not isinstance(base_events[doctype][event], list):
+                        base_events[doctype][event] = [base_events[doctype][event]]
+                    if isinstance(handler, list):
+                        base_events[doctype][event].extend(handler)
+                    else:
+                        base_events[doctype][event].append(handler)
+                else:
+                    base_events[doctype][event] = handler
+        else:
+            base_events[doctype] = events
+    
+    return base_events
+
+def get_termination_doc_events():
+    """Get document events for termination system"""
+    return {
+        "Membership Termination Request": {
+            "validate": "verenigingen.validations.validate_termination_request",
+            "on_submit": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.on_submit_termination",
+            "on_cancel": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.on_cancel_termination"
+        },
+        "Termination Appeals Process": {
+            "validate": "verenigingen.validations.validate_appeal_filing",
+            "after_insert": "verenigingen.verenigingen.doctype.termination_appeals_process.termination_appeals_process.after_appeal_insert"
+        },
+        "Member": {
+            "before_save": "verenigingen.verenigingen.doctype.member.member.update_termination_status_display"
+        }
+    }
+
+def get_scheduler_events():
+    """Get all scheduler events including termination system"""
+    
+    base_events = {
+        "daily": [
+            "verenigingen.verenigingen.doctype.membership.scheduler.process_expired_memberships",
+            "verenigingen.verenigingen.doctype.membership.scheduler.send_renewal_reminders",
+            "verenigingen.verenigingen.doctype.membership.scheduler.process_auto_renewals",
+            "verenigingen.subscription_handler.process_all_subscriptions",
+            "verenigingen.verenigingen.doctype.membership.scheduler.notify_about_orphaned_records"
+        ]
+    }
+    
+    # Add termination system scheduler events
+    termination_scheduler = {
+        "daily": [
+            "verenigingen.verenigingen.notification.overdue_appeal_reviews.send_overdue_appeal_notifications"
+        ],
+        "weekly": [
+            "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.generate_weekly_governance_report"
+        ]
+    }
+    
+    # Merge scheduler events
+    for frequency, handlers in termination_scheduler.items():
+        if frequency in base_events:
+            base_events[frequency].extend(handlers)
+        else:
+            base_events[frequency] = handlers
+    
+    return base_events
+
+# Set the doc_events and scheduler_events
+doc_events = get_doc_events()
+scheduler_events = get_scheduler_events()
+
 # application home page (will override Website Settings)
 # home_page = "login"
 
@@ -104,7 +191,7 @@ jinja = {
 # ------------
 
 # before_install = "verenigingen.install.before_install"
-after_install = "verenigingen.setup.execute_after_install"
+after_install = "verenigingen.setup.execute_after_install_with_termination"
 
 # Desk Notifications
 # ------------------
@@ -142,51 +229,11 @@ has_permission = {
 # Document Events
 # ---------------
 # Hook on document methods and events
-
-doc_events = {
-    "Membership": {
-        "on_submit": "verenigingen.verenigingen.doctype.membership.membership.on_submit",
-        "on_cancel": "verenigingen.verenigingen.doctype.membership.membership.on_cancel"
-    },
-    "Subscription": {
-        "on_update": [
-            "verenigingen.verenigingen.doctype.membership.membership.update_membership_from_subscription",
-        ]
-    },
-    "Chapter": {
-        "validate": "verenigingen.verenigingen.doctype.chapter.chapter.validate_chapter_access",
-    },
-    "Verenigingen Settings": {
-        "on_update": "verenigingen.utils.on_update_verenigingen_settings",
-    },
-    "Payment Entry": {
-        "on_submit": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history",
-        "on_cancel": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history",
-        "on_trash": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history"
-    },
-    "Sales Invoice": {
-        "before_validate": [
-            "verenigingen.utils.apply_tax_exemption_from_source"
-        ],
-        # Add these new entries for invoice updates
-        "on_submit": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history_from_invoice",
-        "on_update_after_submit": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history_from_invoice",
-        "on_cancel": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history_from_invoice"
-    }
-}
+# (Now handled by get_doc_events() function above)
 
 # Scheduled Tasks
 # ---------------
-
-scheduler_events = {
-    "daily": [
-        "verenigingen.verenigingen.doctype.membership.scheduler.process_expired_memberships",
-        "verenigingen.verenigingen.doctype.membership.scheduler.send_renewal_reminders",
-        "verenigingen.verenigingen.doctype.membership.scheduler.process_auto_renewals",
-        "verenigingen.subscription_handler.process_all_subscriptions",
-        "verenigingen.verenigingen.doctype.membership.scheduler.notify_about_orphaned_records"
-    ]
-}
+# (Now handled by get_scheduler_events() function above)
 
 # Testing
 # -------
@@ -210,7 +257,6 @@ scheduler_events = {
 # exempt linked doctypes from being automatically cancelled
 #
 # auto_cancel_exempted_doctypes = ["Auto Repeat"]
-
 
 # User Data Protection
 # --------------------
@@ -252,21 +298,34 @@ fixtures = [
         ]
     },
     {
+        "doctype": "Email Template",
+        "filters": [
+            ["name", "in", [
+                "Termination Approval Required",
+                "Appeal Acknowledgment", 
+                "Appeal Decision Notification",
+                "Termination Execution Notice"
+            ]]
+        ]
+    },
+    {
         "doctype": "Workflow",
         "filters": [
-            ["name", "=", "Membership Workflow"]
+            ["name", "in", [
+                "Membership Workflow",
+                "Membership Termination Workflow",
+                "Termination Appeals Workflow"
+            ]]
         ]
     },
     {
         "doctype": "Role",
         "filters": [
-            ["name", "=", "Association Manager"]
-        ]
-    },
-    {
-        "doctype": "Role",
-        "filters": [
-            ["name", "=", "Assocation Member"]
+            ["name", "in", [
+                "Association Manager",
+                "Appeals Reviewer",
+                "Governance Auditor"
+            ]]
         ]
     }
 ]
