@@ -134,6 +134,9 @@ def execute_after_install():
         
         # Set up tax exemption templates if enabled
         setup_tax_exemption_on_install()
+
+        # NEW: Set up termination system
+        setup_termination_system_integration()
         
         # Log the successful setup
         frappe.logger().info("Verenigingen setup completed successfully")
@@ -217,3 +220,202 @@ def fix_btw_installation():
     except Exception as e:
         frappe.msgprint(_("Error fixing BTW installation: {0}").format(str(e)))
         return False
+
+def execute_after_install_with_termination():
+    """
+    Enhanced version of execute_after_install that includes termination system
+    Replace the existing execute_after_install() function with this one
+    """
+    try:
+        # Execute existing setup first
+        setup_verenigingen()
+        
+        # Set up tax exemption templates if enabled
+        setup_tax_exemption_on_install()
+        
+        # NEW: Set up termination system
+        setup_termination_system_integration()
+        
+        # Log the successful setup
+        frappe.logger().info("Verenigingen setup (with termination system) completed successfully")
+        print("Verenigingen app setup completed successfully")
+        
+    except Exception as e:
+        frappe.logger().error(f"Error during Verenigingen setup: {str(e)}")
+        print(f"Error during setup: {str(e)}")
+        # Don't throw error to avoid installation failure
+
+def setup_termination_system_integration():
+    """
+    Setup the termination system as part of app installation
+    This is called from execute_after_install_with_termination()
+    """
+    try:
+        print("🔧 Setting up termination system...")
+        
+        # Step 1: Setup termination-specific settings
+        setup_termination_settings()
+        
+        # Step 2: Setup workflows and templates
+        setup_termination_workflows_and_templates()
+        
+        # Step 3: Setup roles and permissions
+        setup_termination_roles_and_permissions()
+        
+        print("✅ Termination system setup completed")
+        
+    except Exception as e:
+        frappe.log_error(f"Termination system setup error: {str(e)}", "Termination Setup Error")
+        print(f"⚠️ Termination system setup failed: {str(e)}")
+        # Don't fail the entire installation if termination setup fails
+
+def setup_termination_settings():
+    """Setup termination system settings"""
+    
+    try:
+        # Get or create Verenigingen Settings
+        if not frappe.db.exists("Verenigingen Settings", "Verenigingen Settings"):
+            # This should already be created by the main setup, but just in case
+            return
+        
+        settings = frappe.get_single("Verenigingen Settings")
+        
+        # Add termination system settings if they don't exist
+        termination_defaults = {
+            'enable_termination_system': 1,
+            'require_secondary_approval': 1,
+            'appeal_deadline_days': 30,
+            'appeal_review_days': 60,
+            'termination_grace_period_days': 30,
+            'auto_cancel_sepa_mandates': 1,
+            'auto_end_board_positions': 1,
+            'send_termination_notifications': 1
+        }
+        
+        settings_updated = False
+        for field, default_value in termination_defaults.items():
+            if hasattr(settings, field):
+                if not getattr(settings, field):
+                    setattr(settings, field, default_value)
+                    settings_updated = True
+        
+        if settings_updated:
+            settings.save(ignore_permissions=True)
+            frappe.db.commit()
+            print("   ✓ Termination settings configured")
+        else:
+            print("   ✓ Termination settings already configured")
+            
+    except Exception as e:
+        print(f"   ⚠️ Could not setup termination settings: {str(e)}")
+
+def setup_termination_workflows_and_templates():
+    """Setup workflows and email templates for termination system"""
+    
+    try:
+        # Try to import and run the workflow setup
+        from verenigingen.workflow_states import setup_with_debug
+        
+        success = setup_with_debug()
+        
+        if success:
+            print("   ✓ Termination workflows and templates setup completed")
+        else:
+            print("   ⚠️ Termination workflows setup had some issues")
+            
+    except ImportError:
+        print("   ⚠️ Could not import workflow setup - termination workflows not created")
+    except Exception as e:
+        print(f"   ⚠️ Workflow setup failed: {str(e)}")
+
+def setup_termination_roles_and_permissions():
+    """Setup roles and basic permissions for termination system"""
+    
+    try:
+        # Create required roles
+        required_roles = [
+            {
+                "role_name": "Association Manager",
+                "desk_access": 1,
+                "is_custom": 1
+            }
+        ]
+        
+        for role_config in required_roles:
+            role_name = role_config["role_name"]
+            if not frappe.db.exists("Role", role_name):
+                try:
+                    role = frappe.get_doc({
+                        "doctype": "Role",
+                        **role_config
+                    })
+                    role.insert(ignore_permissions=True)
+                    print(f"   ✓ Created role: {role_name}")
+                except Exception as e:
+                    print(f"   ⚠️ Could not create role {role_name}: {str(e)}")
+            else:
+                print(f"   ✓ Role already exists: {role_name}")
+        
+        frappe.db.commit()
+        
+    except Exception as e:
+        print(f"   ⚠️ Role setup failed: {str(e)}")
+
+# Add these API endpoints to your existing setup.py file
+
+@frappe.whitelist()
+def setup_termination_system_manual():
+    """Manual setup endpoint for termination system"""
+    try:
+        setup_termination_system_integration()
+        return {"success": True, "message": "Termination system setup completed"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@frappe.whitelist()
+def check_termination_system_status():
+    """Check the status of termination system setup"""
+    
+    status = {
+        "settings_configured": False,
+        "workflows_exist": False,
+        "roles_exist": False,
+        "system_enabled": False
+    }
+    
+    try:
+        # Check settings
+        if frappe.db.exists("Verenigingen Settings", "Verenigingen Settings"):
+            settings = frappe.get_single("Verenigingen Settings")
+            if hasattr(settings, 'enable_termination_system'):
+                status["settings_configured"] = True
+                status["system_enabled"] = bool(settings.enable_termination_system)
+        
+        # Check workflows
+        workflows = ["Membership Termination Workflow", "Termination Appeals Workflow"]
+        workflow_count = 0
+        for workflow in workflows:
+            if frappe.db.exists("Workflow", workflow):
+                workflow_count += 1
+        status["workflows_exist"] = workflow_count > 0
+        
+        # Check roles
+        status["roles_exist"] = frappe.db.exists("Role", "Association Manager")
+        
+        return {"success": True, "status": status}
+        
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@frappe.whitelist()
+def run_termination_diagnostics():
+    """Run diagnostics on termination system"""
+    
+    try:
+        from verenigingen.setup_termination_system_cli import run_diagnostics_internal
+        result = run_diagnostics_internal()
+        return {"success": True, "diagnostics_passed": result}
+    except ImportError:
+        return {"success": False, "message": "Diagnostic tools not available"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
