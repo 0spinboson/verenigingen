@@ -47,7 +47,32 @@ doctype_js = {
 
 # Home Pages
 # ----------
-
+def get_additional_hooks():
+    """Additional hooks for the termination system"""
+    return {
+        "doc_events": {
+            "Membership Termination Request": {
+                "validate": "verenigingen.verenigingen.validations.validate_termination_request",
+                "on_submit": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.on_submit_termination",
+                "on_cancel": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.on_cancel_termination"
+            },
+            "Termination Appeals Process": {
+                "validate": "verenigingen.verenigingen.validations.validate_appeal_filing",
+                "after_insert": "verenigingen.verenigingen.doctype.termination_appeals_process.termination_appeals_process.after_appeal_insert"
+            },
+            "Member": {
+                "before_save": "verenigingen.verenigingen.doctype.member.member.update_termination_status_display"
+            }
+        },
+        "scheduler_events": {
+            "daily": [
+                "verenigingen.verenigingen.notification.overdue_appeal_reviews.send_overdue_appeal_notifications"
+            ],
+            "weekly": [
+                "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.generate_weekly_governance_report"
+            ]
+        }
+    }
 # application home page (will override Website Settings)
 # home_page = "login"
 
