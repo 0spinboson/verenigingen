@@ -22,6 +22,9 @@
   "review_section",
   "under_appeal",
   "appeal_date",
+  "governance_section",
+  "compliance_checked",
+  
   "column_break_3",
   "reversal_date",
   "reversal_reason"
@@ -55,6 +58,32 @@
   {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "governance_section",
+   "fieldtype": "Section Break",
+   "label": "Governance Tracking",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "compliance_checked",
+   "fieldtype": "Check",
+   "label": "Compliance Verified",
+   "default": "0",
+   "description": "Mark when compliance has been verified"
+  },
+  {
+   "fieldname": "board_review_date",
+   "fieldtype": "Date",
+   "label": "Board Review Date",
+   "description": "Date when case was reviewed by governance board"
+  },
+  {
+   "fieldname": "case_priority",
+   "fieldtype": "Select",
+   "label": "Case Priority",
+   "options": "Low\nMedium\nHigh\nUrgent",
+   "default": "Medium"
   },
   {
    "fieldname": "expulsion_date",
