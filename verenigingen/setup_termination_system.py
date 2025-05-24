@@ -19,12 +19,6 @@ def setup_complete_termination_system():
         setup_roles_and_permissions()
         print("✅ Roles and permissions configured")
         
-        # Step 2: Create custom fields
-        print("📝 Step 2: Creating custom fields...")
-        from verenigingen.verenigingen.custom_fields import create_custom_fields
-        create_custom_fields()
-        print("✅ Custom fields created successfully")
-        
         # Step 3: Setup workflows (now that roles exist)
         print("⚙️ Step 3: Setting up workflows...")
         from verenigingen.verenigingen.workflow_states import setup_termination_workflow
