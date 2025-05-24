@@ -4,6 +4,26 @@ import frappe
 def setup_termination_workflow():
     """Setup workflow states for the termination process"""
     
+    # First ensure required roles exist
+    required_roles = ["System Manager", "Association Manager"]
+    missing_roles = []
+    
+    for role in required_roles:
+        if not frappe.db.exists("Role", role):
+            missing_roles.append(role)
+    
+    if missing_roles:
+        print(f"   Creating missing roles: {', '.join(missing_roles)}")
+        for role in missing_roles:
+            role_doc = frappe.get_doc({
+                "doctype": "Role",
+                "role_name": role,
+                "desk_access": 1,
+                "is_custom": 1 if role != "System Manager" else 0
+            })
+            role_doc.insert()
+            print(f"   Created role: {role}")
+    
     # Create Membership Termination Request workflow
     if not frappe.db.exists("Workflow", "Membership Termination Workflow"):
         workflow = frappe.get_doc({
@@ -17,7 +37,7 @@ def setup_termination_workflow():
                 {
                     "state": "Draft",
                     "doc_status": "0",
-                    "allow_edit": "System Manager,Association Manager,Association Manager",
+                    "allow_edit": "System Manager,Association Manager",
                     "is_optional_state": 1
                 },
                 {
@@ -29,7 +49,7 @@ def setup_termination_workflow():
                 {
                     "state": "Approved",
                     "doc_status": "0",
-                    "allow_edit": "System Manager,Association Manager,Association Manager",
+                    "allow_edit": "System Manager,Association Manager",
                     "message": "Approved and ready for execution"
                 },
                 {
@@ -50,7 +70,7 @@ def setup_termination_workflow():
                     "state": "Draft",
                     "action": "Submit for Approval",
                     "next_state": "Pending Approval",
-                    "allowed": "System Manager,Association Manager,Association Manager",
+                    "allowed": "System Manager,Association Manager",
                     "condition": "doc.requires_secondary_approval == 1"
                 },
                 {
@@ -76,7 +96,7 @@ def setup_termination_workflow():
                     "state": "Approved",
                     "action": "Execute",
                     "next_state": "Executed",
-                    "allowed": "System Manager,Association Manager,Association Manager"
+                    "allowed": "System Manager,Association Manager"
                 }
             ]
         })
@@ -108,7 +128,7 @@ def setup_termination_workflow():
                 {
                     "state": "Under Review",
                     "doc_status": "0",
-                    "allow_edit": "System Manager,Association Manager,Association Manager",
+                    "allow_edit": "System Manager,Association Manager",
                     "message": "Appeal is being reviewed"
                 },
                 {
@@ -129,13 +149,13 @@ def setup_termination_workflow():
                     "state": "Submitted",
                     "action": "Start Review",
                     "next_state": "Under Review", 
-                    "allowed": "System Manager,Association Manager,Association Manager"
+                    "allowed": "System Manager,Association Manager"
                 },
                 {
                     "state": "Under Review",
                     "action": "Make Decision",
                     "next_state": "Decided",
-                    "allowed": "System Manager,Association Manager,Association Manager"
+                    "allowed": "System Manager,Association Manager"
                 }
             ]
         })
