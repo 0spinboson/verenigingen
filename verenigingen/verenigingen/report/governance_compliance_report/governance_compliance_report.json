@@ -68,3 +68,38 @@
   }
  ]
 }
+
+// REPORT COMPARISON AND USAGE:
+
+/* 
+TERMINATION COMPLIANCE REPORT (existing)
+========================================
+Purpose: Day-to-day operational compliance monitoring
+Users: Compliance officers, managers
+Focus: Individual termination request issues
+Data: 
+- Processing delays per request
+- Missing documentation by request
+- Approval bottlenecks
+- Individual compliance issues
+- Request-level details
+Output: Tabular data with drill-down capability
+
+GOVERNANCE COMPLIANCE REPORT (new)  
+===================================
+Purpose: Executive/board governance oversight
+Users: Board members, executives, auditors
+Focus: System-wide health and risk assessment
+Data:
+- Overall compliance score (0-100)
+- Risk level assessment (Low/Medium/High)
+- System-wide trends and analytics
+- Appeals success rates
+- Executive recommendations
+Output: Summary cards, charts, and high-level insights
+
+RELATIONSHIP:
+- Use Termination Compliance Report for fixing specific issues
+- Use Governance Compliance Report for strategic decisions
+- Both reports complement each other in a complete governance framework
+*/
