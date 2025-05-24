@@ -48,6 +48,8 @@
   "payment_reference",
   "column_break_31",
   "membership_status",
+  "termination_status_section",
+  "termination_status_html",
   "permission_category",
   "sepa_mandates_section",
   "sepa_mandates",
@@ -235,6 +237,19 @@
    "fieldtype": "Select",
    "label": "Status",
    "options": "Active\nExpired\nSuspended\nBanned\nDeceased"
+  },
+  {
+  "fieldname": "termination_status_section",
+  "fieldtype": "Section Break",
+  "label": "Termination Status",
+  "collapsible": 1
+  },
+  {
+   "fieldname": "termination_status_html",
+   "fieldtype": "HTML",
+   "label": "Termination Status",
+   "read_only": 1,
+   "description": "Shows current termination status and any pending requests"
   },
   {
    "fieldname": "address_section",
