@@ -21,13 +21,13 @@ def setup_complete_termination_system():
         
         # Step 3: Setup workflows (now that roles exist)
         print("⚙️ Step 3: Setting up workflows...")
-        from verenigingen.verenigingen.workflow_states import setup_termination_workflow
+        from verenigingen.workflow_states import setup_termination_workflow
         setup_termination_workflow()
         print("✅ Workflows created successfully")
         
         # Step 4: Setup email templates
         print("📧 Step 4: Setting up email templates...")
-        from verenigingen.verenigingen.workflow_states import setup_email_templates
+        from verenigingen.workflow_states import setup_email_templates
         setup_email_templates()
         print("✅ Email templates created successfully")
         
