@@ -100,6 +100,18 @@
    "in_list_view": 1
   },
   {
+      "fieldname": "unsubscribe_newsletters",
+      "fieldtype": "Check", 
+      "label": "Unsubscribe from Newsletters",
+      "default": "1"
+    },
+    {
+      "fieldname": "newsletters_updated",
+      "fieldtype": "Check",
+      "label": "Newsletter Subscriptions Updated", 
+      "read_only": 1
+    },
+  {
    "fieldname": "reason_section",
    "fieldtype": "Section Break",
    "label": "Reason & Documentation"
