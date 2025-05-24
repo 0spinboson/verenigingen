@@ -328,7 +328,7 @@
    "fieldtype": "Section Break",
    "label": "Termination System Settings",
    "collapsible": 1,
-   "insert_after": "company"  # Adjust based on your existing fields
+   "insert_after": "company"
   },
   {
    "fieldname": "enable_termination_system",
