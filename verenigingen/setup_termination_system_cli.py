@@ -30,7 +30,7 @@ def run_setup():
         # Step 2: Setup termination system
         print("\n📋 Step 2: Setting up termination system...")
         from verenigingen.setup import setup_termination_system_integration
-        setup_termination_system()
+        setup_termination_system_integration()
         
         # Step 3: Verify setup
         print("\n📋 Step 3: Verifying setup...")
