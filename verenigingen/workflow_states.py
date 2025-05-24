@@ -1,6 +1,6 @@
 # File: verenigingen/workflow_states.py
 """
-Complete Workflow States and Email Template Setup for Termination System
+Fixed Workflow States and Email Template Setup for Termination System
 """
 
 import frappe
@@ -17,8 +17,8 @@ def setup_with_debug():
         # Create missing roles
         roles_created = create_missing_roles()
         
-        # Setup main workflow
-        workflow_created = setup_termination_workflow()
+        # Setup main workflow - FIXED: renamed to avoid recursion
+        workflow_created = setup_main_termination_workflow()
         
         # Setup appeals workflow
         appeals_workflow_created = setup_appeals_workflow()
@@ -32,6 +32,8 @@ def setup_with_debug():
     except Exception as e:
         print(f"❌ Workflow setup failed: {str(e)}")
         frappe.log_error(f"Workflow setup error: {str(e)}", "Termination Workflow Setup")
+        import traceback
+        traceback.print_exc()
         return False
 
 def create_missing_roles():
@@ -77,12 +79,15 @@ def create_missing_roles():
             print(f"   ✓ Role already exists: {role_name}")
     
     if created_count > 0:
-        frappe.db.commit()
+        try:
+            frappe.db.commit()
+        except Exception as e:
+            print(f"   ⚠️ Role commit warning: {str(e)}")
     
     return created_count
 
-def setup_termination_workflow():
-    """Create the main termination workflow"""
+def setup_main_termination_workflow():
+    """Create the main termination workflow - RENAMED to avoid recursion"""
     
     workflow_name = "Membership Termination Workflow"
     
@@ -375,7 +380,10 @@ def setup_email_templates():
             frappe.log_error(f"Failed to create email template {template_name}: {str(e)}", "Email Template Creation Error")
     
     if created_count > 0:
-        frappe.db.commit()
+        try:
+            frappe.db.commit()
+        except Exception as e:
+            print(f"   ⚠️ Template commit warning: {str(e)}")
     
     return created_count
 
@@ -581,7 +589,62 @@ def debug_workflow_requirements():
     
     print("-" * 25)
 
-# Backwards compatibility with existing setup
+# FIXED: Remove the circular dependency - keep only one entry point
 def setup_termination_workflow():
-    """Wrapper for existing setup calls"""
+    """Main entry point for workflow setup"""
     return setup_with_debug()
+
+# Alternative safe setup function with better error handling
+def safe_setup_termination_system():
+    """Safe setup with database transaction handling"""
+    
+    print("🔄 Starting SAFE termination system setup...")
+    
+    try:
+        # Step 1: Check database connection
+        frappe.db.sql("SELECT 1")
+        print("   ✓ Database connection OK")
+        
+        # Step 2: Setup roles first (small transaction)
+        print("   🔐 Setting up roles...")
+        roles_created = create_missing_roles()
+        
+        # Step 3: Setup main workflow
+        print("   📋 Setting up main workflow...")
+        main_workflow_created = setup_main_termination_workflow()
+        
+        # Step 4: Setup appeals workflow  
+        print("   📋 Setting up appeals workflow...")
+        appeals_workflow_created = setup_appeals_workflow()
+        
+        # Step 5: Setup email templates
+        print("   📧 Setting up email templates...")
+        templates_created = setup_email_templates()
+        
+        # Final commit
+        frappe.db.commit()
+        
+        print(f"✅ SAFE setup completed successfully!")
+        print(f"   - Roles created: {roles_created}")
+        print(f"   - Workflows created: {main_workflow_created + appeals_workflow_created}")
+        print(f"   - Email templates created: {templates_created}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ SAFE setup failed: {str(e)}")
+        try:
+            frappe.db.rollback()
+            print("   🔄 Database rolled back")
+        except:
+            pass
+        
+        import traceback
+        traceback.print_exc()
+        return False
+
+# Whitelist the safe setup function for API access
+@frappe.whitelist()
+def run_safe_setup():
+    """API endpoint for safe setup"""
+    return safe_setup_termination_system()
