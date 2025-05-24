@@ -124,7 +124,7 @@ class TerminationAppealsProcess(Document):
         eligible_reviewers = frappe.get_all(
             "Has Role",
             filters={
-                "role": ["in", ["Association Manager", "System Manager", "Association Manager"]],
+                "role": ["in", ["Association Manager", "System Manager"]],
                 "parenttype": "User"
             },
             fields=["parent"]
