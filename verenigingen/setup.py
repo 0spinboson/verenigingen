@@ -393,11 +393,56 @@ def check_termination_system_status():
 def run_termination_diagnostics():
     """Run diagnostics on termination system"""
     
-    try:
-        from verenigingen.setup_termination_system_cli import run_diagnostics_internal
-        result = run_diagnostics_internal()
-        return {"success": True, "diagnostics_passed": result}
-    except ImportError:
-        return {"success": False, "message": "Diagnostic tools not available"}
-    except Exception as e:
-        return {"success": False, "message": str(e)}
+    print("🔍 TERMINATION SYSTEM DIAGNOSTICS")
+    print("=" * 40)
+    
+    all_good = True
+    
+    # 1. Check required doctypes
+    print("\n1. DOCTYPE CHECK")
+    print("-" * 15)
+    
+    required_doctypes = [
+        "Membership Termination Request",
+        "Termination Appeals Process", 
+        "Expulsion Report Entry"
+    ]
+    
+    for doctype in required_doctypes:
+        if frappe.db.exists("DocType", doctype):
+            print(f"   ✅ {doctype}")
+        else:
+            print(f"   ❌ {doctype} - MISSING")
+            all_good = False
+    
+    # 2. Check roles
+    print("\n2. ROLE CHECK")
+    print("-" * 12)
+    
+    if frappe.db.exists("Role", "Association Manager"):
+        print("   ✅ Association Manager")
+    else:
+        print("   ❌ Association Manager - MISSING")
+        all_good = False
+    
+    # 3. Check workflows
+    print("\n3. WORKFLOW CHECK")
+    print("-" * 15)
+    
+    workflows = ["Membership Termination Workflow", "Termination Appeals Workflow"]
+    for workflow in workflows:
+        if frappe.db.exists("Workflow", workflow):
+            print(f"   ✅ {workflow}")
+        else:
+            print(f"   ❌ {workflow} - MISSING")
+            all_good = False
+    
+    # Summary
+    print("\n" + "=" * 40)
+    if all_good:
+        print("✅ ALL DIAGNOSTICS PASSED")
+    else:
+        print("⚠️ SOME ISSUES FOUND")
+    print("=" * 40)
+    
+    return {"success": True, "diagnostics_passed": all_good}
