@@ -29,9 +29,16 @@ def setup_complete_termination_system():
         
         # Step 3: Setup workflows (now that roles exist)
         print("⚙️ Step 3: Setting up workflows...")
-        from verenigingen.workflow_states import setup_termination_workflow
-        setup_termination_workflow()
-        print("✅ Workflows created successfully")
+        try:
+            from verenigingen.workflow_states import setup_with_debug
+            workflow_success = setup_with_debug()
+            if workflow_success:
+                print("✅ Workflows created successfully")
+            else:
+                print("⚠️ Workflow creation had issues but setup continues")
+        except Exception as e:
+            print(f"⚠️ Workflow setup failed: {str(e)}")
+            print("   Continuing with rest of setup...")
         
         # Step 4: Setup email templates
         print("📧 Step 4: Setting up email templates...")
