@@ -7,20 +7,10 @@
  "doctype": "Report",
  "filters": [
   {
-   "fieldname": "report_period",
-   "fieldtype": "Select",
-   "label": "Report Period",
-   "mandatory": 1,
-   "options": "Last Month\nLast Quarter\nLast 6 Months\nLast Year\nCustom",
-   "default": "Last Quarter",
-   "wildcard_filter": 0
-  },
-  {
    "fieldname": "from_date",
    "fieldtype": "Date",
    "label": "From Date",
    "mandatory": 0,
-   "depends_on": "eval:doc.report_period=='Custom'",
    "wildcard_filter": 0
   },
   {
@@ -28,36 +18,42 @@
    "fieldtype": "Date",
    "label": "To Date",
    "mandatory": 0,
-   "depends_on": "eval:doc.report_period=='Custom'",
    "wildcard_filter": 0
   },
   {
-   "fieldname": "include_appeals",
-   "fieldtype": "Check",
-   "label": "Include Appeals Analysis",
+   "fieldname": "chapter",
+   "fieldtype": "Link",
+   "label": "Chapter",
    "mandatory": 0,
-   "default": 1,
+   "options": "Chapter",
    "wildcard_filter": 0
   },
   {
-   "fieldname": "include_expulsions",
-   "fieldtype": "Check",
-   "label": "Include Expulsion Details",
+   "fieldname": "termination_type",
+   "fieldtype": "Select", 
+   "label": "Termination Type",
    "mandatory": 0,
-   "default": 1,
+   "options": "\nVoluntary\nNon-payment\nDeceased\nPolicy Violation\nDisciplinary Action\nExpulsion",
    "wildcard_filter": 0
+  },
+  {
+   "fieldname": "board_role",
+   "fieldtype": "Data",
+   "label": "Board Role",
+   "mandatory": 0,
+   "wildcard_filter": 1
   }
  ],
  "is_standard": "Yes",
  "modified": "2025-01-20 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Verenigingen",
- "name": "Governance Compliance Report",
+ "name": "Board Position Termination Impact",
  "owner": "Administrator",
  "prepared_report": 0,
  "query": "",
  "ref_doctype": "Membership Termination Request",
- "report_name": "Governance Compliance Report",
+ "report_name": "Board Position Termination Impact",
  "report_type": "Script Report",
  "roles": [
   {
@@ -65,6 +61,9 @@
   },
   {
    "role": "Association Manager"
+  },
+  {
+   "role": "Verenigingen Manager"
   }
  ]
 }
