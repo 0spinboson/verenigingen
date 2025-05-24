@@ -4,65 +4,80 @@ import frappe
 def setup_termination_workflow():
     """Setup workflow states for the termination process"""
     
-    # First ensure required roles exist
-    required_roles = ["System Manager", "Association Manager"]
-    missing_roles = []
+    # First ensure required roles exist and are committed to database
+    print("   Ensuring required roles exist...")
+    required_roles = [
+        {
+            "role_name": "Association Manager",
+            "desk_access": 1,
+            "is_custom": 1
+        }
+    ]
     
-    for role in required_roles:
+    for role_config in required_roles:
+        role_name = role_config["role_name"]
+        if not frappe.db.exists("Role", role_name):
+            print(f"   Creating missing role: {role_name}")
+            role_doc = frappe.get_doc({
+                "doctype": "Role",
+                **role_config
+            })
+            role_doc.insert()
+            print(f"   ✓ Created role: {role_name}")
+        else:
+            print(f"   ✓ Role already exists: {role_name}")
+    
+    # Commit the roles to database before creating workflows
+    frappe.db.commit()
+    
+    # Verify roles exist before proceeding
+    missing_roles = []
+    check_roles = ["System Manager", "Association Manager"]
+    for role in check_roles:
         if not frappe.db.exists("Role", role):
             missing_roles.append(role)
     
     if missing_roles:
-        print(f"   Creating missing roles: {', '.join(missing_roles)}")
-        for role in missing_roles:
-            role_doc = frappe.get_doc({
-                "doctype": "Role",
-                "role_name": role,
-                "desk_access": 1,
-                "is_custom": 1 if role != "System Manager" else 0
-            })
-            role_doc.insert()
-            print(f"   Created role: {role}")
+        frappe.throw(f"Required roles still missing after creation: {', '.join(missing_roles)}")
+    
+    print("   All required roles verified. Creating workflows...")
     
     # Create Membership Termination Request workflow
     if not frappe.db.exists("Workflow", "Membership Termination Workflow"):
+        print("   Creating Membership Termination Workflow...")
+        
         workflow = frappe.get_doc({
             "doctype": "Workflow",
             "workflow_name": "Membership Termination Workflow",
             "document_type": "Membership Termination Request",
             "is_active": 1,
             "send_email_alert": 1,
-            "workflow_state_field": "workflow_state",
+            "workflow_state_field": "status",  # Use the existing status field
             "states": [
                 {
                     "state": "Draft",
                     "doc_status": "0",
-                    "allow_edit": "System Manager,Association Manager",
-                    "is_optional_state": 1
+                    "allow_edit": "System Manager,Association Manager"
                 },
                 {
                     "state": "Pending Approval",
-                    "doc_status": "0",
-                    "allow_edit": "System Manager,Association Manager",
-                    "message": "Awaiting secondary approval for disciplinary termination"
+                    "doc_status": "0", 
+                    "allow_edit": "System Manager,Association Manager"
                 },
                 {
                     "state": "Approved",
                     "doc_status": "0",
-                    "allow_edit": "System Manager,Association Manager",
-                    "message": "Approved and ready for execution"
+                    "allow_edit": "System Manager,Association Manager"
                 },
                 {
                     "state": "Rejected",
                     "doc_status": "0",
-                    "allow_edit": "System Manager",
-                    "message": "Termination request rejected"
+                    "allow_edit": "System Manager"
                 },
                 {
                     "state": "Executed",
                     "doc_status": "1",
-                    "allow_edit": "System Manager",
-                    "message": "Termination has been executed"
+                    "allow_edit": "System Manager"
                 }
             ],
             "transitions": [
@@ -74,10 +89,10 @@ def setup_termination_workflow():
                     "condition": "doc.requires_secondary_approval == 1"
                 },
                 {
-                    "state": "Draft", 
-                    "action": "Auto Approve",
+                    "state": "Draft",
+                    "action": "Auto Approve", 
                     "next_state": "Approved",
-                    "allowed": "ALL",
+                    "allowed": "System Manager,Association Manager",
                     "condition": "doc.requires_secondary_approval == 0"
                 },
                 {
@@ -88,8 +103,8 @@ def setup_termination_workflow():
                 },
                 {
                     "state": "Pending Approval",
-                    "action": "Reject", 
-                    "next_state": "Rejected",
+                    "action": "Reject",
+                    "next_state": "Rejected", 
                     "allowed": "System Manager,Association Manager"
                 },
                 {
@@ -100,42 +115,57 @@ def setup_termination_workflow():
                 }
             ]
         })
-        workflow.insert()
-        print("Created Membership Termination Workflow")
+        
+        try:
+            workflow.insert()
+            print("   ✓ Created Membership Termination Workflow")
+        except Exception as e:
+            print(f"   ✗ Failed to create Membership Termination Workflow: {str(e)}")
+            raise
+    else:
+        print("   ✓ Membership Termination Workflow already exists")
     
     # Create Appeals Process workflow
     if not frappe.db.exists("Workflow", "Appeals Process Workflow"):
+        print("   Creating Appeals Process Workflow...")
+        
         appeals_workflow = frappe.get_doc({
             "doctype": "Workflow",
             "workflow_name": "Appeals Process Workflow",
             "document_type": "Termination Appeals Process",
-            "is_active": 1,  
+            "is_active": 1,
             "send_email_alert": 1,
-            "workflow_state_field": "workflow_state",
+            "workflow_state_field": "appeal_status",  # Use the existing appeal_status field
             "states": [
                 {
                     "state": "Draft",
                     "doc_status": "0",
-                    "allow_edit": "ALL",
-                    "is_optional_state": 1
+                    "allow_edit": "ALL"
                 },
                 {
                     "state": "Submitted",
                     "doc_status": "0",
-                    "allow_edit": "System Manager,Association Manager",
-                    "message": "Appeal submitted for review"
+                    "allow_edit": "System Manager,Association Manager"
                 },
                 {
                     "state": "Under Review",
                     "doc_status": "0",
-                    "allow_edit": "System Manager,Association Manager",
-                    "message": "Appeal is being reviewed"
+                    "allow_edit": "System Manager,Association Manager"
                 },
                 {
-                    "state": "Decided",
+                    "state": "Decided - Upheld",
                     "doc_status": "1",
-                    "allow_edit": "System Manager",
-                    "message": "Appeal decision has been made"
+                    "allow_edit": "System Manager"
+                },
+                {
+                    "state": "Decided - Rejected",
+                    "doc_status": "1", 
+                    "allow_edit": "System Manager"
+                },
+                {
+                    "state": "Decided - Partially Upheld",
+                    "doc_status": "1",
+                    "allow_edit": "System Manager"
                 }
             ],
             "transitions": [
@@ -148,22 +178,44 @@ def setup_termination_workflow():
                 {
                     "state": "Submitted",
                     "action": "Start Review",
-                    "next_state": "Under Review", 
+                    "next_state": "Under Review",
                     "allowed": "System Manager,Association Manager"
                 },
                 {
                     "state": "Under Review",
-                    "action": "Make Decision",
-                    "next_state": "Decided",
+                    "action": "Uphold Appeal",
+                    "next_state": "Decided - Upheld",
+                    "allowed": "System Manager,Association Manager"
+                },
+                {
+                    "state": "Under Review",
+                    "action": "Reject Appeal",
+                    "next_state": "Decided - Rejected",
+                    "allowed": "System Manager,Association Manager"
+                },
+                {
+                    "state": "Under Review",
+                    "action": "Partially Uphold",
+                    "next_state": "Decided - Partially Upheld",
                     "allowed": "System Manager,Association Manager"
                 }
             ]
         })
-        appeals_workflow.insert()
-        print("Created Appeals Process Workflow")
+        
+        try:
+            appeals_workflow.insert()
+            print("   ✓ Created Appeals Process Workflow")
+        except Exception as e:
+            print(f"   ✗ Failed to create Appeals Process Workflow: {str(e)}")
+            # Don't raise here as this is less critical
+            pass
+    else:
+        print("   ✓ Appeals Process Workflow already exists")
 
 def setup_email_templates():
     """Setup email templates for the termination system"""
+    
+    print("   Setting up email templates...")
     
     templates = [
         {
@@ -203,7 +255,7 @@ def setup_email_templates():
                 <li><strong>Type:</strong> {{ doc.appeal_type }}</li>
             </ul>
             
-            <p>Your appeal will be reviewed within {{ date_diff(doc.review_deadline, doc.appeal_date) }} days.</p>
+            <p>Your appeal will be reviewed within the statutory timeframe.</p>
             
             <p>Best regards,<br>Appeals Review Panel</p>
             """,
@@ -234,15 +286,25 @@ def setup_email_templates():
         }
     ]
     
+    created_count = 0
     for template_config in templates:
-        if not frappe.db.exists("Email Template", template_config["name"]):
-            email_template = frappe.get_doc({
-                "doctype": "Email Template",
-                "name": template_config["name"],
-                "subject": template_config["subject"],
-                "response": template_config["response"],
-                "reference_doctype": template_config["doctype"],
-                "enabled": 1
-            })
-            email_template.insert()
-            print(f"Created email template: {template_config['name']}")
+        template_name = template_config["name"]
+        if not frappe.db.exists("Email Template", template_name):
+            try:
+                email_template = frappe.get_doc({
+                    "doctype": "Email Template",
+                    "name": template_name,
+                    "subject": template_config["subject"],
+                    "response": template_config["response"],
+                    "reference_doctype": template_config["doctype"],
+                    "enabled": 1
+                })
+                email_template.insert()
+                print(f"   ✓ Created email template: {template_name}")
+                created_count += 1
+            except Exception as e:
+                print(f"   ✗ Failed to create email template {template_name}: {str(e)}")
+        else:
+            print(f"   ✓ Email template already exists: {template_name}")
+    
+    print(f"   Email template setup complete. Created {created_count} new templates.")
