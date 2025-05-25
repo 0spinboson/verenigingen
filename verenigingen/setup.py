@@ -228,9 +228,9 @@ def setup_termination_system_integration():
         # Step 1: Setup termination-specific settings
         setup_termination_settings()
         
-        # Step 2: Setup workflows using simplified approach
-        from verenigingen.simplified_workflow_setup import setup_workflows_simplified
-        workflow_success = setup_workflows_simplified()
+        # Step 2: Setup workflows
+        from verenigingen.corrected_workflow_setup import setup_workflows_corrected
+        workflow_success = setup_workflows_corrected()
         
         if workflow_success:
             print("✅ Workflows created successfully")
