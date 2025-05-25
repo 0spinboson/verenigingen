@@ -221,18 +221,21 @@ def fix_btw_installation():
         return False
 
 def setup_termination_system_integration():
-    """
-    Setup the termination system as part of app installation
-    This is called from execute_after_install_with_termination()
-    """
+    """Setup the termination system as part of app installation"""
     try:
         print("🔧 Setting up termination system...")
         
         # Step 1: Setup termination-specific settings
         setup_termination_settings()
         
-        # Step 2: Setup workflows and templates
-        setup_termination_workflows_and_templates()
+        # Step 2: Setup workflows using simplified approach
+        from verenigingen.simplified_workflow_setup import setup_workflows_simplified
+        workflow_success = setup_workflows_simplified()
+        
+        if workflow_success:
+            print("✅ Workflows created successfully")
+        else:
+            print("⚠️ Workflow creation had issues")
         
         # Step 3: Setup roles and permissions
         setup_termination_roles_and_permissions()
@@ -242,7 +245,6 @@ def setup_termination_system_integration():
     except Exception as e:
         frappe.log_error(f"Termination system setup error: {str(e)}", "Termination Setup Error")
         print(f"⚠️ Termination system setup failed: {str(e)}")
-        # Don't fail the entire installation if termination setup fails
 
 def setup_termination_settings():
     """Setup termination system settings"""
