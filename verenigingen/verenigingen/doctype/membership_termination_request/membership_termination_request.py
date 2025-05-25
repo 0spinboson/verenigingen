@@ -805,7 +805,7 @@ class MembershipTerminationRequest(Document):
                 <table style="width: 100%; border-collapse: collapse;">
                     <tr><td style="padding: 5px;"><strong>Type:</strong></td><td style="padding: 5px;"><span style="background: #dc3545; color: white; padding: 2px 8px; border-radius: 3px;">{self.termination_type}</span></td></tr>
                     <tr><td style="padding: 5px;"><strong>Requested By:</strong></td><td style="padding: 5px;">{self.requested_by}</td></tr>
-                    <tr><td style="padding: 5px;"><strong>Request Date:</strong></td><td style="padding: 5px;">{frappe.format_date(self.request_date)}</td></tr>
+                    <tr><td style="padding: 5px;"><strong>Request Date:</strong></td><td style="padding: 5px;">{frappe.utils.format_date(self.request_date)}</td></tr>
                     <tr><td style="padding: 5px;"><strong>Reason:</strong></td><td style="padding: 5px;">{self.termination_reason}</td></tr>
                 </table>
             </div>
