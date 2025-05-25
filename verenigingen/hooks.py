@@ -108,16 +108,19 @@ def get_doc_events():
     return base_events
 
 def get_termination_doc_events():
-    """Get document events for termination system"""
+    """Get document events for termination system - Updated for simplified workflows"""
     return {
         "Membership Termination Request": {
             "validate": "verenigingen.validations.validate_termination_request",
-            "on_submit": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.on_submit_termination",
-            "on_cancel": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.on_cancel_termination"
+            # Remove the on_submit/on_cancel hooks since we're using standard workflow now
+            # The workflow system will handle state transitions
+            "before_submit": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.before_workflow_action",
+            "on_update": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.on_status_change"
         },
         "Termination Appeals Process": {
             "validate": "verenigingen.validations.validate_appeal_filing",
-            "after_insert": "verenigingen.verenigingen.doctype.termination_appeals_process.termination_appeals_process.after_appeal_insert"
+            "after_insert": "verenigingen.verenigingen.doctype.termination_appeals_process.termination_appeals_process.after_insert",
+            "on_update": "verenigingen.verenigingen.doctype.termination_appeals_process.termination_appeals_process.on_update"
         },
         "Member": {
             "before_save": "verenigingen.verenigingen.doctype.member.member.update_termination_status_display"
@@ -312,9 +315,25 @@ fixtures = [
         "doctype": "Workflow",
         "filters": [
             ["name", "in", [
-                "Membership Workflow",
-                "Membership Termination Workflow",
-                "Termination Appeals Workflow"
+                "Membership Termination Workflow",  # Keep this
+                "Termination Appeals Workflow"      # Keep this
+                # Remove "Membership Workflow" if it's not related to termination
+            ]]
+        ]
+    },
+    {
+        "doctype": "Workflow State",
+        "filters": [
+            ["workflow_state_name", "in", [
+                "Executed"  # Only export custom states we create
+            ]]
+        ]
+    },
+    {
+        "doctype": "Workflow Action Master", 
+        "filters": [
+            ["workflow_action_name", "in", [
+                "Execute"  # Only export custom actions we create
             ]]
         ]
     },
@@ -323,7 +342,7 @@ fixtures = [
         "filters": [
             ["name", "in", [
                 "Association Manager",
-                "Appeals Reviewer",
+                "Appeals Reviewer", 
                 "Governance Auditor"
             ]]
         ]
