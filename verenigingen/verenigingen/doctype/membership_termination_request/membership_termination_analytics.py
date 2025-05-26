@@ -254,7 +254,7 @@ def calculate_efficiency_score(status_distribution, processing_times):
     
     # Reduce score for high percentage of pending/draft items
     pending_rate = (status_distribution.get('Draft', 0) + 
-                   status_distribution.get('Pending Approval', 0) + 
+                   status_distribution.get('Pending', 0) + 
                    status_distribution.get('Approved', 0)) / total
     
     score -= pending_rate * 30
@@ -294,7 +294,7 @@ def identify_risk_indicators(terminations):
         risk_indicators['unusual_patterns'].append(f"High disciplinary rate: {disciplinary_rate:.1f}%")
     
     # Check for processing delays
-    pending_count = len([t for t in terminations if t.status in ['Draft', 'Pending Approval', 'Approved']])
+    pending_count = len([t for t in terminations if t.status in ['Draft', 'Pending', 'Approved']])
     if pending_count > total_terminations * 0.4:  # More than 40% pending
         risk_indicators['processing_delays'] = True
         risk_indicators['unusual_patterns'].append(f"High pending rate: {(pending_count/total_terminations)*100:.1f}%")
@@ -468,7 +468,7 @@ def get_early_warning_system():
     
     # Check for high pending approvals
     pending_count = frappe.db.count("Membership Termination Request", {
-        "status": "Pending Approval"
+        "status": "Pending"
     })
     
     if pending_count > 10:
@@ -539,7 +539,7 @@ def check_system_health():
     
     # Check for stalled processes (requests older than 90 days still pending)
     stalled_requests = frappe.db.count("Membership Termination Request", {
-        "status": ["in", ["Draft", "Pending Approval", "Approved"]],
+        "status": ["in", ["Draft", "Pending", "Approved"]],
         "request_date": ["<", add_days(today(), -90)]
     })
     
@@ -602,7 +602,7 @@ def generate_executive_summary():
         'total_terminations': len(terminations),
         'disciplinary_terminations': len([t for t in terminations if t.termination_type in ['Policy Violation', 'Disciplinary Action', 'Expulsion']]),
         'completed_terminations': len([t for t in terminations if t.status == 'Executed']),
-        'pending_terminations': len([t for t in terminations if t.status in ['Draft', 'Pending Approval', 'Approved']]),
+        'pending_terminations': len([t for t in terminations if t.status in ['Draft', 'Pending', 'Approved']]),
         'appeals_filed': len(appeals),
         'appeals_successful': len([a for a in appeals if a.decision_outcome in ['Upheld', 'Partially Upheld']]),
         'key_metrics': calculate_key_metrics(terminations, appeals),
