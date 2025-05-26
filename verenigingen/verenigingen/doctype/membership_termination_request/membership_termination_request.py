@@ -388,7 +388,7 @@ def handle_executed_status(self):
         
         subject = f"Termination Request Approved - {self.member_name}"
         
-        message = f""
+        message = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px;">
             <h2 style="color: #16a34a;">Termination Request Approved</h2>
             
@@ -407,7 +407,7 @@ def handle_executed_status(self):
             
             <p><a href="{frappe.utils.get_url()}/app/membership-termination-request/{self.name}">View Request</a></p>
         </div>
-        ""
+        """
         
         try:
             frappe.sendmail(
@@ -429,7 +429,7 @@ def handle_executed_status(self):
         
         subject = f"Termination Request Rejected - {self.member_name}"
         
-        message = f""
+        message = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px;">
             <h2 style="color: #dc2626;">Termination Request Rejected</h2>
             
@@ -448,7 +448,7 @@ def handle_executed_status(self):
             
             <p><a href="{frappe.utils.get_url()}/app/membership-termination-request/{self.name}">View Request</a></p>
         </div>
-        ""
+        """
         
         try:
             frappe.sendmail(
@@ -470,7 +470,7 @@ def handle_executed_status(self):
         
         subject = f"Termination Executed - {self.member_name}"
         
-        message = f""
+        message = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px;">
             <h2 style="color: #6b7280;">Termination Executed</h2>
             
@@ -489,7 +489,7 @@ def handle_executed_status(self):
             
             <p><a href="{frappe.utils.get_url()}/app/membership-termination-request/{self.name}">View Request</a></p>
         </div>
-        ""
+        """
         
         try:
             frappe.sendmail(
