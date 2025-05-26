@@ -324,6 +324,41 @@ class Member(Document):
                     break
             
             return
+    def get_termination_readiness_check(self):
+            """Check if member is ready for termination and what would be affected"""
+            
+            readiness = {
+                "can_terminate": True,
+                "warnings": [],
+                "blockers": [],
+                "impact": {}
+            }
+            
+            # Check for active systems
+            impact = get_termination_impact_preview(self.name)
+            readiness["impact"] = impact
+            
+            # Check for blockers
+            if impact["board_positions"] > 0:
+                readiness["warnings"].append(f"Member holds {impact['board_positions']} board position(s)")
+            
+            if impact["outstanding_invoices"] > 5:  # More than 5 outstanding invoices
+                readiness["warnings"].append(f"Member has {impact['outstanding_invoices']} outstanding invoices")
+            
+            # Check for pending termination requests
+            pending = frappe.get_all(
+                "Membership Termination Request",
+                filters={
+                    "member": self.name,
+                    "status": ["in", ["Draft", "Pending", "Approved"]]
+                }
+            )
+            
+            if pending:
+                readiness["can_terminate"] = False
+                readiness["blockers"].append("Member already has pending termination request")
+            
+            return readiness
 
     def validate_name(self):
         # Validate that name fields don't contain special characters
