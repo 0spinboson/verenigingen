@@ -608,47 +608,6 @@ class MembershipTerminationRequest(Document):
         except Exception as e:
             frappe.log_error(f"Failed to send approval notification: {str(e)}", "Termination Approval Notification")
             
-    def add_audit_entry(self, action, details, is_system=False):
-        """Add an entry to the audit trail"""
-        self.append("audit_trail", {
-            "timestamp": now(),
-            "action": action,
-            "user": frappe.session.user if not is_system else "System",
-            "details": details,
-            "system_action": 1 if is_system else 0
-        })
-    def execute_system_updates(self):
-        """Execute comprehensive automatic system updates"""
-        results = {}
-        
-        # Get member document
-        member_doc = frappe.get_doc("Member", self.member)
-        
-        # 1. Enhanced SEPA mandate cancellation with payment processing cleanup
-        if self.cancel_sepa_mandates:
-            results['sepa_mandates'] = self.cancel_member_sepa_mandates_enhanced(member_doc)
-        
-        # 2. Cancel/update active memberships
-        results['memberships'] = self.cancel_active_memberships(member_doc)
-        
-        # 3. Process outstanding invoices and payments  
-        results['invoices'] = self.process_outstanding_invoices(member_doc)
-        
-        # 4. End board/committee positions with enhanced history tracking
-        if self.end_board_positions:
-            results['positions'] = self.end_all_positions_enhanced(member_doc)
-        
-        # 5. Update customer status and payment methods
-        results['customer_updates'] = self.update_customer_status(member_doc)
-        
-        # 6. Handle subscription cancellations
-        results['subscriptions'] = self.cancel_member_subscriptions(member_doc)
-        
-        # 7. Create comprehensive termination summary
-        self.create_termination_summary(member_doc, results)
-        
-        return results
-    
     def cancel_member_sepa_mandates_enhanced(self, member_doc):
         """Enhanced SEPA mandate cancellation with payment processing cleanup"""
         active_mandates = frappe.get_all(
