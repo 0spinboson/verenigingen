@@ -2,7 +2,7 @@ frappe.listview_settings['Membership Termination Request'] = {
     get_indicator: function(doc) {
         const status_colors = {
             'Draft': 'blue',
-            'Pending Approval': 'yellow', 
+            'Pending': 'yellow', 
             'Approved': 'green',
             'Rejected': 'red',
             'Executed': 'gray'
@@ -24,7 +24,7 @@ frappe.listview_settings['Membership Termination Request'] = {
     
     button: {
         show: function(doc) {
-            return doc.status === 'Pending Approval';
+            return doc.status === 'Pending';
         },
         get_label: function() {
             return __('Review');
