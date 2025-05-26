@@ -59,7 +59,7 @@ frappe.ui.form.on('Membership Termination Request', {
 function set_status_indicator(frm) {
     let indicator_map = {
         'Draft': 'blue',
-        'Pending Approval': 'yellow',
+        'Pending': 'yellow',
         'Approved': 'green',
         'Rejected': 'red',
         'Executed': 'gray'
@@ -80,7 +80,7 @@ function add_action_buttons(frm) {
             submit_for_approval(frm);
         }, __('Actions')).addClass('btn-primary');
         
-    } else if (frm.doc.status === 'Pending Approval') {
+    } else if (frm.doc.status === 'Pending') {
         // Show approval buttons if user can approve
         if (can_approve_request(frm)) {
             frm.add_custom_button(__('Approve'), function() {
@@ -169,7 +169,7 @@ function validate_required_fields(frm) {
             frappe.throw(__('Documentation is required for disciplinary terminations'));
         }
         
-        if (frm.doc.status === 'Pending Approval' && !frm.doc.secondary_approver) {
+        if (frm.doc.status === 'Pending' && !frm.doc.secondary_approver) {
             frappe.throw(__('Secondary approver is required for disciplinary terminations'));
         }
     }
