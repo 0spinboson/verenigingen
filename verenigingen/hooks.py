@@ -146,7 +146,7 @@ def get_scheduler_events():
             "verenigingen.verenigingen.notification.overdue_appeal_reviews.send_overdue_appeal_notifications"
         ],
         "weekly": [
-            "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.generate_weekly_governance_report"
+            "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_expulsion_governance_report"
         ]
     }
     
