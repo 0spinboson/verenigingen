@@ -24,7 +24,7 @@ class MembershipTerminationRequest(Document):
             
             # Set status to pending approval if not already set and we're past draft
             if self.status == "Draft" and not self.is_new():
-                self.status = "Pending Approval"
+                self.status = "Pending"
         else:
             self.requires_secondary_approval = 0
             # Standard terminations can be approved immediately
@@ -103,7 +103,7 @@ class MembershipTerminationRequest(Document):
             if not self.secondary_approver:
                 frappe.throw(_("Secondary approver is required for disciplinary terminations"))
             
-            self.status = "Pending Approval"
+            self.status = "Pending"
             self.send_approval_notification()
         else:
             # Standard terminations are auto-approved
@@ -119,7 +119,7 @@ class MembershipTerminationRequest(Document):
     @frappe.whitelist()
     def approve_request(self, decision, notes=""):
         """Approve or reject the termination request"""
-        if self.status != "Pending Approval":
+        if self.status != "Pending":
             frappe.throw(_("Only pending requests can be approved"))
         
         # Validate approver permissions
@@ -1076,7 +1076,7 @@ def get_member_termination_status_enhanced(member):
         "Membership Termination Request",
         filters={
             "member": member,
-            "status": ["in", ["Draft", "Pending Approval", "Approved"]]
+            "status": ["in", ["Draft", "Pending", "Approved"]]
         },
         fields=["name", "status", "termination_type", "request_date", "termination_date", "requested_by"],
         order_by="request_date desc"
@@ -1169,7 +1169,7 @@ def get_termination_statistics():
     
     # Get counts by status
     status_counts = {}
-    for status in ["Draft", "Pending Approval", "Approved", "Rejected", "Executed"]:
+    for status in ["Draft", "Pending", "Approved", "Rejected", "Executed"]:
         status_counts[status] = frappe.db.count("Membership Termination Request", {"status": status})
     
     # Get counts by type
@@ -1190,7 +1190,7 @@ def get_termination_statistics():
     
     # Get pending approvals
     pending_approvals = frappe.db.count("Membership Termination Request", {
-        "status": "Pending Approval"
+        "status": "Pending"
     })
     
     return {
@@ -1444,7 +1444,7 @@ def validate_termination_permissions_enhanced(member, termination_type, user=Non
         "Membership Termination Request",
         filters={
             "member": member,
-            "status": ["in", ["Draft", "Pending Approval", "Approved"]]
+            "status": ["in", ["Draft", "Pending", "Approved"]]
         },
         limit=1
     )
@@ -1487,7 +1487,7 @@ def add_to_member_py():
             "Membership Termination Request",
             filters={
                 "member": self.name,
-                "status": ["in", ["Draft", "Pending Approval", "Approved"]]
+                "status": ["in", ["Draft", "Pending", "Approved"]]
             }
         )
         
