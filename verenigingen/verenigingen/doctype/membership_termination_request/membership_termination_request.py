@@ -261,6 +261,246 @@ class MembershipTerminationRequest(Document):
         # unsubscribe_from_newsletter(member_doc.email, category)
         
         return True
+
+def on_status_change(self):
+    """Handle workflow status changes and their side effects"""
+    
+    # Only process if status has actually changed
+    if not self.has_value_changed("status"):
+        return
+    
+    old_status = self.get_db_value("status")
+    new_status = self.status
+    
+    # Add audit trail entry for status change
+    self.add_audit_entry(
+        "Status Changed", 
+        f"Status changed from {old_status} to {new_status}",
+        is_system=True
+    )
+    
+    # Handle specific status transitions
+    if new_status == "Pending":
+        self.handle_pending_status()
+    elif new_status == "Approved":
+        self.handle_approved_status()
+    elif new_status == "Rejected":
+        self.handle_rejected_status()
+    elif new_status == "Executed":
+        self.handle_executed_status()
+
+def handle_pending_status(self):
+    """Handle when termination request moves to Pending status"""
+    
+    # For disciplinary terminations requiring secondary approval
+    if self.requires_secondary_approval and self.secondary_approver:
+        # Send approval notification to secondary approver
+        self.send_approval_notification()
+        
+        self.add_audit_entry(
+            "Approval Required", 
+            f"Secondary approval required from {self.secondary_approver}",
+            is_system=True
+        )
+    
+    # For standard terminations that auto-approve
+    elif not self.requires_secondary_approval:
+        # These should typically auto-approve, but workflow handles this
+        pass
+
+def handle_approved_status(self):
+    """Handle when termination request is approved"""
+    
+    # Set approval fields if not already set by workflow
+    if not self.approved_by:
+        self.approved_by = frappe.session.user
+    if not self.approval_date:
+        self.approval_date = frappe.utils.now()
+    
+    # Set default termination date if not provided
+    if not self.termination_date:
+        if self.requires_secondary_approval:
+            # Immediate for disciplinary terminations
+            self.termination_date = frappe.utils.today()
+        else:
+            # Standard terminations may have grace period
+            self.termination_date = frappe.utils.today()
+            if self.termination_type not in ['Deceased', 'Policy Violation', 'Disciplinary Action', 'Expulsion']:
+                self.grace_period_end = frappe.utils.add_days(frappe.utils.today(), 30)
+    
+    # Add to expulsion report if disciplinary
+    if self.requires_secondary_approval:
+        self.add_to_expulsion_report()
+    
+    # Send approval notification to requester
+    self.send_approval_confirmation()
+    
+    self.add_audit_entry(
+        "Request Approved", 
+        f"Approved by {self.approved_by} on {frappe.utils.format_datetime(self.approval_date)}",
+        is_system=True
+    )
+
+def handle_rejected_status(self):
+    """Handle when termination request is rejected"""
+    
+    # Set rejection fields if not already set
+    if not self.approved_by:  # This field is used for both approval and rejection
+        self.approved_by = frappe.session.user
+    if not self.approval_date:
+        self.approval_date = frappe.utils.now()
+    
+    # Send rejection notification
+    self.send_rejection_notification()
+    
+    self.add_audit_entry(
+        "Request Rejected", 
+        f"Rejected by {self.approved_by}. Reason: {self.approver_notes or 'No reason provided'}",
+        is_system=True
+    )
+
+def handle_executed_status(self):
+    """Handle when termination request is executed"""
+    
+    # This status should typically be set by the execute_termination method
+    # But we can handle any cleanup or notifications here
+    
+    if not self.executed_by:
+        self.executed_by = frappe.session.user
+    if not self.execution_date:
+        self.execution_date = frappe.utils.now()
+    
+    # Send execution confirmation
+    self.send_execution_notification()
+    
+    self.add_audit_entry(
+        "Termination Executed", 
+        f"Termination executed by {self.executed_by} on {frappe.utils.format_datetime(self.execution_date)}",
+        is_system=True
+    )
+
+    def send_approval_confirmation(self):
+        """Send confirmation email when request is approved"""
+        requester_email = frappe.db.get_value("User", self.requested_by, "email")
+        
+        if not requester_email:
+            return
+        
+        subject = f"Termination Request Approved - {self.member_name}"
+        
+        message = f""
+        <div style="font-family: Arial, sans-serif; max-width: 600px;">
+            <h2 style="color: #16a34a;">Termination Request Approved</h2>
+            
+            <p>The membership termination request has been approved:</p>
+            
+            <div style="background: #f0f9ff; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr><td style="padding: 5px;"><strong>Member:</strong></td><td style="padding: 5px;">{self.member_name}</td></tr>
+                    <tr><td style="padding: 5px;"><strong>Termination Type:</strong></td><td style="padding: 5px;">{self.termination_type}</td></tr>
+                    <tr><td style="padding: 5px;"><strong>Approved By:</strong></td><td style="padding: 5px;">{self.approved_by}</td></tr>
+                    <tr><td style="padding: 5px;"><strong>Termination Date:</strong></td><td style="padding: 5px;">{frappe.utils.format_date(self.termination_date) if self.termination_date else 'TBD'}</td></tr>
+                </table>
+            </div>
+            
+            <p>The termination will be executed on the scheduled date.</p>
+            
+            <p><a href="{frappe.utils.get_url()}/app/membership-termination-request/{self.name}">View Request</a></p>
+        </div>
+        ""
+        
+        try:
+            frappe.sendmail(
+                recipients=[requester_email],
+                subject=subject,
+                message=message,
+                reference_doctype=self.doctype,
+                reference_name=self.name
+            )
+        except Exception as e:
+            frappe.log_error(f"Failed to send approval confirmation: {str(e)}", "Termination Approval Notification")
+    
+    def send_rejection_notification(self):
+        """Send notification when request is rejected"""
+        requester_email = frappe.db.get_value("User", self.requested_by, "email")
+        
+        if not requester_email:
+            return
+        
+        subject = f"Termination Request Rejected - {self.member_name}"
+        
+        message = f""
+        <div style="font-family: Arial, sans-serif; max-width: 600px;">
+            <h2 style="color: #dc2626;">Termination Request Rejected</h2>
+            
+            <p>The membership termination request has been rejected:</p>
+            
+            <div style="background: #fef2f2; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr><td style="padding: 5px;"><strong>Member:</strong></td><td style="padding: 5px;">{self.member_name}</td></tr>
+                    <tr><td style="padding: 5px;"><strong>Termination Type:</strong></td><td style="padding: 5px;">{self.termination_type}</td></tr>
+                    <tr><td style="padding: 5px;"><strong>Rejected By:</strong></td><td style="padding: 5px;">{self.approved_by}</td></tr>
+                    <tr><td style="padding: 5px;"><strong>Reason:</strong></td><td style="padding: 5px;">{self.approver_notes or 'Not specified'}</td></tr>
+                </table>
+            </div>
+            
+            <p>Please review the rejection reason and contact the approver if you need clarification.</p>
+            
+            <p><a href="{frappe.utils.get_url()}/app/membership-termination-request/{self.name}">View Request</a></p>
+        </div>
+        ""
+        
+        try:
+            frappe.sendmail(
+                recipients=[requester_email],
+                subject=subject,
+                message=message,
+                reference_doctype=self.doctype,
+                reference_name=self.name
+            )
+        except Exception as e:
+            frappe.log_error(f"Failed to send rejection notification: {str(e)}", "Termination Rejection Notification")
+    
+    def send_execution_notification(self):
+        """Send notification when termination is executed"""
+        requester_email = frappe.db.get_value("User", self.requested_by, "email")
+        
+        if not requester_email:
+            return
+        
+        subject = f"Termination Executed - {self.member_name}"
+        
+        message = f""
+        <div style="font-family: Arial, sans-serif; max-width: 600px;">
+            <h2 style="color: #6b7280;">Termination Executed</h2>
+            
+            <p>The membership termination has been executed:</p>
+            
+            <div style="background: #f9fafb; padding: 15px; border-radius: 5px; margin: 20px 0;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr><td style="padding: 5px;"><strong>Member:</strong></td><td style="padding: 5px;">{self.member_name}</td></tr>
+                    <tr><td style="padding: 5px;"><strong>Termination Type:</strong></td><td style="padding: 5px;">{self.termination_type}</td></tr>
+                    <tr><td style="padding: 5px;"><strong>Executed By:</strong></td><td style="padding: 5px;">{self.executed_by}</td></tr>
+                    <tr><td style="padding: 5px;"><strong>Execution Date:</strong></td><td style="padding: 5px;">{frappe.utils.format_datetime(self.execution_date)}</td></tr>
+                </table>
+            </div>
+            
+            <p>All associated system updates have been completed.</p>
+            
+            <p><a href="{frappe.utils.get_url()}/app/membership-termination-request/{self.name}">View Request</a></p>
+        </div>
+        ""
+        
+        try:
+            frappe.sendmail(
+                recipients=[requester_email],
+                subject=subject,
+                message=message,
+                reference_doctype=self.doctype,
+                reference_name=self.name
+            )
+        except Exception as e:
+            frappe.log_error(f"Failed to send execution notification: {str(e)}", "Termination Execution Notification")
     
     def end_all_positions(self, member_doc):
         """End all board and committee positions automatically"""
