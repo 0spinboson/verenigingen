@@ -112,8 +112,6 @@ def get_termination_doc_events():
     return {
         "Membership Termination Request": {
             "validate": "verenigingen.validations.validate_termination_request",
-            # Remove the on_submit/on_cancel hooks since we're using standard workflow now
-            # The workflow system will handle state transitions
             "before_submit": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.before_workflow_action",
             "on_update": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.on_status_change"
         },
