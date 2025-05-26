@@ -94,7 +94,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "Draft\nPending Approval\nApproved\nRejected\nExecuted",
+   "options": "Draft\nPending\nApproved\nRejected\nExecuted",
    "default": "Draft",
    "reqd": 1,
    "in_list_view": 1
@@ -136,7 +136,7 @@
    "label": "Secondary Approver",
    "options": "User",
    "depends_on": "eval:doc.requires_secondary_approval",
-   "mandatory_depends_on": "eval:doc.requires_secondary_approval && doc.status == 'Pending Approval'"
+   "mandatory_depends_on": "eval:doc.requires_secondary_approval && doc.status == 'Pending'"
   },
   {
    "fieldname": "column_break_2",
