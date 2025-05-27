@@ -1549,3 +1549,21 @@ def on_status_change(doc, method):
     """Module-level hook for status changes - delegates to document method"""
     if hasattr(doc, 'on_status_change') and doc.has_value_changed("status"):
         doc.on_status_change()
+
+def before_workflow_action(doc, method):
+    """Module-level hook for before workflow actions"""
+    # Add any pre-workflow validation here
+    if doc.status == "Draft" and method == "submit":
+        # Validate required fields before workflow submission
+        doc.validate()
+        
+        # For disciplinary terminations, ensure secondary approver is set
+        if doc.requires_secondary_approval and not doc.secondary_approver:
+            frappe.throw(_("Secondary approver is required before submitting disciplinary terminations"))
+    
+    # Log the workflow action
+    doc.add_audit_entry(
+        "Workflow Action", 
+        f"Before {method} action - Status: {doc.status}",
+        is_system=True
+    )
