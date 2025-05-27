@@ -135,6 +135,7 @@ def get_scheduler_events():
             "verenigingen.verenigingen.doctype.membership.scheduler.process_auto_renewals",
             "verenigingen.subscription_handler.process_all_subscriptions",
             "verenigingen.verenigingen.doctype.membership.scheduler.notify_about_orphaned_records"
+            "verenigingen.api.membership_application_review.send_overdue_notifications"
         ]
     }
     
