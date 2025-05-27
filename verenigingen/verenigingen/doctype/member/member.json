@@ -95,6 +95,30 @@
    "unique": 1
   },
   {
+   "fieldname": "application_section",
+   "fieldtype": "Section Break",
+   "label": "Application Details",
+   "insert_after": "member_since",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "application_status",
+   "fieldtype": "Select",
+   "label": "Application Status",
+   "options": "\nPending\nActive\nRejected\nPayment Failed\nPayment Cancelled",
+   "default": "Pending",
+   "insert_after": "application_section",
+   "in_list_view": 1,
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "application_date",
+   "fieldtype": "Datetime",
+   "label": "Application Date",
+   "insert_after": "application_status",
+   "read_only": 1
+  },
+  {
    "depends_on": "eval:doc.name",
    "fieldname": "sepa_mandates_section",
    "fieldtype": "Section Break",
