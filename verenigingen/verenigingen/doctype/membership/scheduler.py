@@ -14,7 +14,7 @@ def setup_membership_scheduler_events():
     }
 def notify_about_orphaned_records():
     """Send email notifications about orphaned subscriptions and memberships"""
-    from verenigingen.verenigingen.verenigingen.report.orphaned_subscriptions_report.orphaned_subscriptions_report import get_data
+    from verenigingen.verenigingen.report.orphaned_subscriptions_report.orphaned_subscriptions_report import get_data
     
     orphaned_data = get_data()
     
