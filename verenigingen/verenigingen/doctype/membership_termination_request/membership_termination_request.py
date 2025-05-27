@@ -1547,23 +1547,55 @@ def validate_termination_permissions_enhanced(member, termination_type, user=Non
 
 def on_status_change(doc, method):
     """Module-level hook for status changes - delegates to document method"""
-    if hasattr(doc, 'on_status_change') and doc.has_value_changed("status"):
-        doc.on_status_change()
+    try:
+        # Only process if status has actually changed
+        if hasattr(doc, 'has_value_changed') and doc.has_value_changed("status"):
+            if hasattr(doc, 'on_status_change'):
+                doc.on_status_change()
+    except Exception as e:
+        frappe.log_error(f"Error in on_status_change hook: {str(e)}", "Termination Status Change Hook")
+        # Don't re-raise to avoid blocking the workflow
 
 def before_workflow_action(doc, method):
     """Module-level hook for before workflow actions"""
-    # Add any pre-workflow validation here
-    if doc.status == "Draft" and method == "submit":
-        # Validate required fields before workflow submission
-        doc.validate()
+    try:
+        # Add any pre-workflow validation here
+        if doc.status == "Draft":
+            # Validate required fields before workflow submission
+            doc.validate()
+            
+            # For disciplinary terminations, ensure secondary approver is set
+            if getattr(doc, 'requires_secondary_approval', False) and not getattr(doc, 'secondary_approver', None):
+                frappe.throw(_("Secondary approver is required before submitting disciplinary terminations"))
         
-        # For disciplinary terminations, ensure secondary approver is set
-        if doc.requires_secondary_approval and not doc.secondary_approver:
-            frappe.throw(_("Secondary approver is required before submitting disciplinary terminations"))
-    
-    # Log the workflow action
-    doc.add_audit_entry(
-        "Workflow Action", 
-        f"Before {method} action - Status: {doc.status}",
-        is_system=True
-    )
+        # Log the workflow action
+        if hasattr(doc, 'add_audit_entry'):
+            doc.add_audit_entry(
+                "Workflow Action", 
+                f"Before workflow action - Status: {doc.status}",
+                is_system=True
+            )
+    except Exception as e:
+        frappe.log_error(f"Error in before_workflow_action hook: {str(e)}", "Termination Workflow Hook")
+        # Re-raise validation errors but log others
+        if "is required" in str(e):
+            raise
+        else:
+            frappe.log_error(str(e))
+
+def handle_document_update(doc, method):
+    """Alternative hook for document updates"""
+    try:
+        # Call before_save logic
+        if hasattr(doc, 'before_save'):
+            doc.before_save()
+            
+        # Handle status changes
+        if hasattr(doc, 'has_value_changed') and doc.has_value_changed("status"):
+            if hasattr(doc, 'on_status_change'):
+                doc.on_status_change()
+    except Exception as e:
+        frappe.log_error(f"Error in handle_document_update hook: {str(e)}", "Termination Document Update Hook")
+        # Don't block the save operation unless it's a validation error
+        if "throw" in str(e) or "required" in str(e).lower():
+            raise
