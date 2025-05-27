@@ -112,8 +112,8 @@ def get_termination_doc_events():
     return {
         "Membership Termination Request": {
             "validate": "verenigingen.validations.validate_termination_request",
-            "before_submit": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.before_workflow_action",
-            "on_update": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.on_status_change"
+            #"before_submit": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.before_workflow_action",
+            "before_save": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.handle_document_update"
         },
         "Termination Appeals Process": {
             "validate": "verenigingen.validations.validate_appeal_filing",
