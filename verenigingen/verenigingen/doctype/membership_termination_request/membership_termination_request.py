@@ -1544,3 +1544,8 @@ def validate_termination_permissions_enhanced(member, termination_type, user=Non
         result["reasons"].append("Member already has pending termination request")
     
     return result
+
+def on_status_change(doc, method):
+    """Module-level hook for status changes - delegates to document method"""
+    if hasattr(doc, 'on_status_change') and doc.has_value_changed("status"):
+        doc.on_status_change()
