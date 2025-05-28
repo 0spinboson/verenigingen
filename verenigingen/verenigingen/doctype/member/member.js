@@ -7,6 +7,7 @@ frappe.ui.form.on('Member', {
             $(frm.fields_dict.payment_history.grid.wrapper).addClass('payment-history-grid');
         }
         
+
         // Add buttons to create customer and user
         if (frm.doc.docstatus === 1) {
             // Add payment processing button
@@ -459,7 +460,16 @@ frappe.ui.form.on('Member', {
 
         // ENHANCED MEMBERSHIP TERMINATION INTEGRATION
         if (!frm.doc.__islocal && frm.doc.docstatus !== 2) {
+            // Add enhanced termination button
+            frm.add_custom_button(__('Terminate Membership'), function() {
+                show_enhanced_termination_dialog(frm.doc.name, frm.doc.full_name);
+            }, __('Actions')).addClass('btn-danger');
             
+            // Add button to view termination requests
+            frm.add_custom_button(__('View Termination Requests'), function() {
+                frappe.set_route('List', 'Membership Termination Request', {
+                    'member': frm.doc.name
+                });
             // Get termination impact preview
             frappe.call({
                 method: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_termination_impact_preview',
@@ -485,6 +495,25 @@ frappe.ui.form.on('Member', {
                 show_termination_history(frm);
             }, __('View'));
         }
+        // Function to check if member has pending termination requests
+        frappe.call({
+            method: 'frappe.client.get_count',
+            args: {
+                doctype: 'Membership Termination Request',
+                filters: {
+                    'member': frm.doc.name,
+                    'status': ['in', ['Draft', 'Pending Approval', 'Approved']]
+                }
+            },
+            callback: function(r) {
+                if (r.message && r.message > 0) {
+                    frm.dashboard.add_indicator(
+                        __('Has Pending Termination Request'), 
+                        'orange'
+                    );
+                }
+            }
+        });
 
         // Attach triggers to name fields dynamically
         ['first_name', 'middle_name', 'last_name'].forEach(field => {
@@ -824,6 +853,8 @@ frappe.ui.form.on('Member', {
         }
     }
 });
+
+
 
 // ENHANCED TERMINATION FUNCTIONALITY
 
