@@ -462,7 +462,7 @@ frappe.ui.form.on('Member', {
         if (!frm.doc.__islocal && frm.doc.docstatus !== 2) {
             // Add enhanced termination button
             frm.add_custom_button(__('Terminate Membership'), function() {
-                show_enhanced_termination_dialog(frm.doc.name, frm.doc.full_name);
+                show_enhanced_termination_dialog_v2(frm.doc.name, frm.doc.full_name);
             }, __('Actions')).addClass('btn-danger');
             
             // Add button to view termination requests
