@@ -472,20 +472,9 @@ frappe.ui.form.on('Member', {
                 });
             }, __('View'));
             // Get termination impact preview
-            frappe.call({
-                method: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_termination_impact_preview',
-                args: {
-                    member: frm.doc.name
-                },
-                callback: function(r) {
-                    if (r.message) {
-                        // Store impact data for use in termination dialog
-                        frm._termination_impact = r.message;
-                        
-                        // Add enhanced termination button with impact preview
-                        add_enhanced_termination_button(frm, r.message);
-                    }
-                }
+            get_termination_impact(frm.doc.name, function(impact) {
+                // Use impact data here
+                console.log(impact);
             });
             
             // Check for active termination requests with enhanced status display
@@ -2380,6 +2369,20 @@ function show_appeal_creation_dialog(termination_request_id) {
                 });
                 
                 dialog.show();
+            }
+        }
+    });
+}
+
+function get_termination_impact(member_id, callback) {
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_termination_impact_preview',
+        args: {
+            member: member_id
+        },
+        callback: function(r) {
+            if (r.message && callback) {
+                callback(r.message);
             }
         }
     });
