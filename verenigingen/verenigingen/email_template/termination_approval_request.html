@@ -1,0 +1,70 @@
+
+<!-- Email Template: Termination Approval Request -->
+<!-- File: verenigingen/verenigingen/email_template/termination_approval_request.html -->
+
+<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+    <div style="background-color: #fff3cd; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #ffc107;">
+        <h2 style="color: #856404; margin: 0;">🔍 Termination Approval Required</h2>
+        <p style="color: #6c757d; margin: 5px 0 0 0;">{{ frappe.utils.format_date(frappe.utils.today(), "dd MMMM yyyy") }}</p>
+    </div>
+    
+    <div style="padding: 20px;">
+        <p>Dear {{ frappe.get_value("User", doc.secondary_approver, "full_name") or doc.secondary_approver }},</p>
+        
+        <p>A disciplinary termination request requires your approval:</p>
+        
+        <div style="background-color: #f8d7da; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #dc3545;">
+            <h3 style="margin-top: 0; color: #721c24;">Disciplinary Action</h3>
+            <ul style="margin: 10px 0;">
+                <li><strong>Member:</strong> {{ doc.member_name }}</li>
+                <li><strong>Termination Type:</strong> {{ doc.termination_type }}</li>
+                <li><strong>Requested by:</strong> {{ frappe.get_value("User", doc.requested_by, "full_name") or doc.requested_by }}</li>
+                <li><strong>Request Date:</strong> {{ frappe.utils.format_date(doc.request_date, "dd MMMM yyyy") }}</li>
+            </ul>
+        </div>
+        
+        <div style="margin: 20px 0;">
+            <h3>Termination Reason</h3>
+            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px;">
+                {{ doc.termination_reason or 'Not specified' }}
+            </div>
+        </div>
+        
+        {% if doc.disciplinary_documentation %}
+        <div style="margin: 20px 0;">
+            <h3>Supporting Documentation</h3>
+            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 5px; border-left: 3px solid #6c757d;">
+                {{ doc.disciplinary_documentation | safe }}
+            </div>
+        </div>
+        {% endif %}
+        
+        <div style="background-color: #e3f2fd; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #1976d2;">Required Actions</h3>
+            <p>As a secondary approver, please review this request and:</p>
+            <ol>
+                <li>Examine the termination reason and supporting documentation</li>
+                <li>Verify that proper procedures have been followed</li>
+                <li>Approve or reject the termination request</li>
+                <li>Provide rationale for your decision</li>
+            </ol>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{{ frappe.utils.get_url() }}/app/membership-termination-request/{{ doc.name }}" 
+               style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                Review Termination Request
+            </a>
+        </div>
+        
+        <div style="background-color: #d4edda; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid #28a745;">
+            <p style="margin: 0;"><strong>Important:</strong> Disciplinary terminations require secondary approval to ensure due process and governance compliance.</p>
+        </div>
+        
+        <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e9ecef;">
+            <p>Best regards,<br>
+            <strong>Governance System</strong><br>
+            {{ frappe.get_single("Verenigingen Settings").organization_name or "Organization" }}</p>
+        </div>
+    </div>
+</div>
