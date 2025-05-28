@@ -350,6 +350,7 @@
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Termination Appeals Process",
+ "is_submittable": 1,
  "owner": "Administrator",
  "permissions": [
   {
