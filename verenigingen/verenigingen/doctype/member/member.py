@@ -1805,3 +1805,35 @@ def debug_postal_code_matching(postal_code):
             })
     
     return results
+
+@frappe.whitelist()
+def get_member_termination_status(member):
+    """Get termination status for a member"""
+    
+    # Check for active termination requests
+    pending_requests = frappe.get_all(
+        "Membership Termination Request",
+        filters={
+            "member": member,
+            "status": ["in", ["Draft", "Pending Approval", "Approved"]]
+        },
+        fields=["name", "status", "termination_type", "request_date"]
+    )
+    
+    # Check for executed terminations
+    executed_requests = frappe.get_all(
+        "Membership Termination Request",
+        filters={
+            "member": member,
+            "status": "Executed"
+        },
+        fields=["name", "termination_type", "execution_date"],
+        limit=1,
+        order_by="execution_date desc"
+    )
+    
+    return {
+        "pending_requests": pending_requests,
+        "executed_requests": executed_requests,
+        "is_terminated": len(executed_requests) > 0
+    }
