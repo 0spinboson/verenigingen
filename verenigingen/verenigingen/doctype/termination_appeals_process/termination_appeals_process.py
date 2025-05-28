@@ -573,3 +573,113 @@ def get_appeals_analytics():
         "avg_processing_time": avg_processing_time,
         "total_processed": len(decided_appeals)
     }
+def send_hearing_notification(self):
+    """Send notification when a hearing is scheduled"""
+    if not self.appellant_email:
+        return
+        
+    # Get hearing details from timeline
+    hearing_event = None
+    for event in self.appeal_timeline:
+        if event.event_type == "Hearing Scheduled" and event.deadline_date:
+            hearing_event = event
+            break
+    
+    if not hearing_event:
+        return
+        
+    subject = f"Hearing Scheduled - Appeal {self.name}"
+    
+    message = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px;">
+        <h2 style="color: #2563eb;">Hearing Scheduled</h2>
+        
+        <p>Dear {self.appellant_name},</p>
+        
+        <p>A hearing has been scheduled for your appeal:</p>
+        
+        <div style="background: #f0f9ff; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr><td style="padding: 5px;"><strong>Appeal Reference:</strong></td><td style="padding: 5px;">{self.name}</td></tr>
+                <tr><td style="padding: 5px;"><strong>Member:</strong></td><td style="padding: 5px;">{self.member_name}</td></tr>
+                <tr><td style="padding: 5px;"><strong>Hearing Date:</strong></td><td style="padding: 5px;">{frappe.format_date(hearing_event.deadline_date)}</td></tr>
+                <tr><td style="padding: 5px;"><strong>Details:</strong></td><td style="padding: 5px;">{hearing_event.event_description}</td></tr>
+            </table>
+        </div>
+        
+        <p>Please ensure you are available on the scheduled date. If you cannot attend, please contact us immediately.</p>
+        
+        <p>Best regards,<br>Appeals Committee</p>
+    </div>
+    """
+    
+    try:
+        frappe.sendmail(
+            recipients=[self.appellant_email],
+            subject=subject,
+            message=message,
+            reference_doctype=self.doctype,
+            reference_name=self.name
+        )
+        
+        self.add_communication_entry(
+            "Email",
+            "Outgoing",
+            "Appeals Committee",
+            self.appellant_email,
+            subject,
+            "Hearing notification sent"
+        )
+        
+    except Exception as e:
+        frappe.log_error(f"Failed to send hearing notification: {str(e)}", "Appeal Hearing Notification")
+
+def send_reviewer_assignment_notification(self):
+    """Send notification to assigned reviewer"""
+    if not self.assigned_reviewer:
+        return
+        
+    reviewer_email = frappe.db.get_value("User", self.assigned_reviewer, "email")
+    if not reviewer_email:
+        return
+        
+    subject = f"Appeal Review Assignment - {self.name}"
+    
+    message = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px;">
+        <h2 style="color: #2563eb;">Appeal Review Assignment</h2>
+        
+        <p>You have been assigned to review an appeal:</p>
+        
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;">
+            <h3>Appeal Details</h3>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr><td style="padding: 5px;"><strong>Appeal Reference:</strong></td><td style="padding: 5px;">{self.name}</td></tr>
+                <tr><td style="padding: 5px;"><strong>Member:</strong></td><td style="padding: 5px;">{self.member_name}</td></tr>
+                <tr><td style="padding: 5px;"><strong>Appeal Date:</strong></td><td style="padding: 5px;">{frappe.format_date(self.appeal_date)}</td></tr>
+                <tr><td style="padding: 5px;"><strong>Review Deadline:</strong></td><td style="padding: 5px;">{frappe.format_date(self.review_deadline) if self.review_deadline else 'TBD'}</td></tr>
+            </table>
+        </div>
+        
+        <div style="text-align: center; margin: 20px 0;">
+            <a href="{frappe.utils.get_url()}/app/termination-appeals-process/{self.name}" 
+               style="background-color: #2563eb; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px;">
+                Review Appeal
+            </a>
+        </div>
+        
+        <p>Best regards,<br>Appeals System</p>
+    </div>
+    """
+    
+    try:
+        frappe.sendmail(
+            recipients=[reviewer_email],
+            subject=subject,
+            message=message,
+            reference_doctype=self.doctype,
+            reference_name=self.name
+        )
+        
+    except Exception as e:
+        frappe.log_error(f"Failed to send reviewer assignment notification: {str(e)}", "Appeal Assignment Notification")
