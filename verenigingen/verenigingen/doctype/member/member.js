@@ -2105,22 +2105,7 @@ function formatIBAN(iban) {
     return iban.replace(/(.{4})/g, '$1 ').trim();
 }
 
-function show_enhanced_termination_dialog_v2(member_id, member_name) {
-    // First get termination readiness check
-    frappe.call({
-        method: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_termination_impact_preview',
-        args: {
-            member: member_id
-        },
-        callback: function(r) {
-            if (r.message) {
-                show_termination_dialog_with_impact(member_id, member_name, r.message);
-            }
-        }
-    });
-}
-
-
+function show_termination_dialog_with_impact(member_id, member_name, impact_data) {
     const dialog = new frappe.ui.Dialog({
         title: __('Terminate Membership: {0}', [member_name]),
         size: 'large',
@@ -2286,4 +2271,3 @@ function generate_impact_assessment_html(impact_data) {
     html += '</div>';
     return html;
 }
-
