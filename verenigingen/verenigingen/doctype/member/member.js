@@ -470,6 +470,7 @@ frappe.ui.form.on('Member', {
                 frappe.set_route('List', 'Membership Termination Request', {
                     'member': frm.doc.name
                 });
+            }, __('View'));
             // Get termination impact preview
             frappe.call({
                 method: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_termination_impact_preview',
@@ -2103,3 +2104,186 @@ function formatIBAN(iban) {
     // Format with spaces every 4 characters
     return iban.replace(/(.{4})/g, '$1 ').trim();
 }
+
+function show_enhanced_termination_dialog_v2(member_id, member_name) {
+    // First get termination readiness check
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_termination_impact_preview',
+        args: {
+            member: member_id
+        },
+        callback: function(r) {
+            if (r.message) {
+                show_termination_dialog_with_impact(member_id, member_name, r.message);
+            }
+        }
+    });
+}
+
+
+    const dialog = new frappe.ui.Dialog({
+        title: __('Terminate Membership: {0}', [member_name]),
+        size: 'large',
+        fields: [
+            // Impact Assessment Section
+            {
+                fieldtype: 'Section Break',
+                label: __('Impact Assessment')
+            },
+            {
+                fieldtype: 'HTML',
+                options: generate_impact_assessment_html(impact_data)
+            },
+            
+            // Termination Details Section
+            {
+                fieldtype: 'Section Break',
+                label: __('Termination Details')
+            },
+            {
+                fieldname: 'termination_type',
+                fieldtype: 'Select',
+                label: __('Termination Type'),
+                options: [
+                    'Voluntary',
+                    'Non-payment', 
+                    'Deceased',
+                    '--- Disciplinary ---',
+                    'Policy Violation',
+                    'Disciplinary Action',
+                    'Expulsion'
+                ],
+                reqd: 1,
+                onchange: function() {
+                    toggle_dialog_fields_v2(dialog, this.value);
+                }
+            },
+            {
+                fieldname: 'termination_reason',
+                fieldtype: 'Small Text',
+                label: __('Termination Reason'),
+                reqd: 1
+            },
+            
+            // Disciplinary Section
+            {
+                fieldtype: 'Section Break',
+                label: __('Disciplinary Documentation'),
+                depends_on: 'eval:["Policy Violation", "Disciplinary Action", "Expulsion"].includes(termination_type)'
+            },
+            {
+                fieldname: 'disciplinary_documentation',
+                fieldtype: 'Text Editor',
+                label: __('Required Documentation'),
+                depends_on: 'eval:["Policy Violation", "Disciplinary Action", "Expulsion"].includes(termination_type)',
+                mandatory_depends_on: 'eval:["Policy Violation", "Disciplinary Action", "Expulsion"].includes(termination_type)',
+                description: __('Detailed documentation required for disciplinary actions')
+            },
+            {
+                fieldname: 'secondary_approver',
+                fieldtype: 'Link',
+                label: __('Secondary Approver'),
+                options: 'User',
+                depends_on: 'eval:["Policy Violation", "Disciplinary Action", "Expulsion"].includes(termination_type)',
+                mandatory_depends_on: 'eval:["Policy Violation", "Disciplinary Action", "Expulsion"].includes(termination_type)',
+                get_query: function() {
+                    return {
+                        query: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_eligible_approvers'
+                    };
+                }
+            },
+            
+            // System Actions Section
+            {
+                fieldtype: 'Section Break',
+                label: __('Automatic System Updates')
+            },
+            {
+                fieldname: 'cancel_sepa_mandates',
+                fieldtype: 'Check',
+                label: __('Cancel SEPA Mandates'),
+                default: impact_data.sepa_mandates > 0 ? 1 : 0,
+                description: impact_data.sepa_mandates > 0 ? 
+                    __('Will cancel {0} active SEPA mandate(s)', [impact_data.sepa_mandates]) : 
+                    __('No active SEPA mandates found')
+            },
+            {
+                fieldname: 'end_board_positions',
+                fieldtype: 'Check',
+                label: __('End Board/Committee Positions'),
+                default: impact_data.board_positions > 0 ? 1 : 0,
+                description: impact_data.board_positions > 0 ? 
+                    __('Will end {0} active board position(s)', [impact_data.board_positions]) : 
+                    __('No active board positions found')
+            },
+            {
+                fieldname: 'cancel_memberships',
+                fieldtype: 'Check',
+                label: __('Cancel Active Memberships'),
+                default: impact_data.active_memberships > 0 ? 1 : 0,
+                description: impact_data.active_memberships > 0 ? 
+                    __('Will cancel {0} active membership(s)', [impact_data.active_memberships]) : 
+                    __('No active memberships found')
+            },
+            {
+                fieldname: 'process_invoices',
+                fieldtype: 'Check',
+                label: __('Process Outstanding Invoices'),
+                default: impact_data.outstanding_invoices > 0 ? 1 : 0,
+                description: impact_data.outstanding_invoices > 0 ? 
+                    __('Will process {0} outstanding invoice(s)', [impact_data.outstanding_invoices]) : 
+                    __('No outstanding invoices found')
+            },
+            {
+                fieldname: 'cancel_subscriptions',
+                fieldtype: 'Check',
+                label: __('Cancel Subscriptions'),
+                default: impact_data.subscriptions > 0 ? 1 : 0,
+                description: impact_data.subscriptions > 0 ? 
+                    __('Will cancel {0} active subscription(s)', [impact_data.subscriptions]) : 
+                    __('No active subscriptions found')
+            }
+        ],
+        primary_action_label: __('Create Termination Request'),
+        primary_action: function(values) {
+            create_termination_request_v2(member_id, member_name, values, dialog);
+        }
+    });
+    
+    dialog.show();
+}
+
+function generate_impact_assessment_html(impact_data) {
+    let html = '<div class="impact-assessment" style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 10px 0;">';
+    html += '<h5 style="margin: 0 0 15px 0; color: #495057;">📊 Termination Impact Assessment</h5>';
+    
+    const impacts = [
+        { label: 'SEPA Mandates', count: impact_data.sepa_mandates, icon: '💳' },
+        { label: 'Active Memberships', count: impact_data.active_memberships, icon: '📝' },
+        { label: 'Board Positions', count: impact_data.board_positions, icon: '👔' },
+        { label: 'Outstanding Invoices', count: impact_data.outstanding_invoices, icon: '💰' },
+        { label: 'Active Subscriptions', count: impact_data.subscriptions, icon: '🔄' }
+    ];
+    
+    html += '<div class="row">';
+    
+    impacts.forEach(impact => {
+        const color = impact.count > 0 ? '#dc3545' : '#28a745';
+        html += `<div class="col-md-6 col-lg-4" style="margin-bottom: 10px;">`;
+        html += `<div style="padding: 8px; border-left: 3px solid ${color}; background: white; border-radius: 3px;">`;
+        html += `<span style="font-size: 14px;">${impact.icon} <strong>${impact.label}:</strong> ${impact.count}</span>`;
+        html += `</div></div>`;
+    });
+    
+    html += '</div>';
+    
+    if (!impact_data.customer_linked) {
+        html += '<div style="background: #fff3cd; padding: 8px; margin-top: 10px; border-radius: 3px; font-size: 13px;">';
+        html += '⚠️ <strong>Note:</strong> No customer account linked - some system updates may not apply.';
+        html += '</div>';
+    }
+    
+    html += '</div>';
+    return html;
+}
+
