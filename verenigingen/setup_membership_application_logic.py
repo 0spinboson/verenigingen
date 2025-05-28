@@ -7,8 +7,6 @@ import frappe
 def setup_member_application_system():
     """Main setup function for member application system"""
     try:
-        # Setup custom fields
-        setup_member_custom_fields()
         
         # Create email templates
         create_application_email_templates()
