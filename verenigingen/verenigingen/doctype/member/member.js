@@ -2271,3 +2271,116 @@ function generate_impact_assessment_html(impact_data) {
     html += '</div>';
     return html;
 }
+
+function show_appeal_creation_dialog(termination_request_id) {
+    // First get the termination request details
+    frappe.call({
+        method: 'frappe.client.get',
+        args: {
+            doctype: 'Membership Termination Request',
+            name: termination_request_id
+        },
+        callback: function(r) {
+            if (r.message) {
+                const termination_data = r.message;
+                
+                const dialog = new frappe.ui.Dialog({
+                    title: __('File Appeal for {0}', [termination_data.member_name]),
+                    size: 'large',
+                    fields: [
+                        {
+                            fieldtype: 'Section Break',
+                            label: __('Termination Details')
+                        },
+                        {
+                            fieldtype: 'HTML',
+                            options: `<div class="alert alert-info">
+                                <strong>Termination Type:</strong> ${termination_data.termination_type}<br>
+                                <strong>Execution Date:</strong> ${frappe.datetime.str_to_user(termination_data.execution_date)}<br>
+                                <strong>Reason:</strong> ${termination_data.termination_reason}
+                            </div>`
+                        },
+                        {
+                            fieldtype: 'Section Break',
+                            label: __('Appellant Information')
+                        },
+                        {
+                            fieldname: 'appellant_name',
+                            fieldtype: 'Data',
+                            label: __('Appellant Name'),
+                            reqd: 1
+                        },
+                        {
+                            fieldname: 'appellant_email',
+                            fieldtype: 'Data',
+                            label: __('Appellant Email'),
+                            reqd: 1
+                        },
+                        {
+                            fieldname: 'appellant_relationship',
+                            fieldtype: 'Select',
+                            label: __('Relationship to Member'),
+                            options: 'Self\nLegal Representative\nFamily Member\nAuthorized Representative',
+                            reqd: 1
+                        },
+                        {
+                            fieldtype: 'Section Break',
+                            label: __('Appeal Details')
+                        },
+                        {
+                            fieldname: 'appeal_type',
+                            fieldtype: 'Select',
+                            label: __('Appeal Type'),
+                            options: 'Procedural Appeal\nSubstantive Appeal\nNew Evidence Appeal\nFull Review Appeal',
+                            reqd: 1
+                        },
+                        {
+                            fieldname: 'appeal_grounds',
+                            fieldtype: 'Text Editor',
+                            label: __('Grounds for Appeal'),
+                            reqd: 1,
+                            description: __('Detailed explanation of why the termination should be overturned')
+                        },
+                        {
+                            fieldname: 'remedy_sought',
+                            fieldtype: 'Select',
+                            label: __('Remedy Sought'),
+                            options: 'Full Reinstatement\nReduction of Penalty\nNew Hearing\nProcedural Correction\nOther',
+                            reqd: 1
+                        }
+                    ],
+                    primary_action_label: __('File Appeal'),
+                    primary_action: function(values) {
+                        // Create the appeal
+                        frappe.call({
+                            method: 'frappe.client.insert',
+                            args: {
+                                doc: {
+                                    doctype: 'Termination Appeals Process',
+                                    termination_request: termination_data.name,
+                                    member: termination_data.member,
+                                    member_name: termination_data.member_name,
+                                    appeal_date: frappe.datetime.get_today(),
+                                    appeal_status: 'Draft',
+                                    ...values
+                                }
+                            },
+                            callback: function(r) {
+                                if (r.message) {
+                                    dialog.hide();
+                                    frappe.set_route('Form', 'Termination Appeals Process', r.message.name);
+                                    frappe.show_alert({
+                                        message: __('Appeal created successfully'),
+                                        indicator: 'green'
+                                    }, 5);
+                                }
+                            }
+                        });
+                    }
+                });
+                
+                dialog.show();
+            }
+        }
+    });
+}
