@@ -183,6 +183,7 @@
  "module": "Verenigingen",
  "name": "Expulsion Report Entry",
  "owner": "Administrator",
+ "is_submittable": 1,
  "permissions": [
   {
    "create": 1,
