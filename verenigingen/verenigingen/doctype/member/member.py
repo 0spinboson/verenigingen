@@ -1837,14 +1837,22 @@ def get_member_termination_status(member):
         "executed_requests": executed_requests,
         "is_terminated": len(executed_requests) > 0
     }
-def update_termination_status_display(self):
+def update_termination_status_display(doc, method=None):
     """Update member fields to display current termination status"""
+    This is a hook function that can be called directly or via Frappe hooks
+    Args:
+        doc: The Member document
+        method: The method name (when called via hooks)
+    """
     
+    # Use doc instead of self since this is a module-level function
+    member = doc
+
     # Check for executed termination
     executed_termination = frappe.get_all(
         "Membership Termination Request",
         filters={
-            "member": self.name,
+            "member": member.name,
             "status": "Executed"
         },
         fields=["name", "termination_type", "execution_date", "termination_date"],
