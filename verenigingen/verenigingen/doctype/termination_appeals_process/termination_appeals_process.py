@@ -88,7 +88,7 @@ class TerminationAppealsProcess(Document):
         # Validate required fields
         self.validate_submission_requirements()
         
-        # Update status
+        # Update status to Submitted (not directly to Under Review)
         self.appeal_status = "Submitted"
         self.save()
         
@@ -98,7 +98,7 @@ class TerminationAppealsProcess(Document):
         # Send notifications
         self.send_submission_notifications()
         
-        # Assign reviewer if not already assigned
+        # Now assign reviewer, which will handle the transition
         if not self.assigned_reviewer:
             self.assign_initial_reviewer()
             
@@ -149,8 +149,13 @@ class TerminationAppealsProcess(Document):
         
         self.assigned_reviewer = assigned_reviewer
         self.review_start_date = today()
-        self.appeal_status = "Under Review"
-        self.review_status = "Document Review"
+        
+        # Don't directly set to "Under Review" - follow the workflow
+        # Instead, ensure the appeal is in "Submitted" status first
+        if self.appeal_status == "Draft":
+            self.appeal_status = "Submitted"
+        
+        # The transition to "Under Review" should happen through workflow
         self.save()
         
         # Add timeline event
