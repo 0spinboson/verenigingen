@@ -1978,3 +1978,36 @@ def update_termination_status_display(doc, method=None):
                 member.membership_badge_color = "#28a745"  # Green for active
             else:
                 member.membership_badge_color = "#6c757d"  # Gray for inactive
+
+def terminate_membership(self, termination_type, termination_date, termination_request=None):
+    """
+    Terminate membership method for Member doctype
+    """
+    # Map termination types to valid member status values
+    status_mapping = {
+        'Voluntary': 'Expired',      # Member chose to leave
+        'Non-payment': 'Suspended',  # Could be temporary
+        'Deceased': 'Deceased',      # Clear mapping
+        'Policy Violation': 'Suspended',     # Disciplinary but not permanent ban
+        'Disciplinary Action': 'Suspended',   # Disciplinary suspension
+        'Expulsion': 'Banned'        # Permanent ban from organization
+    }
+    
+    # Update member status
+    self.status = status_mapping.get(termination_type, 'Suspended')
+    
+    # Add termination information to notes
+    termination_note = f"Membership terminated on {termination_date} - Type: {termination_type}"
+    if termination_request:
+        termination_note += f" - Request: {termination_request}"
+    
+    if self.notes:
+        self.notes += f"\n\n{termination_note}"
+    else:
+        self.notes = termination_note
+    
+    # Save the member
+    self.flags.ignore_permissions = True
+    self.save()
+    
+    frappe.logger().info(f"Terminated membership for member {self.name} - Status: {self.status}")
