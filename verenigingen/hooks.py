@@ -111,8 +111,8 @@ def get_termination_doc_events():
     return {
         "Membership Termination Request": {
             "validate": "verenigingen.validations.validate_termination_request",
-            "before_submit": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.before_workflow_action",
-            "on_update": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.on_status_change"
+            "on_update_after_submit": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.handle_status_change",
+            "on_submit": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.handle_status_change"
         },
         "Termination Appeals Process": {
             "validate": "verenigingen.validations.validate_appeal_filing",
@@ -121,7 +121,6 @@ def get_termination_doc_events():
             "on_update": "verenigingen.verenigingen.doctype.termination_appeals_process.termination_appeals_process.on_update"
         },
         "Member": {
-            # This is also incorrect - should be a module-level function
             "before_save": "verenigingen.verenigingen.doctype.member.member.update_termination_status_display"
         }
     }
@@ -348,3 +347,8 @@ fixtures = [
         ]
     }
 ]
+workflow_action_handlers = {
+    "Membership Termination Request": {
+        "Execute": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.on_workflow_action"
+    }
+}
