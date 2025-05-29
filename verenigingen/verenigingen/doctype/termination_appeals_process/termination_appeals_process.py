@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import getdate, today, now, add_days, date_diff
+from frappe.utils import getdate, today, now, add_days, date_diff, format_date
 
 class TerminationAppealsProcess(Document):
     def validate(self):
@@ -288,7 +288,7 @@ class TerminationAppealsProcess(Document):
                 <h3>Appeal Details</h3>
                 <table style="width: 100%; border-collapse: collapse;">
                     <tr><td style="padding: 5px;"><strong>Appeal Reference:</strong></td><td style="padding: 5px;">{self.name}</td></tr>
-                    <tr><td style="padding: 5px;"><strong>Appeal Date:</strong></td><td style="padding: 5px;">{frappe.format_date(self.appeal_date)}</td></tr>
+                    <tr><td style="padding: 5px;"><strong>Appeal Date:</strong></td><td style="padding: 5px;">{frappe.utils.format_date(self.appeal_date)}</td></tr>
                     <tr><td style="padding: 5px;"><strong>Appeal Type:</strong></td><td style="padding: 5px;">{self.appeal_type}</td></tr>
                     <tr><td style="padding: 5px;"><strong>Remedy Sought:</strong></td><td style="padding: 5px;">{self.remedy_sought}</td></tr>
                 </table>
@@ -354,7 +354,7 @@ class TerminationAppealsProcess(Document):
             
             <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 4px solid {color};">
                 <h3>Decision: {self.decision_outcome}</h3>
-                <p><strong>Decision Date:</strong> {frappe.format_date(self.decision_date)}</p>
+                <p><strong>Decision Date:</strong> {frappe.utils.format_date(self.decision_date)}</p>
                 <p><strong>Decided By:</strong> {self.decided_by}</p>
             </div>
             
@@ -410,8 +410,8 @@ class TerminationAppealsProcess(Document):
                 <table style="width: 100%; border-collapse: collapse;">
                     <tr><td style="padding: 5px;"><strong>Appeal Reference:</strong></td><td style="padding: 5px;">{self.name}</td></tr>
                     <tr><td style="padding: 5px;"><strong>Member:</strong></td><td style="padding: 5px;">{self.member_name}</td></tr>
-                    <tr><td style="padding: 5px;"><strong>Appeal Date:</strong></td><td style="padding: 5px;">{frappe.format_date(self.appeal_date)}</td></tr>
-                    <tr><td style="padding: 5px;"><strong>Review Deadline:</strong></td><td style="padding: 5px;">{frappe.format_date(self.review_deadline) if self.review_deadline else 'TBD'}</td></tr>
+                    <tr><td style="padding: 5px;"><strong>Appeal Date:</strong></td><td style="padding: 5px;">{frappe.utils.format_date(self.appeal_date)}</td></tr>
+                    <tr><td style="padding: 5px;"><strong>Review Deadline:</strong></td><td style="padding: 5px;">{frappe.utils.format_date(self.review_deadline) if self.review_deadline else 'TBD'}</td></tr>
                 </table>
             </div>
             
@@ -602,7 +602,7 @@ def send_hearing_notification(self):
             <table style="width: 100%; border-collapse: collapse;">
                 <tr><td style="padding: 5px;"><strong>Appeal Reference:</strong></td><td style="padding: 5px;">{self.name}</td></tr>
                 <tr><td style="padding: 5px;"><strong>Member:</strong></td><td style="padding: 5px;">{self.member_name}</td></tr>
-                <tr><td style="padding: 5px;"><strong>Hearing Date:</strong></td><td style="padding: 5px;">{frappe.format_date(hearing_event.deadline_date)}</td></tr>
+                <tr><td style="padding: 5px;"><strong>Hearing Date:</strong></td><td style="padding: 5px;">{frappe.utils.format_date(hearing_event.deadline_date)}</td></tr>
                 <tr><td style="padding: 5px;"><strong>Details:</strong></td><td style="padding: 5px;">{hearing_event.event_description}</td></tr>
             </table>
         </div>
@@ -656,8 +656,8 @@ def send_reviewer_assignment_notification(self):
             <table style="width: 100%; border-collapse: collapse;">
                 <tr><td style="padding: 5px;"><strong>Appeal Reference:</strong></td><td style="padding: 5px;">{self.name}</td></tr>
                 <tr><td style="padding: 5px;"><strong>Member:</strong></td><td style="padding: 5px;">{self.member_name}</td></tr>
-                <tr><td style="padding: 5px;"><strong>Appeal Date:</strong></td><td style="padding: 5px;">{frappe.format_date(self.appeal_date)}</td></tr>
-                <tr><td style="padding: 5px;"><strong>Review Deadline:</strong></td><td style="padding: 5px;">{frappe.format_date(self.review_deadline) if self.review_deadline else 'TBD'}</td></tr>
+                <tr><td style="padding: 5px;"><strong>Appeal Date:</strong></td><td style="padding: 5px;">{frappe.utils.format_date(self.appeal_date)}</td></tr>
+                <tr><td style="padding: 5px;"><strong>Review Deadline:</strong></td><td style="padding: 5px;">{frappe.utils.format_date(self.review_deadline) if self.review_deadline else 'TBD'}</td></tr>
             </table>
         </div>
         
