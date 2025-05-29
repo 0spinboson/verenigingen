@@ -1838,16 +1838,17 @@ def get_member_termination_status(member):
         "is_terminated": len(executed_requests) > 0
     }
 def update_termination_status_display(doc, method=None):
-    """Update member fields to display current termination status"""
+    """Update member fields to display current termination status
+    
     This is a hook function that can be called directly or via Frappe hooks
     Args:
         doc: The Member document
         method: The method name (when called via hooks)
-    """
+    """  # Make sure this closing triple-quote is present
     
     # Use doc instead of self since this is a module-level function
     member = doc
-
+    
     # Check for executed termination
     executed_termination = frappe.get_all(
         "Membership Termination Request",
@@ -1864,7 +1865,7 @@ def update_termination_status_display(doc, method=None):
     pending_termination = frappe.get_all(
         "Membership Termination Request",
         filters={
-            "member": self.name,
+            "member": member.name,
             "status": ["in", ["Draft", "Pending Approval", "Approved"]]
         },
         fields=["name", "status", "termination_type", "request_date"],
@@ -1873,76 +1874,74 @@ def update_termination_status_display(doc, method=None):
     )
     
     # Update custom fields for termination status
-    # These fields should exist on the Member doctype
     if executed_termination:
-        # Member is terminated
         term_data = executed_termination[0]
         
         # Set termination status fields
-        if hasattr(self, 'termination_status'):
-            self.termination_status = "Terminated"
+        if hasattr(member, 'termination_status'):
+            member.termination_status = "Terminated"
         
-        if hasattr(self, 'termination_date'):
-            self.termination_date = term_data.execution_date or term_data.termination_date
+        if hasattr(member, 'termination_date'):
+            member.termination_date = term_data.execution_date or term_data.termination_date
         
-        if hasattr(self, 'termination_type'):
-            self.termination_type = term_data.termination_type
+        if hasattr(member, 'termination_type'):
+            member.termination_type = term_data.termination_type
         
-        if hasattr(self, 'termination_request'):
-            self.termination_request = term_data.name
+        if hasattr(member, 'termination_request'):
+            member.termination_request = term_data.name
         
         # Update member status if applicable
-        if hasattr(self, 'status') and self.status != "Terminated":
-            self.status = "Terminated"
+        if hasattr(member, 'status') and member.status != "Terminated":
+            member.status = "Terminated"
         
         # Add to member notes if configured
-        if hasattr(self, 'termination_notes'):
-            self.termination_notes = f"Terminated on {term_data.execution_date} - Type: {term_data.termination_type}"
+        if hasattr(member, 'termination_notes'):
+            member.termination_notes = f"Terminated on {term_data.execution_date} - Type: {term_data.termination_type}"
     
     elif pending_termination:
         # Member has pending termination
         pend_data = pending_termination[0]
         
-        if hasattr(self, 'termination_status'):
+        if hasattr(member, 'termination_status'):
             status_map = {
                 "Draft": "Termination Draft",
                 "Pending Approval": "Termination Pending Approval",
                 "Approved": "Termination Approved"
             }
-            self.termination_status = status_map.get(pend_data.status, "Termination Pending")
+            member.termination_status = status_map.get(pend_data.status, "Termination Pending")
         
-        if hasattr(self, 'pending_termination_type'):
-            self.pending_termination_type = pend_data.termination_type
+        if hasattr(member, 'pending_termination_type'):
+            member.pending_termination_type = pend_data.termination_type
         
-        if hasattr(self, 'pending_termination_request'):
-            self.pending_termination_request = pend_data.name
+        if hasattr(member, 'pending_termination_request'):
+            member.pending_termination_request = pend_data.name
     
     else:
         # No termination - clear fields
-        if hasattr(self, 'termination_status'):
-            self.termination_status = "Active"
+        if hasattr(member, 'termination_status'):
+            member.termination_status = "Active"
         
-        if hasattr(self, 'termination_date'):
-            self.termination_date = None
+        if hasattr(member, 'termination_date'):
+            member.termination_date = None
         
-        if hasattr(self, 'termination_type'):
-            self.termination_type = None
+        if hasattr(member, 'termination_type'):
+            member.termination_type = None
         
-        if hasattr(self, 'termination_request'):
-            self.termination_request = None
+        if hasattr(member, 'termination_request'):
+            member.termination_request = None
         
-        if hasattr(self, 'pending_termination_type'):
-            self.pending_termination_type = None
+        if hasattr(member, 'pending_termination_type'):
+            member.pending_termination_type = None
         
-        if hasattr(self, 'pending_termination_request'):
-            self.pending_termination_request = None
+        if hasattr(member, 'pending_termination_request'):
+            member.pending_termination_request = None
     
     # Check for appeals if terminated
     if executed_termination:
         appeals = frappe.get_all(
             "Termination Appeals Process",
             filters={
-                "member": self.name,
+                "member": member.name,
                 "appeal_status": ["not in", ["Withdrawn", "Dismissed"]]
             },
             fields=["name", "appeal_status", "decision_outcome"],
@@ -1952,30 +1951,30 @@ def update_termination_status_display(doc, method=None):
         
         if appeals:
             appeal = appeals[0]
-            if hasattr(self, 'appeal_status'):
-                self.appeal_status = appeal.appeal_status
+            if hasattr(member, 'appeal_status'):
+                member.appeal_status = appeal.appeal_status
             
-            if hasattr(self, 'appeal_reference'):
-                self.appeal_reference = appeal.name
+            if hasattr(member, 'appeal_reference'):
+                member.appeal_reference = appeal.name
             
             # If appeal was upheld, update termination status
-            if appeal.decision_outcome == "Upheld" and hasattr(self, 'termination_status'):
-                self.termination_status = "Termination Reversed"
+            if appeal.decision_outcome == "Upheld" and hasattr(member, 'termination_status'):
+                member.termination_status = "Termination Reversed"
     
     # Update color/badge field for visual indication
-    if hasattr(self, 'membership_badge_color'):
+    if hasattr(member, 'membership_badge_color'):
         if executed_termination:
-            self.membership_badge_color = "#dc3545"  # Red for terminated
+            member.membership_badge_color = "#dc3545"  # Red for terminated
         elif pending_termination:
-            self.membership_badge_color = "#ffc107"  # Yellow for pending
+            member.membership_badge_color = "#ffc107"  # Yellow for pending
         else:
             # Check if member has active membership
             active_membership = frappe.db.exists("Membership", {
-                "member": self.name,
+                "member": member.name,
                 "status": "Active",
                 "docstatus": 1
             })
             if active_membership:
-                self.membership_badge_color = "#28a745"  # Green for active
+                member.membership_badge_color = "#28a745"  # Green for active
             else:
-                self.membership_badge_color = "#6c757d"  # Gray for inactive
+                member.membership_badge_color = "#6c757d"  # Gray for inactive
