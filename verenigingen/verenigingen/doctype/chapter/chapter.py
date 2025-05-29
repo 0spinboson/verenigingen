@@ -1379,4 +1379,51 @@ def bulk_end_board_positions(self, positions_data):
                     "volunteer": volunteer_id,
                     "is_active": 1
                 },
-                fields=["name", "chapter_role",
+                fields=["name", "chapter_role", "from_date"]
+            )
+            
+            for board_position in board_positions:
+                try:
+                    board_member = frappe.get_doc("Chapter Board Member", board_position.name)
+                    
+                    # End the position
+                    board_member.is_active = 0
+                    board_member.to_date = end_date
+                    
+                    # Add reason to notes if provided
+                    if reason:
+                        existing_notes = board_member.notes or ""
+                        board_member.notes = f"{existing_notes}\nEnded: {reason}".strip()
+                    
+                    board_member.flags.ignore_permissions = True
+                    board_member.save()
+                    
+                    processed_count += 1
+                    
+                    # Update volunteer assignment history using existing method
+                    try:
+                        from verenigingen.verenigingen.doctype.chapter.chapter import update_volunteer_assignment_history
+                        update_volunteer_assignment_history(
+                            volunteer_id,
+                            self.name,
+                            board_position.chapter_role,
+                            board_position.from_date,
+                            end_date
+                        )
+                    except Exception as e:
+                        frappe.logger().error(f"Error updating volunteer history: {str(e)}")
+                        
+                except Exception as e:
+                    errors.append(f"Error ending position {board_position.name}: {str(e)}")
+                    
+        except Exception as e:
+            errors.append(f"Error processing volunteer {position_data.get('volunteer', 'unknown')}: {str(e)}")
+    
+    # Save the chapter document to commit changes
+    self.save()
+    
+    return {
+        "success": True,
+        "processed": processed_count,
+        "errors": errors
+    }
