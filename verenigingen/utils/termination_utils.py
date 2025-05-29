@@ -1,6 +1,8 @@
 import frappe
 from frappe import _
-from frappe.utils import today, getdate
+from frappe.utils import today, getdate, add_days, now
+
+# ===== Your existing functions from paste.txt go here =====
 
 @frappe.whitelist()
 def validate_termination_readiness(member_name):
@@ -144,6 +146,213 @@ def get_termination_impact_summary(member_name):
         summary["ready_for_termination"] = readiness.get("ready", False)
         
         return summary
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+# ===== Optional Scheduler Functions =====
+# Add these if you want automated processing
+
+def process_overdue_termination_requests():
+    """
+    OPTIONAL: Scheduled task to process overdue termination requests
+    Called daily by scheduler if enabled in hooks.py
+    """
+    try:
+        # Find requests that have been pending approval for more than 7 days
+        overdue_requests = frappe.get_all(
+            "Membership Termination Request",
+            filters={
+                "status": "Pending",
+                "request_date": ["<", add_days(today(), -7)]
+            },
+            fields=["name", "member_name", "requested_by", "request_date", "termination_type"]
+        )
+        
+        if overdue_requests:
+            frappe.logger().warning(f"Found {len(overdue_requests)} overdue termination requests")
+            
+            # Send notification to administrators
+            administrators = frappe.get_all("User", 
+                filters={"role_profile_name": ["like", "%System Manager%"]},
+                fields=["email"]
+            )
+            
+            if administrators:
+                admin_emails = [admin.email for admin in administrators if admin.email]
+                
+                if admin_emails:
+                    # Create email content
+                    email_content = f"""
+                    <h3>Overdue Termination Requests</h3>
+                    <p>The following termination requests have been pending for more than 7 days:</p>
+                    <table border="1" style="border-collapse: collapse;">
+                        <tr>
+                            <th>Request ID</th>
+                            <th>Member</th>
+                            <th>Type</th>
+                            <th>Request Date</th>
+                            <th>Days Overdue</th>
+                        </tr>
+                    """
+                    
+                    for request in overdue_requests:
+                        days_overdue = (getdate(today()) - getdate(request.request_date)).days
+                        email_content += f"""
+                        <tr>
+                            <td>{request.name}</td>
+                            <td>{request.member_name}</td>
+                            <td>{request.termination_type}</td>
+                            <td>{request.request_date}</td>
+                            <td>{days_overdue}</td>
+                        </tr>
+                        """
+                    
+                    email_content += "</table>"
+                    
+                    # Send email
+                    frappe.sendmail(
+                        recipients=admin_emails,
+                        subject=f"Overdue Termination Requests - {len(overdue_requests)} items",
+                        message=email_content
+                    )
+                    
+                    frappe.logger().info(f"Sent overdue termination notification to {len(admin_emails)} administrators")
+        
+        return {"processed": len(overdue_requests)}
+        
+    except Exception as e:
+        frappe.log_error(f"Error processing overdue termination requests: {str(e)}", 
+                        "Termination Scheduler Error")
+        return {"error": str(e)}
+
+def generate_weekly_termination_report():
+    """
+    OPTIONAL: Generate weekly termination report
+    Called weekly by scheduler if enabled in hooks.py
+    """
+    try:
+        # Get termination requests from the last week
+        week_ago = add_days(today(), -7)
+        
+        weekly_requests = frappe.get_all(
+            "Membership Termination Request",
+            filters={
+                "request_date": [">=", week_ago]
+            },
+            fields=["name", "member_name", "termination_type", "status", "request_date", "execution_date"]
+        )
+        
+        if not weekly_requests:
+            frappe.logger().info("No termination requests in the past week")
+            return {"message": "No requests to report"}
+        
+        # Categorize requests
+        report_data = {
+            "total_requests": len(weekly_requests),
+            "by_status": {},
+            "by_type": {},
+            "executed_count": 0,
+            "pending_count": 0
+        }
+        
+        for request in weekly_requests:
+            # Count by status
+            status = request.status
+            report_data["by_status"][status] = report_data["by_status"].get(status, 0) + 1
+            
+            # Count by type
+            req_type = request.termination_type
+            report_data["by_type"][req_type] = report_data["by_type"].get(req_type, 0) + 1
+            
+            # Count executed vs pending
+            if status == "Executed":
+                report_data["executed_count"] += 1
+            elif status in ["Draft", "Pending", "Approved"]:
+                report_data["pending_count"] += 1
+        
+        # Send report to administrators
+        administrators = frappe.get_all("User", 
+            filters={"role_profile_name": ["like", "%Association Manager%"]},
+            fields=["email"]
+        )
+        
+        if administrators:
+            admin_emails = [admin.email for admin in administrators if admin.email]
+            
+            if admin_emails:
+                # Create report content
+                report_content = f"""
+                <h3>Weekly Termination Report</h3>
+                <p>Period: {week_ago} to {today()}</p>
+                
+                <h4>Summary</h4>
+                <ul>
+                    <li>Total Requests: {report_data['total_requests']}</li>
+                    <li>Executed: {report_data['executed_count']}</li>
+                    <li>Pending: {report_data['pending_count']}</li>
+                </ul>
+                
+                <h4>By Status</h4>
+                <ul>
+                """
+                
+                for status, count in report_data["by_status"].items():
+                    report_content += f"<li>{status}: {count}</li>"
+                
+                report_content += """
+                </ul>
+                
+                <h4>By Type</h4>
+                <ul>
+                """
+                
+                for req_type, count in report_data["by_type"].items():
+                    report_content += f"<li>{req_type}: {count}</li>"
+                
+                report_content += "</ul>"
+                
+                # Send email
+                frappe.sendmail(
+                    recipients=admin_emails,
+                    subject=f"Weekly Termination Report - {report_data['total_requests']} requests",
+                    message=report_content
+                )
+                
+                frappe.logger().info(f"Sent weekly termination report to {len(admin_emails)} administrators")
+        
+        return report_data
+        
+    except Exception as e:
+        frappe.log_error(f"Error generating weekly termination report: {str(e)}", 
+                        "Termination Report Error")
+        return {"error": str(e)}
+
+@frappe.whitelist()
+def get_termination_statistics():
+    """
+    Get overall termination statistics for dashboard
+    """
+    try:
+        stats = {
+            "total_requests": frappe.db.count("Membership Termination Request"),
+            "pending_requests": frappe.db.count("Membership Termination Request", {"status": "Pending"}),
+            "executed_requests": frappe.db.count("Membership Termination Request", {"status": "Executed"}),
+            "this_month": frappe.db.count("Membership Termination Request", {
+                "request_date": [">=", today().replace(day=1)]
+            })
+        }
+        
+        # Get breakdown by type
+        type_breakdown = frappe.db.sql("""
+            SELECT termination_type, COUNT(*) as count
+            FROM `tabMembership Termination Request`
+            GROUP BY termination_type
+        """, as_dict=True)
+        
+        stats["by_type"] = {row.termination_type: row.count for row in type_breakdown}
+        
+        return stats
         
     except Exception as e:
         return {"error": str(e)}
