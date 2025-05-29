@@ -362,13 +362,6 @@ frappe.ui.form.on('Member', {
             frappe.set_route('List', 'Membership', {'member': frm.doc.name});
         }, __('View'));
         
-        // Add button to view linked customer
-        if (frm.doc.customer) {
-            frm.add_custom_button(__('Customer'), function() {
-                frappe.set_route('Form', 'Customer', frm.doc.customer);
-            }, __('View'));
-        }
-        
         // Add button to view linked user
         if (frm.doc.user) {
             frm.add_custom_button(__('User'), function() {
