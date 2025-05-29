@@ -1034,3 +1034,45 @@ def update_membership_from_subscription(doc, method=None):
             frappe.log_error(f"Error updating membership {membership_data.name} from subscription: {str(e)}", 
                           "Membership Update Error")
 
+@frappe.whitelist()
+def cancel_membership(membership_name, cancellation_date=None, cancellation_reason=None, cancellation_type="Immediate"):
+    """
+    Enhanced cancel membership method that can be called by termination system
+    """
+    if not cancellation_date:
+        cancellation_date = frappe.utils.today()
+        
+    membership = frappe.get_doc("Membership", membership_name)
+    
+    # Validate cancellation is allowed
+    if membership.status == "Cancelled":
+        frappe.msgprint(_("Membership {0} is already cancelled").format(membership_name))
+        return True
+    
+    # Set cancellation details
+    membership.status = "Cancelled"
+    membership.cancellation_date = cancellation_date
+    membership.cancellation_reason = cancellation_reason or "Membership cancelled"
+    membership.cancellation_type = cancellation_type
+    
+    # Cancel associated subscription if exists
+    if membership.subscription:
+        try:
+            subscription = frappe.get_doc("Subscription", membership.subscription)
+            if subscription.status != "Cancelled":
+                subscription.flags.ignore_permissions = True
+                subscription.cancel_subscription()
+                frappe.logger().info(f"Cancelled associated subscription {membership.subscription}")
+        except Exception as e:
+            frappe.logger().error(f"Failed to cancel subscription {membership.subscription}: {str(e)}")
+    
+    # Update member status
+    membership.update_member_status()
+    
+    # Use flags to allow update after submit
+    membership.flags.ignore_validate_update_after_submit = True
+    membership.flags.ignore_permissions = True
+    membership.save()
+    
+    frappe.logger().info(f"Cancelled membership {membership_name}")
+    return True
