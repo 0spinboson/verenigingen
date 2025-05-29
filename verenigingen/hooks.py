@@ -15,6 +15,9 @@ app_license = "AGPL-3"
 # ------------------
 on_app_init = ["verenigingen.subscription_override.setup_subscription_override"]
 app_include_css = "/assets/verenigingen/css/verenigingen_custom.css"
+app_include_js = [
+    "/assets/verenigingen/js/termination_dashboard.js"
+]
 
 # include js in doctype views
 doctype_js = {
@@ -22,7 +25,16 @@ doctype_js = {
     "Membership": "public/js/membership.js",
     "Membership Type": "public/js/membership_type.js",
     "Direct Debit Batch": "public/js/direct_debit_batch.js",
+    "Membership Termination Request": "public/js/membership_termination_request.js",
+    "Termination Appeals Process": "public/js/termination_appeals_process.js",
+    "Expulsion Report Entry": "public/js/expulsion_report_entry.js"
 }
+
+# doctype_list_js = {
+#     "Membership Termination Request": "public/js/membership_termination_request_list.js",
+#     "Termination Appeals Process": "public/js/termination_appeals_process_list.js",
+#     "Expulsion Report Entry": "public/js/expulsion_report_entry_list.js"
+# }
 
 # Document Events
 # ---------------
@@ -61,14 +73,34 @@ doc_events = {
     "Membership Termination Request": {
         "validate": "verenigingen.validations.validate_termination_request",
         "on_update_after_submit": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.handle_status_change",
-        "on_submit": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.handle_status_change"
+        "on_submit": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.handle_status_change",
+        "before_save": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.before_save",
+        "after_insert": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.after_insert"
     },
     "Termination Appeals Process": {
         "validate": "verenigingen.validations.validate_appeal_filing",
+        "before_save": "verenigingen.verenigingen.doctype.termination_appeals_process.termination_appeals_process.before_save",
+        "after_insert": "verenigingen.verenigingen.doctype.termination_appeals_process.termination_appeals_process.after_insert",
         "on_update": "verenigingen.verenigingen.doctype.termination_appeals_process.termination_appeals_process.on_update"
+    },
+    "Expulsion Report Entry": {
+        "validate": "verenigingen.verenigingen.doctype.expulsion_report_entry.expulsion_report_entry.validate",
+        "before_save": "verenigingen.verenigingen.doctype.expulsion_report_entry.expulsion_report_entry.before_save",
+        "after_insert": "verenigingen.verenigingen.doctype.expulsion_report_entry.expulsion_report_entry.after_insert"
     },
     "Member": {
         "before_save": "verenigingen.verenigingen.doctype.member.member.update_termination_status_display"
+    },
+    
+    # Child table events (if needed)
+    "Appeal Timeline Entry": {
+        "validate": "verenigingen.verenigingen.doctype.appeal_timeline_entry.appeal_timeline_entry.validate"
+    },
+    "Appeal Communication Entry": {
+        "validate": "verenigingen.verenigingen.doctype.appeal_communication_entry.appeal_communication_entry.validate"
+    },
+    "Termination Audit Entry": {
+        "validate": "verenigingen.verenigingen.doctype.termination_audit_entry.termination_audit_entry.validate"
     }
 }
 
@@ -85,11 +117,13 @@ scheduler_events = {
         "verenigingen.api.membership_application_review.send_overdue_notifications",
         
         # Termination system
+        "verenigingen.verenigingen.notification.overdue_appeal_reviews.send_overdue_appeal_notifications",
         "verenigingen.utils.termination_utils.process_overdue_termination_requests"
     ],
     "weekly": [
         # Termination system
-        "verenigingen.utils.termination_utils.generate_weekly_termination_report"
+        "verenigingen.utils.termination_utils.generate_weekly_termination_report",
+        "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.generate_governance_compliance_report"
     ]
 }
 
@@ -107,6 +141,7 @@ jinja = {
 # Installation
 # ------------
 after_install = "verenigingen.setup.execute_after_install"
+# after_migrate = "verenigingen.verenigingen.notification.overdue_appeal_reviews.create_custom_fields"
 
 # Permissions
 # -----------
@@ -132,6 +167,7 @@ workflow_action_handlers = {
 # Fixtures
 # --------
 fixtures = [
+    # Email Templates
     {
         "doctype": "Email Template", 
         "filters": [
@@ -145,10 +181,15 @@ fixtures = [
                 "Termination Approval Required",
                 "Appeal Acknowledgment", 
                 "Appeal Decision Notification",
-                "Termination Execution Notice"
+                "Termination Execution Notice",
+                "termination_approval_request",
+                "appeal_acknowledgment",
+                "appeal_decision_notification"
             ]]
         ]
     },
+    
+    # Workflows
     {
         "doctype": "Workflow",
         "filters": [
@@ -174,14 +215,86 @@ fixtures = [
             ]]
         ]
     },
+    
+    # Roles
     {
         "doctype": "Role",
         "filters": [
             ["name", "in", [
                 "Association Manager",
                 "Appeals Reviewer", 
-                "Governance Auditor"
+                "Governance Auditor",
+                "Chapter Board Member",
+                "Member Portal User"
             ]]
+        ]
+    },
+    
+    # Reports
+    {
+        "doctype": "Report",
+        "filters": [
+            ["name", "in", [
+                "Termination Audit Report",
+                "Appeals Analysis Report",
+                "Termination Compliance Report",
+                "Board Position Termination Impact",
+                "Expulsion Governance Report",
+                "Governance Compliance Report"
+            ]]
+        ]
+    },
+    
+    # Custom Fields (if you want to export them)
+    {
+        "doctype": "Custom Field",
+        "filters": [
+            ["dt", "in", ["Membership Termination Request", "Sales Invoice", "Membership", "Donation"]],
+            ["fieldname", "like", "btw_%"]
         ]
     }
 ]
+
+# Authentication and authorization
+# --------------------------------
+
+# auth_hooks = [
+#	"verenigingen.auth.validate"
+# ]
+
+# Automatically update python controller files
+# override_whitelisted_methods = {
+#	"frappe.desk.query_report.export_query": "verenigingen.verenigingen.report.termination_audit_report.termination_audit_report.export_audit_report"
+# }
+
+# Each overriding function accepts a `data` argument;
+# generated from the base implementation of the doctype dashboard,
+# along with any modifications made in other Frappe apps
+# override_doctype_dashboards = {
+#	"Member": "verenigingen.verenigingen.dashboard.member_dashboard.get_dashboard_data"
+# }
+
+# Exempt linked doctypes from being automatically cancelled
+#
+# auto_cancel_exempted_doctypes = ["Auto Repeat"]
+
+# User Data Protection
+# --------------------
+
+# user_data_fields = [
+#	{
+#		"doctype": "Member",
+#		"filter_by": "user",
+#		"redact_fields": ["full_name", "email"],
+#		"partial": 1,
+#	}
+# ]
+
+# Additional termination-specific configurations
+termination_config = {
+    "appeal_deadline_days": 30,
+    "review_deadline_days": 60,
+    "governance_notification_roles": ["Association Manager", "System Manager"],
+    "enable_automatic_execution": True,
+    "require_documentation_for_disciplinary": True
+}
