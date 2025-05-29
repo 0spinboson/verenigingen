@@ -106,9 +106,8 @@ def get_doc_events():
             base_events[doctype] = events
     
     return base_events
-
 def get_termination_doc_events():
-    """Get document events for termination system - Updated for simplified workflows"""
+    """Get document events for termination system"""
     return {
         "Membership Termination Request": {
             "validate": "verenigingen.validations.validate_termination_request",
@@ -117,10 +116,12 @@ def get_termination_doc_events():
         },
         "Termination Appeals Process": {
             "validate": "verenigingen.validations.validate_appeal_filing",
-            "after_insert": "verenigingen.verenigingen.doctype.termination_appeals_process.termination_appeals_process.after_insert",
+            # Remove this line - after_insert is a class method, not a module function
+            # "after_insert": "verenigingen.verenigingen.doctype.termination_appeals_process.termination_appeals_process.after_insert",
             "on_update": "verenigingen.verenigingen.doctype.termination_appeals_process.termination_appeals_process.on_update"
         },
         "Member": {
+            # This is also incorrect - should be a module-level function
             "before_save": "verenigingen.verenigingen.doctype.member.member.update_termination_status_display"
         }
     }
