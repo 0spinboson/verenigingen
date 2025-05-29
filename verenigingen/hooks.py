@@ -123,7 +123,7 @@ scheduler_events = {
     "weekly": [
         # Termination system
         "verenigingen.utils.termination_utils.generate_weekly_termination_report",
-        "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.generate_governance_compliance_report"
+        "verenigingen.verenigingen.repot.governance_compliance_report.governance_compliance_report.generate_governance_compliance_report"
     ]
 }
 
