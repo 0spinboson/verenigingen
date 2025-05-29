@@ -1347,3 +1347,36 @@ def update_volunteer_assignment_history(volunteer_id, chapter_name, role, start_
         error_msg = f"Error updating volunteer assignment history: {str(e)}\nVolunteer: {volunteer_id}, Chapter: {chapter_name}, Role: {role}"
         frappe.log_error(error_msg, "Volunteer Assignment Error")
         return False
+
+@frappe.whitelist()
+def bulk_end_board_positions(self, positions_data):
+    """
+    Enhanced bulk end board positions method
+    positions_data should be a list of dicts with volunteer, end_date, reason
+    """
+    if isinstance(positions_data, str):
+        import json
+        positions_data = json.loads(positions_data)
+    
+    processed_count = 0
+    errors = []
+    
+    for position_data in positions_data:
+        try:
+            volunteer_id = position_data.get('volunteer')
+            end_date = position_data.get('end_date')
+            reason = position_data.get('reason', '')
+            
+            if not volunteer_id:
+                errors.append("Missing volunteer ID")
+                continue
+            
+            # Find active board positions for this volunteer in this chapter
+            board_positions = frappe.get_all(
+                "Chapter Board Member",
+                filters={
+                    "parent": self.name,
+                    "volunteer": volunteer_id,
+                    "is_active": 1
+                },
+                fields=["name", "chapter_role",
