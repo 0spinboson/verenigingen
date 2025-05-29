@@ -73,8 +73,7 @@
    "fieldname": "expulsion_entry",
    "fieldtype": "Link",
    "label": "Expulsion Entry",
-   "options": "Expulsion Report Entry",
-   "fetch_from": "termination_request.expulsion_entry"
+   "options": "Expulsion Report Entry"
   },
   {
    "fieldname": "member",
