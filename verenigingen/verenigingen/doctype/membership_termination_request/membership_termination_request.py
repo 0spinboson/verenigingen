@@ -489,7 +489,6 @@ class MembershipTerminationRequest(Document):
             "details": details,
             "system_action": 1 if is_system else 0
         })
-    
     def set_approval_requirements(self):
         """Set whether secondary approval is required based on termination type"""
         disciplinary_types = ['Policy Violation', 'Disciplinary Action', 'Expulsion']
@@ -573,15 +572,7 @@ class MembershipTerminationRequest(Document):
             if getdate(self.grace_period_end) < getdate(self.termination_date):
                 frappe.throw(_("Grace period end cannot be before termination date"))
 
-    def add_audit_entry(self, action, details, is_system=False):
-        """Add an entry to the audit trail"""
-        self.append("audit_trail", {
-            "timestamp": now(),
-            "action": action,
-            "user": frappe.session.user if not is_system else "System",
-            "details": details,
-            "system_action": 1 if is_system else 0
-        })
+
     
     def on_status_change(self):
         """Handle workflow status changes and their side effects"""
