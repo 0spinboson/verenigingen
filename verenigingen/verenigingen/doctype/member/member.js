@@ -859,7 +859,7 @@ function add_enhanced_termination_button(frm, impact) {
 
 function check_termination_status_enhanced(frm) {
     frappe.call({
-        method: 'verenigingen.verenigingen.doctype.membership_termination_request.member.get_member_termination_status',
+        method: 'verenigingen.verenigingen.doctype.member.get_member_termination_status',
         args: {
             member: frm.doc.name
         },
