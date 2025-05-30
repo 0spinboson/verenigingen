@@ -164,19 +164,28 @@ def validate_birth_date(birth_date):
         if age < 0:
             return {"valid": False, "message": _("Invalid birth date")}
         
-        # Age warnings
+        # Age warnings - only show for edge cases
         warnings = []
         if age < 12:
             warnings.append(_("Applicant is under 12 years old - parental consent may be required"))
         elif age > 100:
             warnings.append(_("Please verify birth date - applicant would be over 100 years old"))
         
-        return {
-            "valid": True,
-            "age": age,
-            "warnings": warnings,
-            "message": _(None)
-        }
+        # Return appropriate message based on warnings
+        if warnings:
+            return {
+                "valid": True,
+                "age": age,
+                "warnings": warnings,
+                "message": warnings[0]  # Show the warning as the message
+            }
+        else:
+            return {
+                "valid": True,
+                "age": age,
+                "warnings": [],
+                "message": ""  # No message for valid birth dates
+            }
         
     except Exception as e:
         return {"valid": False, "message": _("Invalid date format")}
