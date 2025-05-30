@@ -1,7 +1,83 @@
 import frappe
 from frappe import _
-from frappe.utils import today, now_datetime, add_days, getdate, flt
+from frappe.utils import today, now_datetime, add_days, getdate, flt, validate_email_address
 from verenigingen.verenigingen.doctype.chapter.chapter import suggest_chapter_for_member
+
+frappe.whitelist(allow_guest=True)
+def validate_email(email):
+    """Validate email format and check if it already exists"""
+    if not email:
+        return {"valid": False, "message": _("Email is required")}
+    
+    try:
+        # Use Frappe's built-in email validation
+        validate_email_address(email, throw=True)
+        
+        # Check if email already exists
+        existing_member = frappe.db.exists("Member", {"email": email})
+        existing_user = frappe.db.exists("User", {"email": email})
+        
+        if existing_member:
+            return {
+                "valid": False, 
+                "message": _("A member with this email already exists. Please login or contact support."),
+                "exists": True,
+                "member_id": existing_member
+            }
+        
+        if existing_user:
+            # Check if user is linked to a member
+            user_member = frappe.db.get_value("Member", {"user": existing_user}, "name")
+            if user_member:
+                return {
+                    "valid": False,
+                    "message": _("This email is already registered. Please login or contact support."),
+                    "exists": True
+                }
+        
+        return {"valid": True, "message": _("Email is available")}
+        
+    except Exception as e:
+        return {"valid": False, "message": str(e)}
+
+@frappe.whitelist(allow_guest=True)
+def validate_postal_code(postal_code, country="Netherlands"):
+    """Validate postal code format and suggest chapters"""
+    if not postal_code:
+        return {"valid": False, "message": _("Postal code is required")}
+    
+    # Basic format validation based on country
+    postal_patterns = {
+        "Netherlands": r"^[1-9][0-9]{3}\s?[A-Z]{2}$",
+        "Germany": r"^[0-9]{5}$",
+        "Belgium": r"^[1-9][0-9]{3}$",
+        "France": r"^[0-9]{5}$"
+    }
+    
+    pattern = postal_patterns.get(country, r"^.+$")  # Default: any non-empty
+    
+    if not re.match(pattern, postal_code.upper().strip()):
+        return {
+            "valid": False,
+            "message": _("Invalid postal code format for {0}").format(country)
+        }
+    
+    # Find matching chapters
+    suggested_chapters = []
+    try:
+        from verenigingen.verenigingen.doctype.member.member import find_chapter_by_postal_code
+        result = find_chapter_by_postal_code(postal_code)
+        
+        if result.get("success") and result.get("matching_chapters"):
+            suggested_chapters = result["matching_chapters"]
+    except Exception as e:
+        frappe.log_error(f"Error finding chapters for postal code {postal_code}: {str(e)}")
+    
+    return {
+        "valid": True,
+        "message": _("Valid postal code"),
+        "suggested_chapters": suggested_chapters
+    }
 
 @frappe.whitelist(allow_guest=True)
 def get_application_form_data():
@@ -42,19 +118,68 @@ def get_application_form_data():
     }
 
 @frappe.whitelist(allow_guest=True)
-def validate_age(birth_date):
-    """Validate applicant age and return warning if needed"""
-    from datetime import datetime
+def validate_phone_number(phone, country="Netherlands"):
+    """Validate phone number format"""
+    if not phone:
+        return {"valid": True, "message": ""}  # Phone is optional
     
-    birth = getdate(birth_date)
-    today = getdate()
-    age = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
+    # Remove spaces, dashes, and plus signs for validation
+    clean_phone = re.sub(r'[\s\-\+\(\)]', '', phone)
     
-    return {
-        "age": age,
-        "warning": age <= 12,
-        "message": _("Please note: Applicant is {0} years old").format(age) if age <= 12 else None
+    # Basic phone validation patterns by country
+    phone_patterns = {
+        "Netherlands": r"^(31|0)[0-9]{9}$",  # Dutch mobile/landline
+        "Germany": r"^(49|0)[0-9]{10,11}$",
+        "Belgium": r"^(32|0)[0-9]{8,9}$"
     }
+    
+    pattern = phone_patterns.get(country, r"^[0-9]{8,15}$")  # Default: 8-15 digits
+    
+    if not re.match(pattern, clean_phone):
+        return {
+            "valid": False,
+            "message": _("Invalid phone number format")
+        }
+    
+    return {"valid": True, "message": _("Valid phone number")}
+
+@frappe.whitelist(allow_guest=True)
+def validate_birth_date(birth_date):
+    """Validate birth date and return age information"""
+    if not birth_date:
+        return {"valid": False, "message": _("Birth date is required")}
+    
+    try:
+        birth = getdate(birth_date)
+        today_date = getdate(today())
+        
+        # Check if birth date is not in the future
+        if birth > today_date:
+            return {"valid": False, "message": _("Birth date cannot be in the future")}
+        
+        # Calculate age
+        age = today_date.year - birth.year - ((today_date.month, today_date.day) < (birth.month, birth.day))
+        
+        # Check minimum age (optional)
+        if age < 0:
+            return {"valid": False, "message": _("Invalid birth date")}
+        
+        # Age warnings
+        warnings = []
+        if age < 12:
+            warnings.append(_("Applicant is under 12 years old - parental consent may be required"))
+        elif age > 100:
+            warnings.append(_("Please verify birth date - applicant would be over 100 years old"))
+        
+        return {
+            "valid": True,
+            "age": age,
+            "warnings": warnings,
+            "message": _("Valid birth date")
+        }
+        
+    except Exception as e:
+        return {"valid": False, "message": _("Invalid date format")}
 
 @frappe.whitelist(allow_guest=True)
 def submit_application(data):
@@ -171,6 +296,68 @@ def create_crm_lead_from_application(data):
     })
     lead.insert(ignore_permissions=True)
     return lead
+
+@frappe.whitelist(allow_guest=True)
+def validate_name(name, field_name="Name"):
+    """Validate name fields"""
+    if not name:
+        return {"valid": False, "message": _(f"{field_name} is required")}
+    
+    # Check length
+    if len(name.strip()) < 2:
+        return {"valid": False, "message": _(f"{field_name} must be at least 2 characters")}
+    
+    if len(name.strip()) > 50:
+        return {"valid": False, "message": _(f"{field_name} must be less than 50 characters")}
+    
+    # Check for valid characters (letters, spaces, hyphens, apostrophes)
+    if not re.match(r"^[a-zA-ZÀ-ÿ\s\-\'\.]+$", name):
+        return {
+            "valid": False,
+            "message": _(f"{field_name} can only contain letters, spaces, hyphens, and apostrophes")
+        }
+    
+    return {"valid": True, "message": _("Valid name")}
+
+@frappe.whitelist(allow_guest=True)
+def check_application_eligibility(data):
+    """Check if applicant is eligible for membership"""
+    import json
+    
+    if isinstance(data, str):
+        data = json.loads(data)
+    
+    eligibility_issues = []
+    
+    # Age check
+    if data.get("birth_date"):
+        birth_validation = validate_birth_date(data["birth_date"])
+        if not birth_validation["valid"]:
+            eligibility_issues.append(birth_validation["message"])
+        elif birth_validation.get("age", 0) < 12:
+            eligibility_issues.append(_("Applicants under 12 require parental consent"))
+    
+    # Email uniqueness
+    if data.get("email"):
+        email_validation = validate_email(data["email"])
+        if not email_validation["valid"]:
+            eligibility_issues.append(email_validation["message"])
+    
+    # Check if membership types are available
+    available_types = frappe.get_all(
+        "Membership Type",
+        filters={"is_active": 1},
+        fields=["name"]
+    )
+    
+    if not available_types:
+        eligibility_issues.append(_("No membership types are currently available"))
+    
+    return {
+        "eligible": len(eligibility_issues) == 0,
+        "issues": eligibility_issues,
+        "warnings": []
+    }
 
 def create_address(data):
     """Create address record"""
@@ -490,3 +677,161 @@ def check_overdue_applications():
                     args={"applications": overdue},
                     now=True
                 )
+
+@frappe.whitelist(allow_guest=True)
+def get_membership_fee_info(membership_type):
+    """Get detailed fee information for a membership type"""
+    if not membership_type:
+        return {"error": _("Membership type is required")}
+    
+    try:
+        mt = frappe.get_doc("Membership Type", membership_type)
+        
+        # Calculate prorated amount if joining mid-year
+        from frappe.utils import add_months, getdate, date_diff
+        
+        today_date = getdate(today())
+        year_start = today_date.replace(month=1, day=1)
+        year_end = today_date.replace(month=12, day=31)
+        
+        full_amount = mt.amount
+        prorated_amount = full_amount
+        
+        # If joining after March, calculate prorated amount
+        if today_date.month > 3:  # After Q1
+            remaining_months = 12 - today_date.month + 1
+            prorated_amount = (full_amount / 12) * remaining_months
+        
+        return {
+            "membership_type": mt.membership_type_name,
+            "full_amount": full_amount,
+            "prorated_amount": prorated_amount,
+            "currency": mt.currency,
+            "period": mt.subscription_period,
+            "description": mt.description,
+            "is_prorated": prorated_amount != full_amount,
+            "join_date": today(),
+            "next_renewal": year_end if mt.subscription_period == "Annual" else add_months(today(), 1)
+        }
+        
+    except frappe.DoesNotExistError:
+        return {"error": _("Membership type not found")}
+    except Exception as e:
+        frappe.log_error(f"Error getting membership fee info: {str(e)}")
+        return {"error": _("Error calculating fees")}
+
+@frappe.whitelist(allow_guest=True)
+def validate_address(data):
+    """Validate address fields"""
+    import json
+    
+    if isinstance(data, str):
+        data = json.loads(data)
+    
+    required_fields = ["address_line1", "city", "postal_code", "country"]
+    missing_fields = []
+    
+    for field in required_fields:
+        if not data.get(field):
+            missing_fields.append(field.replace("_", " ").title())
+    
+    if missing_fields:
+        return {
+            "valid": False,
+            "message": _("Missing required fields: {0}").format(", ".join(missing_fields))
+        }
+    
+    # Validate postal code for the country
+    postal_validation = validate_postal_code(data["postal_code"], data["country"])
+    
+    return {
+        "valid": postal_validation["valid"],
+        "message": postal_validation["message"],
+        "suggested_chapters": postal_validation.get("suggested_chapters", [])
+    }
+
+@frappe.whitelist(allow_guest=True)
+def get_payment_methods():
+    """Get available payment methods for membership applications"""
+    
+    # Get active payment methods from ERPNext
+    payment_methods = frappe.get_all(
+        "Mode of Payment",
+        filters={"enabled": 1},
+        fields=["name", "type"],
+        order_by="name"
+    )
+    
+    # Add membership-specific payment options
+    membership_payment_methods = [
+        {
+            "name": "Bank Transfer",
+            "type": "Bank",
+            "description": _("One-time bank transfer"),
+            "processing_time": _("1-3 business days")
+        },
+        {
+            "name": "Direct Debit",
+            "type": "Bank",
+            "description": _("SEPA Direct Debit (recurring)"),
+            "processing_time": _("Immediate setup, 5-7 days first collection"),
+            "requires_mandate": True
+        },
+        {
+            "name": "Credit Card",
+            "type": "Card",
+            "description": _("Visa, Mastercard, American Express"),
+            "processing_time": _("Immediate")
+        }
+    ]
+    
+    return {
+        "payment_methods": membership_payment_methods,
+        "default_method": "Credit Card",
+        "supports_recurring": True
+    }
+
+@frappe.whitelist(allow_guest=True) 
+def save_draft_application(data):
+    """Save application as draft for later completion"""
+    import json
+    
+    if isinstance(data, str):
+        data = json.loads(data)
+    
+    # Create a temporary draft record (you might want a separate DocType for this)
+    draft_key = f"draft_application_{frappe.session.sid}"
+    
+    # Store in cache (expires in 24 hours)
+    frappe.cache().set_value(draft_key, data, expires_in_sec=86400)
+    
+    return {
+        "success": True,
+        "draft_id": draft_key,
+        "message": _("Application saved as draft")
+    }
+
+@frappe.whitelist(allow_guest=True)
+def load_draft_application(draft_id):
+    """Load previously saved draft application"""
+    
+    try:
+        data = frappe.cache().get_value(draft_id)
+        
+        if data:
+            return {
+                "success": True,
+                "data": data,
+                "message": _("Draft loaded successfully")
+            }
+        else:
+            return {
+                "success": False,
+                "message": _("Draft not found or expired")
+            }
+            
+    except Exception as e:
+        return {
+            "success": False,
+            "message": _("Error loading draft")
+        }
