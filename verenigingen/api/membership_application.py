@@ -3,7 +3,7 @@ from frappe import _
 from frappe.utils import today, now_datetime, add_days, getdate, flt, validate_email_address
 from verenigingen.verenigingen.doctype.chapter.chapter import suggest_chapter_for_member
 
-frappe.whitelist(allow_guest=True)
+@frappe.whitelist(allow_guest=True)
 def validate_email(email):
     """Validate email format and check if it already exists"""
     if not email:
