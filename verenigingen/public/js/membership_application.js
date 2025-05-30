@@ -475,3 +475,161 @@ frappe.ready(function() {
     // Initialize the application
     MembershipApplication.init();
 });
+(document).ready(function() {
+    // Load form data when page loads
+    loadFormData();
+});
+
+function loadFormData() {
+    frappe.call({
+        method: 'verenigingen.api.membership_application.get_application_form_data',
+        callback: function(r) {
+            if (r.message) {
+                populateCountries(r.message.countries);
+                populateMembershipTypes(r.message.membership_types);
+                populateChapters(r.message.chapters);
+                populateVolunteerAreas(r.message.volunteer_areas);
+            }
+        },
+        error: function(r) {
+            console.error('Error loading form data:', r);
+            // Fallback - load countries manually
+            loadCountriesFallback();
+        }
+    });
+}
+
+function populateCountries(countries) {
+    const countrySelect = $('#country');
+    countrySelect.empty();
+    countrySelect.append('<option value="">Select Country...</option>');
+    
+    // Add Netherlands at the top (assuming it's your primary country)
+    countrySelect.append('<option value="Netherlands">Netherlands</option>');
+    
+    // Add other countries
+    countries.forEach(function(country) {
+        if (country.name !== 'Netherlands') {
+            countrySelect.append(`<option value="${country.name}">${country.name}</option>`);
+        }
+    });
+}
+
+function loadCountriesFallback() {
+    // Fallback list of common European countries if API fails
+    const commonCountries = [
+        'Netherlands',
+        'Germany', 
+        'Belgium',
+        'France',
+        'United Kingdom',
+        'Spain',
+        'Italy',
+        'Austria',
+        'Switzerland',
+        'Denmark',
+        'Sweden',
+        'Norway',
+        'Finland',
+        'Poland',
+        'Other'
+    ];
+    
+    const countrySelect = $('#country');
+    countrySelect.empty();
+    countrySelect.append('<option value="">Select Country...</option>');
+    
+    commonCountries.forEach(function(country) {
+        countrySelect.append(`<option value="${country}">${country}</option>`);
+    });
+}
+
+function populateMembershipTypes(membershipTypes) {
+    const container = $('#membership-types');
+    container.empty();
+    
+    membershipTypes.forEach(function(type) {
+        const card = $(`
+            <div class="membership-type-card" data-type="${type.name}">
+                <h5>${type.membership_type_name}</h5>
+                <div class="price">${frappe.format_currency(type.amount, type.currency)}</div>
+                <div class="period">${type.subscription_period}</div>
+                <div class="description">${type.description || ''}</div>
+            </div>
+        `);
+        
+        card.click(function() {
+            $('.membership-type-card').removeClass('selected');
+            $(this).addClass('selected');
+            $('#selected_membership_type').val(type.name);
+            showMembershipFeeDetails(type);
+        });
+        
+        container.append(card);
+    });
+}
+
+function populateChapters(chapters) {
+    const chapterSelect = $('#selected_chapter');
+    chapterSelect.empty();
+    chapterSelect.append('<option value="">Select a chapter...</option>');
+    
+    chapters.forEach(function(chapter) {
+        chapterSelect.append(`<option value="${chapter.name}">${chapter.name} - ${chapter.region}</option>`);
+    });
+}
+
+function populateVolunteerAreas(volunteerAreas) {
+    const container = $('#volunteer-interests');
+    container.empty();
+    
+    volunteerAreas.forEach(function(area) {
+        const checkbox = $(`
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" value="${area.name}" id="interest_${area.name}">
+                <label class="form-check-label" for="interest_${area.name}">
+                    ${area.name}
+                </label>
+            </div>
+        `);
+        container.append(checkbox);
+    });
+}
+
+// Postal code validation with chapter suggestion
+$('#postal_code').on('blur', function() {
+    const postalCode = $(this).val();
+    const country = $('#country').val();
+    
+    if (postalCode && country) {
+        frappe.call({
+            method: 'verenigingen.api.membership_application.validate_postal_code',
+            args: {
+                postal_code: postalCode,
+                country: country
+            },
+            callback: function(r) {
+                if (r.message && r.message.valid) {
+                    if (r.message.suggested_chapters && r.message.suggested_chapters.length > 0) {
+                        showSuggestedChapters(r.message.suggested_chapters);
+                    }
+                }
+            }
+        });
+    }
+});
+
+function showSuggestedChapters(chapters) {
+    const suggestion = $('#suggested-chapter');
+    const chapterName = $('#suggested-chapter-name');
+    
+    if (chapters.length > 0) {
+        chapterName.text(chapters[0].name);
+        suggestion.show();
+        
+        $('#accept-suggestion').off('click').on('click', function() {
+            $('#selected_chapter').val(chapters[0].name);
+            suggestion.hide();
+        });
+    }
+}
