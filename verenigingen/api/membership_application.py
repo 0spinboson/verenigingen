@@ -92,23 +92,44 @@ def get_application_form_data():
         order_by="amount"
     )
     
-    # Get public chapters
-    chapters = frappe.get_all(
-        "Chapter",
-        filters={"published": 1},
-        fields=["name", "region"],
-        order_by="name"
-    )
+    # Get public chapters (only if chapter management is enabled)
+    chapters = []
+    try:
+        if frappe.db.get_single_value("Verenigingen Settings", "enable_chapter_management"):
+            chapters = frappe.get_all(
+                "Chapter",
+                filters={"published": 1},
+                fields=["name", "region"],
+                order_by="name"
+            )
+    except:
+        pass  # Chapter management might not be enabled
     
     # Get volunteer interest areas
-    volunteer_areas = frappe.get_all(
-        "Volunteer Interest Area",
-        fields=["name", "description"],
-        order_by="name"
-    )
+    volunteer_areas = []
+    try:
+        volunteer_areas = frappe.get_all(
+            "Volunteer Interest Area",
+            fields=["name", "description"],
+            order_by="name"
+        )
+    except:
+        pass  # Table might not exist
     
-    # Get countries
-    countries = frappe.get_all("Country", fields=["name"])
+    # Get countries - try ERPNext Country doctype first, then fallback
+    countries = []
+    try:
+        countries = frappe.get_all("Country", fields=["name"], order_by="name")
+    except:
+        # Fallback to hardcoded list if Country doctype doesn't exist
+        country_list = [
+            "Netherlands", "Germany", "Belgium", "France", "United Kingdom",
+            "Spain", "Italy", "Austria", "Switzerland", "Denmark", "Sweden",
+            "Norway", "Finland", "Poland", "Czech Republic", "Hungary",
+            "Portugal", "Ireland", "Luxembourg", "Slovenia", "Slovakia",
+            "Estonia", "Latvia", "Lithuania", "Malta", "Cyprus", "Other"
+        ]
+        countries = [{"name": country} for country in country_list]
     
     return {
         "membership_types": membership_types,
