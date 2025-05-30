@@ -267,7 +267,7 @@ def reject_membership_application(member_name, reason):
 
 def create_membership_invoice(member, membership, membership_type):
     """Create invoice for membership"""
-    from vereiningen.utils import DutchTaxExemptionHandler
+    from verenigingen.utils import DutchTaxExemptionHandler
     
     settings = frappe.get_single("Verenigingen Settings")
     
