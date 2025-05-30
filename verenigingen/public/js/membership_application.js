@@ -475,7 +475,8 @@ frappe.ready(function() {
     // Initialize the application
     MembershipApplication.init();
 });
-(document).ready(function() {
+
+$(document).ready(function() {
     // Load form data when page loads
     loadFormData();
 });
