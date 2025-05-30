@@ -169,7 +169,7 @@ frappe.ready(function() {
             if (!birthDate) return;
             
             frappe.call({
-                method: 'verenigingen.api.membership_application.validate_age',
+                method: 'verenigingen.api.membership_application.validate_birth_date',
                 args: { birth_date: birthDate },
                 callback: (r) => {
                     if (r.message) {
