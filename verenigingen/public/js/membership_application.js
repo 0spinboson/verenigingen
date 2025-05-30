@@ -437,7 +437,7 @@ frappe.ready(function() {
             
             // Submit to server
             frappe.call({
-                method: 'vereiningen.api.membership_application.submit_application',
+                method: 'verenigingen.api.membership_application.submit_application',
                 args: {
                     data: this.formData
                 },
