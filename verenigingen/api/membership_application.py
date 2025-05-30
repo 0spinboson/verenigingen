@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.utils import today, now_datetime, add_days, getdate, flt
-from vereiningen.verenigingen.doctype.chapter.chapter import suggest_chapter_for_member
+from verenigingen.verenigingen.doctype.chapter.chapter import suggest_chapter_for_member
 
 @frappe.whitelist(allow_guest=True)
 def get_application_form_data():
