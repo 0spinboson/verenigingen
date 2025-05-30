@@ -175,7 +175,7 @@ def validate_birth_date(birth_date):
             "valid": True,
             "age": age,
             "warnings": warnings,
-            "message": _("Valid birth date")
+            "message": _(None)
         }
         
     except Exception as e:
