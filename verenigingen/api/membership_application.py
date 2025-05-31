@@ -282,7 +282,44 @@ def submit_application(data):
             "application_source_details": data.get("application_source_details", ""),
             "notes": data.get("additional_notes", "")
         })
+        # Create membership record with custom amount if provided
+        membership_data = {
+            "doctype": "Membership",
+            "member": member.name,
+            "membership_type": data.get("selected_membership_type"),
+            "start_date": frappe.utils.today(),
+            "status": "Pending",  # Will become Active after payment
+            "auto_renew": 1
+        }
+
+        # Handle custom amount
+        custom_amount = data.get("membership_amount")
+        if custom_amount:
+            membership_type = frappe.get_doc("Membership Type", data.get("selected_membership_type"))
+            minimum_amount = getattr(membership_type, 'minimum_amount', None) or membership_type.amount
+            
+            if float(custom_amount) != membership_type.amount:
+                # Using custom amount
+                if float(custom_amount) >= minimum_amount:
+                    membership_data.update({
+                        "uses_custom_amount": 1,
+                        "custom_amount": float(custom_amount),
+                        "amount_reason": "Amount selected during application"
+                    })
+                else:
+                    frappe.throw(_("Selected amount is below minimum allowed amount"))
         
+        membership = frappe.get_doc(membership_data)
+        membership.insert(ignore_permissions=True)
+        
+        # Create invoice with correct amount
+        invoice_amount = membership.effective_amount or membership.custom_amount
+        if not invoice_amount:
+            membership_type = frappe.get_doc("Membership Type", membership.membership_type)
+            invoice_amount = membership_type.amount
+            
+        invoice = create_membership_invoice(member, membership, invoice_amount)
+
         # Add volunteer interests if provided
         if data.get("volunteer_interests"):
             for interest in data.get("volunteer_interests"):
@@ -865,3 +902,135 @@ def load_draft_application(draft_id):
             "success": False,
             "message": _("Error loading draft")
         }
+def create_membership_invoice(member, membership, amount):
+    """Create invoice with specific amount"""
+    from verenigingen.utils import DutchTaxExemptionHandler
+    
+    settings = frappe.get_single("Verenigingen Settings")
+    
+    # Create or get customer
+    if not member.customer:
+        # ... customer creation code ...
+    
+    # Get membership type for description
+    membership_type = frappe.get_doc("Membership Type", membership.membership_type)
+    
+    # Create invoice with custom amount
+    invoice = frappe.get_doc({
+        "doctype": "Sales Invoice",
+        "customer": member.customer,
+        "member": member.name,
+        "membership": membership.name,
+        "posting_date": frappe.utils.today(),
+        "due_date": frappe.utils.add_days(frappe.utils.today(), 14),
+        "items": [{
+            "item_code": get_or_create_membership_item(membership_type),
+            "qty": 1,
+            "rate": amount,  # Use the specific amount (custom or standard)
+            "description": f"Membership Fee - {membership_type.membership_type_name}" + 
+                          (f" (Custom Amount)" if membership.uses_custom_amount else "")
+        }]
+    })
+    
+    # Apply tax exemption if configured
+    if settings.tax_exempt_for_contributions:
+        handler = DutchTaxExemptionHandler()
+        handler.apply_exemption_to_invoice(invoice, "EXEMPT_MEMBERSHIP")
+    
+    invoice.insert()
+    invoice.submit()
+    
+    return invoice
+
+# Add utility functions for membership amount management
+
+@frappe.whitelist()
+def get_membership_amount_info(membership_name):
+    """Get detailed amount information for a membership"""
+    membership = frappe.get_doc("Membership", membership_name)
+    membership_type = frappe.get_doc("Membership Type", membership.membership_type)
+    
+    return {
+        "membership_type_amount": membership_type.amount,
+        "effective_amount": membership.effective_amount,
+        "uses_custom_amount": membership.uses_custom_amount,
+        "custom_amount": membership.custom_amount,
+        "amount_reason": membership.amount_reason,
+        "amount_difference": membership.amount_difference,
+        "allows_custom": getattr(membership_type, 'allow_custom_amount', False),
+        "minimum_amount": getattr(membership_type, 'minimum_amount', None) or membership_type.amount,
+        "currency": membership_type.currency
+    }
+
+@frappe.whitelist()
+def suggest_membership_amounts(membership_type_name):
+    """Get suggested amounts for a membership type"""
+    membership_type = frappe.get_doc("Membership Type", membership_type_name)
+    
+    suggestions = [membership_type.amount]  # Always include standard amount
+    
+    if getattr(membership_type, 'allow_custom_amount', False):
+        # Add suggested amounts if configured
+        if getattr(membership_type, 'suggested_amounts', None):
+            try:
+                suggested = [float(x.strip()) for x in membership_type.suggested_amounts.split(",") if x.strip()]
+                suggestions.extend(suggested)
+            except:
+                pass
+        
+        # Add some reasonable suggestions based on standard amount
+        base = membership_type.amount
+        auto_suggestions = [
+            base * 0.5,  # 50% (student/hardship)
+            base * 1.5,  # 150% (supporter)
+            base * 2.0,  # 200% (patron)
+            base * 3.0   # 300% (benefactor)
+        ]
+        
+        # Only add if they're above minimum
+        minimum = getattr(membership_type, 'minimum_amount', None) or membership_type.amount
+        for amount in auto_suggestions:
+            if amount >= minimum and amount not in suggestions:
+                suggestions.append(amount)
+    
+    # Remove duplicates and sort
+    suggestions = sorted(list(set(suggestions)))
+    
+    return {
+        "standard_amount": membership_type.amount,
+        "minimum_amount": getattr(membership_type, 'minimum_amount', None) or membership_type.amount,
+        "suggested_amounts": suggestions,
+        "allows_custom": getattr(membership_type, 'allow_custom_amount', False),
+        "currency": membership_type.currency
+    }
+
+# Report function for tracking custom amounts
+@frappe.whitelist()
+def get_custom_amount_report(from_date=None, to_date=None):
+    """Generate report of memberships using custom amounts"""
+    
+    filters = {"uses_custom_amount": 1}
+    
+    if from_date:
+        filters["start_date"] = [">=", from_date]
+    if to_date:
+        filters["start_date"] = ["<=", to_date]
+    
+    memberships = frappe.get_all(
+        "Membership",
+        filters=filters,
+        fields=[
+            "name", "member", "member_name", "membership_type", 
+            "custom_amount", "amount_reason", "start_date", "status"
+        ],
+        order_by="start_date desc"
+    )
+    
+    # Add membership type standard amounts for comparison
+    for membership in memberships:
+        mt = frappe.get_doc("Membership Type", membership.membership_type)
+        membership["standard_amount"] = mt.amount
+        membership["difference"] = membership.custom_amount - mt.amount
+        membership["percentage_of_standard"] = round((membership.custom_amount / mt.amount) * 100, 1)
+    
+    return memberships
