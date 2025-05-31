@@ -10,6 +10,7 @@ class Membership(Document):
         self.validate_existing_memberships()
         self.set_renewal_date()  # Calculate renewal date based on start date and membership type
         self.set_status()
+        self.calculate_effective_amount()  # New: Calculate effective amount
 
     def validate_existing_memberships(self):
         """Check if there are any existing active memberships for this member"""
@@ -147,6 +148,23 @@ class Membership(Document):
         else:
             # All good - active membership
             self.status = "Active"
+    
+    def calculate_effective_amount(self):
+        """Calculate the effective amount and difference from standard"""
+        if self.uses_custom_amount and self.custom_amount:
+            self.effective_amount = self.custom_amount
+        elif self.membership_type:
+            membership_type = frappe.get_cached_doc("Membership Type", self.membership_type)
+            self.effective_amount = membership_type.amount
+        else:
+            self.effective_amount = 0
+        
+        # Calculate difference
+        if self.membership_type and self.effective_amount:
+            membership_type = frappe.get_cached_doc("Membership Type", self.membership_type)
+            self.amount_difference = flt(self.effective_amount) - flt(membership_type.amount)
+        else:
+            self.amount_difference = 0
                 
     def on_submit(self):
         import frappe
@@ -187,7 +205,7 @@ class Membership(Document):
         # Link to subscription if configured
         if not self.subscription and self.subscription_plan:
             options = {
-            'follow_calendar_months': 0,
+                'follow_calendar_months': 0,
                 'generate_invoice_at_period_start': 1,  # Beginning of period
                 'generate_new_invoices_past_due_date': 1,  # Generate even if past due
                 'submit_invoice': 1,  # Submit invoices
@@ -244,6 +262,16 @@ class Membership(Document):
                 indicator='blue', 
                 alert=True
             )
+    
+    def on_update_after_submit(self):
+        """Handle updates after submission, including amount changes"""
+        
+        # Call existing code first
+        super().on_update_after_submit() if hasattr(super(), 'on_update_after_submit') else None
+        
+        # Handle subscription amount updates when custom amount changes
+        if self.has_value_changed('custom_amount') or self.has_value_changed('uses_custom_amount'):
+            self.update_subscription_amount()
 
     def update_member_status(self):
         """Update the membership status in the Member document"""
@@ -321,6 +349,11 @@ class Membership(Document):
         new_membership.payment_method = self.payment_method
         new_membership.subscription_plan = self.subscription_plan
         
+        # Copy custom amount settings
+        new_membership.uses_custom_amount = self.uses_custom_amount
+        new_membership.custom_amount = self.custom_amount
+        new_membership.amount_reason = self.amount_reason
+        
         # Copy SEPA mandate details
         new_membership.sepa_mandate = self.sepa_mandate
         new_membership.mandate_reference = self.mandate_reference
@@ -335,7 +368,6 @@ class Membership(Document):
         
         frappe.msgprint(_("Renewal Membership {0} created").format(new_membership.name))
         return new_membership.name
-
 
     def create_subscription_from_membership(self, options=None):
         """Create an ERPNext subscription for this membership with additional options"""
@@ -397,10 +429,14 @@ class Membership(Document):
             subscription.submit_invoice = options.get('submit_invoice', 1)
             subscription.days_until_due = options.get('days_until_due', 27)
             
-            # Add the subscription plan
+            # Get the effective amount for this membership
+            effective_amount = self.get_billing_amount()
+            
+            # Add the subscription plan with the correct amount
             subscription.append("plans", {
                 "plan": self.subscription_plan,
-                "qty": 1
+                "qty": 1,
+                "cost": effective_amount  # Override the plan's default cost
             })
             
             # Insert and submit
@@ -442,6 +478,11 @@ class Membership(Document):
                     frappe.format(subscription.current_invoice_start, {"fieldtype": "Date"})
                 ))
             
+            frappe.logger().info(
+                f"Created subscription {subscription.name} with amount {effective_amount} "
+                f"(custom: {self.uses_custom_amount}) for membership {self.name}"
+            )
+            
             return subscription.name
             
         except Exception as e:
@@ -449,6 +490,117 @@ class Membership(Document):
             frappe.log_error(f"Error creating subscription: {str(e)}\n{error_details}", 
                           "Membership Subscription Error")
             raise
+    
+    def get_billing_amount(self):
+        """Get the amount that should be used for billing this membership"""
+        
+        if self.uses_custom_amount and self.custom_amount:
+            return self.custom_amount
+        else:
+            # Use the membership type amount
+            if self.membership_type:
+                membership_type = frappe.get_doc("Membership Type", self.membership_type)
+                return membership_type.amount
+            else:
+                return 0
+    
+    def update_subscription_amount(self):
+        """Update the subscription plan amount when membership amount changes"""
+        
+        if not self.subscription:
+            frappe.logger().info(f"No subscription linked to membership {self.name}")
+            return
+            
+        try:
+            subscription = frappe.get_doc("Subscription", self.subscription)
+            
+            # Calculate the new amount to use
+            new_amount = self.get_billing_amount()
+            
+            # Update subscription plan amounts
+            updated = False
+            for plan_row in subscription.plans:
+                # Update the amount in the subscription plan row
+                if plan_row.cost != new_amount:
+                    old_amount = plan_row.cost
+                    plan_row.cost = new_amount
+                    updated = True
+                    
+                    frappe.logger().info(
+                        f"Updated subscription {subscription.name} plan amount from {old_amount} to {new_amount} "
+                        f"for membership {self.name}"
+                    )
+            
+            if updated:
+                # Save the subscription with updated amounts
+                subscription.save(ignore_permissions=True)
+                
+                # Cancel any pending unpaid invoices and regenerate them with new amounts
+                self.regenerate_pending_invoices(subscription)
+                
+                # Show message to user
+                frappe.msgprint(
+                    _("Subscription amount updated to {0}. Future invoices will use the new amount.").format(
+                        frappe.format_value(new_amount, {"fieldtype": "Currency"})
+                    ),
+                    indicator="green"
+                )
+                
+        except Exception as e:
+            frappe.log_error(f"Error updating subscription amount for membership {self.name}: {str(e)}", 
+                          "Subscription Amount Update Error")
+            frappe.throw(_("Error updating subscription amount. Please contact system administrator."))
+    
+    def regenerate_pending_invoices(self, subscription):
+        """Cancel pending invoices and regenerate them with new amounts"""
+        
+        try:
+            # Find draft or unpaid invoices for this subscription
+            pending_invoices = frappe.get_all(
+                "Sales Invoice",
+                filters={
+                    "subscription": subscription.name,
+                    "status": ["in", ["Draft", "Unpaid"]],
+                    "docstatus": ["!=", 2]  # Not cancelled
+                },
+                fields=["name", "docstatus", "grand_total"]
+            )
+            
+            cancelled_count = 0
+            for invoice_info in pending_invoices:
+                invoice = frappe.get_doc("Sales Invoice", invoice_info.name)
+                
+                # Only cancel/delete if the amount is different
+                new_amount = self.get_billing_amount()
+                if abs(invoice.grand_total - new_amount) > 0.01:  # Allow for small rounding differences
+                    
+                    if invoice.docstatus == 1:  # Submitted
+                        invoice.cancel()
+                        cancelled_count += 1
+                        frappe.logger().info(f"Cancelled invoice {invoice.name} (amount {invoice.grand_total}) for regeneration with new amount {new_amount}")
+                        
+                    elif invoice.docstatus == 0:  # Draft
+                        invoice.delete()
+                        cancelled_count += 1
+                        frappe.logger().info(f"Deleted draft invoice {invoice.name} for regeneration with new amount {new_amount}")
+            
+            if cancelled_count > 0:
+                # Trigger subscription processing to create new invoices with correct amounts
+                frappe.enqueue(
+                    "erpnext.accounts.doctype.subscription.subscription.process_all",
+                    subscription=subscription.name,
+                    enqueue_after_commit=True,
+                    queue="short"
+                )
+                
+                frappe.msgprint(
+                    _("{0} pending invoices cancelled and will be regenerated with the new amount.").format(cancelled_count),
+                    indicator="blue"
+                )
+                
+        except Exception as e:
+            frappe.log_error(f"Error regenerating pending invoices: {str(e)}", 
+                          "Invoice Regeneration Error")
 
 # Hook functions for doc_events (outside the class)
 def on_submit(doc, method=None):
@@ -832,7 +984,6 @@ def process_membership_statuses():
     return True
 
 def verify_signature(data, signature, secret_key=None):
-
     """
     Verify a signature for webhook data (for donation verification)
     Args:
@@ -1034,45 +1185,150 @@ def update_membership_from_subscription(doc, method=None):
             frappe.log_error(f"Error updating membership {membership_data.name} from subscription: {str(e)}", 
                           "Membership Update Error")
 
+# Enhanced set_custom_amount function
 @frappe.whitelist()
-def cancel_membership(membership_name, cancellation_date=None, cancellation_reason=None, cancellation_type="Immediate"):
-    """
-    Enhanced cancel membership method that can be called by termination system
-    """
-    if not cancellation_date:
-        cancellation_date = frappe.utils.today()
-        
+def set_custom_amount(membership_name, custom_amount, reason=None):
+    """Set custom amount for a membership and update subscription"""
+    
     membership = frappe.get_doc("Membership", membership_name)
     
-    # Validate cancellation is allowed
-    if membership.status == "Cancelled":
-        frappe.msgprint(_("Membership {0} is already cancelled").format(membership_name))
-        return True
+    # Check permissions
+    if not frappe.has_permission("Membership", "write", membership):
+        frappe.throw(_("No permission to modify this membership"))
     
-    # Set cancellation details
-    membership.status = "Cancelled"
-    membership.cancellation_date = cancellation_date
-    membership.cancellation_reason = cancellation_reason or "Membership cancelled"
-    membership.cancellation_type = cancellation_type
+    custom_amount = float(custom_amount)
+    old_effective_amount = membership.get_billing_amount()
     
-    # Cancel associated subscription if exists
-    if membership.subscription:
-        try:
-            subscription = frappe.get_doc("Subscription", membership.subscription)
-            if subscription.status != "Cancelled":
-                subscription.flags.ignore_permissions = True
-                subscription.cancel_subscription()
-                frappe.logger().info(f"Cancelled associated subscription {membership.subscription}")
-        except Exception as e:
-            frappe.logger().error(f"Failed to cancel subscription {membership.subscription}: {str(e)}")
+    # Validate against membership type
+    membership_type = frappe.get_doc("Membership Type", membership.membership_type)
     
-    # Update member status
-    membership.update_member_status()
+    if not getattr(membership_type, 'allow_custom_amount', False):
+        frappe.throw(_("Custom amounts are not allowed for this membership type"))
     
-    # Use flags to allow update after submit
+    minimum_amount = getattr(membership_type, 'minimum_amount', None) or membership_type.amount
+    if custom_amount < minimum_amount:
+        frappe.throw(_("Amount cannot be less than minimum: {0}").format(minimum_amount))
+    
+    # Update membership
+    membership.uses_custom_amount = 1
+    membership.custom_amount = custom_amount
+    membership.amount_reason = reason or ""
     membership.flags.ignore_validate_update_after_submit = True
-    membership.flags.ignore_permissions = True
     membership.save()
     
-    frappe.logger().info(f"Cancelled membership {membership_name}")
-    return True
+    # Get new effective amount
+    new_effective_amount = membership.get_billing_amount()
+    
+    return {
+        "success": True,
+        "old_amount": old_effective_amount,
+        "new_amount": new_effective_amount,
+        "difference": new_effective_amount - membership_type.amount,
+        "subscription_updated": bool(membership.subscription),
+        "message": _("Amount updated successfully. Future invoices will use {0}").format(
+            frappe.format_value(new_effective_amount, {"fieldtype": "Currency"})
+        )
+    }
+
+@frappe.whitelist()
+def revert_to_standard_amount(membership_name, reason=None):
+    """Revert membership to use standard membership type amount"""
+    
+    membership = frappe.get_doc("Membership", membership_name)
+    
+    # Check permissions
+    if not frappe.has_permission("Membership", "write", membership):
+        frappe.throw(_("No permission to modify this membership"))
+    
+    if not membership.uses_custom_amount:
+        frappe.throw(_("This membership is already using the standard amount"))
+    
+    old_amount = membership.custom_amount
+    
+    # Revert to standard amount
+    membership.uses_custom_amount = 0
+    membership.custom_amount = None
+    membership.amount_reason = reason or "Reverted to standard amount"
+    membership.flags.ignore_validate_update_after_submit = True
+    membership.save()
+    
+    # Get standard amount
+    membership_type = frappe.get_doc("Membership Type", membership.membership_type)
+    standard_amount = membership_type.amount
+    
+    return {
+        "success": True,
+        "old_amount": old_amount,
+        "new_amount": standard_amount,
+        "message": _("Reverted to standard amount: {0}").format(
+            frappe.format_value(standard_amount, {"fieldtype": "Currency"})
+        )
+    }
+
+# Utility function to check subscription amounts
+@frappe.whitelist()
+def check_subscription_amounts():
+    """Debug function to check subscription amounts vs membership amounts"""
+    
+    results = []
+    
+    # Get all active memberships with subscriptions
+    memberships = frappe.get_all(
+        "Membership",
+        filters={
+            "status": "Active",
+            "subscription": ["is", "set"]
+        },
+        fields=["name", "member_name", "uses_custom_amount", "custom_amount", "subscription", "membership_type"]
+    )
+    
+    for membership_info in memberships:
+        membership = frappe.get_doc("Membership", membership_info.name)
+        expected_amount = membership.get_billing_amount()
+        
+        # Get subscription amount
+        try:
+            subscription = frappe.get_doc("Subscription", membership.subscription)
+            actual_amount = subscription.plans[0].cost if subscription.plans else 0
+            
+            results.append({
+                "membership": membership.name,
+                "member": membership.member_name,
+                "expected_amount": expected_amount,
+                "actual_amount": actual_amount,
+                "matches": abs(expected_amount - actual_amount) < 0.01,
+                "uses_custom": membership.uses_custom_amount
+            })
+            
+        except Exception as e:
+            results.append({
+                "membership": membership.name,
+                "member": membership.member_name,
+                "error": str(e)
+            })
+    
+    return results
+
+# Function to bulk fix subscription amounts if needed
+@frappe.whitelist()
+def fix_subscription_amounts():
+    """Fix subscription amounts to match membership amounts"""
+    
+    check_results = check_subscription_amounts()
+    fixed_count = 0
+    
+    for result in check_results:
+        if result.get("matches") == False:  # Amount mismatch
+            try:
+                membership = frappe.get_doc("Membership", result["membership"])
+                membership.update_subscription_amount()
+                fixed_count += 1
+                
+            except Exception as e:
+                frappe.log_error(f"Error fixing subscription amount for {result['membership']}: {str(e)}")
+    
+    return {
+        "success": True,
+        "fixed_count": fixed_count,
+        "message": f"Fixed {fixed_count} subscription amounts"
+    }
