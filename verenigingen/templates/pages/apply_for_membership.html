@@ -314,31 +314,38 @@
                     
                     <!-- Payment Method Selection -->
                     <h5 class="required">{{ _("Payment Method") }}</h5>
-                    <div class="payment-methods-container">
-                        <div class="row">
-                            <div class="col-md-8">
-                                <div id="payment-methods-list">
-                                    <!-- Payment methods will be loaded here -->
+                        <div class="payment-methods-container">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <div id="payment-methods-list">
+                                        <!-- This will be populated by JavaScript -->
+                                        <div class="text-center">
+                                            <i class="fa fa-spinner fa-spin"></i> Loading payment methods...
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Immediate fallback with basic options -->
+                                    <div id="payment-method-fallback" style="display: none;">
+                                        <label for="payment_method" class="required">{{ _("Payment Method") }}</label>
+                                        <select class="form-control" id="payment_method" name="payment_method" required>
+                                            <option value="">{{ _("Select payment method...") }}</option>
+                                            <option value="Credit Card">{{ _("Credit Card") }}</option>
+                                            <option value="Bank Transfer">{{ _("Bank Transfer") }}</option>
+                                            <option value="Direct Debit">{{ _("Direct Debit (SEPA)") }}</option>
+                                        </select>
+                                        <div class="invalid-feedback"></div>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="payment-info-panel">
-                                    <div id="payment-method-details" style="display: none;">
-                                        <h6>Payment Details</h6>
-                                        <div id="payment-details-content"></div>
+                                <div class="col-md-4">
+                                    <div class="payment-info-panel">
+                                        <div id="payment-method-details" style="display: none;">
+                                            <h6>Payment Details</h6>
+                                            <div id="payment-details-content"></div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-                        
-                        <!-- Fallback dropdown if JavaScript loading fails -->
-                        <div id="payment-method-fallback" style="display: none;">
-                            <select class="form-control" id="payment_method" name="payment_method" required>
-                                <option value="">{{ _("Select payment method...") }}</option>
-                            </select>
-                            <div class="invalid-feedback"></div>
-                        </div>
-                    </div>
                     
                     <!-- SEPA Mandate Notice (shown when Direct Debit is selected) -->
                     <div id="sepa-mandate-notice" class="alert alert-warning mt-3" style="display: none;">
@@ -484,3 +491,22 @@
 {% block script %}
 <script src="/assets/verenigingen/js/membership_application.js"></script>
 {% endblock %}
+<script>
+// Immediate fallback if main script doesn't load within 3 seconds
+setTimeout(function() {
+    if ($('#payment-methods-list').html().indexOf('Loading') !== -1) {
+        console.log('JavaScript not loaded, showing fallback payment methods');
+        $('#payment-methods-list').hide();
+        $('#payment-method-fallback').show();
+        
+        // Add SEPA notice handler
+        $('#payment_method').change(function() {
+            if ($(this).val() === 'Direct Debit') {
+                $('#sepa-mandate-notice').show();
+            } else {
+                $('#sepa-mandate-notice').hide();
+            }
+        });
+    }
+}, 3000);
+</script>
