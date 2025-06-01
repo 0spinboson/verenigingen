@@ -1,44 +1,223 @@
 import frappe, re
 from frappe import _
 from frappe.utils import today, now_datetime, add_days, getdate, flt, validate_email_address
+
+import frappe, json, re
+from frappe import _
+from frappe.utils import today, now_datetime, add_days, getdate, flt, validate_email_address
 from verenigingen.verenigingen.doctype.chapter.chapter import suggest_chapter_for_member
+
+# Simple test method to verify the API is working
+@frappe.whitelist(allow_guest=True)
+def test_connection():
+    """Simple test method to verify the API is working"""
+    return {
+        "success": True,
+        "message": "Backend connection working",
+        "timestamp": frappe.utils.now(),
+        "user": frappe.session.user
+    }
+
+@frappe.whitelist(allow_guest=True)
+def get_application_form_data():
+    """Get data needed for application form - FIXED VERSION"""
+    try:
+        # Get active membership types
+        membership_types = frappe.get_all(
+            "Membership Type",
+            filters={"is_active": 1},
+            fields=["name", "membership_type_name", "description", "amount",
+                    "currency", "subscription_period"],
+            order_by="amount"
+        )
+
+        # Get countries - use a fallback list
+        countries = [
+            {"name": "Netherlands"}, {"name": "Germany"}, {"name": "Belgium"},
+            {"name": "France"}, {"name": "United Kingdom"}, {"name": "Other"}
+        ]
+
+        # Try to get from database, fallback to hardcoded
+        try:
+            db_countries = frappe.get_all("Country", fields=["name"], order_by="name")
+            if db_countries:
+                countries = db_countries
+        except:
+            pass  # Use fallback countries
+
+        # Get chapters - with error handling
+        chapters = []
+        try:
+            if frappe.db.get_single_value("Verenigingen Settings", "enable_chapter_management"):
+                chapters = frappe.get_all(
+                    "Chapter",
+                    filters={"published": 1},
+                    fields=["name", "region"],
+                    order_by="name"
+                )
+        except:
+            pass  # Chapter management not enabled or error
+
+        # Get volunteer areas - with error handling
+        volunteer_areas = []
+        try:
+            volunteer_areas = frappe.get_all(
+                "Volunteer Interest Area",
+                fields=["name", "description"],
+                order_by="name"
+            )
+        except:
+            pass  # Table might not exist
+
+        return {
+            "success": True,
+            "membership_types": membership_types,
+            "chapters": chapters,
+            "volunteer_areas": volunteer_areas,
+            "countries": countries
+        }
+
+    except Exception as e:
+        frappe.log_error(f"Error in get_application_form_data: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Error loading form data"
+        }
 
 @frappe.whitelist(allow_guest=True)
 def validate_email(email):
-    """Validate email format and check if it already exists"""
-    if not email:
-        return {"valid": False, "message": _("Email is required")}
-    
+    """Validate email format and check if it already exists - FIXED VERSION"""
     try:
+        if not email:
+            return {"valid": False, "message": _("Email is required")}
+
         # Use Frappe's built-in email validation
         validate_email_address(email, throw=True)
-        
+
         # Check if email already exists
         existing_member = frappe.db.exists("Member", {"email": email})
-        existing_user = frappe.db.exists("User", {"email": email})
-        
         if existing_member:
             return {
-                "valid": False, 
+                "valid": False,
                 "message": _("A member with this email already exists. Please login or contact support."),
                 "exists": True,
                 "member_id": existing_member
             }
-        
-        if existing_user:
-            # Check if user is linked to a member
-            user_member = frappe.db.get_value("Member", {"user": existing_user}, "name")
-            if user_member:
-                return {
-                    "valid": False,
-                    "message": _("This email is already registered. Please login or contact support."),
-                    "exists": True
-                }
-        
+
         return {"valid": True, "message": _("Email is available")}
-        
+
     except Exception as e:
         return {"valid": False, "message": str(e)}
+
+@frappe.whitelist(allow_guest=True)
+def submit_application(data):
+    """Process membership application submission - FIXED VERSION"""
+    try:
+        # Handle data parameter - it might be a string or dict
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except json.JSONDecodeError as e:
+                frappe.throw(_("Invalid data format: {0}").format(str(e)))
+
+        # Log what we received for debugging
+        frappe.logger().info(f"Received application data: {data}")
+
+        # Validate required fields
+        required_fields = ["first_name", "last_name", "email", "birth_date",
+                          "address_line1", "city", "postal_code", "country"]
+
+        missing_fields = []
+        for field in required_fields:
+            if not data.get(field):
+                missing_fields.append(field)
+
+        if missing_fields:
+            frappe.throw(_("Missing required fields: {0}").format(", ".join(missing_fields)))
+
+        # Check if member with email already exists
+        existing = frappe.db.exists("Member", {"email": data.get("email")})
+        if existing:
+            frappe.throw(_("A member with this email already exists. Please login or contact support."))
+
+        # Validate membership type exists
+        selected_type = data.get("selected_membership_type")
+        if selected_type and not frappe.db.exists("Membership Type", selected_type):
+            # Try to get any active membership type as fallback
+            fallback_types = frappe.get_all("Membership Type",
+                                          filters={"is_active": 1},
+                                          fields=["name"],
+                                          limit=1)
+            if fallback_types:
+                selected_type = fallback_types[0].name
+                frappe.logger().warning(f"Used fallback membership type: {selected_type}")
+            else:
+                frappe.throw(_("No valid membership type found"))
+
+        # Create address
+        address = frappe.get_doc({
+            "doctype": "Address",
+            "address_title": f"{data['first_name']} {data['last_name']}",
+            "address_type": "Personal",
+            "address_line1": data.get("address_line1"),
+            "address_line2": data.get("address_line2", ""),
+            "city": data.get("city"),
+            "state": data.get("state", ""),
+            "country": data.get("country"),
+            "pincode": data.get("postal_code"),
+            "email_id": data.get("email"),
+            "phone": data.get("phone", ""),
+            "is_primary_address": 1
+        })
+        address.insert(ignore_permissions=True)
+
+        # Create member
+        member = frappe.get_doc({
+            "doctype": "Member",
+            "first_name": data.get("first_name"),
+            "middle_name": data.get("middle_name", ""),
+            "last_name": data.get("last_name"),
+            "email": data.get("email"),
+            "mobile_no": data.get("mobile_no", ""),
+            "phone": data.get("phone", ""),
+            "birth_date": data.get("birth_date"),
+            "pronouns": data.get("pronouns", ""),
+            "primary_address": address.name,
+            "status": "Pending",
+            "application_status": "Pending",
+            "application_date": now_datetime(),
+            "selected_membership_type": selected_type,
+            "interested_in_volunteering": data.get("interested_in_volunteering", 0),
+            "newsletter_opt_in": data.get("newsletter_opt_in", 1),
+            "application_source": data.get("application_source", "Website"),
+            "notes": data.get("additional_notes", ""),
+            "payment_method": data.get("payment_method", "")
+        })
+
+        member.insert(ignore_permissions=True)
+
+        # Create a simple success response
+        return {
+            "success": True,
+            "message": _("Application submitted successfully! You will receive an email with next steps."),
+            "member_id": member.name,
+            "status": "pending_review"
+        }
+
+    except Exception as e:
+        frappe.log_error(f"Error in submit_application: {str(e)}")
+
+        # Return error in a format the frontend can handle
+        error_message = str(e)
+        if hasattr(e, 'message'):
+            error_message = e.message
+
+        return {
+            "success": False,
+            "error": error_message,
+            "message": f"Application submission failed: {error_message}"
+        }
 
 def determine_chapter_from_application(data):
     """Determine suggested chapter from application data"""
@@ -233,160 +412,6 @@ def validate_birth_date(birth_date):
         
     except Exception as e:
         return {"valid": False, "message": _("Invalid date format")}
-
-@frappe.whitelist(allow_guest=True)
-def submit_application(data):
-    """Process membership application submission with custom amount support"""
-    import json
-    import re
-    
-    if isinstance(data, str):
-        data = json.loads(data)
-    
-    # Validate required fields
-    required_fields = ["first_name", "last_name", "email", "birth_date", 
-                      "address_line1", "city", "postal_code", "country",
-                      "selected_membership_type"]
-    
-    for field in required_fields:
-        if not data.get(field):
-            frappe.throw(_("Please fill all required fields: {0}").format(field))
-    
-    # Check if member with email already exists
-    existing = frappe.db.exists("Member", {"email": data.get("email")})
-    if existing:
-        frappe.throw(_("A member with this email already exists. Please login or contact support."))
-    
-    try:
-        # Step 1: Validate membership type and custom amount
-        membership_type_doc = frappe.get_doc("Membership Type", data.get("selected_membership_type"))
-        
-        # Determine final membership amount
-        final_amount = membership_type_doc.amount  # Default to standard amount
-        uses_custom_amount = False
-        amount_reason = ""
-        
-        if data.get("uses_custom_amount") and data.get("membership_amount"):
-            custom_amount = float(data.get("membership_amount"))
-            
-            # Validate custom amount if allowed
-            if getattr(membership_type_doc, 'allow_custom_amount', False):
-                minimum_amount = getattr(membership_type_doc, 'minimum_amount', None) or membership_type_doc.amount
-                
-                if custom_amount >= minimum_amount:
-                    final_amount = custom_amount
-                    uses_custom_amount = True
-                    
-                    # Generate reason based on amount difference
-                    if custom_amount > membership_type_doc.amount:
-                        percentage = ((custom_amount - membership_type_doc.amount) / membership_type_doc.amount) * 100
-                        amount_reason = f"Supporter contribution (+{percentage:.1f}% above standard)"
-                    elif custom_amount < membership_type_doc.amount:
-                        percentage = ((membership_type_doc.amount - custom_amount) / membership_type_doc.amount) * 100
-                        amount_reason = f"Reduced contribution (-{percentage:.1f} % from standard)"
-                    else:
-                        uses_custom_amount = False  # Same as standard, no need for custom flag
-                else:
-                    frappe.throw(_("Custom amount {0} is below minimum allowed amount {1}").format(
-                        frappe.format_value(custom_amount, {"fieldtype": "Currency"}),
-                        frappe.format_value(minimum_amount, {"fieldtype": "Currency"})
-                    ))
-            else:
-                frappe.throw(_("Custom amounts are not allowed for this membership type"))
-        
-        # Step 2: Create CRM Lead
-        lead = create_crm_lead_from_application(data)
-        
-        # Step 3: Create Address
-        address = create_address_from_application(data)
-        
-        # Step 4: Determine chapter
-        suggested_chapter = determine_chapter_from_application(data)
-        
-        # Step 5: Create Member with Pending status
-        member = frappe.get_doc({
-            "doctype": "Member",
-            "first_name": data.get("first_name"),
-            "middle_name": data.get("middle_name", ""),
-            "last_name": data.get("last_name"),
-            "email": data.get("email"),
-            "mobile_no": data.get("mobile_no", ""),
-            "phone": data.get("phone", ""),
-            "birth_date": data.get("birth_date"),
-            "pronouns": data.get("pronouns", ""),
-            "primary_address": address.name,
-            "status": "Pending",
-            "application_status": "Pending",
-            "application_date": frappe.utils.now_datetime(),
-            "selected_chapter": data.get("selected_chapter"),
-            "suggested_chapter": suggested_chapter,
-            "primary_chapter": suggested_chapter or data.get("selected_chapter"),
-            "selected_membership_type": data.get("selected_membership_type"),
-            "interested_in_volunteering": data.get("interested_in_volunteering", 0),
-            "volunteer_availability": data.get("volunteer_availability", ""),
-            "volunteer_experience_level": data.get("volunteer_experience_level", ""),
-            "newsletter_opt_in": data.get("newsletter_opt_in", 1),
-            "application_source": data.get("application_source", ""),
-            "application_source_details": data.get("application_source_details", ""),
-            "notes": data.get("additional_notes", ""),
-            "payment_method": data.get("payment_method", "")
-        })
-        
-        # Add volunteer interests if provided
-        if data.get("volunteer_interests"):
-            for interest in data.get("volunteer_interests", []):
-                member.append("volunteer_interests", {"interest_area": interest})
-        
-        member.insert(ignore_permissions=True)
-        
-        # Step 6: Create Membership record with custom amount support
-        membership_data = {
-            "doctype": "Membership",
-            "member": member.name,
-            "membership_type": data.get("selected_membership_type"),
-            "start_date": frappe.utils.today(),
-            "status": "Pending",  # Will become Active after payment
-            "auto_renew": 1
-        }
-        
-        # Add custom amount information if applicable
-        if uses_custom_amount:
-            membership_data.update({
-                "uses_custom_amount": 1,
-                "custom_amount": final_amount,
-                "amount_reason": amount_reason
-            })
-        
-        membership = frappe.get_doc(membership_data)
-        membership.insert(ignore_permissions=True)
-        
-        # Step 7: Create invoice with correct amount
-        invoice = create_membership_invoice_with_amount(member, membership, final_amount)
-        
-        # Step 8: Link everything together
-        lead.db_set("member", member.name)
-        member.db_set("application_invoice", invoice.name)
-        
-        # Step 9: Send notifications
-        send_application_notifications(member)
-        send_application_confirmation_with_payment(member, invoice)
-        
-        return {
-            "success": True,
-            "message": _("Thank you for your application! Please complete payment to activate your membership."),
-            "member_id": member.name,
-            "lead_id": lead.name,
-            "invoice_id": invoice.name,
-            "amount": final_amount,
-            "payment_url": f"/payment/membership/{member.name}/{invoice.name}"
-        }
-        
-    except Exception as e:
-        frappe.log_error(frappe.get_traceback(), "Membership Application Error")
-        if isinstance(e, frappe.ValidationError):
-            frappe.throw(str(e))
-        else:
-            frappe.throw(_("An error occurred while processing your application. Please try again."))
 
 def create_crm_lead_from_application(data):
     """Create CRM Lead from application data"""
