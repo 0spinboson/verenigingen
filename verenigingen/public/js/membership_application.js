@@ -248,23 +248,25 @@ $(document).ready(function() {
     }
 
     function loadPaymentMethods() {
-        $('#payment-methods-list').addClass('loading');
+        const container = $('#payment-methods-list');
+        const fallback = $('#payment-method-fallback');
+        
+        // Show loading state
+        container.html('<div class="text-center p-4"><i class="fa fa-spinner fa-spin"></i> Loading payment methods...</div>');
         
         frappe.call({
             method: 'verenigingen.api.membership_application.get_payment_methods',
             callback: function(r) {
-                $('#payment-methods-list').removeClass('loading');
-                
-                if (r.message && r.message.payment_methods) {
+                if (r.message && r.message.payment_methods && r.message.payment_methods.length > 0) {
                     paymentMethods = r.message.payment_methods;
                     renderPaymentMethods();
+                    fallback.hide();
                 } else {
-                    // Fallback to dropdown
+                    console.warn('No payment methods returned from API, using fallback');
                     showPaymentMethodFallback();
                 }
             },
             error: function(r) {
-                $('#payment-methods-list').removeClass('loading');
                 console.error('Error loading payment methods:', r);
                 showPaymentMethodFallback();
             }
@@ -274,7 +276,12 @@ $(document).ready(function() {
     function renderPaymentMethods() {
         const container = $('#payment-methods-list');
         container.empty();
-
+    
+        if (!paymentMethods || paymentMethods.length === 0) {
+            showPaymentMethodFallback();
+            return;
+        }
+    
         paymentMethods.forEach(function(method) {
             const methodCard = $(`
                 <div class="payment-method-option" data-method="${method.name}">
@@ -294,8 +301,8 @@ $(document).ready(function() {
                             <div class="form-check">
                                 <input class="form-check-input payment-method-radio" type="radio" 
                                        name="payment_method_selection" value="${method.name}" 
-                                       id="payment_${method.name.replace(/\s+/g, '_')}">
-                                <label class="form-check-label" for="payment_${method.name.replace(/\s+/g, '_')}">
+                                       id="payment_${method.name.replace(/\s+/g, '_').toLowerCase()}">
+                                <label class="form-check-label" for="payment_${method.name.replace(/\s+/g, '_').toLowerCase()}">
                                     Select
                                 </label>
                             </div>
@@ -305,38 +312,43 @@ $(document).ready(function() {
             `);
             container.append(methodCard);
         });
-
+    
         // Bind payment method selection
-        $('.payment-method-option').click(function() {
+        $('.payment-method-option').off('click').on('click', function() {
             const methodName = $(this).data('method');
             selectPaymentMethod(methodName);
         });
-
-        $('.payment-method-radio').change(function() {
+    
+        $('.payment-method-radio').off('change').on('change', function() {
             if ($(this).is(':checked')) {
                 selectPaymentMethod($(this).val());
             }
         });
-
-        // Auto-select default method if specified
-        const defaultMethod = paymentMethods.find(m => m.name === 'Credit Card');
-        if (defaultMethod) {
-            selectPaymentMethod(defaultMethod.name);
+    
+        // Auto-select first method
+        if (paymentMethods.length > 0) {
+            selectPaymentMethod(paymentMethods[0].name);
         }
     }
 
     function selectPaymentMethod(methodName) {
+        if (!methodName) return;
+        
         selectedPaymentMethod = methodName;
+        console.log('Selected payment method:', methodName);
         
-        // Update UI
-        $('.payment-method-option').removeClass('selected');
-        $(`.payment-method-option[data-method="${methodName}"]`).addClass('selected');
-        
-        // Update radio button
-        $(`.payment-method-radio[value="${methodName}"]`).prop('checked', true);
-        
-        // Update hidden field for form submission
-        $('#payment_method').val(methodName);
+        // Update UI based on whether we're using cards or dropdown
+        if ($('#payment-method-fallback').is(':visible')) {
+            // Using dropdown fallback
+            $('#payment_method').val(methodName);
+        } else {
+            // Using card interface
+            $('.payment-method-option').removeClass('selected');
+            $(`.payment-method-option[data-method="${methodName}"]`).addClass('selected');
+            
+            // Update radio button
+            $(`.payment-method-radio[value="${methodName}"]`).prop('checked', true);
+        }
         
         // Show method details
         const method = paymentMethods.find(m => m.name === methodName);
@@ -354,6 +366,9 @@ $(document).ready(function() {
         // Clear validation error
         $('#payment_method').removeClass('is-invalid');
         $('#payment_method').siblings('.invalid-feedback').hide();
+        
+        // Store in form data
+        formData.payment_method = methodName;
     }
 
     function showPaymentMethodDetails(method) {
@@ -387,22 +402,61 @@ $(document).ready(function() {
     }
 
     function showPaymentMethodFallback() {
-        $('#payment-methods-list').hide();
-        $('#payment-method-fallback').show();
+        console.log('Showing payment method fallback');
+        const container = $('#payment-methods-list');
+        const fallback = $('#payment-method-fallback');
+        
+        container.hide();
+        fallback.show();
         
         // Populate fallback dropdown
         const select = $('#payment_method');
         select.empty().append('<option value="">Select payment method...</option>');
         
         const fallbackMethods = [
-            { name: 'Credit Card', description: 'Visa, Mastercard, American Express' },
-            { name: 'Bank Transfer', description: 'One-time bank transfer' },
-            { name: 'Direct Debit', description: 'SEPA Direct Debit (recurring)' }
+            { 
+                name: 'Credit Card', 
+                description: 'Visa, Mastercard, American Express',
+                icon: 'fa-credit-card',
+                processing_time: 'Immediate',
+                requires_mandate: false
+            },
+            { 
+                name: 'Bank Transfer', 
+                description: 'One-time bank transfer',
+                icon: 'fa-university',
+                processing_time: '1-3 business days',
+                requires_mandate: false
+            },
+            { 
+                name: 'Direct Debit', 
+                description: 'SEPA Direct Debit (recurring)',
+                icon: 'fa-repeat',
+                processing_time: '5-7 days first collection',
+                requires_mandate: true
+            }
         ];
+        
+        // Store fallback methods for later use
+        paymentMethods = fallbackMethods;
         
         fallbackMethods.forEach(function(method) {
             select.append(`<option value="${method.name}">${method.name} - ${method.description}</option>`);
         });
+        
+        // Bind change event for fallback dropdown
+        select.off('change').on('change', function() {
+            const selectedMethod = $(this).val();
+            if (selectedMethod) {
+                selectPaymentMethod(selectedMethod);
+            }
+        });
+        
+        // Auto-select first option
+        if (fallbackMethods.length > 0) {
+            select.val(fallbackMethods[0].name);
+            selectPaymentMethod(fallbackMethods[0].name);
+        }
     }
 
     function loadCountries(countries) {
@@ -542,22 +596,7 @@ $(document).ready(function() {
 
         if (step === 5) {
             // Payment method validation
-            if (!selectedPaymentMethod) {
-                markFieldInvalid($('#payment_method'), 'Please select a payment method');
-                isValid = false;
-            }
-
-            // Terms validation
-            if (!$('#terms').is(':checked')) {
-                markFieldInvalid($('#terms'), 'You must accept the terms and conditions');
-                isValid = false;
-            }
-
-            // GDPR consent validation
-            if (!$('#gdpr_consent').is(':checked')) {
-                markFieldInvalid($('#gdpr_consent'), 'You must consent to data processing');
-                isValid = false;
-            }
+            return validateStep5();
         }
 
         // Standard validation for other steps
@@ -904,3 +943,40 @@ $(document).ready(function() {
         }
     });
 });
+
+function validateStep5() {
+    let isValid = true;
+    
+    // Payment method validation - check both interfaces
+    const selectedFromDropdown = $('#payment_method').val();
+    const selectedFromCards = selectedPaymentMethod;
+    
+    const finalSelection = selectedFromDropdown || selectedFromCards;
+    
+    if (!finalSelection) {
+        if ($('#payment-method-fallback').is(':visible')) {
+            markFieldInvalid($('#payment_method'), 'Please select a payment method');
+        } else {
+            $('#payment-methods-list').after('<div class="invalid-feedback d-block">Please select a payment method</div>');
+        }
+        isValid = false;
+    } else {
+        // Store the selection
+        selectedPaymentMethod = finalSelection;
+        formData.payment_method = finalSelection;
+    }
+
+    // Terms validation
+    if (!$('#terms').is(':checked')) {
+        markFieldInvalid($('#terms'), 'You must accept the terms and conditions');
+        isValid = false;
+    }
+
+    // GDPR consent validation
+    if (!$('#gdpr_consent').is(':checked')) {
+        markFieldInvalid($('#gdpr_consent'), 'You must consent to data processing');
+        isValid = false;
+    }
+
+    return isValid;
+}
