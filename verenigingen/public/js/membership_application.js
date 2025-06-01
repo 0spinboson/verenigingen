@@ -988,79 +988,73 @@ function validateStep5() {
     $('.is-invalid').removeClass('is-invalid');
     $('.is-valid').removeClass('is-valid');
     
-    // Payment method validation - be very explicit about what we're checking
-    let finalPaymentMethod = null;
+    // Payment method validation - check both interfaces
+    const selectedFromDropdown = $('#payment_method').val();
+    const selectedFromCards = selectedPaymentMethod;
+    const formDataMethod = formData.payment_method;
     
-    // Check all possible sources for payment method
-    const dropdownValue = $('#payment_method').val();
-    const selectedValue = selectedPaymentMethod;
-    const formDataValue = formData.payment_method;
-    
-    console.log('Payment method sources:', {
-        dropdown: dropdownValue,
-        selected: selectedValue, 
-        formData: formDataValue
+    console.log('Payment method validation:', {
+        dropdown: selectedFromDropdown,
+        cards: selectedFromCards,
+        formData: formDataMethod
     });
     
-    // Use the first valid value we find
-    if (dropdownValue && dropdownValue !== '') {
-        finalPaymentMethod = dropdownValue;
-    } else if (selectedValue) {
-        finalPaymentMethod = selectedValue;
-    } else if (formDataValue) {
-        finalPaymentMethod = formDataValue;
-    }
+    const finalSelection = selectedFromDropdown || selectedFromCards || formDataMethod;
     
-    if (!finalPaymentMethod) {
-        console.log('No payment method found - validation failed');
-        
-        // Show error message
-        const errorHtml = '<div class="alert alert-danger mt-3" id="payment-error">Please select a payment method to continue.</div>';
-        
-        if ($('#payment-error').length === 0) {
-            $('#payment-method-fallback').after(errorHtml);
+    if (!finalSelection) {
+        console.log('No payment method selected - showing error');
+        if ($('#payment-method-fallback').is(':visible')) {
+            const select = $('#payment_method');
+            select.addClass('is-invalid');
+            select.after('<div class="invalid-feedback">Please select a payment method</div>');
+        } else {
+            // Show error for card interface
+            const errorDiv = $('<div class="invalid-feedback d-block text-danger mb-3">Please select a payment method</div>');
+            $('#payment-methods-list').after(errorDiv);
         }
-        
         isValid = false;
     } else {
-        // Payment method is valid - store it everywhere
-        selectedPaymentMethod = finalPaymentMethod;
-        formData.payment_method = finalPaymentMethod;
-        $('#payment_method').val(finalPaymentMethod);
+        // Store the selection and mark as valid
+        selectedPaymentMethod = finalSelection;
+        formData.payment_method = finalSelection;
         
-        // Remove any error messages
-        $('#payment-error').remove();
+        if ($('#payment-method-fallback').is(':visible')) {
+            $('#payment_method').addClass('is-valid').removeClass('is-invalid');
+        }
         
-        console.log('Payment method validated:', finalPaymentMethod);
+        console.log('Payment method validated:', finalSelection);
     }
 
-    // Terms validation - simplified
-    if (!$('#terms').is(':checked')) {
+    // Terms validation
+    const termsChecked = $('#terms').is(':checked');
+    if (!termsChecked) {
         console.log('Terms not accepted');
-        if ($('#terms-error').length === 0) {
-            $('#terms').closest('.form-check').after('<div class="text-danger mt-1" id="terms-error">You must accept the terms and conditions</div>');
-        }
+        const termsLabel = $('label[for="terms"]');
+        termsLabel.after('<div class="invalid-feedback d-block">You must accept the terms and conditions</div>');
+        $('#terms').addClass('is-invalid');
         isValid = false;
     } else {
-        $('#terms-error').remove();
+        $('#terms').addClass('is-valid').removeClass('is-invalid');
     }
 
-    // GDPR consent validation - simplified  
-    if (!$('#gdpr_consent').is(':checked')) {
+    // GDPR consent validation
+    const gdprChecked = $('#gdpr_consent').is(':checked');
+    if (!gdprChecked) {
         console.log('GDPR consent not given');
-        if ($('#gdpr-error').length === 0) {
-            $('#gdpr_consent').closest('.form-check').after('<div class="text-danger mt-1" id="gdpr-error">You must consent to data processing</div>');
-        }
+        const gdprLabel = $('label[for="gdpr_consent"]');
+        gdprLabel.after('<div class="invalid-feedback d-block">You must consent to data processing</div>');
+        $('#gdpr_consent').addClass('is-invalid');
         isValid = false;
     } else {
-        $('#gdpr-error').remove();
+        $('#gdpr_consent').addClass('is-valid').removeClass('is-invalid');
     }
 
     console.log('Step 5 validation result:', isValid);
     return isValid;
 }
 
-
+// Initialize form submission with better error handling
+function initializeFormSubmission() {
     $('#membership-application-form').off('submit').on('submit', function(e) {
         e.preventDefault();
         console.log('Form submission triggered');
