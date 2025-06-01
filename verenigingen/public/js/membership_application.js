@@ -150,10 +150,18 @@ class MembershipApplication {
             console.log('Application submitted successfully:', result);
             
             this.ui.showSuccess(result);
-            this.redirectToPayment(result.payment_url);
+            
+            // Redirect to payment if URL is provided
+            if (result.payment_url) {
+                this.redirectToPayment(result.payment_url);
+            }
+            
+            return result;
+            
         } catch (error) {
             console.error('Application submission failed:', error);
             this.ui.showError('Submission failed', error);
+            throw error; // Re-throw so calling code can handle it
         } finally {
             this.ui.setSubmitting(false);
         }
@@ -1262,31 +1270,32 @@ class MembershipAPI {
     }
 
     async submitApplication(data) {
-        // Submit to server
-        frappe.call({
-            method: 'verenigingen.api.membership_application.submit_application',
-            args: { 
-                data: JSON.stringify(applicationData)  // Ensure data is properly serialized
-            },
-            type: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            callback: function(r) {
-                console.log('Server response:', r);
-                if (r.message && r.message.success) {
-                    handleSubmissionSuccess(r.message);
-                } else {
-                    const errorMsg = r.message ? (r.message.message || r.message) : 'Unknown error occurred';
-                    handleSubmissionError(errorMsg);
-                    $btn.prop('disabled', false).html('Submit Application & Pay');
+        return new Promise((resolve, reject) => {
+            console.log('Submitting application data:', data);
+            
+            frappe.call({
+                method: 'verenigingen.api.membership_application.submit_application',
+                args: { 
+                    data: JSON.stringify(data)  // FIXED: was applicationData, now data
+                },
+                type: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                callback: function(r) {
+                    console.log('Server response:', r);
+                    if (r.message && r.message.success) {
+                        resolve(r.message);
+                    } else {
+                        const errorMsg = r.message ? (r.message.message || r.message) : 'Unknown error occurred';
+                        reject(new Error(errorMsg));
+                    }
+                },
+                error: function(r) {
+                    console.error('Submission error:', r);
+                    reject(new Error('Network error. Please check your connection and try again.'));
                 }
-            },
-            error: function(r) {
-                console.error('Submission error:', r);
-                handleSubmissionError('Network error. Please check your connection and try again.');
-                $btn.prop('disabled', false).html('Submit Application & Pay');
-            }
+            });
         });
     }
     
@@ -1300,13 +1309,19 @@ class MembershipAPI {
                 method,
                 args,
                 callback: (r) => {
-                    if (r.message) {
+                    if (r.message !== undefined) {
                         resolve(r.message);
+                    } else if (r.exc) {
+                        reject(new Error(r.exc));
                     } else {
                         reject(new Error('No response from server'));
                     }
                 },
-                error: reject
+                error: (r) => {
+                    console.error('API call error:', r);
+                    const errorMsg = r.responseJSON?.exc || r.statusText || 'Network error';
+                    reject(new Error(errorMsg));
+                }
             });
         });
     }
