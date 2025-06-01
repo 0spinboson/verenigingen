@@ -1240,8 +1240,7 @@ function initializeFormSubmission() {
                 const fallbackPaymentMethod = $('#payment_method').val() || formData?.payment_method;
                 console.log('Fallback payment method:', fallbackPaymentMethod);
             }
-        }
-
+    
         // Disable submit button
         const $btn = $('#submit-btn');
         $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Processing...');
