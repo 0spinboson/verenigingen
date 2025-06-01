@@ -1,4 +1,4 @@
-import frappe
+import frappe, re
 from frappe import _
 from frappe.utils import today, now_datetime, add_days, getdate, flt, validate_email_address
 from verenigingen.verenigingen.doctype.chapter.chapter import suggest_chapter_for_member
