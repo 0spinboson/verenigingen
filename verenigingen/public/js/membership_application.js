@@ -340,7 +340,15 @@ $(document).ready(function() {
         // Update UI based on whether we're using cards or dropdown
         if ($('#payment-method-fallback').is(':visible')) {
             // Using dropdown fallback
-            $('#payment_method').val(methodName);
+            const select = $('#payment_method');
+            select.val(methodName);
+            
+            // Clear any validation errors
+            select.removeClass('is-invalid');
+            select.siblings('.invalid-feedback').hide();
+            
+            // Mark as valid
+            select.addClass('is-valid');
         } else {
             // Using card interface
             $('.payment-method-option').removeClass('selected');
@@ -363,12 +371,10 @@ $(document).ready(function() {
             $('#sepa-mandate-notice').hide();
         }
         
-        // Clear validation error
-        $('#payment_method').removeClass('is-invalid');
-        $('#payment_method').siblings('.invalid-feedback').hide();
-        
         // Store in form data
         formData.payment_method = methodName;
+        
+        console.log('Payment method selection complete:', methodName);
     }
 
     function showPaymentMethodDetails(method) {
@@ -447,16 +453,26 @@ $(document).ready(function() {
         // Bind change event for fallback dropdown
         select.off('change').on('change', function() {
             const selectedMethod = $(this).val();
+            console.log('Dropdown changed to:', selectedMethod);
             if (selectedMethod) {
                 selectPaymentMethod(selectedMethod);
             }
         });
         
-        // Auto-select first option
-        if (fallbackMethods.length > 0) {
-            select.val(fallbackMethods[0].name);
-            selectPaymentMethod(fallbackMethods[0].name);
-        }
+        // AUTO-SELECT FIRST OPTION - Fixed to properly set the value
+        setTimeout(function() {
+            if (fallbackMethods.length > 0) {
+                const defaultMethod = fallbackMethods[0].name;
+                select.val(defaultMethod);
+                selectPaymentMethod(defaultMethod);
+                
+                // Remove the required attribute temporarily to avoid validation issues
+                select.removeAttr('required');
+                setTimeout(() => select.attr('required', 'required'), 100);
+                
+                console.log('Auto-selected payment method:', defaultMethod);
+            }
+        }, 200); // Longer delay to ensure everything is ready
     }
 
     function loadCountries(countries) {
@@ -575,22 +591,24 @@ $(document).ready(function() {
         $('.invalid-feedback').hide();
 
         if (step === 3) {
-            // Membership type validation
             if (!formData.selected_membership_type) {
-                $('#membership-type-error').show().text('Please select a membership type');
-                isValid = false;
-            }
-
-            // Custom amount validation
-            if (formData.uses_custom_amount) {
-                const membershipType = membershipTypes.find(t => t.name === formData.selected_membership_type);
-                if (!membershipType) return false;
-                
-                const minAmount = membershipType.amount * 0.5; // Assuming 50% minimum
-                if (formData.membership_amount < minAmount) {
-                    $('#membership-type-error').show().text(`Amount must be at least ${frappe.format(minAmount, {fieldtype: 'Currency'})}`);
-                    isValid = false;
-                }
+                        $('#membership-type-error').show().text('Please select a membership type');
+                        isValid = false;
+                    } else {
+                        $('#membership-type-error').hide();
+                    }
+            
+                    // Custom amount validation
+                    if (formData.uses_custom_amount && formData.membership_amount) {
+                        const membershipType = membershipTypes.find(t => t.name === formData.selected_membership_type);
+                        if (membershipType) {
+                            const minAmount = membershipType.amount * 0.5; // Assuming 50% minimum
+                            if (formData.membership_amount < minAmount) {
+                                $('#membership-type-error').show().text(`Amount must be at least ${frappe.format(minAmount, {fieldtype: 'Currency'})}`);
+                                isValid = false;
+                            }
+                        }
+                    }
             }
         }
 
@@ -945,38 +963,178 @@ $(document).ready(function() {
 });
 
 function validateStep5() {
+    console.log('Validating step 5');
     let isValid = true;
+    
+    // Clear all previous validation messages
+    $('.invalid-feedback').remove();
+    $('.is-invalid').removeClass('is-invalid');
+    $('.is-valid').removeClass('is-valid');
     
     // Payment method validation - check both interfaces
     const selectedFromDropdown = $('#payment_method').val();
     const selectedFromCards = selectedPaymentMethod;
+    const formDataMethod = formData.payment_method;
     
-    const finalSelection = selectedFromDropdown || selectedFromCards;
+    console.log('Payment method validation:', {
+        dropdown: selectedFromDropdown,
+        cards: selectedFromCards,
+        formData: formDataMethod
+    });
+    
+    const finalSelection = selectedFromDropdown || selectedFromCards || formDataMethod;
     
     if (!finalSelection) {
+        console.log('No payment method selected - showing error');
         if ($('#payment-method-fallback').is(':visible')) {
-            markFieldInvalid($('#payment_method'), 'Please select a payment method');
+            const select = $('#payment_method');
+            select.addClass('is-invalid');
+            select.after('<div class="invalid-feedback">Please select a payment method</div>');
         } else {
-            $('#payment-methods-list').after('<div class="invalid-feedback d-block">Please select a payment method</div>');
+            // Show error for card interface
+            const errorDiv = $('<div class="invalid-feedback d-block text-danger mb-3">Please select a payment method</div>');
+            $('#payment-methods-list').after(errorDiv);
         }
         isValid = false;
     } else {
-        // Store the selection
+        // Store the selection and mark as valid
         selectedPaymentMethod = finalSelection;
         formData.payment_method = finalSelection;
+        
+        if ($('#payment-method-fallback').is(':visible')) {
+            $('#payment_method').addClass('is-valid').removeClass('is-invalid');
+        }
+        
+        console.log('Payment method validated:', finalSelection);
     }
 
     // Terms validation
-    if (!$('#terms').is(':checked')) {
-        markFieldInvalid($('#terms'), 'You must accept the terms and conditions');
+    const termsChecked = $('#terms').is(':checked');
+    if (!termsChecked) {
+        console.log('Terms not accepted');
+        const termsLabel = $('label[for="terms"]');
+        termsLabel.after('<div class="invalid-feedback d-block">You must accept the terms and conditions</div>');
+        $('#terms').addClass('is-invalid');
         isValid = false;
+    } else {
+        $('#terms').addClass('is-valid').removeClass('is-invalid');
     }
 
     // GDPR consent validation
-    if (!$('#gdpr_consent').is(':checked')) {
-        markFieldInvalid($('#gdpr_consent'), 'You must consent to data processing');
+    const gdprChecked = $('#gdpr_consent').is(':checked');
+    if (!gdprChecked) {
+        console.log('GDPR consent not given');
+        const gdprLabel = $('label[for="gdpr_consent"]');
+        gdprLabel.after('<div class="invalid-feedback d-block">You must consent to data processing</div>');
+        $('#gdpr_consent').addClass('is-invalid');
         isValid = false;
+    } else {
+        $('#gdpr_consent').addClass('is-valid').removeClass('is-invalid');
     }
 
+    console.log('Step 5 validation result:', isValid);
     return isValid;
 }
+
+
+    $('#membership-application-form').off('submit').on('submit', function(e) {
+        e.preventDefault();
+        console.log('Form submission triggered');
+        
+        // Force validation of step 5 before submission
+        if (!validateStep5()) {
+            console.log('Step 5 validation failed - stopping submission');
+            
+            // Show user-friendly error
+            frappe.msgprint({
+                title: 'Form Incomplete',
+                message: 'Please complete all required fields before submitting.',
+                indicator: 'orange'
+            });
+            return false;
+        }
+
+        const $btn = $('#submit-btn');
+        $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Processing...');
+
+        // Collect all form data
+        const applicationData = collectFormData();
+        console.log('Collected application data:', applicationData);
+
+        // Final validation of critical data
+        const criticalErrors = [];
+        if (!applicationData.selected_membership_type) {
+            criticalErrors.push('Membership type is missing');
+        }
+        if (!applicationData.payment_method) {
+            criticalErrors.push('Payment method is missing');
+        }
+        if (!applicationData.first_name || !applicationData.last_name) {
+            criticalErrors.push('Name is missing');
+        }
+        if (!applicationData.email) {
+            criticalErrors.push('Email is missing');
+        }
+
+        if (criticalErrors.length > 0) {
+            console.error('Critical validation errors:', criticalErrors);
+            frappe.msgprint({
+                title: 'Form Error',
+                message: 'Missing required information: ' + criticalErrors.join(', '),
+                indicator: 'red'
+            });
+            $btn.prop('disabled', false).html('Submit Application & Pay');
+            return false;
+        }
+
+        // Submit application
+        frappe.call({
+            method: 'verenigingen.api.membership_application.submit_application',
+            args: { data: applicationData },
+            callback: function(r) {
+                console.log('API response:', r);
+                if (r.message && r.message.success) {
+                    handleSubmissionSuccess(r.message);
+                } else {
+                    handleSubmissionError(r.message || 'Unknown error occurred');
+                    $btn.prop('disabled', false).html('Submit Application & Pay');
+                }
+            },
+            error: function(r) {
+                console.error('Application submission error:', r);
+                handleSubmissionError('Network error occurred. Please check your connection and try again.');
+                $btn.prop('disabled', false).html('Submit Application & Pay');
+            }
+        });
+    });
+}
+
+const validationCSS = `
+<style>
+.is-valid {
+    border-color: #28a745;
+}
+
+.is-invalid {
+    border-color: #dc3545;
+}
+
+.invalid-feedback {
+    display: block !important;
+    color: #dc3545;
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+
+.invalid-feedback.d-block {
+    display: block !important;
+}
+
+.text-danger {
+    color: #dc3545 !important;
+}
+</style>
+`;
+
+// Inject the CSS
+$('head').append(validationCSS);
