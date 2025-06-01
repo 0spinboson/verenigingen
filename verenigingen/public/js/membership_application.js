@@ -1310,13 +1310,11 @@ class MembershipAPI {
         return new Promise((resolve, reject) => {
             console.log('Submitting application data:', data);
             
-            // More robust frappe.call for form submission
             frappe.call({
                 method: 'verenigingen.api.membership_application.submit_application',
-                args: { 
-                    data: data  // FIXED: Don't stringify here, let frappe handle it
+                args: {
+                    data: data  // Pass as an argument in the args object
                 },
-                // Remove custom headers and type - let frappe handle the request format
                 callback: function(r) {
                     console.log('Server response:', r);
                     if (r.message && r.message.success) {
@@ -1330,7 +1328,6 @@ class MembershipAPI {
                     console.error('Submission error:', r);
                     let errorMsg = 'Network error occurred';
                     
-                    // Handle different error formats
                     if (r.responseJSON && r.responseJSON.exc) {
                         errorMsg = r.responseJSON.exc;
                     } else if (r.statusText) {
@@ -1341,6 +1338,48 @@ class MembershipAPI {
                     
                     reject(new Error(errorMsg));
                 }
+            });
+        });
+    }
+
+    // Alternative methods for testing different approaches
+    async submitApplicationMethod2(data) {
+        return new Promise((resolve, reject) => {
+            // Try passing data as JSON string
+            frappe.call({
+                method: 'verenigingen.api.membership_application.submit_application',
+                args: {
+                    data: JSON.stringify(data)
+                },
+                callback: resolve,
+                error: reject
+            });
+        });
+    }
+
+    async submitApplicationMethod3(data) {
+        return new Promise((resolve, reject) => {
+            // Try passing fields directly
+            frappe.call({
+                method: 'verenigingen.api.membership_application.submit_application',
+                args: data,  // Pass data object directly as args
+                callback: resolve,
+                error: reject
+            });
+        });
+    }
+
+    // Test method to see how data is being passed
+    async testDataPassing(data) {
+        return new Promise((resolve, reject) => {
+            frappe.call({
+                method: 'verenigingen.api.membership_application.test_data_passing',
+                args: {
+                    data: data,
+                    test_field: 'test_value'
+                },
+                callback: resolve,
+                error: reject
             });
         });
     }
