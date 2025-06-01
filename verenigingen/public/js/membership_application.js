@@ -1273,27 +1273,36 @@ class MembershipAPI {
         return new Promise((resolve, reject) => {
             console.log('Submitting application data:', data);
             
+            // More robust frappe.call for form submission
             frappe.call({
                 method: 'verenigingen.api.membership_application.submit_application',
                 args: { 
-                    data: JSON.stringify(data)  // FIXED: was applicationData, now data
+                    data: data  // FIXED: Don't stringify here, let frappe handle it
                 },
-                type: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                // Remove custom headers and type - let frappe handle the request format
                 callback: function(r) {
                     console.log('Server response:', r);
                     if (r.message && r.message.success) {
                         resolve(r.message);
                     } else {
-                        const errorMsg = r.message ? (r.message.message || r.message) : 'Unknown error occurred';
+                        const errorMsg = r.message ? (r.message.message || JSON.stringify(r.message)) : 'Unknown error occurred';
                         reject(new Error(errorMsg));
                     }
                 },
                 error: function(r) {
                     console.error('Submission error:', r);
-                    reject(new Error('Network error. Please check your connection and try again.'));
+                    let errorMsg = 'Network error occurred';
+                    
+                    // Handle different error formats
+                    if (r.responseJSON && r.responseJSON.exc) {
+                        errorMsg = r.responseJSON.exc;
+                    } else if (r.statusText) {
+                        errorMsg = `Server error: ${r.status} ${r.statusText}`;
+                    } else if (r.message) {
+                        errorMsg = r.message;
+                    }
+                    
+                    reject(new Error(errorMsg));
                 }
             });
         });
@@ -1305,21 +1314,77 @@ class MembershipAPI {
     
     async call(method, args = {}) {
         return new Promise((resolve, reject) => {
+            // Add timeout to prevent hanging requests
+            const timeoutId = setTimeout(() => {
+                reject(new Error('Request timeout - server did not respond'));
+            }, 30000); // 30 second timeout
+            
             frappe.call({
                 method,
                 args,
                 callback: (r) => {
+                    clearTimeout(timeoutId);
+                    
                     if (r.message !== undefined) {
                         resolve(r.message);
                     } else if (r.exc) {
                         reject(new Error(r.exc));
                     } else {
-                        reject(new Error('No response from server'));
+                        // Sometimes frappe returns success with no message
+                        resolve(r);
                     }
                 },
                 error: (r) => {
+                    clearTimeout(timeoutId);
                     console.error('API call error:', r);
-                    const errorMsg = r.responseJSON?.exc || r.statusText || 'Network error';
+                    
+                    let errorMsg = 'Network error';
+                    if (r.responseJSON?.exc) {
+                        errorMsg = r.responseJSON.exc;
+                    } else if (r.statusText) {
+                        errorMsg = `${r.status}: ${r.statusText}`;
+                    } else if (r.message) {
+                        errorMsg = r.message;
+                    }
+                    
+                    reject(new Error(errorMsg));
+                }
+            });
+        });
+    }
+    
+    // Alternative submit method using direct AJAX if frappe.call continues to fail
+    async submitApplicationDirect(data) {
+        return new Promise((resolve, reject) => {
+            console.log('Using direct AJAX submission');
+            
+            $.ajax({
+                url: '/api/method/verenigingen.api.membership_application.submit_application',
+                type: 'POST',
+                data: {
+                    data: JSON.stringify(data)
+                },
+                headers: {
+                    'X-Frappe-CSRF-Token': frappe.csrf_token
+                },
+                success: function(response) {
+                    console.log('Direct AJAX response:', response);
+                    if (response.message && response.message.success) {
+                        resolve(response.message);
+                    } else {
+                        reject(new Error(response.message || 'Unknown error'));
+                    }
+                },
+                error: function(xhr, status, error) {
+                    console.error('Direct AJAX error:', xhr, status, error);
+                    let errorMsg = `Server error: ${xhr.status}`;
+                    
+                    if (xhr.responseJSON && xhr.responseJSON.exc) {
+                        errorMsg = xhr.responseJSON.exc;
+                    } else if (error) {
+                        errorMsg = error;
+                    }
+                    
                     reject(new Error(errorMsg));
                 }
             });
