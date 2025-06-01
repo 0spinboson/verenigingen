@@ -5,6 +5,9 @@ $(document).ready(function() {
     let membershipTypes = [];
     let paymentMethods = [];
     let selectedPaymentMethod = null;
+    console.log('=== INITIAL VARIABLE STATE ===');
+    console.log('selectedPaymentMethod declared:', typeof selectedPaymentMethod);
+    console.log('Initial value:', selectedPaymentMethod);
 
     // Load initial form data
     loadFormData();
@@ -1218,23 +1221,25 @@ function initializeFormSubmission() {
     $('#membership-application-form').on('submit', function(e) {
         e.preventDefault();
         console.log('Form submission triggered');
+        console.log('About to call validateStep5...');
         
         // Clear any existing error messages
         $('#payment-error, #terms-error, #gdpr-error').remove();
         
-        // Validate step 5 explicitly
-        if (!validateStep5()) {
-            console.log('Step 5 validation failed - stopping submission');
-            
-            // Scroll to first error
-            const firstError = $('.alert-danger, .text-danger').first();
-            if (firstError.length > 0) {
-                $('html, body').animate({
-                    scrollTop: firstError.offset().top - 100
-                }, 500);
+        try {
+                debugPaymentMethod(); // Check state before validation
+                const isValid = validateStep5();
+                console.log('validateStep5 result:', isValid);
+            } catch (error) {
+                console.error('ERROR in validateStep5:', error);
+                console.error('Error stack:', error.stack);
+                console.error('Error on line:', error.line || 'unknown');
+                
+                // Try to continue with fallback
+                console.log('Trying fallback validation...');
+                const fallbackPaymentMethod = $('#payment_method').val() || formData?.payment_method;
+                console.log('Fallback payment method:', fallbackPaymentMethod);
             }
-            
-            return false;
         }
 
         // Disable submit button
@@ -1267,3 +1272,82 @@ function initializeFormSubmission() {
         });
     });
 }
+
+window.debugPaymentMethod = function() {
+    console.log('=== PAYMENT METHOD DEBUG ===');
+    console.log('selectedPaymentMethod type:', typeof selectedPaymentMethod);
+    console.log('selectedPaymentMethod value:', selectedPaymentMethod);
+    console.log('formData.payment_method:', formData?.payment_method);
+    console.log('dropdown value:', $('#payment_method').val());
+    console.log('Current step:', currentStep);
+    console.log('Payment methods array:', paymentMethods);
+    console.log('Variables in global scope:');
+    console.log('  - currentStep:', typeof currentStep);
+    console.log('  - formData:', typeof formData);
+    console.log('  - membershipTypes:', typeof membershipTypes);
+    console.log('  - paymentMethods:', typeof paymentMethods);
+    console.log('==========================');
+};
+
+// 3. Add this to track when selectPaymentMethod is called
+function selectPaymentMethodWithDebug(methodName) {
+    console.log('=== selectPaymentMethod called ===');
+    console.log('Input methodName:', methodName);
+    console.log('selectedPaymentMethod BEFORE:', selectedPaymentMethod);
+    
+    // Your existing selectPaymentMethod code here
+    selectedPaymentMethod = methodName;
+    formData.payment_method = methodName;
+    
+    console.log('selectedPaymentMethod AFTER:', selectedPaymentMethod);
+    console.log('formData.payment_method AFTER:', formData.payment_method);
+    console.log('=== selectPaymentMethod complete ===');
+}
+
+// 4. Add this to track when validateStep5 is called
+function validateStep5WithDebug() {
+    console.log('=== validateStep5 called ===');
+    console.log('selectedPaymentMethod type at validation:', typeof selectedPaymentMethod);
+    console.log('selectedPaymentMethod value at validation:', selectedPaymentMethod);
+    
+    // Check if the variable exists in different scopes
+    try {
+        console.log('Can access selectedPaymentMethod:', selectedPaymentMethod);
+    } catch (e) {
+        console.error('ERROR accessing selectedPaymentMethod:', e);
+    }
+    
+    // Check the line that's causing the error specifically
+    try {
+        const selectedFromCards = selectedPaymentMethod;
+        console.log('Successfully assigned selectedFromCards:', selectedFromCards);
+    } catch (e) {
+        console.error('ERROR on line that was failing:', e);
+        console.error('Stack trace:', e.stack);
+    }
+    
+    console.log('=== validateStep5 debug complete ===');
+}
+// 6. Check if there are multiple scripts or scope issues
+setTimeout(function() {
+    console.log('=== DELAYED SCOPE CHECK ===');
+    console.log('selectedPaymentMethod still accessible:', typeof selectedPaymentMethod);
+    if (typeof selectedPaymentMethod === 'undefined') {
+        console.error('PROBLEM: selectedPaymentMethod became undefined!');
+        console.log('Checking window scope:', typeof window.selectedPaymentMethod);
+    }
+    debugPaymentMethod();
+}, 5000);
+
+// 7. Override console.error to catch the exact error
+const originalError = console.error;
+console.error = function(...args) {
+    if (args[0] && args[0].includes && args[0].includes('selectedPaymentMethod')) {
+        console.log('=== CAUGHT selectedPaymentMethod ERROR ===');
+        console.log('Error args:', args);
+        console.log('Current call stack:');
+        console.trace();
+        debugPaymentMethod();
+    }
+    originalError.apply(console, args);
+};
