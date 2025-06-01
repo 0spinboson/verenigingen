@@ -816,47 +816,6 @@ def validate_address(data):
         "suggested_chapters": postal_validation.get("suggested_chapters", [])
     }
 
-@frappe.whitelist(allow_guest=True)
-def get_payment_methods():
-    """Get available payment methods for membership applications"""
-    
-    # Get active payment methods from ERPNext
-    payment_methods = frappe.get_all(
-        "Mode of Payment",
-        filters={"enabled": 1},
-        fields=["name", "type"],
-        order_by="name"
-    )
-    
-    # Add membership-specific payment options
-    membership_payment_methods = [
-        {
-            "name": "Bank Transfer",
-            "type": "Bank",
-            "description": _("One-time bank transfer"),
-            "processing_time": _("1-3 business days")
-        },
-        {
-            "name": "Direct Debit",
-            "type": "Bank",
-            "description": _("SEPA Direct Debit (recurring)"),
-            "processing_time": _("Immediate setup, 5-7 days first collection"),
-            "requires_mandate": True
-        },
-        {
-            "name": "Credit Card",
-            "type": "Card",
-            "description": _("Visa, Mastercard, American Express"),
-            "processing_time": _("Immediate")
-        }
-    ]
-    
-    return {
-        "payment_methods": membership_payment_methods,
-        "default_method": "Credit Card",
-        "supports_recurring": True
-    }
-
 @frappe.whitelist(allow_guest=True) 
 def save_draft_application(data):
     """Save application as draft for later completion"""
@@ -991,3 +950,176 @@ def get_custom_amount_report(from_date=None, to_date=None):
         membership["percentage_of_standard"] = round((membership.custom_amount / mt.amount) * 100, 1)
     
     return memberships
+
+# Fixed version of get_payment_methods in membership_application.py
+
+@frappe.whitelist(allow_guest=True)
+def get_payment_methods():
+    """Get available payment methods for membership applications"""
+    
+    # Get active payment methods from ERPNext if available
+    erpnext_methods = []
+    try:
+        erpnext_methods = frappe.get_all(
+            "Mode of Payment",
+            filters={"enabled": 1},
+            fields=["name", "type"],
+            order_by="name"
+        )
+    except:
+        # Mode of Payment doctype might not exist in all setups
+        pass
+    
+    # Define membership-specific payment options with proper structure
+    membership_payment_methods = [
+        {
+            "name": "Credit Card",
+            "type": "Card",
+            "description": _("Visa, Mastercard, American Express"),
+            "processing_time": _("Immediate"),
+            "requires_mandate": False,
+            "icon": "fa-credit-card"
+        },
+        {
+            "name": "Bank Transfer",
+            "type": "Bank",
+            "description": _("One-time bank transfer"),
+            "processing_time": _("1-3 business days"),
+            "requires_mandate": False,
+            "icon": "fa-bank"
+        },
+        {
+            "name": "Direct Debit",
+            "type": "Bank",
+            "description": _("SEPA Direct Debit (recurring)"),
+            "processing_time": _("Immediate setup, 5-7 days first collection"),
+            "requires_mandate": True,
+            "icon": "fa-repeat",
+            "note": _("Requires SEPA mandate setup")
+        }
+    ]
+    
+    # Merge with ERPNext methods if available
+    for erpnext_method in erpnext_methods:
+        # Check if we already have this method defined
+        existing = next((m for m in membership_payment_methods if m["name"] == erpnext_method.name), None)
+        if not existing:
+            membership_payment_methods.append({
+                "name": erpnext_method.name,
+                "type": erpnext_method.type or "Other",
+                "description": erpnext_method.name,
+                "processing_time": _("Standard processing"),
+                "requires_mandate": False,
+                "icon": "fa-money"
+            })
+    
+    return {
+        "payment_methods": membership_payment_methods,
+        "default_method": "Credit Card",
+        "supports_recurring": True,
+        "currency": "EUR"
+    }
+
+@frappe.whitelist(allow_guest=True)
+def get_membership_type_details(membership_type):
+    """Get detailed information about a membership type including custom amount options"""
+    if not membership_type:
+        return {"error": _("Membership type is required")}
+    
+    try:
+        mt = frappe.get_doc("Membership Type", membership_type)
+        
+        # Get custom amount settings
+        allow_custom = getattr(mt, 'allow_custom_amount', False)
+        minimum_amount = getattr(mt, 'minimum_amount', None) or mt.amount
+        
+        # Calculate suggested amounts
+        suggested_amounts = [mt.amount]  # Always include standard
+        
+        if allow_custom:
+            # Add preset suggestions based on standard amount
+            base = mt.amount
+            suggestions = [
+                {"amount": base * 0.5, "label": _("Student/Hardship (50%)")},
+                {"amount": base, "label": _("Standard Amount")},
+                {"amount": base * 1.5, "label": _("Supporter (150%)")},
+                {"amount": base * 2.0, "label": _("Patron (200%)")},
+                {"amount": base * 3.0, "label": _("Benefactor (300%)")}
+            ]
+            
+            # Filter out suggestions below minimum
+            suggestions = [s for s in suggestions if s["amount"] >= minimum_amount]
+        else:
+            suggestions = [{"amount": mt.amount, "label": _("Standard Amount")}]
+        
+        return {
+            "name": mt.name,
+            "membership_type_name": mt.membership_type_name,
+            "description": mt.description,
+            "amount": mt.amount,
+            "currency": mt.currency,
+            "subscription_period": mt.subscription_period,
+            "allow_custom_amount": allow_custom,
+            "minimum_amount": minimum_amount,
+            "suggested_amounts": suggestions,
+            "custom_amount_note": _("You can choose a custom amount to support our mission") if allow_custom else None
+        }
+        
+    except frappe.DoesNotExistError:
+        return {"error": _("Membership type not found")}
+    except Exception as e:
+        frappe.log_error(f"Error getting membership type details: {str(e)}")
+        return {"error": _("Error loading membership type details")}
+
+@frappe.whitelist(allow_guest=True)  
+def validate_custom_amount(membership_type, amount):
+    """Validate a custom membership amount"""
+    try:
+        mt = frappe.get_doc("Membership Type", membership_type)
+        amount = float(amount)
+        
+        # Check if custom amounts are allowed
+        if not getattr(mt, 'allow_custom_amount', False):
+            return {
+                "valid": False,
+                "message": _("Custom amounts are not allowed for this membership type")
+            }
+        
+        # Check minimum amount
+        minimum_amount = getattr(mt, 'minimum_amount', None) or mt.amount
+        if amount < minimum_amount:
+            return {
+                "valid": False,
+                "message": _("Amount must be at least {0}").format(
+                    frappe.format_value(minimum_amount, {"fieldtype": "Currency"})
+                )
+            }
+        
+        # Check reasonable maximum (10x standard amount)
+        maximum_amount = mt.amount * 10
+        if amount > maximum_amount:
+            return {
+                "valid": False,
+                "message": _("Amount seems unusually high. Please contact us if you wish to contribute more than {0}").format(
+                    frappe.format_value(maximum_amount, {"fieldtype": "Currency"})
+                )
+            }
+        
+        # Calculate difference from standard
+        difference = amount - mt.amount
+        percentage = (difference / mt.amount) * 100
+        
+        return {
+            "valid": True,
+            "amount": amount,
+            "standard_amount": mt.amount,
+            "difference": difference,
+            "percentage": percentage,
+            "message": _("Valid amount")
+        }
+        
+    except Exception as e:
+        return {
+            "valid": False,
+            "message": _("Error validating amount")
+        }
