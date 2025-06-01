@@ -1,15 +1,51 @@
 $(document).ready(function() {
-    let currentStep = 1;
-    let maxSteps = 5;
-    let formData = {};
-    let membershipTypes = [];
-    let paymentMethods = [];
-    let selectedPaymentMethod = null;
-    console.log('=== INITIAL VARIABLE STATE ===');
-    console.log('selectedPaymentMethod declared:', typeof selectedPaymentMethod);
-    console.log('Initial value:', selectedPaymentMethod);
-
-    // Load initial form data
+    // ========================================
+    // GLOBAL VARIABLES - Fixed Scope Issues
+    // ========================================
+    
+    // Make variables persistent and accessible throughout the application
+    window.membershipApp = {
+        currentStep: 1,
+        maxSteps: 5,
+        formData: {},
+        membershipTypes: [],
+        paymentMethods: [],
+        selectedPaymentMethod: null,
+        
+        // Helper methods for consistent access
+        setPaymentMethod: function(method) {
+            this.selectedPaymentMethod = method;
+            this.formData.payment_method = method;
+            console.log('Payment method set to:', method);
+        },
+        
+        getPaymentMethod: function() {
+            return this.selectedPaymentMethod || this.formData.payment_method || $('#payment_method').val();
+        },
+        
+        debug: function() {
+            console.log('=== MEMBERSHIP APP DEBUG ===');
+            console.log('Current step:', this.currentStep);
+            console.log('Selected payment method:', this.selectedPaymentMethod);
+            console.log('Form data payment method:', this.formData.payment_method);
+            console.log('Dropdown value:', $('#payment_method').val());
+            console.log('============================');
+        }
+    };
+    
+    // Create shortcuts for backward compatibility
+    let currentStep = window.membershipApp.currentStep;
+    let maxSteps = window.membershipApp.maxSteps;
+    let formData = window.membershipApp.formData;
+    let membershipTypes = window.membershipApp.membershipTypes;
+    let paymentMethods = window.membershipApp.paymentMethods;
+    
+    console.log('Membership application initialized');
+    
+    // ========================================
+    // INITIALIZATION
+    // ========================================
+    
     loadFormData();
 
     function loadFormData() {
@@ -17,7 +53,9 @@ $(document).ready(function() {
             method: 'verenigingen.api.membership_application.get_application_form_data',
             callback: function(r) {
                 if (r.message) {
-                    membershipTypes = r.message.membership_types;
+                    window.membershipApp.membershipTypes = r.message.membership_types;
+                    membershipTypes = window.membershipApp.membershipTypes; // Update reference
+                    
                     renderMembershipTypes();
                     loadCountries(r.message.countries);
                     loadVolunteerAreas(r.message.volunteer_areas);
@@ -28,12 +66,16 @@ $(document).ready(function() {
         });
     }
 
+    // ========================================
+    // MEMBERSHIP TYPE HANDLING
+    // ========================================
+
     function renderMembershipTypes() {
         const container = $('#membership-types');
         container.empty();
 
-        // First, get detailed information for each membership type
-        const loadPromises = membershipTypes.map(type => {
+        // Get detailed information for each membership type
+        const loadPromises = window.membershipApp.membershipTypes.map(type => {
             return new Promise((resolve) => {
                 frappe.call({
                     method: 'verenigingen.api.membership_application.get_membership_type_details',
@@ -52,70 +94,78 @@ $(document).ready(function() {
                     return;
                 }
 
-                const card = $(`
-                    <div class="membership-type-card" data-type="${type.name}" data-amount="${type.amount}">
-                        <h5>${type.membership_type_name}</h5>
-                        <div class="membership-price">
-                            ${frappe.format(type.amount, {fieldtype: 'Currency'})} / ${type.subscription_period}
-                        </div>
-                        <p class="membership-description">${type.description || ''}</p>
-                        
-                        ${type.allow_custom_amount ? `
-                            <div class="custom-amount-section" style="display: none;">
-                                <label>Choose Your Contribution:</label>
-                                <div class="amount-suggestion-pills">
-                                    ${type.suggested_amounts.map(suggestion => `
-                                        <span class="amount-pill" data-amount="${suggestion.amount}">
-                                            ${frappe.format(suggestion.amount, {fieldtype: 'Currency'})}
-                                            <br><small>${suggestion.label}</small>
-                                        </span>
-                                    `).join('')}
-                                </div>
-                                <div class="mt-3">
-                                    <label>Or enter custom amount:</label>
-                                    <input type="number" class="form-control custom-amount-input" 
-                                           min="${type.minimum_amount}" step="0.01" 
-                                           placeholder="Enter amount">
-                                    <small class="text-muted">Minimum: ${frappe.format(type.minimum_amount, {fieldtype: 'Currency'})}</small>
-                                </div>
-                            </div>
-                        ` : ''}
-                        
-                        <div class="btn-group mt-3">
-                            <button type="button" class="btn btn-primary select-membership">
-                                Select ${type.allow_custom_amount ? 'Standard' : ''}
-                            </button>
-                            ${type.allow_custom_amount ? `
-                                <button type="button" class="btn btn-outline-secondary toggle-custom">
-                                    Choose Amount
-                                </button>
-                            ` : ''}
-                        </div>
-                        
-                        ${type.allow_custom_amount ? `
-                            <div class="mt-2">
-                                <small class="text-muted">${type.custom_amount_note || ''}</small>
-                            </div>
-                        ` : ''}
-                    </div>
-                `);
+                // Build the card HTML using string concatenation to avoid nested template literal issues
+                let cardHTML = '<div class="membership-type-card" data-type="' + type.name + '" data-amount="' + type.amount + '">';
+                cardHTML += '<h5>' + type.membership_type_name + '</h5>';
+                cardHTML += '<div class="membership-price">';
+                cardHTML += frappe.format(type.amount, {fieldtype: 'Currency'}) + ' / ' + type.subscription_period;
+                cardHTML += '</div>';
+                cardHTML += '<p class="membership-description">' + (type.description || '') + '</p>';
+                
+                // Add custom amount section if allowed
+                if (type.allow_custom_amount) {
+                    cardHTML += '<div class="custom-amount-section" style="display: none;">';
+                    cardHTML += '<label>Choose Your Contribution:</label>';
+                    cardHTML += '<div class="amount-suggestion-pills">';
+                    
+                    if (type.suggested_amounts && type.suggested_amounts.length > 0) {
+                        type.suggested_amounts.forEach(function(suggestion) {
+                            cardHTML += '<span class="amount-pill" data-amount="' + suggestion.amount + '">';
+                            cardHTML += frappe.format(suggestion.amount, {fieldtype: 'Currency'});
+                            cardHTML += '<br><small>' + suggestion.label + '</small>';
+                            cardHTML += '</span>';
+                        });
+                    }
+                    
+                    cardHTML += '</div>';
+                    cardHTML += '<div class="mt-3">';
+                    cardHTML += '<label>Or enter custom amount:</label>';
+                    cardHTML += '<input type="number" class="form-control custom-amount-input" ';
+                    cardHTML += 'min="' + type.minimum_amount + '" step="0.01" placeholder="Enter amount">';
+                    cardHTML += '<small class="text-muted">Minimum: ' + frappe.format(type.minimum_amount, {fieldtype: 'Currency'}) + '</small>';
+                    cardHTML += '</div>';
+                    cardHTML += '</div>';
+                }
+                
+                // Add button group
+                cardHTML += '<div class="btn-group mt-3">';
+                cardHTML += '<button type="button" class="btn btn-primary select-membership">';
+                cardHTML += 'Select' + (type.allow_custom_amount ? ' Standard' : '');
+                cardHTML += '</button>';
+                
+                if (type.allow_custom_amount) {
+                    cardHTML += '<button type="button" class="btn btn-outline-secondary toggle-custom">';
+                    cardHTML += 'Choose Amount';
+                    cardHTML += '</button>';
+                }
+                cardHTML += '</div>';
+                
+                // Add note if custom amounts are allowed
+                if (type.allow_custom_amount && type.custom_amount_note) {
+                    cardHTML += '<div class="mt-2">';
+                    cardHTML += '<small class="text-muted">' + type.custom_amount_note + '</small>';
+                    cardHTML += '</div>';
+                }
+                
+                cardHTML += '</div>';
+                
+                const card = $(cardHTML);
                 container.append(card);
             });
 
-            // Bind event handlers after all cards are rendered
             bindMembershipTypeEvents();
         });
     }
 
     function bindMembershipTypeEvents() {
         // Standard selection
-        $('.select-membership').click(function() {
+        $('.select-membership').off('click').on('click', function() {
             const card = $(this).closest('.membership-type-card');
             selectMembershipType(card, false);
         });
 
         // Toggle custom amount section
-        $('.toggle-custom').click(function() {
+        $('.toggle-custom').off('click').on('click', function() {
             const card = $(this).closest('.membership-type-card');
             const customSection = card.find('.custom-amount-section');
             const button = $(this);
@@ -126,43 +176,35 @@ $(document).ready(function() {
                 card.find('.custom-amount-input').val('');
                 card.find('.amount-pill').removeClass('selected');
             } else {
-                // Hide other custom sections
                 $('.custom-amount-section').hide();
                 $('.toggle-custom').text('Choose Amount');
                 
-                // Show this one
                 customSection.show();
                 button.text('Standard Amount');
                 
-                // Pre-select the standard amount pill
                 const standardAmount = card.data('amount');
                 card.find(`.amount-pill[data-amount="${standardAmount}"]`).addClass('selected');
             }
         });
 
         // Amount pill selection
-        $(document).on('click', '.amount-pill', function() {
+        $(document).off('click', '.amount-pill').on('click', '.amount-pill', function() {
             const card = $(this).closest('.membership-type-card');
             const amount = $(this).data('amount');
             
-            // Update pill selection
             card.find('.amount-pill').removeClass('selected');
             $(this).addClass('selected');
             
-            // Update input
             card.find('.custom-amount-input').val(amount);
-            
-            // Auto-select this membership type
             selectMembershipType(card, true, amount);
         });
 
         // Custom amount input
-        $('.custom-amount-input').on('input blur', function() {
+        $('.custom-amount-input').off('input blur').on('input blur', function() {
             const card = $(this).closest('.membership-type-card');
             const amount = parseFloat($(this).val());
             const minAmount = parseFloat($(this).attr('min'));
 
-            // Clear pill selections
             card.find('.amount-pill').removeClass('selected');
 
             if (amount && amount >= minAmount) {
@@ -182,19 +224,17 @@ $(document).ready(function() {
         const standardAmount = card.data('amount');
         const finalAmount = customAmount || standardAmount;
 
-        // Clear other selections
         $('.membership-type-card').removeClass('selected');
         card.addClass('selected');
 
-        // Store selection
-        formData.selected_membership_type = membershipType;
-        formData.membership_amount = finalAmount;
-        formData.uses_custom_amount = isCustom && (customAmount !== standardAmount);
+        // Store in app state
+        window.membershipApp.formData.selected_membership_type = membershipType;
+        window.membershipApp.formData.membership_amount = finalAmount;
+        window.membershipApp.formData.uses_custom_amount = isCustom && (customAmount !== standardAmount);
 
         updateMembershipFeeDisplay();
         $('#membership-type-error').hide();
 
-        // Validate custom amount if applicable
         if (isCustom && customAmount) {
             frappe.call({
                 method: 'verenigingen.api.membership_application.validate_custom_amount',
@@ -215,9 +255,10 @@ $(document).ready(function() {
     function updateMembershipFeeDisplay() {
         const display = $('#membership-fee-display');
         const details = $('#fee-details');
+        const formData = window.membershipApp.formData;
 
         if (formData.selected_membership_type && formData.membership_amount) {
-            const membershipType = membershipTypes.find(t => t.name === formData.selected_membership_type);
+            const membershipType = window.membershipApp.membershipTypes.find(t => t.name === formData.selected_membership_type);
             let content = `
                 <div class="row">
                     <div class="col-md-6">
@@ -230,16 +271,14 @@ $(document).ready(function() {
             if (formData.uses_custom_amount) {
                 const difference = formData.membership_amount - membershipType.amount;
                 const percentageDiff = ((difference / membershipType.amount) * 100).toFixed(1);
-                content += `
-                    <strong>Standard Amount:</strong> ${frappe.format(membershipType.amount, {fieldtype: 'Currency'})}<br>
-                    <strong>Your Contribution:</strong> 
-                    <span class="${difference > 0 ? 'text-success' : 'text-warning'}">
-                        ${difference > 0 ? '+' : ''}${frappe.format(difference, {fieldtype: 'Currency'})} 
-                        (${percentageDiff > 0 ? '+' : ''}${percentageDiff}%)
-                    </span>
-                `;
+                content += '<strong>Standard Amount:</strong> ' + frappe.format(membershipType.amount, {fieldtype: 'Currency'}) + '<br>';
+                content += '<strong>Your Contribution:</strong> ';
+                content += '<span class="' + (difference > 0 ? 'text-success' : 'text-warning') + '">';
+                content += (difference > 0 ? '+' : '') + frappe.format(difference, {fieldtype: 'Currency'}) + ' ';
+                content += '(' + (percentageDiff > 0 ? '+' : '') + percentageDiff + '%)';
+                content += '</span>';
             } else {
-                content += `<em>Standard membership amount</em>`;
+                content += '<em>Standard membership amount</em>';
             }
 
             content += `</div></div>`;
@@ -250,18 +289,22 @@ $(document).ready(function() {
         }
     }
 
+    // ========================================
+    // PAYMENT METHOD HANDLING - FIXED
+    // ========================================
+
     function loadPaymentMethods() {
         const container = $('#payment-methods-list');
         const fallback = $('#payment-method-fallback');
         
-        // Show loading state
         container.html('<div class="text-center p-4"><i class="fa fa-spinner fa-spin"></i> Loading payment methods...</div>');
         
         frappe.call({
             method: 'verenigingen.api.membership_application.get_payment_methods',
             callback: function(r) {
                 if (r.message && r.message.payment_methods && r.message.payment_methods.length > 0) {
-                    paymentMethods = r.message.payment_methods;
+                    window.membershipApp.paymentMethods = r.message.payment_methods;
+                    paymentMethods = window.membershipApp.paymentMethods; // Update reference
                     renderPaymentMethods();
                     fallback.hide();
                 } else {
@@ -280,43 +323,49 @@ $(document).ready(function() {
         const container = $('#payment-methods-list');
         container.empty();
     
-        if (!paymentMethods || paymentMethods.length === 0) {
+        if (!window.membershipApp.paymentMethods || window.membershipApp.paymentMethods.length === 0) {
             showPaymentMethodFallback();
             return;
         }
     
-        paymentMethods.forEach(function(method) {
-            const methodCard = $(`
-                <div class="payment-method-option" data-method="${method.name}">
-                    <div class="d-flex align-items-center">
-                        <div class="payment-method-icon">
-                            <i class="fa ${method.icon || 'fa-credit-card'}"></i>
-                        </div>
-                        <div class="payment-method-info flex-grow-1">
-                            <h6>${method.name}</h6>
-                            <div class="text-muted">
-                                ${method.description}<br>
-                                <small><strong>Processing:</strong> ${method.processing_time}</small>
-                                ${method.requires_mandate ? '<br><small class="text-warning"><strong>Note:</strong> ' + method.note + '</small>' : ''}
-                            </div>
-                        </div>
-                        <div class="payment-method-selector">
-                            <div class="form-check">
-                                <input class="form-check-input payment-method-radio" type="radio" 
-                                       name="payment_method_selection" value="${method.name}" 
-                                       id="payment_${method.name.replace(/\s+/g, '_').toLowerCase()}">
-                                <label class="form-check-label" for="payment_${method.name.replace(/\s+/g, '_').toLowerCase()}">
-                                    Select
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `);
+        window.membershipApp.paymentMethods.forEach(function(method) {
+            // Build payment method card HTML using string concatenation
+            let methodCardHTML = '<div class="payment-method-option" data-method="' + method.name + '">';
+            methodCardHTML += '<div class="d-flex align-items-center">';
+            methodCardHTML += '<div class="payment-method-icon">';
+            methodCardHTML += '<i class="fa ' + (method.icon || 'fa-credit-card') + '"></i>';
+            methodCardHTML += '</div>';
+            methodCardHTML += '<div class="payment-method-info flex-grow-1">';
+            methodCardHTML += '<h6>' + method.name + '</h6>';
+            methodCardHTML += '<div class="text-muted">';
+            methodCardHTML += method.description + '<br>';
+            methodCardHTML += '<small><strong>Processing:</strong> ' + method.processing_time + '</small>';
+            
+            if (method.requires_mandate) {
+                methodCardHTML += '<br><small class="text-warning"><strong>Note:</strong> ' + method.note + '</small>';
+            }
+            
+            methodCardHTML += '</div>';
+            methodCardHTML += '</div>';
+            methodCardHTML += '<div class="payment-method-selector">';
+            methodCardHTML += '<div class="form-check">';
+            
+            const radioId = 'payment_' + method.name.replace(/\s+/g, '_').toLowerCase();
+            methodCardHTML += '<input class="form-check-input payment-method-radio" type="radio" ';
+            methodCardHTML += 'name="payment_method_selection" value="' + method.name + '" id="' + radioId + '">';
+            methodCardHTML += '<label class="form-check-label" for="' + radioId + '">';
+            methodCardHTML += 'Select';
+            methodCardHTML += '</label>';
+            methodCardHTML += '</div>';
+            methodCardHTML += '</div>';
+            methodCardHTML += '</div>';
+            methodCardHTML += '</div>';
+            
+            const methodCard = $(methodCardHTML);
             container.append(methodCard);
         });
     
-        // Bind payment method selection
+        // Bind payment method selection with proper scope
         $('.payment-method-option').off('click').on('click', function() {
             const methodName = $(this).data('method');
             selectPaymentMethod(methodName);
@@ -329,40 +378,32 @@ $(document).ready(function() {
         });
     
         // Auto-select first method
-        if (paymentMethods.length > 0) {
-            selectPaymentMethod(paymentMethods[0].name);
+        if (window.membershipApp.paymentMethods.length > 0) {
+            selectPaymentMethod(window.membershipApp.paymentMethods[0].name);
         }
     }
 
     function selectPaymentMethod(methodName) {
         if (!methodName) return;
         
-        selectedPaymentMethod = methodName;
+        // Use the app state to store payment method
+        window.membershipApp.setPaymentMethod(methodName);
+        
         console.log('Selected payment method:', methodName);
         
-        // Update UI based on whether we're using cards or dropdown
+        // Update UI
         if ($('#payment-method-fallback').is(':visible')) {
-            // Using dropdown fallback
             const select = $('#payment_method');
             select.val(methodName);
-            
-            // Clear any validation errors
-            select.removeClass('is-invalid');
-            select.siblings('.invalid-feedback').remove();
-            
-            // Mark as valid
-            select.addClass('is-valid');
+            select.removeClass('is-invalid').addClass('is-valid');
         } else {
-            // Using card interface
             $('.payment-method-option').removeClass('selected');
             $(`.payment-method-option[data-method="${methodName}"]`).addClass('selected');
-            
-            // Update radio button
             $(`.payment-method-radio[value="${methodName}"]`).prop('checked', true);
         }
         
         // Show method details
-        const method = paymentMethods.find(m => m.name === methodName);
+        const method = window.membershipApp.paymentMethods.find(m => m.name === methodName);
         if (method) {
             showPaymentMethodDetails(method);
         }
@@ -374,9 +415,6 @@ $(document).ready(function() {
             $('#sepa-mandate-notice').hide();
         }
         
-        // Store in form data
-        formData.payment_method = methodName;
-        
         console.log('Payment method selection complete:', methodName);
     }
 
@@ -384,27 +422,24 @@ $(document).ready(function() {
         const detailsContainer = $('#payment-method-details');
         const contentContainer = $('#payment-details-content');
         
-        let content = `
-            <div class="selected-method-info">
-                <div class="d-flex align-items-center mb-2">
-                    <i class="fa ${method.icon || 'fa-credit-card'} me-2"></i>
-                    <strong>${method.name}</strong>
-                </div>
-                <p class="mb-2">${method.description}</p>
-                <div class="method-details">
-                    <small><strong>Processing Time:</strong> ${method.processing_time}</small>
-                </div>
-        `;
+        // Build content HTML using string concatenation
+        let content = '<div class="selected-method-info">';
+        content += '<div class="d-flex align-items-center mb-2">';
+        content += '<i class="fa ' + (method.icon || 'fa-credit-card') + ' me-2"></i>';
+        content += '<strong>' + method.name + '</strong>';
+        content += '</div>';
+        content += '<p class="mb-2">' + method.description + '</p>';
+        content += '<div class="method-details">';
+        content += '<small><strong>Processing Time:</strong> ' + method.processing_time + '</small>';
+        content += '</div>';
         
         if (method.requires_mandate) {
-            content += `
-                <div class="alert alert-info mt-2 mb-0">
-                    <small><i class="fa fa-info-circle"></i> ${method.note}</small>
-                </div>
-            `;
+            content += '<div class="alert alert-info mt-2 mb-0">';
+            content += '<small><i class="fa fa-info-circle"></i> ' + method.note + '</small>';
+            content += '</div>';
         }
         
-        content += `</div>`;
+        content += '</div>';
         
         contentContainer.html(content);
         detailsContainer.show();
@@ -418,11 +453,7 @@ $(document).ready(function() {
         container.hide();
         fallback.show();
         
-        // Get the select element and remove required temporarily
         const select = $('#payment_method');
-        select.removeAttr('required');
-        
-        // Clear and populate dropdown
         select.empty();
         
         const fallbackMethods = [
@@ -449,15 +480,15 @@ $(document).ready(function() {
             }
         ];
         
-        // Store fallback methods for later use
-        paymentMethods = fallbackMethods;
+        // Store fallback methods
+        window.membershipApp.paymentMethods = fallbackMethods;
+        paymentMethods = fallbackMethods; // Update reference
         
-        // Add options without placeholder first
         fallbackMethods.forEach(function(method) {
             select.append(`<option value="${method.name}">${method.name} - ${method.description}</option>`);
         });
         
-        // Bind change event for fallback dropdown
+        // Bind change event
         select.off('change').on('change', function() {
             const selectedMethod = $(this).val();
             console.log('Dropdown changed to:', selectedMethod);
@@ -466,7 +497,7 @@ $(document).ready(function() {
             }
         });
         
-        // AUTO-SELECT FIRST OPTION immediately
+        // Auto-select first option
         if (fallbackMethods.length > 0) {
             const defaultMethod = fallbackMethods[0].name;
             select.val(defaultMethod);
@@ -474,6 +505,10 @@ $(document).ready(function() {
             console.log('Auto-selected payment method:', defaultMethod);
         }
     }
+
+    // ========================================
+    // OTHER LOADING FUNCTIONS
+    // ========================================
 
     function loadCountries(countries) {
         const select = $('#country');
@@ -483,7 +518,6 @@ $(document).ready(function() {
             select.append(`<option value="${country.name}">${country.name}</option>`);
         });
         
-        // Set Netherlands as default
         select.val('Netherlands');
     }
 
@@ -492,16 +526,22 @@ $(document).ready(function() {
         container.empty();
         
         areas.forEach(function(area) {
-            const checkbox = $(`
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" 
-                           value="${area.name}" id="interest_${area.name.replace(/\s+/g, '_')}">
-                    <label class="form-check-label" for="interest_${area.name.replace(/\s+/g, '_')}">
-                        ${area.name}
-                        ${area.description ? `<small class="text-muted d-block">${area.description}</small>` : ''}
-                    </label>
-                </div>
-            `);
+            // Build checkbox HTML using string concatenation
+            const checkboxId = 'interest_' + area.name.replace(/\s+/g, '_');
+            let checkboxHTML = '<div class="form-check">';
+            checkboxHTML += '<input class="form-check-input" type="checkbox" ';
+            checkboxHTML += 'value="' + area.name + '" id="' + checkboxId + '">';
+            checkboxHTML += '<label class="form-check-label" for="' + checkboxId + '">';
+            checkboxHTML += area.name;
+            
+            if (area.description) {
+                checkboxHTML += '<small class="text-muted d-block">' + area.description + '</small>';
+            }
+            
+            checkboxHTML += '</label>';
+            checkboxHTML += '</div>';
+            
+            const checkbox = $(checkboxHTML);
             container.append(checkbox);
         });
     }
@@ -514,30 +554,37 @@ $(document).ready(function() {
             select.append(`<option value="${chapter.name}">${chapter.name} - ${chapter.region}</option>`);
         });
         
-        // Show chapter selection section if chapters are available
         if (chapters.length > 0) {
             $('#chapter-selection').show();
         }
     }
 
-    // Step navigation (rest of the navigation code remains the same)
-    $('#next-btn').click(function() {
+    // ========================================
+    // STEP NAVIGATION - FIXED
+    // ========================================
+
+    $('#next-btn').off('click').on('click', function() {
         if (validateCurrentStep()) {
-            if (currentStep < maxSteps) {
-                currentStep++;
-                showStep(currentStep);
+            if (window.membershipApp.currentStep < window.membershipApp.maxSteps) {
+                window.membershipApp.currentStep++;
+                currentStep = window.membershipApp.currentStep; // Update reference
+                showStep(window.membershipApp.currentStep);
             }
         }
     });
 
-    $('#prev-btn').click(function() {
-        if (currentStep > 1) {
-            currentStep--;
-            showStep(currentStep);
+    $('#prev-btn').off('click').on('click', function() {
+        if (window.membershipApp.currentStep > 1) {
+            window.membershipApp.currentStep--;
+            currentStep = window.membershipApp.currentStep; // Update reference
+            showStep(window.membershipApp.currentStep);
         }
     });
 
     function showStep(step) {
+        // Update app state
+        window.membershipApp.currentStep = step;
+        
         // Hide all steps
         $('.form-step').hide().removeClass('active');
         
@@ -545,7 +592,7 @@ $(document).ready(function() {
         $(`.form-step[data-step="${step}"]`).show().addClass('active');
         
         // Update progress bar
-        const progress = (step / maxSteps) * 100;
+        const progress = (step / window.membershipApp.maxSteps) * 100;
         $('#form-progress').css('width', progress + '%');
         
         // Update step indicators
@@ -557,87 +604,84 @@ $(document).ready(function() {
         
         // Update navigation buttons
         $('#prev-btn').toggle(step > 1);
-        $('#next-btn').toggle(step < maxSteps);
-        $('#submit-btn').toggle(step === maxSteps);
-
-        if (step === 5) {
-            console.log('Initializing step 5');
-            
-            // Clear any validation errors from previous visits
-            $('#payment-error, #terms-error, #gdpr-error').remove();
-            
-            // Load payment methods if not already loaded
-            if (!paymentMethods || paymentMethods.length === 0) {
-                console.log('Loading payment methods for step 5');
-                loadPaymentMethods();
-            } else {
-                // Payment methods already loaded, just ensure fallback is shown
-                showPaymentMethodFallback();
-            }
-            
-            // Update summary
-            updateApplicationSummary();
-            
-            // Initialize form submission
-            initializeFormSubmission();
-        }
+        $('#next-btn').toggle(step < window.membershipApp.maxSteps);
+        $('#submit-btn').toggle(step === window.membershipApp.maxSteps);
 
         // Step-specific actions
         if (step === 2) {
-            $('#postal_code').on('blur', function() {
+            $('#postal_code').off('blur').on('blur', function() {
                 suggestChapterFromPostalCode($(this).val());
             });
         }
 
         if (step === 4) {
-            $('#interested_in_volunteering').change(function() {
+            $('#interested_in_volunteering').off('change').on('change', function() {
                 $('#volunteer-details').toggle($(this).is(':checked'));
             });
 
-            $('#application_source').change(function() {
+            $('#application_source').off('change').on('change', function() {
                 $('#source-details-container').toggle($(this).val() === 'Other');
             });
         }
 
-        if (step === maxSteps) {
+        if (step === 5) {
+            console.log('Initializing step 5');
+            
+            // Clear validation errors
+            $('.invalid-feedback').remove();
+            $('.is-invalid').removeClass('is-invalid');
+            
+            // Load payment methods if needed
+            if (!window.membershipApp.paymentMethods || window.membershipApp.paymentMethods.length === 0) {
+                console.log('Loading payment methods for step 5');
+                loadPaymentMethods();
+            }
+            
+            updateApplicationSummary();
+            initializeFormSubmission();
+        }
+
+        if (step === window.membershipApp.maxSteps) {
             updateApplicationSummary();
         }
     }
 
+    // ========================================
+    // VALIDATION - FIXED
+    // ========================================
+
     function validateCurrentStep() {
-        const step = currentStep;
+        const step = window.membershipApp.currentStep;
         let isValid = true;
         
         // Clear previous validation
         $('.is-invalid').removeClass('is-invalid');
         $('.invalid-feedback').hide();
+        
         if (step === 5) {
-            // Payment method validation
             return validateStep5();
         }
 
         if (step === 3) {
-            if (!formData.selected_membership_type) {
-                        $('#membership-type-error').show().text('Please select a membership type');
-                        isValid = false;
-                    } else {
-                        $('#membership-type-error').hide();
-                    }
-            
-                    // Custom amount validation
-                    if (formData.uses_custom_amount && formData.membership_amount) {
-                        const membershipType = membershipTypes.find(t => t.name === formData.selected_membership_type);
-                        if (membershipType) {
-                            const minAmount = membershipType.amount * 0.5; // Assuming 50% minimum
-                            if (formData.membership_amount < minAmount) {
-                                $('#membership-type-error').show().text(`Amount must be at least ${frappe.format(minAmount, {fieldtype: 'Currency'})}`);
-                                isValid = false;
-                            }
-                        }
-                    }
+            if (!window.membershipApp.formData.selected_membership_type) {
+                $('#membership-type-error').show().text('Please select a membership type');
+                isValid = false;
+            } else {
+                $('#membership-type-error').hide();
             }
+            
+            if (window.membershipApp.formData.uses_custom_amount && window.membershipApp.formData.membership_amount) {
+                const membershipType = window.membershipApp.membershipTypes.find(t => t.name === window.membershipApp.formData.selected_membership_type);
+                if (membershipType) {
+                    const minAmount = membershipType.amount * 0.5;
+                    if (window.membershipApp.formData.membership_amount < minAmount) {
+                        $('#membership-type-error').show().text(`Amount must be at least ${frappe.format(minAmount, {fieldtype: 'Currency'})}`);
+                        isValid = false;
+                    }
+                }
+            }
+        }
 
-        // Standard validation for other steps
         if (step === 1) {
             const requiredFields = ['first_name', 'last_name', 'email', 'birth_date'];
             requiredFields.forEach(function(field) {
@@ -648,14 +692,12 @@ $(document).ready(function() {
                 }
             });
 
-            // Email validation
             const email = $('#email').val();
             if (email && !isValidEmail(email)) {
                 markFieldInvalid($('#email'), 'Please enter a valid email address');
                 isValid = false;
             }
 
-            // Age validation
             const birthDate = $('#birth_date').val();
             if (birthDate) {
                 const age = calculateAge(birthDate);
@@ -682,6 +724,75 @@ $(document).ready(function() {
         return isValid;
     }
 
+    function validateStep5() {
+        console.log('Validating step 5');
+        let isValid = true;
+        
+        // Clear previous validation
+        $('.invalid-feedback').remove();
+        $('.is-invalid').removeClass('is-invalid');
+        $('.is-valid').removeClass('is-valid');
+        
+        // Get payment method using app state
+        const finalSelection = window.membershipApp.getPaymentMethod();
+        
+        console.log('Payment method validation:', {
+            appState: window.membershipApp.selectedPaymentMethod,
+            formData: window.membershipApp.formData.payment_method,
+            dropdown: $('#payment_method').val(),
+            final: finalSelection
+        });
+        
+        if (!finalSelection) {
+            console.log('No payment method selected - showing error');
+            if ($('#payment-method-fallback').is(':visible')) {
+                const select = $('#payment_method');
+                select.addClass('is-invalid');
+                select.after('<div class="invalid-feedback">Please select a payment method</div>');
+            } else {
+                const errorDiv = $('<div class="invalid-feedback d-block text-danger mb-3">Please select a payment method</div>');
+                $('#payment-methods-list').after(errorDiv);
+            }
+            isValid = false;
+        } else {
+            // Store the selection
+            window.membershipApp.setPaymentMethod(finalSelection);
+            
+            if ($('#payment-method-fallback').is(':visible')) {
+                $('#payment_method').addClass('is-valid').removeClass('is-invalid');
+            }
+            
+            console.log('Payment method validated:', finalSelection);
+        }
+
+        // Terms validation
+        const termsChecked = $('#terms').is(':checked');
+        if (!termsChecked) {
+            console.log('Terms not accepted');
+            const termsLabel = $('label[for="terms"]');
+            termsLabel.after('<div class="invalid-feedback d-block">You must accept the terms and conditions</div>');
+            $('#terms').addClass('is-invalid');
+            isValid = false;
+        } else {
+            $('#terms').addClass('is-valid').removeClass('is-invalid');
+        }
+
+        // GDPR consent validation
+        const gdprChecked = $('#gdpr_consent').is(':checked');
+        if (!gdprChecked) {
+            console.log('GDPR consent not given');
+            const gdprLabel = $('label[for="gdpr_consent"]');
+            gdprLabel.after('<div class="invalid-feedback d-block">You must consent to data processing</div>');
+            $('#gdpr_consent').addClass('is-invalid');
+            isValid = false;
+        } else {
+            $('#gdpr_consent').addClass('is-valid').removeClass('is-invalid');
+        }
+
+        console.log('Step 5 validation result:', isValid);
+        return isValid;
+    }
+
     function markFieldInvalid(field, message) {
         field.addClass('is-invalid');
         let feedback = field.siblings('.invalid-feedback');
@@ -691,6 +802,171 @@ $(document).ready(function() {
         }
         feedback.text(message).show();
     }
+
+    // ========================================
+    // FORM SUBMISSION - FIXED
+    // ========================================
+
+    function initializeFormSubmission() {
+        $('#membership-application-form').off('submit').on('submit', function(e) {
+            e.preventDefault();
+            console.log('Form submission triggered');
+            
+            if (!validateStep5()) {
+                console.log('Step 5 validation failed - stopping submission');
+                frappe.msgprint({
+                    title: 'Form Incomplete',
+                    message: 'Please complete all required fields before submitting.',
+                    indicator: 'orange'
+                });
+                return false;
+            }
+
+            const $btn = $('#submit-btn');
+            $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Processing...');
+
+            // Collect all form data
+            const applicationData = collectFormData();
+            console.log('Collected application data:', applicationData);
+
+            // Final validation of critical data
+            const criticalErrors = [];
+            if (!applicationData.selected_membership_type) {
+                criticalErrors.push('Membership type is missing');
+            }
+            if (!applicationData.payment_method) {
+                criticalErrors.push('Payment method is missing');
+            }
+            if (!applicationData.first_name || !applicationData.last_name) {
+                criticalErrors.push('Name is missing');
+            }
+            if (!applicationData.email) {
+                criticalErrors.push('Email is missing');
+            }
+
+            if (criticalErrors.length > 0) {
+                console.error('Critical validation errors:', criticalErrors);
+                frappe.msgprint({
+                    title: 'Form Error',
+                    message: 'Missing required information: ' + criticalErrors.join(', '),
+                    indicator: 'red'
+                });
+                $btn.prop('disabled', false).html('Submit Application & Pay');
+                return false;
+            }
+
+            // Submit application
+            frappe.call({
+                method: 'verenigingen.api.membership_application.submit_application',
+                args: { data: applicationData },
+                callback: function(r) {
+                    console.log('API response:', r);
+                    if (r.message && r.message.success) {
+                        handleSubmissionSuccess(r.message);
+                    } else {
+                        handleSubmissionError(r.message || 'Unknown error occurred');
+                        $btn.prop('disabled', false).html('Submit Application & Pay');
+                    }
+                },
+                error: function(r) {
+                    console.error('Application submission error:', r);
+                    handleSubmissionError('Network error occurred. Please check your connection and try again.');
+                    $btn.prop('disabled', false).html('Submit Application & Pay');
+                }
+            });
+        });
+    }
+
+    function collectFormData() {
+        // Use app state for payment method
+        const paymentMethod = window.membershipApp.getPaymentMethod();
+        
+        console.log('Collecting form data with payment method:', paymentMethod);
+        
+        const applicationData = {
+            // Personal info
+            first_name: $('#first_name').val() || '',
+            middle_name: $('#middle_name').val() || '',
+            last_name: $('#last_name').val() || '',
+            email: $('#email').val() || '',
+            mobile_no: $('#mobile_no').val() || '',
+            phone: $('#phone').val() || '',
+            birth_date: $('#birth_date').val() || '',
+            pronouns: $('#pronouns').val() || '',
+
+            // Address
+            address_line1: $('#address_line1').val() || '',
+            address_line2: $('#address_line2').val() || '',
+            city: $('#city').val() || '',
+            state: $('#state').val() || '',
+            postal_code: $('#postal_code').val() || '',
+            country: $('#country').val() || '',
+
+            // Membership
+            selected_membership_type: window.membershipApp.formData.selected_membership_type || '',
+            membership_amount: window.membershipApp.formData.membership_amount || 0,
+            uses_custom_amount: window.membershipApp.formData.uses_custom_amount || false,
+            selected_chapter: $('#selected_chapter').val() || '',
+
+            // Volunteer
+            interested_in_volunteering: $('#interested_in_volunteering').is(':checked'),
+            volunteer_availability: $('#volunteer_availability').val() || '',
+            volunteer_experience_level: $('#volunteer_experience_level').val() || '',
+            volunteer_interests: getSelectedVolunteerInterests(),
+
+            // Communication
+            newsletter_opt_in: $('#newsletter_opt_in').is(':checked'),
+            application_source: $('#application_source').val() || '',
+            application_source_details: $('#application_source_details').val() || '',
+
+            // Payment - ensure we have this
+            payment_method: paymentMethod,
+
+            // Additional
+            additional_notes: $('#additional_notes').val() || '',
+            terms: $('#terms').is(':checked'),
+            gdpr_consent: $('#gdpr_consent').is(':checked')
+        };
+
+        return applicationData;
+    }
+
+    function handleSubmissionSuccess(response) {
+        // Build success HTML using string concatenation
+        let successHTML = '<div class="text-center py-5">';
+        successHTML += '<div class="success-icon mb-4">';
+        successHTML += '<i class="fa fa-check-circle text-success" style="font-size: 4rem;"></i>';
+        successHTML += '</div>';
+        successHTML += '<h2 class="text-success">Application Submitted Successfully!</h2>';
+        successHTML += '<p class="lead">Thank you for your application. You will be redirected to complete payment.</p>';
+        successHTML += '<div class="mt-4">';
+        successHTML += '<div class="spinner-border text-primary" role="status">';
+        successHTML += '<span class="sr-only">Loading...</span>';
+        successHTML += '</div>';
+        successHTML += '</div>';
+        successHTML += '</div>';
+        
+        $('.membership-application-form').html(successHTML);
+        
+        // Redirect after 2 seconds
+        setTimeout(() => {
+            window.location.href = response.payment_url || `/application-success?id=${response.member_id}`;
+        }, 2000);
+    }
+
+    function handleSubmissionError(error) {
+        const errorMsg = typeof error === 'string' ? error : (error.message || 'An error occurred');
+        
+        frappe.msgprint({
+            title: 'Application Error',
+            message: errorMsg,
+            indicator: 'red'
+        });
+    }
+
+    // ========================================
+    // HELPER FUNCTIONS
+    // ========================================
 
     function suggestChapterFromPostalCode(postalCode) {
         if (!postalCode) return;
@@ -720,144 +996,43 @@ $(document).ready(function() {
 
     function updateApplicationSummary() {
         const summary = $('#application-summary');
-        let content = `
-            <div class="row">
-                <div class="col-md-6">
-                    <h6>Personal Information</h6>
-                    <p><strong>Name:</strong> ${$('#first_name').val()} ${$('#last_name').val()}</p>
-                    <p><strong>Email:</strong> ${$('#email').val()}</p>
-                    <p><strong>Age:</strong> ${calculateAge($('#birth_date').val())} years</p>
-                </div>
-                <div class="col-md-6">
-                    <h6>Membership</h6>
-                    <p><strong>Type:</strong> ${getMembershipTypeName(formData.selected_membership_type)}</p>
-                    <p><strong>Amount:</strong> ${frappe.format(formData.membership_amount, {fieldtype: 'Currency'})}</p>
-                    ${formData.uses_custom_amount ? '<p><em>Custom contribution selected</em></p>' : ''}
-                </div>
-            </div>
-        `;
+        const formData = window.membershipApp.formData;
+        
+        // Build summary HTML using string concatenation
+        let content = '<div class="row">';
+        content += '<div class="col-md-6">';
+        content += '<h6>Personal Information</h6>';
+        content += '<p><strong>Name:</strong> ' + $('#first_name').val() + ' ' + $('#last_name').val() + '</p>';
+        content += '<p><strong>Email:</strong> ' + $('#email').val() + '</p>';
+        content += '<p><strong>Age:</strong> ' + calculateAge($('#birth_date').val()) + ' years</p>';
+        content += '</div>';
+        content += '<div class="col-md-6">';
+        content += '<h6>Membership</h6>';
+        content += '<p><strong>Type:</strong> ' + getMembershipTypeName(formData.selected_membership_type) + '</p>';
+        content += '<p><strong>Amount:</strong> ' + frappe.format(formData.membership_amount, {fieldtype: 'Currency'}) + '</p>';
+        
+        if (formData.uses_custom_amount) {
+            content += '<p><em>Custom contribution selected</em></p>';
+        }
+        
+        content += '</div>';
+        content += '</div>';
 
         if ($('#selected_chapter').val()) {
-            content += `<p><strong>Chapter:</strong> ${$('#selected_chapter option:selected').text()}</p>`;
+            content += '<p><strong>Chapter:</strong> ' + $('#selected_chapter option:selected').text() + '</p>';
         }
 
         if ($('#interested_in_volunteering').is(':checked')) {
-            content += `<p><strong>Interested in volunteering:</strong> Yes</p>`;
+            content += '<p><strong>Interested in volunteering:</strong> Yes</p>';
         }
 
-        if (selectedPaymentMethod) {
-            content += `<p><strong>Payment Method:</strong> ${selectedPaymentMethod}</p>`;
+        const paymentMethod = window.membershipApp.getPaymentMethod();
+        if (paymentMethod) {
+            content += '<p><strong>Payment Method:</strong> ' + paymentMethod + '</p>';
         }
 
         summary.html(content);
     }
-
-    // Form submission
-    $('#membership-application-form').submit(function(e) {
-        e.preventDefault();
-        
-        if (!validateCurrentStep()) {
-            return;
-        }
-
-        const $btn = $('#submit-btn');
-        $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Processing...');
-
-        // Collect all form data
-        const applicationData = {
-            // Personal info
-            first_name: $('#first_name').val(),
-            middle_name: $('#middle_name').val(),
-            last_name: $('#last_name').val(),
-            email: $('#email').val(),
-            mobile_no: $('#mobile_no').val(),
-            phone: $('#phone').val(),
-            birth_date: $('#birth_date').val(),
-            pronouns: $('#pronouns').val(),
-
-            // Address
-            address_line1: $('#address_line1').val(),
-            address_line2: $('#address_line2').val(),
-            city: $('#city').val(),
-            state: $('#state').val(),
-            postal_code: $('#postal_code').val(),
-            country: $('#country').val(),
-
-            // Membership
-            selected_membership_type: formData.selected_membership_type,
-            membership_amount: formData.membership_amount,
-            uses_custom_amount: formData.uses_custom_amount,
-            selected_chapter: $('#selected_chapter').val(),
-
-            // Volunteer
-            interested_in_volunteering: $('#interested_in_volunteering').is(':checked'),
-            volunteer_availability: $('#volunteer_availability').val(),
-            volunteer_experience_level: $('#volunteer_experience_level').val(),
-            volunteer_interests: getSelectedVolunteerInterests(),
-
-            // Communication
-            newsletter_opt_in: $('#newsletter_opt_in').is(':checked'),
-            application_source: $('#application_source').val(),
-            application_source_details: $('#application_source_details').val(),
-
-            // Payment
-            payment_method: selectedPaymentMethod,
-
-            // Additional
-            additional_notes: $('#additional_notes').val(),
-            terms: $('#terms').is(':checked'),
-            gdpr_consent: $('#gdpr_consent').is(':checked')
-        };
-
-        // Submit application
-        frappe.call({
-            method: 'verenigingen.api.membership_application.submit_application',
-            args: { data: applicationData },
-            callback: function(r) {
-                if (r.message && r.message.success) {
-                    // Show success message and redirect
-                    const successUrl = `/application-success?id=${r.message.member_id}`;
-                    
-                    // Show success animation
-                    $('.membership-application-form').html(`
-                        <div class="text-center py-5">
-                            <div class="success-icon mb-4">
-                                <i class="fa fa-check-circle text-success" style="font-size: 4rem;"></i>
-                            </div>
-                            <h2 class="text-success">Application Submitted Successfully!</h2>
-                            <p class="lead">Thank you for your application. You will be redirected shortly.</p>
-                            <div class="mt-4">
-                                <div class="spinner-border text-primary" role="status">
-                                    <span class="sr-only">Loading...</span>
-                                </div>
-                            </div>
-                        </div>
-                    `);
-                    
-                    // Redirect after 2 seconds
-                    setTimeout(() => {
-                        window.location.href = successUrl;
-                    }, 2000);
-                } else {
-                    frappe.msgprint({
-                        title: 'Application Error',
-                        message: r.message || 'An error occurred. Please try again.',
-                        indicator: 'red'
-                    });
-                    $btn.prop('disabled', false).html('Submit Application & Pay');
-                }
-            },
-            error: function(r) {
-                console.error('Application submission error:', r);
-                frappe.msgprint({
-                    title: 'Submission Failed',
-                    message: 'An error occurred while submitting your application. Please try again.',
-                    indicator: 'red'
-                });
-                $btn.prop('disabled', false).html('Submit Application & Pay');
-            }
-        });
-    });
 
     // Utility functions
     function isValidEmail(email) {
@@ -881,7 +1056,7 @@ $(document).ready(function() {
     }
 
     function getMembershipTypeName(typeId) {
-        const type = membershipTypes.find(t => t.name === typeId);
+        const type = window.membershipApp.membershipTypes.find(t => t.name === typeId);
         return type ? type.membership_type_name : typeId;
     }
 
@@ -893,16 +1068,19 @@ $(document).ready(function() {
         return interests;
     }
 
-    // Auto-save functionality (optional)
+    // ========================================
+    // ADDITIONAL FEATURES
+    // ========================================
+
+    // Auto-save functionality
     let autoSaveTimer;
     function autoSaveForm() {
         clearTimeout(autoSaveTimer);
         autoSaveTimer = setTimeout(() => {
             const draftData = {
-                step: currentStep,
-                formData: formData,
-                selectedPaymentMethod: selectedPaymentMethod,
-                // Add other form values as needed
+                step: window.membershipApp.currentStep,
+                formData: window.membershipApp.formData,
+                selectedPaymentMethod: window.membershipApp.selectedPaymentMethod,
             };
             
             frappe.call({
@@ -943,7 +1121,53 @@ $(document).ready(function() {
         }
     });
 
-    // Initialize first step
+    // ========================================
+    // KEYBOARD NAVIGATION
+    // ========================================
+
+    $(document).keydown(function(e) {
+        if (e.ctrlKey || e.metaKey) return; // Allow Ctrl shortcuts
+        
+        switch(e.which) {
+            case 37: // Left arrow
+                if (window.membershipApp.currentStep > 1) {
+                    $('#prev-btn').click();
+                }
+                break;
+            case 39: // Right arrow
+                if (window.membershipApp.currentStep < window.membershipApp.maxSteps) {
+                    $('#next-btn').click();
+                }
+                break;
+            case 13: // Enter
+                if (window.membershipApp.currentStep === window.membershipApp.maxSteps) {
+                    $('#submit-btn').click();
+                } else {
+                    $('#next-btn').click();
+                }
+                e.preventDefault();
+                break;
+        }
+    });
+
+    // ========================================
+    // DEBUGGING FUNCTIONS
+    // ========================================
+
+    // Global debug function
+    window.debugMembershipApp = function() {
+        console.log('=== MEMBERSHIP APP DEBUG ===');
+        console.log('App state:', window.membershipApp);
+        console.log('Current step:', window.membershipApp.currentStep);
+        console.log('Selected payment method:', window.membershipApp.selectedPaymentMethod);
+        console.log('Form data:', window.membershipApp.formData);
+        console.log('Payment methods available:', window.membershipApp.paymentMethods);
+        console.log('============================');
+        return window.membershipApp;
+    };
+
+    // Initialize the application
+    console.log('Membership application JavaScript loaded successfully');
     showStep(1);
 
     // Add loading states
@@ -955,398 +1179,64 @@ $(document).ready(function() {
         element.removeClass('loading');
     }
 
-    // Keyboard navigation
-    $(document).keydown(function(e) {
-        if (e.ctrlKey || e.metaKey) return; // Allow Ctrl shortcuts
-        
-        switch(e.which) {
-            case 37: // Left arrow
-                if (currentStep > 1) {
-                    $('#prev-btn').click();
-                }
-                break;
-            case 39: // Right arrow
-                if (currentStep < maxSteps) {
-                    $('#next-btn').click();
-                }
-                break;
-            case 13: // Enter
-                if (currentStep === maxSteps) {
-                    $('#submit-btn').click();
-                } else {
-                    $('#next-btn').click();
-                }
-                e.preventDefault();
-                break;
-        }
-    });
+    // ========================================
+    // CSS FOR VALIDATION STATES
+    // ========================================
+
+    const validationCSS = `
+    <style>
+    .is-valid {
+        border-color: #28a745;
+    }
+
+    .is-invalid {
+        border-color: #dc3545;
+    }
+
+    .invalid-feedback {
+        display: block !important;
+        color: #dc3545;
+        font-size: 0.875rem;
+        margin-top: 0.25rem;
+    }
+
+    .invalid-feedback.d-block {
+        display: block !important;
+    }
+
+    .text-danger {
+        color: #dc3545 !important;
+    }
+
+    .loading {
+        position: relative;
+        pointer-events: none;
+    }
+
+    .loading::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 20px;
+        height: 20px;
+        margin: -10px 0 0 -10px;
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid #007bff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    </style>
+    `;
+
+    // Inject the CSS if not already present
+    if (!$('#membership-app-styles').length) {
+        $('head').append(validationCSS);
+        $('head').append('<meta id="membership-app-styles" />');
+    }
 });
-
-function validateStep5() {
-    console.log('Validating step 5');
-    let isValid = true;
-    
-    // Clear all previous validation messages
-    $('.invalid-feedback').remove();
-    $('.is-invalid').removeClass('is-invalid');
-    $('.is-valid').removeClass('is-valid');
-    
-    // Payment method validation - check both interfaces
-    const selectedFromDropdown = $('#payment_method').val();
-    const selectedFromCards = selectedPaymentMethod;
-    const formDataMethod = formData.payment_method;
-    
-    console.log('Payment method validation:', {
-        dropdown: selectedFromDropdown,
-        cards: selectedFromCards,
-        formData: formDataMethod
-    });
-    
-    const finalSelection = selectedFromDropdown || selectedFromCards || formDataMethod;
-    
-    if (!finalSelection) {
-        console.log('No payment method selected - showing error');
-        if ($('#payment-method-fallback').is(':visible')) {
-            const select = $('#payment_method');
-            select.addClass('is-invalid');
-            select.after('<div class="invalid-feedback">Please select a payment method</div>');
-        } else {
-            // Show error for card interface
-            const errorDiv = $('<div class="invalid-feedback d-block text-danger mb-3">Please select a payment method</div>');
-            $('#payment-methods-list').after(errorDiv);
-        }
-        isValid = false;
-    } else {
-        // Store the selection and mark as valid
-        selectedPaymentMethod = finalSelection;
-        formData.payment_method = finalSelection;
-        
-        if ($('#payment-method-fallback').is(':visible')) {
-            $('#payment_method').addClass('is-valid').removeClass('is-invalid');
-        }
-        
-        console.log('Payment method validated:', finalSelection);
-    }
-
-    // Terms validation
-    const termsChecked = $('#terms').is(':checked');
-    if (!termsChecked) {
-        console.log('Terms not accepted');
-        const termsLabel = $('label[for="terms"]');
-        termsLabel.after('<div class="invalid-feedback d-block">You must accept the terms and conditions</div>');
-        $('#terms').addClass('is-invalid');
-        isValid = false;
-    } else {
-        $('#terms').addClass('is-valid').removeClass('is-invalid');
-    }
-
-    // GDPR consent validation
-    const gdprChecked = $('#gdpr_consent').is(':checked');
-    if (!gdprChecked) {
-        console.log('GDPR consent not given');
-        const gdprLabel = $('label[for="gdpr_consent"]');
-        gdprLabel.after('<div class="invalid-feedback d-block">You must consent to data processing</div>');
-        $('#gdpr_consent').addClass('is-invalid');
-        isValid = false;
-    } else {
-        $('#gdpr_consent').addClass('is-valid').removeClass('is-invalid');
-    }
-
-    console.log('Step 5 validation result:', isValid);
-    return isValid;
-}
-
-// Initialize form submission with better error handling
-function initializeFormSubmission() {
-    $('#membership-application-form').off('submit').on('submit', function(e) {
-        e.preventDefault();
-        console.log('Form submission triggered');
-        
-        // Force validation of step 5 before submission
-        if (!validateStep5()) {
-            console.log('Step 5 validation failed - stopping submission');
-            
-            // Show user-friendly error
-            frappe.msgprint({
-                title: 'Form Incomplete',
-                message: 'Please complete all required fields before submitting.',
-                indicator: 'orange'
-            });
-            return false;
-        }
-
-        const $btn = $('#submit-btn');
-        $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Processing...');
-
-        // Collect all form data
-        const applicationData = collectFormData();
-        console.log('Collected application data:', applicationData);
-
-        // Final validation of critical data
-        const criticalErrors = [];
-        if (!applicationData.selected_membership_type) {
-            criticalErrors.push('Membership type is missing');
-        }
-        if (!applicationData.payment_method) {
-            criticalErrors.push('Payment method is missing');
-        }
-        if (!applicationData.first_name || !applicationData.last_name) {
-            criticalErrors.push('Name is missing');
-        }
-        if (!applicationData.email) {
-            criticalErrors.push('Email is missing');
-        }
-
-        if (criticalErrors.length > 0) {
-            console.error('Critical validation errors:', criticalErrors);
-            frappe.msgprint({
-                title: 'Form Error',
-                message: 'Missing required information: ' + criticalErrors.join(', '),
-                indicator: 'red'
-            });
-            $btn.prop('disabled', false).html('Submit Application & Pay');
-            return false;
-        }
-
-        // Submit application
-        frappe.call({
-            method: 'verenigingen.api.membership_application.submit_application',
-            args: { data: applicationData },
-            callback: function(r) {
-                console.log('API response:', r);
-                if (r.message && r.message.success) {
-                    handleSubmissionSuccess(r.message);
-                } else {
-                    handleSubmissionError(r.message || 'Unknown error occurred');
-                    $btn.prop('disabled', false).html('Submit Application & Pay');
-                }
-            },
-            error: function(r) {
-                console.error('Application submission error:', r);
-                handleSubmissionError('Network error occurred. Please check your connection and try again.');
-                $btn.prop('disabled', false).html('Submit Application & Pay');
-            }
-        });
-    });
-}
-
-const validationCSS = `
-<style>
-.is-valid {
-    border-color: #28a745;
-}
-
-.is-invalid {
-    border-color: #dc3545;
-}
-
-.invalid-feedback {
-    display: block !important;
-    color: #dc3545;
-    font-size: 0.875rem;
-    margin-top: 0.25rem;
-}
-
-.invalid-feedback.d-block {
-    display: block !important;
-}
-
-.text-danger {
-    color: #dc3545 !important;
-}
-</style>
-`;
-
-// Inject the CSS
-$('head').append(validationCSS);
-
-function collectFormData() {
-    // Make sure we have a valid payment method
-    const paymentMethod = selectedPaymentMethod || $('#payment_method').val() || formData.payment_method;
-    
-    console.log('Collecting form data with payment method:', paymentMethod);
-    
-    const applicationData = {
-        // Personal info
-        first_name: $('#first_name').val() || '',
-        middle_name: $('#middle_name').val() || '',
-        last_name: $('#last_name').val() || '',
-        email: $('#email').val() || '',
-        mobile_no: $('#mobile_no').val() || '',
-        phone: $('#phone').val() || '',
-        birth_date: $('#birth_date').val() || '',
-        pronouns: $('#pronouns').val() || '',
-
-        // Address
-        address_line1: $('#address_line1').val() || '',
-        address_line2: $('#address_line2').val() || '',
-        city: $('#city').val() || '',
-        state: $('#state').val() || '',
-        postal_code: $('#postal_code').val() || '',
-        country: $('#country').val() || '',
-
-        // Membership
-        selected_membership_type: formData.selected_membership_type || '',
-        membership_amount: formData.membership_amount || 0,
-        uses_custom_amount: formData.uses_custom_amount || false,
-        selected_chapter: $('#selected_chapter').val() || '',
-
-        // Volunteer
-        interested_in_volunteering: $('#interested_in_volunteering').is(':checked'),
-        volunteer_availability: $('#volunteer_availability').val() || '',
-        volunteer_experience_level: $('#volunteer_experience_level').val() || '',
-        volunteer_interests: getSelectedVolunteerInterests(),
-
-        // Communication
-        newsletter_opt_in: $('#newsletter_opt_in').is(':checked'),
-        application_source: $('#application_source').val() || '',
-        application_source_details: $('#application_source_details').val() || '',
-
-        // Payment - ensure we have this
-        payment_method: paymentMethod,
-
-        // Additional
-        additional_notes: $('#additional_notes').val() || '',
-        terms: $('#terms').is(':checked'),
-        gdpr_consent: $('#gdpr_consent').is(':checked')
-    };
-
-    return applicationData;
-}
-function initializeFormSubmission() {
-    // Remove any existing handlers first
-    $('#membership-application-form').off('submit');
-    
-    // Add new submit handler
-    $('#membership-application-form').on('submit', function(e) {
-        e.preventDefault();
-        console.log('Form submission triggered');
-        console.log('About to call validateStep5...');
-        
-        // Clear any existing error messages
-        $('#payment-error, #terms-error, #gdpr-error').remove();
-        
-        try {
-                debugPaymentMethod(); // Check state before validation
-                const isValid = validateStep5();
-                console.log('validateStep5 result:', isValid);
-            } catch (error) {
-                console.error('ERROR in validateStep5:', error);
-                console.error('Error stack:', error.stack);
-                console.error('Error on line:', error.line || 'unknown');
-                
-                // Try to continue with fallback
-                console.log('Trying fallback validation...');
-                const fallbackPaymentMethod = $('#payment_method').val() || formData?.payment_method;
-                console.log('Fallback payment method:', fallbackPaymentMethod);
-            }
-    
-        // Disable submit button
-        const $btn = $('#submit-btn');
-        $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Processing...');
-
-        // Collect form data
-        const applicationData = collectFormData();
-        console.log('Submitting application data:', applicationData);
-
-        // Submit to server
-        frappe.call({
-            method: 'verenigingen.api.membership_application.submit_application',
-            args: { data: applicationData },
-            callback: function(r) {
-                console.log('Server response:', r);
-                if (r.message && r.message.success) {
-                    handleSubmissionSuccess(r.message);
-                } else {
-                    const errorMsg = r.message ? (r.message.message || r.message) : 'Unknown error occurred';
-                    handleSubmissionError(errorMsg);
-                    $btn.prop('disabled', false).html('Submit Application & Pay');
-                }
-            },
-            error: function(r) {
-                console.error('Submission error:', r);
-                handleSubmissionError('Network error. Please check your connection and try again.');
-                $btn.prop('disabled', false).html('Submit Application & Pay');
-            }
-        });
-    });
-}
-
-window.debugPaymentMethod = function() {
-    console.log('=== PAYMENT METHOD DEBUG ===');
-    console.log('selectedPaymentMethod type:', typeof selectedPaymentMethod);
-    console.log('selectedPaymentMethod value:', selectedPaymentMethod);
-    console.log('formData.payment_method:', formData?.payment_method);
-    console.log('dropdown value:', $('#payment_method').val());
-    console.log('Current step:', currentStep);
-    console.log('Payment methods array:', paymentMethods);
-    console.log('Variables in global scope:');
-    console.log('  - currentStep:', typeof currentStep);
-    console.log('  - formData:', typeof formData);
-    console.log('  - membershipTypes:', typeof membershipTypes);
-    console.log('  - paymentMethods:', typeof paymentMethods);
-    console.log('==========================');
-};
-
-// 3. Add this to track when selectPaymentMethod is called
-function selectPaymentMethodWithDebug(methodName) {
-    console.log('=== selectPaymentMethod called ===');
-    console.log('Input methodName:', methodName);
-    console.log('selectedPaymentMethod BEFORE:', selectedPaymentMethod);
-    
-    // Your existing selectPaymentMethod code here
-    selectedPaymentMethod = methodName;
-    formData.payment_method = methodName;
-    
-    console.log('selectedPaymentMethod AFTER:', selectedPaymentMethod);
-    console.log('formData.payment_method AFTER:', formData.payment_method);
-    console.log('=== selectPaymentMethod complete ===');
-}
-
-// 4. Add this to track when validateStep5 is called
-function validateStep5WithDebug() {
-    console.log('=== validateStep5 called ===');
-    console.log('selectedPaymentMethod type at validation:', typeof selectedPaymentMethod);
-    console.log('selectedPaymentMethod value at validation:', selectedPaymentMethod);
-    
-    // Check if the variable exists in different scopes
-    try {
-        console.log('Can access selectedPaymentMethod:', selectedPaymentMethod);
-    } catch (e) {
-        console.error('ERROR accessing selectedPaymentMethod:', e);
-    }
-    
-    // Check the line that's causing the error specifically
-    try {
-        const selectedFromCards = selectedPaymentMethod;
-        console.log('Successfully assigned selectedFromCards:', selectedFromCards);
-    } catch (e) {
-        console.error('ERROR on line that was failing:', e);
-        console.error('Stack trace:', e.stack);
-    }
-    
-    console.log('=== validateStep5 debug complete ===');
-}
-// 6. Check if there are multiple scripts or scope issues
-setTimeout(function() {
-    console.log('=== DELAYED SCOPE CHECK ===');
-    console.log('selectedPaymentMethod still accessible:', typeof selectedPaymentMethod);
-    if (typeof selectedPaymentMethod === 'undefined') {
-        console.error('PROBLEM: selectedPaymentMethod became undefined!');
-        console.log('Checking window scope:', typeof window.selectedPaymentMethod);
-    }
-    debugPaymentMethod();
-}, 5000);
-
-// 7. Override console.error to catch the exact error
-const originalError = console.error;
-console.error = function(...args) {
-    if (args[0] && args[0].includes && args[0].includes('selectedPaymentMethod')) {
-        console.log('=== CAUGHT selectedPaymentMethod ERROR ===');
-        console.log('Error args:', args);
-        console.log('Current call stack:');
-        console.trace();
-        debugPaymentMethod();
-    }
-    originalError.apply(console, args);
-};
