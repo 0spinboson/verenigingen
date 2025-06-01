@@ -608,6 +608,10 @@ $(document).ready(function() {
         // Clear previous validation
         $('.is-invalid').removeClass('is-invalid');
         $('.invalid-feedback').hide();
+        if (step === 5) {
+            // Payment method validation
+            return validateStep5();
+        }
 
         if (step === 3) {
             if (!formData.selected_membership_type) {
@@ -629,12 +633,6 @@ $(document).ready(function() {
                         }
                     }
             }
-        }
-
-        if (step === 5) {
-            // Payment method validation
-            return validateStep5();
-        }
 
         // Standard validation for other steps
         if (step === 1) {
