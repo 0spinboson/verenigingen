@@ -111,50 +111,63 @@ def validate_email(email):
         return {"valid": False, "message": str(e)}
 
 @frappe.whitelist(allow_guest=True)
-def submit_application(data):
-    """Process membership application submission - FIXED VERSION"""
+def submit_application(**kwargs):
+    """Process membership application submission - FIXED ARGUMENT HANDLING"""
     try:
+        # Frappe passes arguments as kwargs, extract data
+        data = kwargs.get('data')
+        
+        # If data is None, check if arguments were passed directly
+        if data is None:
+            # Sometimes Frappe passes the form fields directly as kwargs
+            data = kwargs
+        
         # Handle data parameter - it might be a string or dict
         if isinstance(data, str):
             try:
                 data = json.loads(data)
             except json.JSONDecodeError as e:
                 frappe.throw(_("Invalid data format: {0}").format(str(e)))
-
+        
         # Log what we received for debugging
         frappe.logger().info(f"Received application data: {data}")
-
+        frappe.logger().info(f"Received kwargs: {kwargs}")
+        
+        # Validate we have data
+        if not data or not isinstance(data, dict):
+            frappe.throw(_("No application data received"))
+        
         # Validate required fields
-        required_fields = ["first_name", "last_name", "email", "birth_date",
+        required_fields = ["first_name", "last_name", "email", "birth_date", 
                           "address_line1", "city", "postal_code", "country"]
-
+        
         missing_fields = []
         for field in required_fields:
             if not data.get(field):
                 missing_fields.append(field)
-
+        
         if missing_fields:
             frappe.throw(_("Missing required fields: {0}").format(", ".join(missing_fields)))
-
+        
         # Check if member with email already exists
         existing = frappe.db.exists("Member", {"email": data.get("email")})
         if existing:
             frappe.throw(_("A member with this email already exists. Please login or contact support."))
-
+        
         # Validate membership type exists
         selected_type = data.get("selected_membership_type")
         if selected_type and not frappe.db.exists("Membership Type", selected_type):
             # Try to get any active membership type as fallback
-            fallback_types = frappe.get_all("Membership Type",
-                                          filters={"is_active": 1},
-                                          fields=["name"],
+            fallback_types = frappe.get_all("Membership Type", 
+                                          filters={"is_active": 1}, 
+                                          fields=["name"], 
                                           limit=1)
             if fallback_types:
                 selected_type = fallback_types[0].name
                 frappe.logger().warning(f"Used fallback membership type: {selected_type}")
             else:
                 frappe.throw(_("No valid membership type found"))
-
+        
         # Create address
         address = frappe.get_doc({
             "doctype": "Address",
@@ -171,7 +184,7 @@ def submit_application(data):
             "is_primary_address": 1
         })
         address.insert(ignore_permissions=True)
-
+        
         # Create member
         member = frappe.get_doc({
             "doctype": "Member",
@@ -194,9 +207,9 @@ def submit_application(data):
             "notes": data.get("additional_notes", ""),
             "payment_method": data.get("payment_method", "")
         })
-
+        
         member.insert(ignore_permissions=True)
-
+        
         # Create a simple success response
         return {
             "success": True,
@@ -204,15 +217,15 @@ def submit_application(data):
             "member_id": member.name,
             "status": "pending_review"
         }
-
+        
     except Exception as e:
         frappe.log_error(f"Error in submit_application: {str(e)}")
-
+        
         # Return error in a format the frontend can handle
         error_message = str(e)
         if hasattr(e, 'message'):
             error_message = e.message
-
+            
         return {
             "success": False,
             "error": error_message,
@@ -1577,3 +1590,21 @@ def get_payment_instructions_html(invoice, payment_url):
         <p><small>You can pay using credit card, bank transfer, or SEPA direct debit.</small></p>
     </div>
     """
+@frappe.whitelist(allow_guest=True)
+def submit_application_alt(data=None):
+    """Alternative method signature for testing"""
+    if data is None:
+        return {"success": False, "error": "No data provided"}
+    
+    return submit_application(data=data)
+
+@frappe.whitelist(allow_guest=True) 
+def test_data_passing(**kwargs):
+    """Test method to see how Frappe passes data"""
+    return {
+        "success": True,
+        "received_kwargs": kwargs,
+        "kwargs_keys": list(kwargs.keys()),
+        "data_value": kwargs.get('data'),
+        "data_type": type(kwargs.get('data')).__name__
+    }
