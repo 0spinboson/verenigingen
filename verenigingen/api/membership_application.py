@@ -400,10 +400,14 @@ def create_crm_lead_from_application(data):
         "source": "Membership Application",
         "status": "Open",
         "type": "Client",
-        "request_type": "Membership Application",
+        "request_type": "Other",  # Use "Other" since "Membership Application" is not allowed
         "unsubscribed": 0,  # Always subscribed to mandatory communications
         "blog_subscriber": 1 if data.get("newsletter_opt_in") else 0
     })
+    
+    # Add a note to clarify this is a membership application
+    lead.notes = "Membership Application - " + (data.get("additional_notes", "") or "No additional notes")
+    
     lead.insert(ignore_permissions=True)
     return lead
 
