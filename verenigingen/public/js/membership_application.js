@@ -1,533 +1,561 @@
-frappe.ready(function() {
-    // Initialize the membership application form
-    const MembershipApplication = {
-        currentStep: 1,
-        totalSteps: 5,
-        formData: {},
-        settings: {},
-        
-        init: function() {
-            this.loadFormData();
-            this.bindEvents();
-            this.setupValidation();
-        },
-        
-        loadFormData: function() {
-            console.log('Loading form data...');
-            // Load form data (membership types, chapters, etc.)
-            frappe.call({
-                method: 'verenigingen.api.membership_application.get_application_form_data',
-                callback: (r) => {
-                    console.log('Form data response:', r);
-                    if (r.message) {
-                        this.populateFormOptions(r.message);
-                    } else {
-                        console.error('No data in response');
-                        this.loadFallbackData();
+// verenigingen/public/js/membership_application.js
+
+$(document).ready(function() {
+    let currentStep = 1;
+    let maxSteps = 5;
+    let formData = {};
+    let membershipTypes = [];
+    let customAmountEnabled = false;
+
+    // Load initial form data
+    loadFormData();
+
+    function loadFormData() {
+        frappe.call({
+            method: 'verenigingen.api.membership_application.get_application_form_data',
+            callback: function(r) {
+                if (r.message) {
+                    membershipTypes = r.message.membership_types;
+                    renderMembershipTypes();
+                    loadCountries(r.message.countries);
+                    loadVolunteerAreas(r.message.volunteer_areas);
+                    loadChapters(r.message.chapters);
+                    loadPaymentMethods();
+                }
+            }
+        });
+    }
+
+    function renderMembershipTypes() {
+        const container = $('#membership-types');
+        container.empty();
+
+        membershipTypes.forEach(function(type) {
+            const card = $(`
+                <div class="membership-type-card" data-type="${type.name}" data-amount="${type.amount}">
+                    <h5>${type.membership_type_name}</h5>
+                    <div class="membership-price">
+                        ${frappe.format(type.amount, {fieldtype: 'Currency'})} / ${type.subscription_period}
+                    </div>
+                    <p class="membership-description">${type.description || ''}</p>
+                    <div class="custom-amount-section" style="display: none;">
+                        <label>Custom Amount:</label>
+                        <input type="number" class="form-control custom-amount-input" 
+                               min="${type.amount * 0.5}" step="0.01" 
+                               placeholder="Enter amount">
+                        <small class="text-muted">Minimum: ${frappe.format(type.amount * 0.5, {fieldtype: 'Currency'})}</small>
+                    </div>
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-primary select-membership">Select</button>
+                        <button type="button" class="btn btn-outline-secondary toggle-custom" style="margin-left: 10px;">Custom Amount</button>
+                    </div>
+                </div>
+            `);
+            container.append(card);
+        });
+
+        // Add event handlers
+        $('.select-membership').click(function() {
+            const card = $(this).closest('.membership-type-card');
+            const membershipType = card.data('type');
+            const standardAmount = card.data('amount');
+            const customAmountInput = card.find('.custom-amount-input');
+            const customAmount = customAmountInput.val();
+
+            // Clear other selections
+            $('.membership-type-card').removeClass('selected');
+            card.addClass('selected');
+
+            // Store selection
+            formData.selected_membership_type = membershipType;
+            
+            if (customAmount && parseFloat(customAmount) !== standardAmount) {
+                formData.membership_amount = parseFloat(customAmount);
+                formData.uses_custom_amount = true;
+            } else {
+                formData.membership_amount = standardAmount;
+                formData.uses_custom_amount = false;
+            }
+
+            updateMembershipFeeDisplay();
+            $('#membership-type-error').hide();
+        });
+
+        $('.toggle-custom').click(function() {
+            const card = $(this).closest('.membership-type-card');
+            const customSection = card.find('.custom-amount-section');
+            const button = $(this);
+
+            if (customSection.is(':visible')) {
+                customSection.hide();
+                button.text('Custom Amount');
+                card.find('.custom-amount-input').val('');
+            } else {
+                customSection.show();
+                button.text('Standard Amount');
+                // Pre-fill with standard amount
+                card.find('.custom-amount-input').val(card.data('amount'));
+            }
+        });
+
+        // Validate custom amounts on input
+        $('.custom-amount-input').on('input', function() {
+            const card = $(this).closest('.membership-type-card');
+            const minAmount = card.data('amount') * 0.5;
+            const enteredAmount = parseFloat($(this).val());
+
+            if (enteredAmount < minAmount) {
+                $(this).addClass('is-invalid');
+                $(this).siblings('.invalid-feedback').remove();
+                $(this).after(`<div class="invalid-feedback">Amount must be at least ${frappe.format(minAmount, {fieldtype: 'Currency'})}</div>`);
+            } else {
+                $(this).removeClass('is-invalid');
+                $(this).siblings('.invalid-feedback').remove();
+            }
+        });
+    }
+
+    function updateMembershipFeeDisplay() {
+        const display = $('#membership-fee-display');
+        const details = $('#fee-details');
+
+        if (formData.selected_membership_type && formData.membership_amount) {
+            const membershipType = membershipTypes.find(t => t.name === formData.selected_membership_type);
+            let content = `
+                <strong>Selected:</strong> ${membershipType.membership_type_name}<br>
+                <strong>Amount:</strong> ${frappe.format(formData.membership_amount, {fieldtype: 'Currency'})}
+            `;
+
+            if (formData.uses_custom_amount) {
+                const difference = formData.membership_amount - membershipType.amount;
+                const percentageDiff = ((difference / membershipType.amount) * 100).toFixed(1);
+                content += `<br><strong>Standard Amount:</strong> ${frappe.format(membershipType.amount, {fieldtype: 'Currency'})}`;
+                content += `<br><strong>Difference:</strong> ${difference > 0 ? '+' : ''}${frappe.format(difference, {fieldtype: 'Currency'})} (${percentageDiff > 0 ? '+' : ''}${percentageDiff}%)`;
+            }
+
+            details.html(content);
+            display.show();
+        } else {
+            display.hide();
+        }
+    }
+
+    function loadPaymentMethods() {
+        frappe.call({
+            method: 'verenigingen.api.membership_application.get_payment_methods',
+            callback: function(r) {
+                if (r.message && r.message.payment_methods) {
+                    const select = $('#payment_method');
+                    select.empty().append('<option value="">Select payment method...</option>');
+                    
+                    r.message.payment_methods.forEach(function(method) {
+                        const option = $(`
+                            <option value="${method.name}" 
+                                    data-type="${method.type}" 
+                                    data-processing-time="${method.processing_time || ''}"
+                                    data-requires-mandate="${method.requires_mandate || false}">
+                                ${method.name} - ${method.description}
+                            </option>
+                        `);
+                        select.append(option);
+                    });
+
+                    // Set default if specified
+                    if (r.message.default_method) {
+                        select.val(r.message.default_method);
                     }
-                },
-                error: (r) => {
-                    console.error('Error loading form data:', r);
-                    this.loadFallbackData();
                 }
-            });
-        },
-        
-        loadFallbackData: function() {
-            console.log('Loading fallback data...');
-            // Load basic countries as fallback
-            const fallbackCountries = [
-                {name: 'Netherlands'}, {name: 'Germany'}, {name: 'Belgium'}, 
-                {name: 'France'}, {name: 'United Kingdom'}, {name: 'Other'}
-            ];
-            
-            this.populateFormOptions({
-                countries: fallbackCountries,
-                membership_types: [],
-                chapters: [],
-                volunteer_areas: []
-            });
-        },
-        
-        populateFormOptions: function(data) {
-            console.log('Populating form options with data:', data);
-            
-            // Populate countries
-            this.populateCountries(data.countries || []);
-            
-            // Populate membership types
-            this.populateMembershipTypes(data.membership_types || []);
-            
-            // Populate chapters
-            this.populateChapters(data.chapters || []);
-            
-            // Populate volunteer areas
-            this.populateVolunteerAreas(data.volunteer_areas || []);
-        },
-        
-        populateCountries: function(countries) {
-            console.log('Populating countries:', countries.length);
-            const countrySelect = $('#country');
-            if (countrySelect.length === 0) {
-                console.error('Country select not found');
-                return;
-            }
-            
-            countrySelect.empty().append('<option value="">Select Country...</option>');
-            
-            // Add Netherlands at the top
-            countrySelect.append('<option value="Netherlands">Netherlands</option>');
-            
-            // Add other countries
-            countries.forEach(country => {
-                if (country.name !== 'Netherlands') {
-                    countrySelect.append(`<option value="${country.name}">${country.name}</option>`);
-                }
-            });
-            
-            console.log('Countries populated successfully');
-        },
-        
-        populateMembershipTypes: function(membershipTypes) {
-            console.log('Populating membership types:', membershipTypes.length);
-            const container = $('#membership-types');
-            if (container.length === 0) {
-                console.error('Membership types container not found');
-                return;
-            }
-            
-            container.empty();
-            
-            membershipTypes.forEach(type => {
-                // Format currency properly
-                const formattedAmount = this.formatCurrency(type.amount, type.currency);
-                
-                const card = $(`
-                    <div class="membership-type-card" data-type="${type.name}" data-amount="${type.amount}">
-                        <h5>${type.membership_type_name}</h5>
-                        <div class="price">${formattedAmount}</div>
-                        <div class="period">${type.subscription_period}</div>
-                        <div class="description">${type.description || ''}</div>
-                    </div>
+            },
+            error: function(r) {
+                console.error('Error loading payment methods:', r);
+                // Fallback to basic options
+                const select = $('#payment_method');
+                select.empty().append(`
+                    <option value="">Select payment method...</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
+                    <option value="Direct Debit">Direct Debit (SEPA)</option>
+                    <option value="Credit Card">Credit Card</option>
                 `);
-                
-                card.click(() => {
-                    $('.membership-type-card').removeClass('selected');
-                    card.addClass('selected');
-                    this.formData.selected_membership_type = type.name;
-                    this.showMembershipFeeDetails(type);
-                });
-                
-                container.append(card);
-            });
-            
-            console.log('Membership types populated successfully');
-        },
-        
-        populateChapters: function(chapters) {
-            console.log('Populating chapters:', chapters.length);
-            const chapterSelect = $('#selected_chapter');
-            if (chapterSelect.length === 0) {
-                console.log('Chapter select not found - might be disabled');
-                return;
             }
-            
-            chapterSelect.empty().append('<option value="">Select a chapter...</option>');
-            
-            chapters.forEach(chapter => {
-                chapterSelect.append(`<option value="${chapter.name}">${chapter.name}${chapter.region ? ' - ' + chapter.region : ''}</option>`);
-            });
-            
-            console.log('Chapters populated successfully');
-        },
+        });
+    }
+
+    function loadCountries(countries) {
+        const select = $('#country');
+        select.empty().append('<option value="">Select Country...</option>');
         
-        populateVolunteerAreas: function(volunteerAreas) {
-            console.log('Populating volunteer areas:', volunteerAreas.length);
-            const container = $('#volunteer-interests');
-            if (container.length === 0) {
-                console.log('Volunteer interests container not found');
-                return;
+        countries.forEach(function(country) {
+            select.append(`<option value="${country.name}">${country.name}</option>`);
+        });
+        
+        // Set Netherlands as default
+        select.val('Netherlands');
+    }
+
+    function loadVolunteerAreas(areas) {
+        const container = $('#volunteer-interests');
+        container.empty();
+        
+        areas.forEach(function(area) {
+            const checkbox = $(`
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" 
+                           value="${area.name}" id="interest_${area.name}">
+                    <label class="form-check-label" for="interest_${area.name}">
+                        ${area.name}
+                        ${area.description ? `<small class="text-muted d-block">${area.description}</small>` : ''}
+                    </label>
+                </div>
+            `);
+            container.append(checkbox);
+        });
+    }
+
+    function loadChapters(chapters) {
+        const select = $('#selected_chapter');
+        select.empty().append('<option value="">Select a chapter...</option>');
+        
+        chapters.forEach(function(chapter) {
+            select.append(`<option value="${chapter.name}">${chapter.name} - ${chapter.region}</option>`);
+        });
+    }
+
+    // Step navigation
+    $('#next-btn').click(function() {
+        if (validateCurrentStep()) {
+            if (currentStep < maxSteps) {
+                currentStep++;
+                showStep(currentStep);
             }
-            
-            container.empty();
-            
-            volunteerAreas.forEach(area => {
-                const safeId = area.name.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '');
-                const checkbox = $(`
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" value="${area.name}" id="interest_${safeId}">
-                        <label class="form-check-label" for="interest_${safeId}">
-                            ${area.name}
-                        </label>
-                    </div>
-                `);
-                container.append(checkbox);
-            });
-            
-            console.log('Volunteer areas populated successfully');
-        },
+        }
+    });
+
+    $('#prev-btn').click(function() {
+        if (currentStep > 1) {
+            currentStep--;
+            showStep(currentStep);
+        }
+    });
+
+    function showStep(step) {
+        // Hide all steps
+        $('.form-step').hide().removeClass('active');
         
-        formatCurrency: function(amount, currency = 'EUR') {
-            // Simple currency formatting - replace with proper Frappe formatting if available
-            if (typeof amount === 'undefined' || amount === null) return '';
-            
-            const formatted = parseFloat(amount).toFixed(2);
-            return `${currency} ${formatted}`;
-        },
+        // Show current step
+        $(`.form-step[data-step="${step}"]`).show().addClass('active');
         
-        showMembershipFeeDetails: function(type) {
-            console.log('Showing fee details for:', type);
-            
-            const feeDisplay = $('#membership-fee-display');
-            const feeDetails = $('#fee-details');
-            
-            if (feeDisplay.length && feeDetails.length) {
-                const formattedAmount = this.formatCurrency(type.amount, type.currency);
-                feeDetails.html(
-                    `<strong>${type.membership_type_name}</strong><br>` +
-                    `Amount: ${formattedAmount}<br>` +
-                    `Billing: ${type.subscription_period}`
-                );
-                feeDisplay.show();
-            }
-        },
+        // Update progress bar
+        const progress = (step / maxSteps) * 100;
+        $('#form-progress').css('width', progress + '%');
         
-        bindEvents: function() {
-            console.log('Binding events...');
-            
-            // Navigation buttons
-            $('#next-btn').click(() => this.nextStep());
-            $('#prev-btn').click(() => this.prevStep());
-            $('#submit-btn').click((e) => {
-                e.preventDefault();
-                this.submitApplication();
+        // Update step indicators
+        $('.step').removeClass('active');
+        $(`.step[data-step="${step}"]`).addClass('active');
+        
+        // Update navigation buttons
+        if (step === 1) {
+            $('#prev-btn').hide();
+        } else {
+            $('#prev-btn').show();
+        }
+        
+        if (step === maxSteps) {
+            $('#next-btn').hide();
+            $('#submit-btn').show();
+            updateApplicationSummary();
+        } else {
+            $('#next-btn').show();
+            $('#submit-btn').hide();
+        }
+
+        // Step-specific actions
+        if (step === 2) {
+            // Postal code suggestion
+            $('#postal_code').on('blur', function() {
+                suggestChapterFromPostalCode($(this).val());
             });
-            
-            // Birth date validation
-            $('#birth_date').change((e) => {
-                this.validateBirthDate(e.target.value);
-            });
-            
-            // Email validation
-            $('#email').blur((e) => {
-                this.validateEmail(e.target.value);
-            });
-            
-            // Postal code chapter suggestion
-            $('#postal_code').blur(() => {
-                const postalCode = $('#postal_code').val();
-                const country = $('#country').val();
-                if (postalCode && country) {
-                    this.validatePostalCode(postalCode, country);
-                }
-            });
-            
+        }
+
+        if (step === 4) {
             // Volunteer interest toggle
             $('#interested_in_volunteering').change(function() {
-                $('#volunteer-details').toggle(this.checked);
+                if ($(this).is(':checked')) {
+                    $('#volunteer-details').show();
+                } else {
+                    $('#volunteer-details').hide();
+                }
             });
-            
-            // Application source change
+
+            // Application source details
             $('#application_source').change(function() {
-                $('#source-details-container').toggle($(this).val() === 'Other');
-            });
-            
-            console.log('Events bound successfully');
-        },
-        
-        setupValidation: function() {
-            console.log('Setting up validation...');
-            const form = document.getElementById('membership-application-form');
-            if (form) {
-                form.classList.add('needs-validation');
-                form.setAttribute('novalidate', true);
-            }
-        },
-        
-        validateBirthDate: function(birthDate) {
-            if (!birthDate) return;
-            
-            frappe.call({
-                method: 'verenigingen.api.membership_application.validate_birth_date',
-                args: { birth_date: birthDate },
-                callback: (r) => {
-                    console.log('Birth date validation:', r);
-                    if (r.message) {
-                        const birthField = $('#birth_date');
-                        const warningDiv = $('#age-warning');
-                        
-                        if (r.message.valid) {
-                            birthField.removeClass('is-invalid');
-                            if (r.message.message && r.message.message.length > 0) {
-                                // Show warning but field is still valid
-                                warningDiv.show().text(r.message.message);
-                            } else {
-                                warningDiv.hide();
-                            }
-                        } else {
-                            birthField.addClass('is-invalid');
-                            birthField.siblings('.invalid-feedback').text(r.message.message);
-                            warningDiv.hide();
-                        }
-                    }
-                }
-            });
-        },
-        
-        validateEmail: function(email) {
-            if (!email) return;
-            
-            frappe.call({
-                method: 'verenigingen.api.membership_application.validate_email',
-                args: { email: email },
-                callback: (r) => {
-                    console.log('Email validation:', r);
-                    if (r.message) {
-                        const emailField = $('#email');
-                        if (r.message.valid) {
-                            emailField.removeClass('is-invalid');
-                        } else {
-                            emailField.addClass('is-invalid');
-                            emailField.siblings('.invalid-feedback').text(r.message.message);
-                        }
-                    }
-                }
-            });
-        },
-        
-        validatePostalCode: function(postalCode, country) {
-            frappe.call({
-                method: 'verenigingen.api.membership_application.validate_postal_code',
-                args: {
-                    postal_code: postalCode,
-                    country: country
-                },
-                callback: (r) => {
-                    console.log('Postal code validation:', r);
-                    if (r.message && r.message.valid) {
-                        if (r.message.suggested_chapters && r.message.suggested_chapters.length > 0) {
-                            this.showSuggestedChapters(r.message.suggested_chapters);
-                        }
-                    }
-                }
-            });
-        },
-        
-        showSuggestedChapters: function(chapters) {
-            console.log('Showing suggested chapters:', chapters);
-            
-            const suggestion = $('#suggested-chapter');
-            const chapterName = $('#suggested-chapter-name');
-            
-            if (chapters.length > 0 && suggestion.length && chapterName.length) {
-                chapterName.text(chapters[0].name);
-                suggestion.show();
-                
-                $('#accept-suggestion').off('click').on('click', () => {
-                    $('#selected_chapter').val(chapters[0].name);
-                    suggestion.hide();
-                });
-            }
-        },
-        
-        validateCurrentStep: function() {
-            const currentStepDiv = $(`.form-step[data-step="${this.currentStep}"]`);
-            const requiredFields = currentStepDiv.find('[required]');
-            let isValid = true;
-            
-            requiredFields.each(function() {
-                const field = $(this);
-                if (!this.checkValidity() || !field.val()) {
-                    field.addClass('is-invalid');
-                    isValid = false;
+                if ($(this).val() === 'Other') {
+                    $('#source-details-container').show();
                 } else {
-                    field.removeClass('is-invalid');
-                }
-            });
-            
-            // Special validation for step 3 (membership type selection)
-            if (this.currentStep === 3) {
-                if ($('.membership-type-card.selected').length === 0) {
-                    $('#membership-type-error').show().text('Please select a membership type');
-                    isValid = false;
-                } else {
-                    $('#membership-type-error').hide();
-                }
-            }
-            
-            // Special validation for step 5 (terms acceptance)
-            if (this.currentStep === 5) {
-                if (!$('#terms').is(':checked')) {
-                    $('#terms').addClass('is-invalid');
-                    isValid = false;
-                }
-            }
-            
-            return isValid;
-        },
-        
-        nextStep: function() {
-            console.log('Moving to next step from', this.currentStep);
-            
-            if (!this.validateCurrentStep()) {
-                console.log('Validation failed for step', this.currentStep);
-                return;
-            }
-            
-            this.saveStepData();
-            
-            if (this.currentStep < this.totalSteps) {
-                this.currentStep++;
-                this.updateStepDisplay();
-            }
-        },
-        
-        prevStep: function() {
-            console.log('Moving to previous step from', this.currentStep);
-            
-            if (this.currentStep > 1) {
-                this.currentStep--;
-                this.updateStepDisplay();
-            }
-        },
-        
-        updateStepDisplay: function() {
-            console.log('Updating display for step', this.currentStep);
-            
-            // Hide all steps
-            $('.form-step').hide();
-            
-            // Show current step
-            $(`.form-step[data-step="${this.currentStep}"]`).show();
-            
-            // Update progress bar
-            const progress = (this.currentStep / this.totalSteps) * 100;
-            $('#form-progress').css('width', progress + '%');
-            
-            // Update step indicators
-            $('.progress-steps .step').removeClass('active');
-            $(`.progress-steps .step[data-step="${this.currentStep}"]`).addClass('active');
-            
-            // Show/hide navigation buttons
-            $('#prev-btn').toggle(this.currentStep > 1);
-            $('#next-btn').toggle(this.currentStep < this.totalSteps);
-            $('#submit-btn').toggle(this.currentStep === this.totalSteps);
-            
-            // Update summary on last step
-            if (this.currentStep === this.totalSteps) {
-                this.updateApplicationSummary();
-            }
-        },
-        
-        saveStepData: function() {
-            console.log('Saving data for step', this.currentStep);
-            
-            const currentStepDiv = $(`.form-step[data-step="${this.currentStep}"]`);
-            
-            // Save all input values
-            currentStepDiv.find('input, select, textarea').each((i, element) => {
-                const $element = $(element);
-                const name = $element.attr('name');
-                
-                if (name) {
-                    if ($element.attr('type') === 'checkbox') {
-                        if (name.endsWith('[]')) {
-                            // Handle checkbox arrays
-                            if (!this.formData[name]) {
-                                this.formData[name] = [];
-                            }
-                            if ($element.is(':checked') && !this.formData[name].includes($element.val())) {
-                                this.formData[name].push($element.val());
-                            }
-                        } else {
-                            this.formData[name] = $element.is(':checked');
-                        }
-                    } else if ($element.attr('type') === 'radio') {
-                        if ($element.is(':checked')) {
-                            this.formData[name] = $element.val();
-                        }
-                    } else {
-                        this.formData[name] = $element.val();
-                    }
-                }
-            });
-            
-            console.log('Form data after step', this.currentStep, ':', this.formData);
-        },
-        
-        updateApplicationSummary: function() {
-            console.log('Updating application summary');
-            
-            const summary = `
-                <table class="table table-sm">
-                    <tr>
-                        <td><strong>Name:</strong></td>
-                        <td>${this.formData.first_name || ''} ${this.formData.middle_name || ''} ${this.formData.last_name || ''}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Email:</strong></td>
-                        <td>${this.formData.email || ''}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Membership Type:</strong></td>
-                        <td>${this.formData.selected_membership_type || 'Not selected'}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Chapter:</strong></td>
-                        <td>${this.formData.selected_chapter || 'Auto-assign based on location'}</td>
-                    </tr>
-                    <tr>
-                        <td><strong>Volunteer Interest:</strong></td>
-                        <td>${this.formData.interested_in_volunteering ? 'Yes' : 'No'}</td>
-                    </tr>
-                </table>
-            `;
-            $('#application-summary').html(summary);
-        },
-        
-        submitApplication: function() {
-            console.log('Submitting application...');
-            
-            // Final validation
-            if (!this.validateCurrentStep()) {
-                console.log('Final validation failed');
-                return;
-            }
-            
-            // Save final step data
-            this.saveStepData();
-            
-            // Disable submit button
-            $('#submit-btn').prop('disabled', true).text('Processing...');
-            
-            console.log('Final form data:', this.formData);
-            
-            // Submit to server
-            frappe.call({
-                method: 'verenigingen.api.membership_application.submit_application',
-                args: {
-                    data: this.formData
-                },
-                callback: (r) => {
-                    console.log('Submission response:', r);
-                    if (r.message && r.message.success) {
-                        // Show success message
-                        alert('Application submitted successfully! ' + r.message.message);
-                        // You can redirect or show a success page here
-                    } else {
-                        alert(r.message?.message || 'An error occurred. Please try again.');
-                        $('#submit-btn').prop('disabled', false).text('Submit Application');
-                    }
-                },
-                error: (r) => {
-                    console.error('Submission error:', r);
-                    alert('An error occurred. Please try again.');
-                    $('#submit-btn').prop('disabled', false).text('Submit Application');
+                    $('#source-details-container').hide();
                 }
             });
         }
-    };
-    
-    // Initialize the application
-    MembershipApplication.init();
+    }
+
+    function validateCurrentStep() {
+        const step = currentStep;
+        let isValid = true;
+        
+        // Clear previous validation
+        $('.is-invalid').removeClass('is-invalid');
+        $('.invalid-feedback').hide();
+
+        if (step === 1) {
+            // Personal information validation
+            const requiredFields = ['first_name', 'last_name', 'email', 'birth_date'];
+            requiredFields.forEach(function(field) {
+                const input = $(`#${field}`);
+                if (!input.val().trim()) {
+                    markFieldInvalid(input, `${field.replace('_', ' ')} is required`);
+                    isValid = false;
+                }
+            });
+
+            // Email validation
+            const email = $('#email').val();
+            if (email && !isValidEmail(email)) {
+                markFieldInvalid($('#email'), 'Please enter a valid email address');
+                isValid = false;
+            }
+
+            // Age validation
+            const birthDate = $('#birth_date').val();
+            if (birthDate) {
+                const age = calculateAge(birthDate);
+                if (age < 0) {
+                    markFieldInvalid($('#birth_date'), 'Birth date cannot be in the future');
+                    isValid = false;
+                } else if (age < 12) {
+                    $('#age-warning').show().text('Applicants under 12 may require parental consent');
+                }
+            }
+        }
+
+        if (step === 2) {
+            // Address validation
+            const requiredFields = ['address_line1', 'city', 'postal_code', 'country'];
+            requiredFields.forEach(function(field) {
+                const input = $(`#${field}`);
+                if (!input.val().trim()) {
+                    markFieldInvalid(input, `${field.replace('_', ' ')} is required`);
+                    isValid = false;
+                }
+            });
+        }
+
+        if (step === 3) {
+            // Membership type validation
+            if (!formData.selected_membership_type) {
+                $('#membership-type-error').show().text('Please select a membership type');
+                isValid = false;
+            }
+
+            // Custom amount validation
+            if (formData.uses_custom_amount) {
+                const membershipType = membershipTypes.find(t => t.name === formData.selected_membership_type);
+                const minAmount = membershipType.amount * 0.5;
+                if (formData.membership_amount < minAmount) {
+                    $('#membership-type-error').show().text(`Amount must be at least ${frappe.format(minAmount, {fieldtype: 'Currency'})}`);
+                    isValid = false;
+                }
+            }
+        }
+
+        if (step === 5) {
+            // Payment method validation
+            if (!$('#payment_method').val()) {
+                markFieldInvalid($('#payment_method'), 'Please select a payment method');
+                isValid = false;
+            }
+
+            // Terms validation
+            if (!$('#terms').is(':checked')) {
+                markFieldInvalid($('#terms'), 'You must accept the terms and conditions');
+                isValid = false;
+            }
+        }
+
+        return isValid;
+    }
+
+    function markFieldInvalid(field, message) {
+        field.addClass('is-invalid');
+        let feedback = field.siblings('.invalid-feedback');
+        if (feedback.length === 0) {
+            feedback = $('<div class="invalid-feedback"></div>');
+            field.after(feedback);
+        }
+        feedback.text(message).show();
+    }
+
+    function suggestChapterFromPostalCode(postalCode) {
+        if (!postalCode) return;
+
+        frappe.call({
+            method: 'verenigingen.api.membership_application.validate_postal_code',
+            args: {
+                postal_code: postalCode,
+                country: $('#country').val() || 'Netherlands'
+            },
+            callback: function(r) {
+                if (r.message && r.message.suggested_chapters && r.message.suggested_chapters.length > 0) {
+                    const suggestion = r.message.suggested_chapters[0];
+                    $('#suggested-chapter-name').text(suggestion.name);
+                    $('#suggested-chapter').show();
+                    
+                    $('#accept-suggestion').off('click').on('click', function() {
+                        $('#selected_chapter').val(suggestion.name);
+                        $('#suggested-chapter').hide();
+                    });
+                } else {
+                    $('#suggested-chapter').hide();
+                }
+            }
+        });
+    }
+
+    function updateApplicationSummary() {
+        const summary = $('#application-summary');
+        let content = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Personal Information</h6>
+                    <p><strong>Name:</strong> ${$('#first_name').val()} ${$('#last_name').val()}</p>
+                    <p><strong>Email:</strong> ${$('#email').val()}</p>
+                    <p><strong>Age:</strong> ${calculateAge($('#birth_date').val())} years</p>
+                </div>
+                <div class="col-md-6">
+                    <h6>Membership</h6>
+                    <p><strong>Type:</strong> ${getMembershipTypeName(formData.selected_membership_type)}</p>
+                    <p><strong>Amount:</strong> ${frappe.format(formData.membership_amount, {fieldtype: 'Currency'})}</p>
+                    ${formData.uses_custom_amount ? '<p><em>Custom amount selected</em></p>' : ''}
+                </div>
+            </div>
+        `;
+
+        if ($('#selected_chapter').val()) {
+            content += `<p><strong>Chapter:</strong> ${$('#selected_chapter option:selected').text()}</p>`;
+        }
+
+        if ($('#interested_in_volunteering').is(':checked')) {
+            content += `<p><strong>Interested in volunteering:</strong> Yes</p>`;
+        }
+
+        summary.html(content);
+    }
+
+    // Form submission
+    $('#membership-application-form').submit(function(e) {
+        e.preventDefault();
+        
+        if (!validateCurrentStep()) {
+            return;
+        }
+
+        const $btn = $('#submit-btn');
+        $btn.prop('disabled', true).html('Processing...');
+
+        // Collect all form data
+        const applicationData = {
+            // Personal info
+            first_name: $('#first_name').val(),
+            middle_name: $('#middle_name').val(),
+            last_name: $('#last_name').val(),
+            email: $('#email').val(),
+            mobile_no: $('#mobile_no').val(),
+            phone: $('#phone').val(),
+            birth_date: $('#birth_date').val(),
+            pronouns: $('#pronouns').val(),
+
+            // Address
+            address_line1: $('#address_line1').val(),
+            address_line2: $('#address_line2').val(),
+            city: $('#city').val(),
+            state: $('#state').val(),
+            postal_code: $('#postal_code').val(),
+            country: $('#country').val(),
+
+            // Membership
+            selected_membership_type: formData.selected_membership_type,
+            membership_amount: formData.membership_amount,
+            uses_custom_amount: formData.uses_custom_amount,
+            selected_chapter: $('#selected_chapter').val(),
+
+            // Volunteer
+            interested_in_volunteering: $('#interested_in_volunteering').is(':checked'),
+            volunteer_availability: $('#volunteer_availability').val(),
+            volunteer_experience_level: $('#volunteer_experience_level').val(),
+            volunteer_interests: getSelectedVolunteerInterests(),
+
+            // Communication
+            newsletter_opt_in: $('#newsletter_opt_in').is(':checked'),
+            application_source: $('#application_source').val(),
+            application_source_details: $('#application_source_details').val(),
+
+            // Payment
+            payment_method: $('#payment_method').val(),
+
+            // Additional
+            additional_notes: $('#additional_notes').val(),
+            terms: $('#terms').is(':checked')
+        };
+
+        // Submit application
+        frappe.call({
+            method: 'verenigingen.api.membership_application.submit_application',
+            args: { data: applicationData },
+            callback: function(r) {
+                if (r.message && r.message.success) {
+                    window.location.href = `/application-success?id=${r.message.member_id}`;
+                } else {
+                    frappe.msgprint(r.message || 'An error occurred. Please try again.');
+                    $btn.prop('disabled', false).html('Submit Application & Pay');
+                }
+            },
+            error: function(r) {
+                frappe.msgprint('An error occurred. Please try again.');
+                $btn.prop('disabled', false).html('Submit Application & Pay');
+            }
+        });
+    });
+
+    // Utility functions
+    function isValidEmail(email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        return emailRegex.test(email);
+    }
+
+    function calculateAge(birthDate) {
+        const birth = new Date(birthDate);
+        const today = new Date();
+        let age = today.getFullYear() - birth.getFullYear();
+        const monthDiff = today.getMonth() - birth.getMonth();
+        
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+            age--;
+        }
+        
+        return age;
+    }
+
+    function getMembershipTypeName(typeId) {
+        const type = membershipTypes.find(t => t.name === typeId);
+        return type ? type.membership_type_name : typeId;
+    }
+
+    function getSelectedVolunteerInterests() {
+        const interests = [];
+        $('#volunteer-interests input[type="checkbox"]:checked').each(function() {
+            interests.push($(this).val());
+        });
+        return interests;
+    }
+
+    // Initialize first step
+    showStep(1);
 });
