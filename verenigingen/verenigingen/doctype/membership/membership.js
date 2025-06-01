@@ -16,8 +16,31 @@ frappe.ui.form.on('Membership', {
                 frm.save();
             }, __('Actions')).addClass('btn-warning');
         }
+        
         // Add custom buttons after document is submitted
         if (frm.doc.docstatus === 1) {
+            // Add custom amount management buttons
+            if (frm.doc.status === 'Active') {
+                // Add "Adjust Amount" button
+                frm.add_custom_button(__('Adjust Amount'), function() {
+                    show_amount_adjustment_dialog(frm);
+                }, __('Actions'));
+                
+                // Add "Revert to Standard" button if using custom amount
+                if (frm.doc.uses_custom_amount) {
+                    frm.add_custom_button(__('Revert to Standard Amount'), function() {
+                        revert_to_standard_amount(frm);
+                    }, __('Actions'));
+                }
+                
+                // Add "Check Subscription" button for debugging
+                if (frm.doc.subscription) {
+                    frm.add_custom_button(__('Check Subscription Amount'), function() {
+                        check_subscription_amount(frm);
+                    }, __('Debug'));
+                }
+            }
+            
             // Add button to renew membership
             if (frm.doc.status === "Active" || frm.doc.status === "Expired") {
                 frm.add_custom_button(__('Renew Membership'), function() {
@@ -34,29 +57,31 @@ frappe.ui.form.on('Membership', {
                     });
                 }, __('Actions'));
             }
-        if (frm.doc.docstatus === 1 && frm.doc.start_date) {
-            const startDate = frappe.datetime.str_to_obj(frm.doc.start_date);
-            const today = frappe.datetime.get_today();
-            const todayObj = frappe.datetime.str_to_obj(today);
             
-            // Calculate months difference
-            const monthDiff = (todayObj.getFullYear() - startDate.getFullYear()) * 12 + 
-                             todayObj.getMonth() - startDate.getMonth();
-            
-            if (monthDiff < 12) {
-                // Calculate remaining months
-                const remainingMonths = 12 - monthDiff;
+            if (frm.doc.docstatus === 1 && frm.doc.start_date) {
+                const startDate = frappe.datetime.str_to_obj(frm.doc.start_date);
+                const today = frappe.datetime.get_today();
+                const todayObj = frappe.datetime.str_to_obj(today);
                 
-                // Add warning message
-                frm.set_intro(
-                    `<div class="alert alert-warning">
-                        <strong>Note:</strong> This membership is in its first year. 
-                        ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''} remaining until the minimum period ends.
-                    </div>`,
-                    'yellow'
-                );
+                // Calculate months difference
+                const monthDiff = (todayObj.getFullYear() - startDate.getFullYear()) * 12 + 
+                                 todayObj.getMonth() - startDate.getMonth();
+                
+                if (monthDiff < 12) {
+                    // Calculate remaining months
+                    const remainingMonths = 12 - monthDiff;
+                    
+                    // Add warning message
+                    frm.set_intro(
+                        `<div class="alert alert-warning">
+                            <strong>Note:</strong> This membership is in its first year. 
+                            ${remainingMonths} month${remainingMonths !== 1 ? 's' : ''} remaining until the minimum period ends.
+                        </div>`,
+                        'yellow'
+                    );
+                }
             }
-        }
+            
             // Add button to cancel membership
             if (frm.doc.status === "Active" || frm.doc.status === "Pending" || frm.doc.status === "Inactive") {
                 // Calculate 1 year after start date to validate cancellation
@@ -119,6 +144,7 @@ frappe.ui.form.on('Membership', {
                     return false;
                 };
             }
+            
             frm.add_custom_button(__('View All Invoices'), function() {
                 frappe.call({
                     method: 'verenigingen.verenigingen.doctype.membership.membership.show_all_invoices',
@@ -134,6 +160,7 @@ frappe.ui.form.on('Membership', {
                     }
                 });
             }, __('Actions'));
+            
             // Add button to add to direct debit batch if payment method is Direct Debit
             if (frm.doc.payment_method === 'Direct Debit' && frm.doc.unpaid_amount > 0) {
                 frm.add_custom_button(__('Add to Direct Debit Batch'), function() {
@@ -181,6 +208,9 @@ frappe.ui.form.on('Membership', {
         if (frm.doc.next_billing_date) {
             frm.set_intro(__('Next billing date: {0}', [frappe.datetime.str_to_user(frm.doc.next_billing_date)]), 'blue');
         }
+        
+        // Update amount display
+        update_amount_display(frm);
     },
     
     toggle_fields: function(frm) {
@@ -198,11 +228,103 @@ frappe.ui.form.on('Membership', {
     membership_type: function(frm) {
         // Recalculate renewal date when membership type changes
         frm.trigger('calculate_renewal_date');
+        
+        // When membership type changes, update custom amount options and display
+        if (frm.doc.membership_type) {
+            frappe.call({
+                method: 'frappe.client.get_value',
+                args: {
+                    doctype: 'Membership Type',
+                    filters: {name: frm.doc.membership_type},
+                    fieldname: ['allow_custom_amount', 'minimum_amount', 'amount', 'currency']
+                },
+                callback: function(r) {
+                    if (r.message) {
+                        const mt = r.message;
+                        
+                        // Show/hide custom amount section
+                        frm.toggle_display('custom_amount_section', mt.allow_custom_amount);
+                        
+                        if (mt.allow_custom_amount) {
+                            // Set minimum amount for custom amount field
+                            const min_amount = mt.minimum_amount || mt.amount;
+                            frm.set_df_property('custom_amount', 'description', 
+                                `Minimum amount: ${mt.currency} ${min_amount}`);
+                        }
+                        
+                        // Calculate effective amount
+                        frm.trigger('calculate_effective_amount');
+                    }
+                }
+            });
+        }
     },
     
     start_date: function(frm) {
         // Recalculate renewal date when start date changes
         frm.trigger('calculate_renewal_date');
+    },
+    
+    uses_custom_amount: function(frm) {
+        frm.trigger('calculate_effective_amount');
+        update_amount_display(frm);
+    },
+    
+    custom_amount: function(frm) {
+        frm.trigger('calculate_effective_amount');
+        frm.trigger('validate_custom_amount');
+    },
+    
+    calculate_effective_amount: function(frm) {
+        if (frm.doc.uses_custom_amount && frm.doc.custom_amount) {
+            frm.set_value('effective_amount', frm.doc.custom_amount);
+        } else if (frm.doc.membership_type) {
+            frappe.call({
+                method: 'frappe.client.get_value',
+                args: {
+                    doctype: 'Membership Type',
+                    filters: {name: frm.doc.membership_type},
+                    fieldname: 'amount'
+                },
+                callback: function(r) {
+                    if (r.message) {
+                        frm.set_value('effective_amount', r.message.amount);
+                    }
+                }
+            });
+        }
+    },
+    
+    validate_custom_amount: function(frm) {
+        if (!frm.doc.uses_custom_amount || !frm.doc.custom_amount || !frm.doc.membership_type) {
+            return;
+        }
+        
+        frappe.call({
+            method: 'frappe.client.get_value',
+            args: {
+                doctype: 'Membership Type',
+                filters: {name: frm.doc.membership_type},
+                fieldname: ['minimum_amount', 'amount', 'allow_custom_amount']
+            },
+            callback: function(r) {
+                if (r.message) {
+                    const mt = r.message;
+                    const minimum = mt.minimum_amount || mt.amount;
+                    
+                    if (!mt.allow_custom_amount) {
+                        frappe.msgprint(__('Custom amounts are not allowed for this membership type'));
+                        frm.set_value('uses_custom_amount', 0);
+                        return;
+                    }
+                    
+                    if (frm.doc.custom_amount < minimum) {
+                        frappe.msgprint(__('Amount cannot be less than minimum: {0}', [minimum]));
+                        frm.set_value('custom_amount', minimum);
+                    }
+                }
+            }
+        });
     },
     
     calculate_renewal_date: function(frm) {
@@ -275,6 +397,186 @@ frappe.ui.form.on('Membership', {
         createSubscriptionWithOptions(frm);
     }
 });
+
+function update_amount_display(frm) {
+    // Add visual indicators for custom amounts
+    if (frm.doc.uses_custom_amount) {
+        frm.dashboard.add_indicator(__('Using Custom Amount: {0}', [format_currency(frm.doc.custom_amount)]), 'blue');
+        
+        if (frm.doc.amount_difference !== 0) {
+            const diff_text = frm.doc.amount_difference > 0 ? 
+                __('Above Standard: +{0}', [format_currency(frm.doc.amount_difference)]) :
+                __('Below Standard: {0}', [format_currency(frm.doc.amount_difference)]);
+            frm.dashboard.add_indicator(diff_text, frm.doc.amount_difference > 0 ? 'green' : 'orange');
+        }
+    }
+}
+
+function show_amount_adjustment_dialog(frm) {
+    // Get current membership type info
+    frappe.call({
+        method: 'frappe.client.get_value',
+        args: {
+            doctype: 'Membership Type',
+            filters: {name: frm.doc.membership_type},
+            fieldname: ['allow_custom_amount', 'minimum_amount', 'amount', 'currency']
+        },
+        callback: function(r) {
+            if (r.message) {
+                const mt = r.message;
+                
+                if (!mt.allow_custom_amount) {
+                    frappe.msgprint(__('Custom amounts are not allowed for this membership type'));
+                    return;
+                }
+                
+                const minimum_amount = mt.minimum_amount || mt.amount;
+                const current_amount = frm.doc.uses_custom_amount ? frm.doc.custom_amount : mt.amount;
+                
+                let dialog = new frappe.ui.Dialog({
+                    title: __('Adjust Membership Amount'),
+                    fields: [
+                        {
+                            fieldtype: 'HTML',
+                            options: `
+                                <div class="alert alert-info">
+                                    <strong>Current Amount:</strong> ${mt.currency} ${current_amount}<br>
+                                    <strong>Standard Amount:</strong> ${mt.currency} ${mt.amount}<br>
+                                    <strong>Minimum Allowed:</strong> ${mt.currency} ${minimum_amount}
+                                </div>
+                            `
+                        },
+                        {
+                            fieldtype: 'Currency',
+                            fieldname: 'new_amount',
+                            label: __('New Amount'),
+                            reqd: 1,
+                            default: current_amount,
+                            description: __('Minimum: {0} {1}', [mt.currency, minimum_amount])
+                        },
+                        {
+                            fieldtype: 'Small Text',
+                            fieldname: 'reason',
+                            label: __('Reason for Change'),
+                            description: __('Optional reason for the amount adjustment')
+                        }
+                    ],
+                    primary_action_label: __('Update Amount'),
+                    primary_action: function(values) {
+                        if (values.new_amount < minimum_amount) {
+                            frappe.msgprint(__('Amount cannot be less than minimum: {0}', [minimum_amount]));
+                            return;
+                        }
+                        
+                        frappe.call({
+                            method: 'verenigingen.verenigingen.doctype.membership.membership.set_custom_amount',
+                            args: {
+                                membership_name: frm.doc.name,
+                                custom_amount: values.new_amount,
+                                reason: values.reason
+                            },
+                            freeze: true,
+                            freeze_message: __('Updating amount...'),
+                            callback: function(r) {
+                                if (r.message && r.message.success) {
+                                    frappe.show_alert({
+                                        message: r.message.message,
+                                        indicator: 'green'
+                                    }, 5);
+                                    frm.reload_doc();
+                                    dialog.hide();
+                                }
+                            }
+                        });
+                    }
+                });
+                
+                dialog.show();
+            }
+        }
+    });
+}
+
+function revert_to_standard_amount(frm) {
+    frappe.confirm(
+        __('Are you sure you want to revert to the standard membership amount? This will affect future billing.'),
+        function() {
+            const reason = prompt(__('Reason for reverting to standard amount (optional):'));
+            
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.membership.membership.revert_to_standard_amount',
+                args: {
+                    membership_name: frm.doc.name,
+                    reason: reason
+                },
+                freeze: true,
+                freeze_message: __('Reverting to standard amount...'),
+                callback: function(r) {
+                    if (r.message && r.message.success) {
+                        frappe.show_alert({
+                            message: r.message.message,
+                            indicator: 'green'
+                        }, 5);
+                        frm.reload_doc();
+                    }
+                }
+            });
+        }
+    );
+}
+
+function check_subscription_amount(frm) {
+    if (!frm.doc.subscription) {
+        frappe.msgprint(__('No subscription linked to this membership'));
+        return;
+    }
+    
+    frappe.call({
+        method: 'frappe.client.get_value',
+        args: {
+            doctype: 'Subscription',
+            filters: {name: frm.doc.subscription},
+            fieldname: ['status']
+        },
+        callback: function(r) {
+            if (r.message) {
+                // Get subscription plans
+                frappe.call({
+                    method: 'frappe.client.get_list',
+                    args: {
+                        doctype: 'Subscription Plan Detail',
+                        filters: {parent: frm.doc.subscription},
+                        fields: ['plan', 'cost'],
+                        parent: 'Subscription'
+                    },
+                    callback: function(r2) {
+                        if (r2.message && r2.message.length > 0) {
+                            const plan = r2.message[0];
+                            const expected_amount = frm.doc.uses_custom_amount ? frm.doc.custom_amount : 
+                                                  (frm.doc.effective_amount || 0);
+                            
+                            const matches = Math.abs(plan.cost - expected_amount) < 0.01;
+                            
+                            frappe.msgprint({
+                                title: __('Subscription Amount Check'),
+                                message: `
+                                    <strong>Membership Amount:</strong> ${format_currency(expected_amount)}<br>
+                                    <strong>Subscription Amount:</strong> ${format_currency(plan.cost)}<br>
+                                    <strong>Status:</strong> ${matches ? 
+                                        '<span class="text-success">✓ Amounts match</span>' : 
+                                        '<span class="text-warning">⚠ Amounts do not match</span>'
+                                    }<br>
+                                    <strong>Subscription Status:</strong> ${r.message.status}
+                                `,
+                                indicator: matches ? 'green' : 'orange'
+                            });
+                        }
+                    }
+                });
+            }
+        }
+    });
+}
 
 // Helper function for creating subscription with our required options
 function createSubscriptionWithOptions(frm) {
@@ -511,8 +813,9 @@ function show_invoices_dialog(invoices_data) {
 }
 
 // Helper function to format currency
-function format_currency(value) {
-    return frappe.format(value, {fieldtype: 'Currency'});
+function format_currency(value, currency = 'EUR') {
+    if (typeof value === 'undefined' || value === null) return '';
+    return currency + ' ' + parseFloat(value).toFixed(2);
 }
 
 // Helper function to get status indicator
