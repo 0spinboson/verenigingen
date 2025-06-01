@@ -1445,18 +1445,50 @@ class MembershipAPI {
                 },
                 success: function(response) {
                     console.log('Direct AJAX response:', response);
+                    
+                    // Check if response contains an error message (even in "success" response)
+                    if (response.error_message || (response.server_messages && response.server_messages.includes('does not have permission'))) {
+                        let errorMsg = response.error_message || 'Permission denied';
+                        
+                        // Try to extract clean error from server_messages
+                        if (response.server_messages) {
+                            try {
+                                const messages = JSON.parse(response.server_messages);
+                                if (messages && messages.length > 0) {
+                                    const firstMessage = typeof messages[0] === 'string' ? JSON.parse(messages[0]) : messages[0];
+                                    if (firstMessage.message) {
+                                        errorMsg = firstMessage.message.replace(/<[^>]*>/g, ''); // Strip HTML
+                                    }
+                                }
+                            } catch (e) {
+                                console.warn('Could not parse server messages:', e);
+                            }
+                        }
+                        
+                        reject(new Error(errorMsg));
+                        return;
+                    }
+                    
                     if (response.message && response.message.success) {
                         resolve(response.message);
+                    } else if (response.message && response.message.error) {
+                        reject(new Error(response.message.message || response.message.error));
                     } else {
-                        reject(new Error(response.message || 'Unknown error'));
+                        reject(new Error(response.message || 'Unknown error occurred'));
                     }
                 },
                 error: function(xhr, status, error) {
                     console.error('Direct AJAX error:', xhr, status, error);
                     let errorMsg = `Server error: ${xhr.status}`;
                     
-                    if (xhr.responseJSON && xhr.responseJSON.exc) {
-                        errorMsg = xhr.responseJSON.exc;
+                    if (xhr.responseJSON) {
+                        if (xhr.responseJSON.exc) {
+                            errorMsg = xhr.responseJSON.exc;
+                        } else if (xhr.responseJSON.error_message) {
+                            errorMsg = xhr.responseJSON.error_message;
+                        } else if (xhr.responseJSON.message && xhr.responseJSON.message.error) {
+                            errorMsg = xhr.responseJSON.message.error;
+                        }
                     } else if (error) {
                         errorMsg = error;
                     }
