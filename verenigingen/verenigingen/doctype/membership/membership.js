@@ -1,4 +1,4 @@
-// Membership form controller with improved maintainability
+// Membership form controller with improved maintainability and custom amount handling
 frappe.ui.form.on('Membership', {
     // Cache for membership type data to avoid repeated API calls
     _membership_type_cache: {},
@@ -13,17 +13,44 @@ frappe.ui.form.on('Membership', {
         'days_until_due': 18
     },
     
+    get_status_indicator: function(status) {
+        const status_map = {
+            'Paid': 'green',
+            'Unpaid': 'orange',
+            'Overdue': 'red',
+            'Cancelled': 'gray'
+        };
+        const color = status_map[status] || 'gray';
+        return `<span class="indicator ${color}">${status}</span>`;
+    }
+});
+    
     refresh: function(frm) {
-        frm.trigger('toggle_fields');
-        frm.trigger('setup_buttons');
-        frm.trigger('update_indicators');
-        
+        this.setup_form_ui(frm);
+        this.setup_buttons(frm);
+        this.update_indicators(frm);
+        this.setup_subscription_button_override(frm);
+    },
+    
+    setup_form_ui: function(frm) {
+        this.toggle_fields(frm);
+        this.setup_custom_amount_visibility(frm);
+    },
+    
+    setup_subscription_button_override: function(frm) {
         // Override subscription creation button
         if (frm.fields_dict.create_subscription && frm.fields_dict.create_subscription.input) {
             frm.fields_dict.create_subscription.input.onclick = () => {
                 this.handle_create_subscription(frm);
                 return false;
             };
+        }
+    },
+    
+    setup_custom_amount_visibility: async function(frm) {
+        if (frm.doc.membership_type) {
+            const mt = await this.get_membership_type_data(frm.doc.membership_type);
+            frm.toggle_display('custom_amount_section', mt.allow_custom_amount);
         }
     },
     
@@ -38,6 +65,10 @@ frappe.ui.form.on('Membership', {
         });
         
         // View buttons
+        this.setup_view_buttons(frm);
+    },
+    
+    setup_view_buttons: function(frm) {
         if (frm.doc.member) {
             frm.add_custom_button(__('Member'), () => {
                 frappe.set_route('Form', 'Member', frm.doc.member);
@@ -57,7 +88,7 @@ frappe.ui.form.on('Membership', {
         const can_cancel = this.can_cancel_membership(frm);
         
         return [
-            // New membership button
+            // Multiple memberships
             {
                 label: 'Allow Multiple Memberships',
                 condition: frm.is_new(),
@@ -67,11 +98,12 @@ frappe.ui.form.on('Membership', {
                 },
                 className: 'btn-warning'
             },
-            // Amount management
+            
+            // Amount management - Enhanced with new functionality
             {
                 label: 'Adjust Amount',
                 condition: is_submitted && is_active,
-                action: () => this.show_amount_adjustment_dialog(frm)
+                action: () => this.show_enhanced_amount_dialog(frm)
             },
             {
                 label: 'Revert to Standard Amount',
@@ -84,6 +116,7 @@ frappe.ui.form.on('Membership', {
                 action: () => this.check_subscription_amount(frm),
                 group: 'Debug'
             },
+            
             // Membership actions
             {
                 label: 'Renew Membership',
@@ -136,8 +169,12 @@ frappe.ui.form.on('Membership', {
             frm.set_intro(__('Next billing date: {0}', [frappe.datetime.str_to_user(frm.doc.next_billing_date)]), 'blue');
         }
         
-        // Custom amount indicators
-        if (frm.doc.uses_custom_amount) {
+        // Custom amount indicators - Enhanced
+        this.update_custom_amount_indicators(frm);
+    },
+    
+    update_custom_amount_indicators: function(frm) {
+        if (frm.doc.uses_custom_amount && frm.doc.custom_amount) {
             frm.dashboard.add_indicator(
                 __('Using Custom Amount: {0}', [frappe.format(frm.doc.custom_amount, {fieldtype: 'Currency'})]), 
                 'blue'
@@ -160,24 +197,42 @@ frappe.ui.form.on('Membership', {
         frm.set_df_property('renewal_date', 'read_only', 1);
     },
     
-    // Field triggers
+    // Field triggers - Enhanced with better custom amount handling
     membership_type: async function(frm) {
+        await this.handle_membership_type_change(frm);
+    },
+    
+    handle_membership_type_change: async function(frm) {
         frm.trigger('calculate_renewal_date');
         
         if (frm.doc.membership_type) {
             const mt = await this.get_membership_type_data(frm.doc.membership_type);
             
-            // Update custom amount visibility and settings
+            // Update custom amount section visibility and validation
             frm.toggle_display('custom_amount_section', mt.allow_custom_amount);
             
             if (mt.allow_custom_amount) {
-                const min_amount = mt.minimum_amount || mt.amount;
-                frm.set_df_property('custom_amount', 'description', 
-                    __('Minimum amount: {0}', [frappe.format(min_amount, {fieldtype: 'Currency', currency: mt.currency})]));
+                this.setup_custom_amount_field(frm, mt);
+            } else {
+                // Reset custom amount if not allowed
+                if (frm.doc.uses_custom_amount) {
+                    frm.set_value('uses_custom_amount', 0);
+                    frm.set_value('custom_amount', null);
+                    frm.set_value('amount_reason', '');
+                }
             }
             
-            frm.trigger('calculate_effective_amount');
+            await this.calculate_effective_amount(frm);
         }
+    },
+    
+    setup_custom_amount_field: function(frm, membership_type_data) {
+        const min_amount = membership_type_data.minimum_amount || membership_type_data.amount;
+        frm.set_df_property('custom_amount', 'description', 
+            __('Minimum amount: {0}', [frappe.format(min_amount, {
+                fieldtype: 'Currency', 
+                currency: membership_type_data.currency
+            })]));
     },
     
     start_date: function(frm) {
@@ -185,13 +240,19 @@ frappe.ui.form.on('Membership', {
     },
     
     uses_custom_amount: function(frm) {
-        frm.trigger('calculate_effective_amount');
-        frm.trigger('update_indicators');
+        this.calculate_effective_amount(frm);
+        this.update_custom_amount_indicators(frm);
+        
+        // Clear custom amount fields if unchecked
+        if (!frm.doc.uses_custom_amount) {
+            frm.set_value('custom_amount', null);
+            frm.set_value('amount_reason', '');
+        }
     },
     
     custom_amount: function(frm) {
-        frm.trigger('calculate_effective_amount');
-        frm.trigger('validate_custom_amount');
+        this.calculate_effective_amount(frm);
+        this.validate_custom_amount(frm);
     },
     
     payment_method: function(frm) {
@@ -199,13 +260,24 @@ frappe.ui.form.on('Membership', {
         frm.toggle_reqd(['sepa_mandate'], is_direct_debit);
     },
     
-    // Calculations
+    // Enhanced calculations and validation
     calculate_effective_amount: async function(frm) {
+        let effective_amount = 0;
+        
         if (frm.doc.uses_custom_amount && frm.doc.custom_amount) {
-            frm.set_value('effective_amount', frm.doc.custom_amount);
+            effective_amount = frm.doc.custom_amount;
         } else if (frm.doc.membership_type) {
             const mt = await this.get_membership_type_data(frm.doc.membership_type);
-            frm.set_value('effective_amount', mt.amount);
+            effective_amount = mt.amount;
+        }
+        
+        frm.set_value('effective_amount', effective_amount);
+        
+        // Calculate difference from standard
+        if (frm.doc.membership_type) {
+            const mt = await this.get_membership_type_data(frm.doc.membership_type);
+            const difference = effective_amount - mt.amount;
+            frm.set_value('amount_difference', difference);
         }
     },
     
@@ -215,7 +287,6 @@ frappe.ui.form.on('Membership', {
         }
         
         const mt = await this.get_membership_type_data(frm.doc.membership_type);
-        const minimum = mt.minimum_amount || mt.amount;
         
         if (!mt.allow_custom_amount) {
             frappe.msgprint(__('Custom amounts are not allowed for this membership type'));
@@ -223,6 +294,7 @@ frappe.ui.form.on('Membership', {
             return;
         }
         
+        const minimum = mt.minimum_amount || mt.amount;
         if (frm.doc.custom_amount < minimum) {
             frappe.msgprint(__('Amount cannot be less than minimum: {0}', 
                 [frappe.format(minimum, {fieldtype: 'Currency', currency: mt.currency})]));
@@ -265,7 +337,6 @@ frappe.ui.form.on('Membership', {
     
     // Utility functions
     get_membership_type_data: async function(membership_type) {
-        // Cache membership type data to avoid repeated API calls
         if (!this._membership_type_cache[membership_type]) {
             const response = await frappe.db.get_value(
                 'Membership Type',
@@ -302,7 +373,7 @@ frappe.ui.form.on('Membership', {
         return frappe.datetime.str_to_obj(frappe.datetime.get_today()) >= minCancellationDate;
     },
     
-    // Actions
+    // Enhanced actions with better custom amount support
     handle_create_subscription: function(frm) {
         if (!frm.doc.subscription_plan) {
             frappe.msgprint(__('Please select a Subscription Plan first'));
@@ -331,6 +402,127 @@ frappe.ui.form.on('Membership', {
                 });
             }
         });
+    },
+    
+    // Enhanced amount adjustment dialog - Refactored for better UX
+    show_enhanced_amount_dialog: async function(frm) {
+        const mt = await this.get_membership_type_data(frm.doc.membership_type);
+        
+        if (!mt.allow_custom_amount) {
+            frappe.msgprint(__('Custom amounts are not allowed for this membership type'));
+            return;
+        }
+        
+        const minimum_amount = mt.minimum_amount || mt.amount;
+        const current_amount = frm.doc.uses_custom_amount ? frm.doc.custom_amount : mt.amount;
+        
+        const dialog = new frappe.ui.Dialog({
+            title: __('Adjust Membership Amount'),
+            size: 'small',
+            fields: [
+                {
+                    fieldtype: 'HTML',
+                    options: this.build_amount_info_html(current_amount, mt.amount, minimum_amount, mt.currency)
+                },
+                {
+                    fieldtype: 'Section Break'
+                },
+                {
+                    fieldtype: 'Currency',
+                    fieldname: 'new_amount',
+                    label: __('New Amount'),
+                    reqd: 1,
+                    default: current_amount,
+                    description: __('Enter the new membership amount')
+                },
+                {
+                    fieldtype: 'Small Text',
+                    fieldname: 'reason',
+                    label: __('Reason for Change'),
+                    description: __('Optional: Explain why the amount is being adjusted')
+                },
+                {
+                    fieldtype: 'Section Break'
+                },
+                {
+                    fieldtype: 'Check',
+                    fieldname: 'update_subscription',
+                    label: __('Update Linked Subscription'),
+                    default: !!frm.doc.subscription,
+                    read_only: !frm.doc.subscription,
+                    description: frm.doc.subscription ? 
+                        __('Automatically update subscription amount and regenerate pending invoices') :
+                        __('No subscription linked')
+                }
+            ],
+            primary_action_label: __('Update Amount'),
+            primary_action: (values) => this.process_amount_update(frm, values, minimum_amount, mt, dialog)
+        });
+        
+        dialog.show();
+    },
+    
+    build_amount_info_html: function(current, standard, minimum, currency) {
+        const format_amount = (amount) => frappe.format(amount, {fieldtype: 'Currency', currency: currency});
+        
+        return `
+            <div class="alert alert-info" style="margin-bottom: 15px;">
+                <h5 style="margin-top: 0;">Amount Information</h5>
+                <div class="row">
+                    <div class="col-sm-4">
+                        <strong>Current:</strong><br>
+                        <span class="text-primary h6">${format_amount(current)}</span>
+                    </div>
+                    <div class="col-sm-4">
+                        <strong>Standard:</strong><br>
+                        <span class="text-muted">${format_amount(standard)}</span>
+                    </div>
+                    <div class="col-sm-4">
+                        <strong>Minimum:</strong><br>
+                        <span class="text-warning">${format_amount(minimum)}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+    
+    process_amount_update: function(frm, values, minimum_amount, membership_type_data, dialog) {
+        if (values.new_amount < minimum_amount) {
+            frappe.msgprint(__('Amount cannot be less than minimum: {0}', 
+                [frappe.format(minimum_amount, {fieldtype: 'Currency', currency: membership_type_data.currency})]));
+            return;
+        }
+        
+        frappe.call({
+            method: 'verenigingen.verenigingen.doctype.membership.membership.set_custom_amount',
+            args: {
+                membership_name: frm.doc.name,
+                custom_amount: values.new_amount,
+                reason: values.reason
+            },
+            freeze: true,
+            freeze_message: __('Updating membership amount...'),
+            callback: (r) => {
+                if (r.message && r.message.success) {
+                    this.show_update_success_message(r.message, frm);
+                    frm.reload_doc();
+                    dialog.hide();
+                }
+            }
+        });
+    },
+    
+    show_update_success_message: function(response, frm) {
+        let message = response.message;
+        
+        if (response.subscription_updated) {
+            message += '<br>' + __('Subscription amount has been updated automatically.');
+        }
+        
+        frappe.show_alert({
+            message: message,
+            indicator: 'green'
+        }, 7);
     },
     
     renew_membership: function(frm) {
@@ -368,77 +560,6 @@ frappe.ui.form.on('Membership', {
                 }
             }
         });
-    },
-    
-    show_amount_adjustment_dialog: async function(frm) {
-        const mt = await this.get_membership_type_data(frm.doc.membership_type);
-        
-        if (!mt.allow_custom_amount) {
-            frappe.msgprint(__('Custom amounts are not allowed for this membership type'));
-            return;
-        }
-        
-        const minimum_amount = mt.minimum_amount || mt.amount;
-        const current_amount = frm.doc.uses_custom_amount ? frm.doc.custom_amount : mt.amount;
-        
-        const dialog = new frappe.ui.Dialog({
-            title: __('Adjust Membership Amount'),
-            fields: [
-                {
-                    fieldtype: 'HTML',
-                    options: `
-                        <div class="alert alert-info">
-                            <strong>${__('Current Amount')}:</strong> ${frappe.format(current_amount, {fieldtype: 'Currency', currency: mt.currency})}<br>
-                            <strong>${__('Standard Amount')}:</strong> ${frappe.format(mt.amount, {fieldtype: 'Currency', currency: mt.currency})}<br>
-                            <strong>${__('Minimum Allowed')}:</strong> ${frappe.format(minimum_amount, {fieldtype: 'Currency', currency: mt.currency})}
-                        </div>
-                    `
-                },
-                {
-                    fieldtype: 'Currency',
-                    fieldname: 'new_amount',
-                    label: __('New Amount'),
-                    reqd: 1,
-                    default: current_amount
-                },
-                {
-                    fieldtype: 'Small Text',
-                    fieldname: 'reason',
-                    label: __('Reason for Change')
-                }
-            ],
-            primary_action_label: __('Update Amount'),
-            primary_action: (values) => {
-                if (values.new_amount < minimum_amount) {
-                    frappe.msgprint(__('Amount cannot be less than minimum: {0}', 
-                        [frappe.format(minimum_amount, {fieldtype: 'Currency', currency: mt.currency})]));
-                    return;
-                }
-                
-                frappe.call({
-                    method: 'verenigingen.verenigingen.doctype.membership.membership.set_custom_amount',
-                    args: {
-                        membership_name: frm.doc.name,
-                        custom_amount: values.new_amount,
-                        reason: values.reason
-                    },
-                    freeze: true,
-                    freeze_message: __('Updating amount...'),
-                    callback: (r) => {
-                        if (r.message && r.message.success) {
-                            frappe.show_alert({
-                                message: r.message.message,
-                                indicator: 'green'
-                            }, 5);
-                            frm.reload_doc();
-                            dialog.hide();
-                        }
-                    }
-                });
-            }
-        });
-        
-        dialog.show();
     },
     
     revert_to_standard_amount: function(frm) {
@@ -570,7 +691,6 @@ frappe.ui.form.on('Membership', {
     },
     
     show_invoices_dialog: function(invoices_data) {
-        // Create a more reusable table component
         const table_html = this.create_invoice_table(invoices_data);
         
         const dialog = new frappe.ui.Dialog({
@@ -631,15 +751,3 @@ frappe.ui.form.on('Membership', {
             </div>
         `;
     },
-    
-    get_status_indicator: function(status) {
-        const status_map = {
-            'Paid': 'green',
-            'Unpaid': 'orange',
-            'Overdue': 'red',
-            'Cancelled': 'gray'
-        };
-        const color = status_map[status] || 'gray';
-        return `<span class="indicator ${color}">${status}</span>`;
-    }
-});
