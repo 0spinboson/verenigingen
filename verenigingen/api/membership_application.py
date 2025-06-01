@@ -40,6 +40,29 @@ def validate_email(email):
     except Exception as e:
         return {"valid": False, "message": str(e)}
 
+def determine_chapter_from_application(data):
+    """Determine suggested chapter from application data"""
+    suggested_chapter = None
+    
+    if data.get("selected_chapter"):
+        suggested_chapter = data.get("selected_chapter")
+    elif data.get("postal_code"):
+        # Use existing chapter suggestion logic
+        try:
+            from verenigingen.verenigingen.doctype.chapter.chapter import suggest_chapter_for_member
+            suggestion_result = suggest_chapter_for_member(
+                None, 
+                data.get("postal_code"),
+                data.get("state"),
+                data.get("city")
+            )
+            if suggestion_result.get("matches_by_postal"):
+                suggested_chapter = suggestion_result["matches_by_postal"][0]["name"]
+        except Exception as e:
+            frappe.log_error(f"Error suggesting chapter: {str(e)}", "Chapter Suggestion Error")
+    
+    return suggested_chapter
+
 @frappe.whitelist(allow_guest=True)
 def validate_postal_code(postal_code, country="Netherlands"):
     """Validate postal code format and suggest chapters"""
@@ -213,8 +236,9 @@ def validate_birth_date(birth_date):
 
 @frappe.whitelist(allow_guest=True)
 def submit_application(data):
-    """Process membership application submission"""
+    """Process membership application submission with custom amount support"""
     import json
+    import re
     
     if isinstance(data, str):
         data = json.loads(data)
@@ -226,7 +250,7 @@ def submit_application(data):
     
     for field in required_fields:
         if not data.get(field):
-            frappe.throw(_("Please fill all required fields"))
+            frappe.throw(_("Please fill all required fields: {0}").format(field))
     
     # Check if member with email already exists
     existing = frappe.db.exists("Member", {"email": data.get("email")})
@@ -234,28 +258,52 @@ def submit_application(data):
         frappe.throw(_("A member with this email already exists. Please login or contact support."))
     
     try:
-        # Step 1: Create CRM Lead
+        # Step 1: Validate membership type and custom amount
+        membership_type_doc = frappe.get_doc("Membership Type", data.get("selected_membership_type"))
+        
+        # Determine final membership amount
+        final_amount = membership_type_doc.amount  # Default to standard amount
+        uses_custom_amount = False
+        amount_reason = ""
+        
+        if data.get("uses_custom_amount") and data.get("membership_amount"):
+            custom_amount = float(data.get("membership_amount"))
+            
+            # Validate custom amount if allowed
+            if getattr(membership_type_doc, 'allow_custom_amount', False):
+                minimum_amount = getattr(membership_type_doc, 'minimum_amount', None) or membership_type_doc.amount
+                
+                if custom_amount >= minimum_amount:
+                    final_amount = custom_amount
+                    uses_custom_amount = True
+                    
+                    # Generate reason based on amount difference
+                    if custom_amount > membership_type_doc.amount:
+                        percentage = ((custom_amount - membership_type_doc.amount) / membership_type_doc.amount) * 100
+                        amount_reason = f"Supporter contribution (+{percentage:.1f}% above standard)"
+                    elif custom_amount < membership_type_doc.amount:
+                        percentage = ((membership_type_doc.amount - custom_amount) / membership_type_doc.amount) * 100
+                        amount_reason = f"Reduced contribution (-{percentage:.1f} % from standard)"
+                    else:
+                        uses_custom_amount = False  # Same as standard, no need for custom flag
+                else:
+                    frappe.throw(_("Custom amount {0} is below minimum allowed amount {1}").format(
+                        frappe.format_value(custom_amount, {"fieldtype": "Currency"}),
+                        frappe.format_value(minimum_amount, {"fieldtype": "Currency"})
+                    ))
+            else:
+                frappe.throw(_("Custom amounts are not allowed for this membership type"))
+        
+        # Step 2: Create CRM Lead
         lead = create_crm_lead_from_application(data)
         
-        # Step 2: Create Address
-        address = create_address(data)
+        # Step 3: Create Address
+        address = create_address_from_application(data)
         
-        # Step 3: Determine chapter
-        suggested_chapter = None
-        if data.get("selected_chapter"):
-            suggested_chapter = data.get("selected_chapter")
-        elif data.get("postal_code"):
-            # Use existing chapter suggestion logic
-            suggestion_result = suggest_chapter_for_member(
-                None, 
-                data.get("postal_code"),
-                data.get("state"),
-                data.get("city")
-            )
-            if suggestion_result.get("matches_by_postal"):
-                suggested_chapter = suggestion_result["matches_by_postal"][0]["name"]
+        # Step 4: Determine chapter
+        suggested_chapter = determine_chapter_from_application(data)
         
-        # Step 4: Create Member with Pending status
+        # Step 5: Create Member with Pending status
         member = frappe.get_doc({
             "doctype": "Member",
             "first_name": data.get("first_name"),
@@ -269,19 +317,29 @@ def submit_application(data):
             "primary_address": address.name,
             "status": "Pending",
             "application_status": "Pending",
-            "application_date": now_datetime(),
+            "application_date": frappe.utils.now_datetime(),
             "selected_chapter": data.get("selected_chapter"),
             "suggested_chapter": suggested_chapter,
             "primary_chapter": suggested_chapter or data.get("selected_chapter"),
             "selected_membership_type": data.get("selected_membership_type"),
             "interested_in_volunteering": data.get("interested_in_volunteering", 0),
             "volunteer_availability": data.get("volunteer_availability", ""),
-            "volunteer_skills": data.get("volunteer_skills", ""),
+            "volunteer_experience_level": data.get("volunteer_experience_level", ""),
             "newsletter_opt_in": data.get("newsletter_opt_in", 1),
             "application_source": data.get("application_source", ""),
             "application_source_details": data.get("application_source_details", ""),
-            "notes": data.get("additional_notes", "")
+            "notes": data.get("additional_notes", ""),
+            "payment_method": data.get("payment_method", "")
         })
+        
+        # Add volunteer interests if provided
+        if data.get("volunteer_interests"):
+            for interest in data.get("volunteer_interests", []):
+                member.append("volunteer_interests", {"interest_area": interest})
+        
+        member.insert(ignore_permissions=True)
+        
+        # Step 6: Create Membership record with custom amount support
         membership_data = {
             "doctype": "Membership",
             "member": member.name,
@@ -290,57 +348,45 @@ def submit_application(data):
             "status": "Pending",  # Will become Active after payment
             "auto_renew": 1
         }
-        custom_amount = data.get("membership_amount")
-        if custom_amount:
-            membership_type = frappe.get_doc("Membership Type", data.get("selected_membership_type"))
-            minimum_amount = getattr(membership_type, 'minimum_amount', None) or membership_type.amount
-            
-            if float(custom_amount) != membership_type.amount:
-                # Using custom amount
-                if float(custom_amount) >= minimum_amount:
-                    membership_data.update({
-                        "uses_custom_amount": 1,
-                        "custom_amount": float(custom_amount),
-                        "amount_reason": "Amount selected during application"
-                    })
-                else:
-                    frappe.throw(_("Selected amount is below minimum allowed amount"))
+        
+        # Add custom amount information if applicable
+        if uses_custom_amount:
+            membership_data.update({
+                "uses_custom_amount": 1,
+                "custom_amount": final_amount,
+                "amount_reason": amount_reason
+            })
         
         membership = frappe.get_doc(membership_data)
         membership.insert(ignore_permissions=True)
         
-        # Create invoice with correct amount
-        invoice_amount = membership.effective_amount or membership.custom_amount
-        if not invoice_amount:
-            membership_type = frappe.get_doc("Membership Type", membership.membership_type)
-            invoice_amount = membership_type.amount
-            
-        invoice = create_membership_invoice(member, membership, invoice_amount)
+        # Step 7: Create invoice with correct amount
+        invoice = create_membership_invoice_with_amount(member, membership, final_amount)
         
-        # Add volunteer interests if provided
-        if data.get("volunteer_interests"):
-            for interest in data.get("volunteer_interests"):
-                member.append("volunteer_interests", {"interest_area": interest})
-        
-        member.insert(ignore_permissions=True)
-        
-        # Step 5: Link lead to member
+        # Step 8: Link everything together
         lead.db_set("member", member.name)
+        member.db_set("application_invoice", invoice.name)
         
-        # Step 6: Send notifications
+        # Step 9: Send notifications
         send_application_notifications(member)
-        send_application_confirmation(member)
+        send_application_confirmation_with_payment(member, invoice)
         
         return {
             "success": True,
-            "message": _("Thank you for your application! We will review it and get back to you soon."),
+            "message": _("Thank you for your application! Please complete payment to activate your membership."),
             "member_id": member.name,
-            "lead_id": lead.name
+            "lead_id": lead.name,
+            "invoice_id": invoice.name,
+            "amount": final_amount,
+            "payment_url": f"/payment/membership/{member.name}/{invoice.name}"
         }
         
     except Exception as e:
         frappe.log_error(frappe.get_traceback(), "Membership Application Error")
-        frappe.throw(_("An error occurred while processing your application. Please try again."))
+        if isinstance(e, frappe.ValidationError):
+            frappe.throw(str(e))
+        else:
+            frappe.throw(_("An error occurred while processing your application. Please try again."))
 
 def create_crm_lead_from_application(data):
     """Create CRM Lead from application data"""
@@ -360,6 +406,70 @@ def create_crm_lead_from_application(data):
     })
     lead.insert(ignore_permissions=True)
     return lead
+
+@frappe.whitelist(allow_guest=True)
+def validate_membership_amount_selection(membership_type, amount, uses_custom):
+    """Validate membership amount selection before submission"""
+    try:
+        mt = frappe.get_doc("Membership Type", membership_type)
+        amount = float(amount)
+        
+        # If using custom amount, validate it's allowed and meets minimum
+        if uses_custom:
+            if not getattr(mt, 'allow_custom_amount', False):
+                return {
+                    "valid": False,
+                    "message": _("Custom amounts are not allowed for this membership type")
+                }
+            
+            minimum_amount = getattr(mt, 'minimum_amount', None) or mt.amount
+            if amount < minimum_amount:
+                return {
+                    "valid": False,
+                    "message": _("Amount must be at least {0}").format(
+                        frappe.format_value(minimum_amount, {"fieldtype": "Currency"})
+                    )
+                }
+        
+        # Calculate impact
+        difference = amount - mt.amount
+        percentage = (difference / mt.amount) * 100 if mt.amount else 0
+        
+        return {
+            "valid": True,
+            "amount": amount,
+            "standard_amount": mt.amount,
+            "difference": difference,
+            "percentage": percentage,
+            "impact_message": get_amount_impact_message(amount, mt.amount, percentage)
+        }
+        
+    except Exception as e:
+        return {
+            "valid": False,
+            "message": _("Error validating amount")
+        }
+
+def get_amount_impact_message(selected_amount, standard_amount, percentage):
+    """Get a friendly message about the impact of the selected amount"""
+    if abs(percentage) < 1:  # Less than 1% difference
+        return _("Thank you for choosing the standard membership amount!")
+    elif percentage > 50:
+        return _("Thank you for your generous supporter contribution! Your extra support helps us grow.")
+    elif percentage > 0:
+        return _("Thank you for your additional contribution to support our mission!")
+    elif percentage > -25:
+        return _("Thank you for joining us! We're glad to accommodate your situation.")
+    else:
+        return _("Thank you for joining us! Please contact us if you need any assistance.")
+
+# Add amount formatting helper
+def format_currency_for_display(amount, currency="EUR"):
+    """Format currency amount for display in UI"""
+    return frappe.format_value(amount, {
+        "fieldtype": "Currency", 
+        "options": currency
+    })
 
 @frappe.whitelist(allow_guest=True)
 def validate_name(name, field_name="Name"):
@@ -423,8 +533,8 @@ def check_application_eligibility(data):
         "warnings": []
     }
 
-def create_address(data):
-    """Create address record"""
+def create_address_from_application(data):
+    """Create address record from application data"""
     address = frappe.get_doc({
         "doctype": "Address",
         "address_title": f"{data['first_name']} {data['last_name']}",
@@ -516,25 +626,26 @@ def reject_membership_application(member_name, reason):
     
     return {"success": True}
 
-def create_membership_invoice(member, membership, amount):
-    """Create invoice with specific amount"""
+def create_membership_invoice_with_amount(member, membership, amount):
+    """Create invoice with specific amount (custom or standard)"""
     from verenigingen.utils import DutchTaxExemptionHandler
     
     settings = frappe.get_single("Verenigingen Settings")
     
     # Create or get customer
     if not member.customer:
-        customer = frappe.get_doc({
-            "doctype": "Customer",
-            "customer_name": member.full_name,
-            "customer_type": "Individual",
-            "customer_group": "Member",
-            "territory": "All Territories"
-        })
-        customer.insert()
-        member.customer = customer.name
-        member.save()
+        customer = create_customer_for_member(member)
+        member.db_set("customer", customer.name)
+    
     membership_type = frappe.get_doc("Membership Type", membership.membership_type)
+    
+    # Determine invoice description based on amount type
+    description = f"Membership Fee - {membership_type.membership_type_name}"
+    if membership.uses_custom_amount:
+        if amount > membership_type.amount:
+            description += " (Supporter Contribution)"
+        elif amount < membership_type.amount:
+            description += " (Reduced Rate)"
     
     # Create invoice
     invoice = frappe.get_doc({
@@ -548,20 +659,37 @@ def create_membership_invoice(member, membership, amount):
             "item_code": get_or_create_membership_item(membership_type),
             "qty": 1,
             "rate": amount,  # Use the specific amount (custom or standard)
-            "description": f"Membership Fee - {membership_type.membership_type_name}" + 
-                          (f" (Custom Amount)" if membership.uses_custom_amount else "")
-        }]
+            "description": description
+        }],
+        "remarks": f"Membership application invoice for {member.full_name}"
     })
     
     # Apply tax exemption if configured
     if settings.tax_exempt_for_contributions:
-        handler = DutchTaxExemptionHandler()
-        handler.apply_exemption_to_invoice(invoice, "EXEMPT_MEMBERSHIP")
+        try:
+            handler = DutchTaxExemptionHandler()
+            handler.apply_exemption_to_invoice(invoice, "EXEMPT_MEMBERSHIP")
+        except Exception as e:
+            frappe.log_error(f"Error applying tax exemption: {str(e)}", "Tax Exemption Error")
     
-    invoice.insert()
+    invoice.insert(ignore_permissions=True)
     invoice.submit()
     
     return invoice
+
+_for_member(member):
+    """Create customer record for member"""
+    customer = frappe.get_doc({
+        "doctype": "Customer",
+        "customer_name": member.full_name,
+        "customer_type": "Individual",
+        "customer_group": frappe.db.get_single_value("Selling Settings", "customer_group") or "Individual",
+        "territory": frappe.db.get_single_value("Selling Settings", "territory") or "All Territories",
+        "email_id": member.email,
+        "mobile_no": member.mobile_no
+    })
+    customer.insert(ignore_permissions=True)
+    return customer
 
 def get_or_create_membership_item(membership_type):
     """Get or create item for membership type"""
@@ -951,8 +1079,6 @@ def get_custom_amount_report(from_date=None, to_date=None):
     
     return memberships
 
-# Fixed version of get_payment_methods in membership_application.py
-
 @frappe.whitelist(allow_guest=True)
 def get_payment_methods():
     """Get available payment methods for membership applications"""
@@ -1123,3 +1249,290 @@ def validate_custom_amount(membership_type, amount):
             "valid": False,
             "message": _("Error validating amount")
         }
+
+def create_customer_for_member(member):
+    """Create customer record for member"""
+    customer = frappe.get_doc({
+        "doctype": "Customer",
+        "customer_name": member.full_name,
+        "customer_type": "Individual",
+        "customer_group": frappe.db.get_single_value("Selling Settings", "customer_group") or "Individual",
+        "territory": frappe.db.get_single_value("Selling Settings", "territory") or "All Territories",
+        "email_id": member.email,
+        "mobile_no": member.mobile_no
+    })
+    customer.insert(ignore_permissions=True)
+    return customer
+
+def send_application_confirmation_with_payment(member, invoice):
+    """Send confirmation email with payment instructions"""
+    try:
+        # Generate payment URL
+        payment_url = frappe.utils.get_url(f"/payment/membership/{member.name}/{invoice.name}")
+        
+        # Get membership type details
+        membership_type_name = "your selected membership"
+        try:
+            if member.selected_membership_type:
+                membership_type_doc = frappe.get_doc("Membership Type", member.selected_membership_type)
+                membership_type_name = membership_type_doc.membership_type_name
+        except:
+            pass
+        
+        # Get company details
+        company_name = "our association"
+        try:
+            company = frappe.defaults.get_global_default('company')
+            if company:
+                company_doc = frappe.get_doc("Company", company)
+                company_name = company_doc.company_name
+        except:
+            pass
+        
+        # Prepare template arguments
+        args = {
+            "member": member,
+            "invoice": invoice,
+            "payment_url": payment_url,
+            "payment_amount": invoice.grand_total,
+            "company": company_name,
+            "membership_type_name": membership_type_name,
+            "due_date": frappe.format_date(invoice.due_date) if invoice.due_date else None,
+            "application_id": member.name,
+            "invoice_number": invoice.name
+        }
+        
+        # Try to use template first
+        template_sent = False
+        if frappe.db.exists("Email Template", "membership_application_confirmation"):
+            try:
+                frappe.sendmail(
+                    recipients=[member.email],
+                    subject=_("Membership Application Received - Payment Required"),
+                    template="membership_application_confirmation",
+                    args=args,
+                    now=True,
+                    reference_doctype="Member",
+                    reference_name=member.name
+                )
+                template_sent = True
+                frappe.logger().info(f"Sent template confirmation email to {member.email}")
+            except Exception as e:
+                frappe.log_error(f"Error sending template email: {str(e)}", "Email Template Error")
+                # Fall back to default email
+        
+        # Send default email if template failed or doesn't exist
+        if not template_sent:
+            # Enhanced default message with better formatting and information
+            message = f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                    <h2 style="color: #007bff; margin: 0;">Thank you for your membership application!</h2>
+                </div>
+                
+                <p>Dear {member.first_name},</p>
+                
+                <p>We have received your membership application for <strong>{membership_type_name}</strong> and are excited to welcome you to {company_name}!</p>
+                
+                <div style="background: #e7f3ff; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <h3 style="color: #007bff; margin-top: 0;">Next Step: Complete Payment</h3>
+                    <p style="margin-bottom: 10px;">To activate your membership, please complete the payment of <strong>{frappe.format_value(invoice.grand_total, {"fieldtype": "Currency"})}</strong>.</p>
+                    {f'<p style="margin-bottom: 10px;"><strong>Payment Due Date:</strong> {frappe.format_date(invoice.due_date)}</p>' if invoice.due_date else ''}
+                </div>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="{payment_url}" 
+                       style="background: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+                        Complete Payment Now
+                    </a>
+                </div>
+                
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                    <h4 style="margin-top: 0;">Application Details:</h4>
+                    <ul style="margin: 0; padding-left: 20px;">
+                        <li><strong>Application ID:</strong> {member.name}</li>
+                        <li><strong>Invoice Number:</strong> {invoice.name}</li>
+                        <li><strong>Membership Type:</strong> {membership_type_name}</li>
+                        <li><strong>Amount:</strong> {frappe.format_value(invoice.grand_total, {"fieldtype": "Currency"})}</li>
+                        {f'<li><strong>Chapter:</strong> {member.primary_chapter}</li>' if member.primary_chapter else ''}
+                    </ul>
+                </div>
+                
+                <p>Once your payment is processed, you will receive:</p>
+                <ul>
+                    <li>A welcome email with your member portal access details</li>
+                    <li>Information about your local chapter activities</li>
+                    <li>Access to member-only resources and events</li>
+                    {f'<li>Volunteer coordinator contact (as requested)</li>' if member.interested_in_volunteering else ''}
+                </ul>
+                
+                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107;">
+                    <h4 style="margin-top: 0; color: #856404;">Payment Options & Information</h4>
+                    <p style="margin-bottom: 10px;">You can pay using various methods including credit card, bank transfer, or SEPA direct debit.</p>
+                    <p style="margin-bottom: 0;">If you experience any issues with payment, please contact us at 
+                    <a href="mailto:membership@{frappe.utils.get_host_name()}" style="color: #007bff;">membership@{frappe.utils.get_host_name()}</a></p>
+                </div>
+                
+                <p>If you have any questions about your application or membership, please don't hesitate to contact us.</p>
+                
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #dee2e6;">
+                    <p style="margin-bottom: 5px;">Best regards,</p>
+                    <p style="margin-bottom: 0;"><strong>The Membership Team</strong><br>{company_name}</p>
+                </div>
+                
+                <div style="margin-top: 20px; padding: 10px; background: #f8f9fa; border-radius: 5px; font-size: 12px; color: #6c757d;">
+                    <p style="margin: 0;">This email was sent regarding your membership application. If you did not apply for membership, please contact us immediately.</p>
+                </div>
+            </div>
+            """
+            
+            try:
+                frappe.sendmail(
+                    recipients=[member.email],
+                    subject=_("Membership Application Received - Payment Required"),
+                    message=message,
+                    now=True,
+                    reference_doctype="Member",
+                    reference_name=member.name
+                )
+                frappe.logger().info(f"Sent default confirmation email to {member.email}")
+            except Exception as e:
+                frappe.log_error(f"Error sending default confirmation email: {str(e)}", "Email Send Error")
+                raise frappe.ValidationError(_("Could not send confirmation email. Please contact support."))
+        
+        # Log the email in member's timeline
+        try:
+            frappe.get_doc({
+                "doctype": "Comment",
+                "comment_type": "Info",
+                "reference_doctype": "Member",
+                "reference_name": member.name,
+                "content": f"Application confirmation email sent with payment instructions. Invoice: {invoice.name}"
+            }).insert(ignore_permissions=True)
+        except:
+            pass  # Don't fail if timeline entry fails
+            
+        # Also notify administrators (optional)
+        try:
+            notify_admins_of_new_application(member, invoice)
+        except Exception as e:
+            frappe.log_error(f"Error notifying admins: {str(e)}", "Admin Notification Error")
+            # Don't fail the main process if admin notification fails
+    
+    except Exception as e:
+        frappe.log_error(f"Error in send_application_confirmation_with_payment: {str(e)}", "Email Confirmation Error")
+        raise frappe.ValidationError(_("Could not send confirmation email. Please contact support."))
+
+def notify_admins_of_new_application(member, invoice):
+    """Notify administrators about new membership application"""
+    try:
+        # Get membership managers and association managers
+        admin_emails = []
+        
+        # Get users with Membership Manager role
+        membership_managers = frappe.get_all(
+            "Has Role",
+            filters={"role": "Membership Manager"},
+            fields=["parent"]
+        )
+        
+        for manager in membership_managers:
+            user = frappe.get_doc("User", manager.parent)
+            if user.enabled and user.email:
+                admin_emails.append(user.email)
+        
+        # Get users with Association Manager role
+        association_managers = frappe.get_all(
+            "Has Role", 
+            filters={"role": "Association Manager"},
+            fields=["parent"]
+        )
+        
+        for manager in association_managers:
+            user = frappe.get_doc("User", manager.parent)
+            if user.enabled and user.email:
+                admin_emails.append(user.email)
+        
+        # Remove duplicates
+        admin_emails = list(set(admin_emails))
+        
+        if admin_emails:
+            # Get membership type name
+            membership_type_name = "Unknown"
+            if member.selected_membership_type:
+                try:
+                    mt = frappe.get_doc("Membership Type", member.selected_membership_type)
+                    membership_type_name = mt.membership_type_name
+                except:
+                    pass
+            
+            admin_message = f"""
+            <h3>New Membership Application Received</h3>
+            
+            <p>A new membership application has been submitted and is ready for review.</p>
+            
+            <table style="border-collapse: collapse; width: 100%;">
+                <tr style="background: #f8f9fa;">
+                    <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>Applicant:</strong></td>
+                    <td style="padding: 8px; border: 1px solid #dee2e6;">{member.full_name}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>Email:</strong></td>
+                    <td style="padding: 8px; border: 1px solid #dee2e6;">{member.email}</td>
+                </tr>
+                <tr style="background: #f8f9fa;">
+                    <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>Membership Type:</strong></td>
+                    <td style="padding: 8px; border: 1px solid #dee2e6;">{membership_type_name}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>Amount:</strong></td>
+                    <td style="padding: 8px; border: 1px solid #dee2e6;">{frappe.format_value(invoice.grand_total, {"fieldtype": "Currency"})}</td>
+                </tr>
+                <tr style="background: #f8f9fa;">
+                    <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>Chapter:</strong></td>
+                    <td style="padding: 8px; border: 1px solid #dee2e6;">{member.primary_chapter or 'Not assigned'}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>Volunteer Interest:</strong></td>
+                    <td style="padding: 8px; border: 1px solid #dee2e6;">{'Yes' if member.interested_in_volunteering else 'No'}</td>
+                </tr>
+            </table>
+            
+            <p><a href="{frappe.utils.get_url()}/app/member/{member.name}" 
+                 style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                Review Application
+            </a></p>
+            
+            <p>The applicant has been sent payment instructions and will become an active member once payment is completed.</p>
+            """
+            
+            frappe.sendmail(
+                recipients=admin_emails,
+                subject=f"New Membership Application: {member.full_name}",
+                message=admin_message,
+                now=True,
+                reference_doctype="Member",
+                reference_name=member.name
+            )
+    
+    except Exception as e:
+        frappe.log_error(f"Error notifying admins: {str(e)}", "Admin Notification Error")
+        # Don't raise error as this is not critical
+
+# Additional helper function for email templates
+def get_payment_instructions_html(invoice, payment_url):
+    """Generate HTML for payment instructions"""
+    return f"""
+    <div style="background: #e7f3ff; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <h3 style="color: #007bff; margin-top: 0;">Complete Your Payment</h3>
+        <p>Amount Due: <strong>{frappe.format_value(invoice.grand_total, {"fieldtype": "Currency"})}</strong></p>
+        {f'<p>Due Date: <strong>{frappe.format_date(invoice.due_date)}</strong></p>' if invoice.due_date else ''}
+        <div style="text-align: center; margin: 20px 0;">
+            <a href="{payment_url}" 
+               style="background: #007bff; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+                Pay Now
+            </a>
+        </div>
+        <p><small>You can pay using credit card, bank transfer, or SEPA direct debit.</small></p>
+    </div>
+    """
