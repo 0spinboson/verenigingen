@@ -677,7 +677,7 @@ def create_membership_invoice_with_amount(member, membership, amount):
     
     return invoice
 
-_for_member(member):
+def create_customer_for_member(member):
     """Create customer record for member"""
     customer = frappe.get_doc({
         "doctype": "Customer",
