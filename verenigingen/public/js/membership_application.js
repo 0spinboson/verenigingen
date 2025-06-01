@@ -1261,9 +1261,32 @@ class MembershipAPI {
         });
     }
     
-    async submitApplication(data) {
-        return await this.call('verenigingen.api.membership_application.submit_application', { data });
-    }
+    // Submit to server
+    frappe.call({
+        method: 'verenigingen.api.membership_application.submit_application',
+        args: { 
+            data: JSON.stringify(applicationData)  // Ensure data is properly serialized
+        },
+        type: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        callback: function(r) {
+            console.log('Server response:', r);
+            if (r.message && r.message.success) {
+                handleSubmissionSuccess(r.message);
+            } else {
+                const errorMsg = r.message ? (r.message.message || r.message) : 'Unknown error occurred';
+                handleSubmissionError(errorMsg);
+                $btn.prop('disabled', false).html('Submit Application & Pay');
+            }
+        },
+        error: function(r) {
+            console.error('Submission error:', r);
+            handleSubmissionError('Network error. Please check your connection and try again.');
+            $btn.prop('disabled', false).html('Submit Application & Pay');
+        }
+    });
     
     async saveDraft(data) {
         return await this.call('verenigingen.api.membership_application.save_draft_application', { data });
