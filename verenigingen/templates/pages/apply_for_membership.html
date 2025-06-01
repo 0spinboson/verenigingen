@@ -138,7 +138,7 @@
             </div>
         </div>
         
-        <!-- Step 3: Membership Selection -->
+        <!-- Enhanced Step 3: Membership Selection with Custom Amount Support -->
         <div class="form-step" data-step="3" style="display: none;">
             <div class="card">
                 <div class="card-header">
@@ -168,17 +168,17 @@
                         </div>
                     </div>
                     
-                    <!-- Membership Type Selection -->
+                    <!-- Membership Type Selection with Custom Amount Support -->
                     <h5 class="required">{{ _("Membership Type") }}</h5>
-                    <div id="membership-types" class="membership-type-cards">
+                    <div id="membership-types" class="membership-type-selection">
                         <!-- Membership types will be loaded here -->
                     </div>
                     <div class="invalid-feedback" id="membership-type-error" style="display: none;"></div>
                     
                     <!-- Membership Fee Display -->
                     <div id="membership-fee-display" class="alert alert-info mt-4" style="display: none;">
-                        <h5>{{ _("Membership Fee") }}</h5>
-                        <p id="fee-details"></p>
+                        <h5>{{ _("Selected Membership") }}</h5>
+                        <div id="fee-details"></div>
                     </div>
                 </div>
             </div>
@@ -297,7 +297,7 @@
             </div>
         </div>
         
-        <!-- Step 5: Payment -->
+        <!-- Enhanced Step 5: Payment with Better Method Selection -->
         <div class="form-step" data-step="5" style="display: none;">
             <div class="card">
                 <div class="card-header">
@@ -312,15 +312,43 @@
                         </div>
                     </div>
                     
-                    <!-- Payment Method -->
+                    <!-- Payment Method Selection -->
                     <h5 class="required">{{ _("Payment Method") }}</h5>
-                    <div class="row">
-                        <div class="col-md-6">
+                    <div class="payment-methods-container">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div id="payment-methods-list">
+                                    <!-- Payment methods will be loaded here -->
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="payment-info-panel">
+                                    <div id="payment-method-details" style="display: none;">
+                                        <h6>Payment Details</h6>
+                                        <div id="payment-details-content"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Fallback dropdown if JavaScript loading fails -->
+                        <div id="payment-method-fallback" style="display: none;">
                             <select class="form-control" id="payment_method" name="payment_method" required>
                                 <option value="">{{ _("Select payment method...") }}</option>
                             </select>
                             <div class="invalid-feedback"></div>
                         </div>
+                    </div>
+                    
+                    <!-- SEPA Mandate Notice (shown when Direct Debit is selected) -->
+                    <div id="sepa-mandate-notice" class="alert alert-warning mt-3" style="display: none;">
+                        <h6><i class="fa fa-info-circle"></i> {{ _("SEPA Direct Debit Information") }}</h6>
+                        <p>{{ _("By selecting Direct Debit, you authorize us to collect payments from your bank account via SEPA Direct Debit.") }}</p>
+                        <ul class="mb-0">
+                            <li>{{ _("You can cancel the mandate at any time") }}</li>
+                            <li>{{ _("First collection will occur 5-7 business days after setup") }}</li>
+                            <li>{{ _("You will receive advance notice before each collection") }}</li>
+                        </ul>
                     </div>
                     
                     <!-- Terms and Conditions -->
@@ -335,12 +363,21 @@
                             </label>
                             <div class="invalid-feedback"></div>
                         </div>
+                        
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" id="gdpr_consent" name="gdpr_consent" required>
+                            <label class="form-check-label" for="gdpr_consent">
+                                {{ _("I consent to the processing of my personal data as described in the Privacy Policy") }}
+                            </label>
+                            <div class="invalid-feedback"></div>
+                        </div>
                     </div>
                     
                     <!-- Additional Notes -->
                     <div class="mt-4">
                         <label for="additional_notes">{{ _("Additional Notes") }} <small class="text-muted">({{ _("Optional") }})</small></label>
-                        <textarea class="form-control" id="additional_notes" name="additional_notes" rows="3"></textarea>
+                        <textarea class="form-control" id="additional_notes" name="additional_notes" rows="3" 
+                                 placeholder="{{ _('Any additional information or special requests...') }}"></textarea>
                     </div>
                 </div>
             </div>
