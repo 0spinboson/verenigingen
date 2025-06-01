@@ -282,7 +282,6 @@ def submit_application(data):
             "application_source_details": data.get("application_source_details", ""),
             "notes": data.get("additional_notes", "")
         })
-        # Create membership record with custom amount if provided
         membership_data = {
             "doctype": "Membership",
             "member": member.name,
@@ -291,8 +290,6 @@ def submit_application(data):
             "status": "Pending",  # Will become Active after payment
             "auto_renew": 1
         }
-
-        # Handle custom amount
         custom_amount = data.get("membership_amount")
         if custom_amount:
             membership_type = frappe.get_doc("Membership Type", data.get("selected_membership_type"))
@@ -319,7 +316,7 @@ def submit_application(data):
             invoice_amount = membership_type.amount
             
         invoice = create_membership_invoice(member, membership, invoice_amount)
-
+        
         # Add volunteer interests if provided
         if data.get("volunteer_interests"):
             for interest in data.get("volunteer_interests"):
@@ -519,8 +516,8 @@ def reject_membership_application(member_name, reason):
     
     return {"success": True}
 
-def create_membership_invoice(member, membership, membership_type):
-    """Create invoice for membership"""
+def create_membership_invoice(member, membership, amount):
+    """Create invoice with specific amount"""
     from verenigingen.utils import DutchTaxExemptionHandler
     
     settings = frappe.get_single("Verenigingen Settings")
@@ -537,6 +534,7 @@ def create_membership_invoice(member, membership, membership_type):
         customer.insert()
         member.customer = customer.name
         member.save()
+    membership_type = frappe.get_doc("Membership Type", membership.membership_type)
     
     # Create invoice
     invoice = frappe.get_doc({
@@ -544,13 +542,14 @@ def create_membership_invoice(member, membership, membership_type):
         "customer": member.customer,
         "member": member.name,
         "membership": membership.name,
-        "posting_date": today(),
-        "due_date": add_days(today(), 14),  # 14 days payment term
+        "posting_date": frappe.utils.today(),
+        "due_date": frappe.utils.add_days(frappe.utils.today(), 14),
         "items": [{
             "item_code": get_or_create_membership_item(membership_type),
             "qty": 1,
-            "rate": membership_type.amount,
-            "description": f"Membership Fee - {membership_type.membership_type_name}"
+            "rate": amount,  # Use the specific amount (custom or standard)
+            "description": f"Membership Fee - {membership_type.membership_type_name}" + 
+                          (f" (Custom Amount)" if membership.uses_custom_amount else "")
         }]
     })
     
@@ -902,48 +901,6 @@ def load_draft_application(draft_id):
             "success": False,
             "message": _("Error loading draft")
         }
-def create_membership_invoice(member, membership, amount):
-    """Create invoice with specific amount"""
-    from verenigingen.utils import DutchTaxExemptionHandler
-    
-    settings = frappe.get_single("Verenigingen Settings")
-    
-    # Create or get customer
-    if not member.customer:
-        # ... customer creation code ...
-    
-    # Get membership type for description
-    membership_type = frappe.get_doc("Membership Type", membership.membership_type)
-    
-    # Create invoice with custom amount
-    invoice = frappe.get_doc({
-        "doctype": "Sales Invoice",
-        "customer": member.customer,
-        "member": member.name,
-        "membership": membership.name,
-        "posting_date": frappe.utils.today(),
-        "due_date": frappe.utils.add_days(frappe.utils.today(), 14),
-        "items": [{
-            "item_code": get_or_create_membership_item(membership_type),
-            "qty": 1,
-            "rate": amount,  # Use the specific amount (custom or standard)
-            "description": f"Membership Fee - {membership_type.membership_type_name}" + 
-                          (f" (Custom Amount)" if membership.uses_custom_amount else "")
-        }]
-    })
-    
-    # Apply tax exemption if configured
-    if settings.tax_exempt_for_contributions:
-        handler = DutchTaxExemptionHandler()
-        handler.apply_exemption_to_invoice(invoice, "EXEMPT_MEMBERSHIP")
-    
-    invoice.insert()
-    invoice.submit()
-    
-    return invoice
-
-# Add utility functions for membership amount management
-
 @frappe.whitelist()
 def get_membership_amount_info(membership_name):
     """Get detailed amount information for a membership"""
