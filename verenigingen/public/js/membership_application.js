@@ -132,7 +132,8 @@ class MembershipApplication {
         return this.steps[this.state.currentStep - 1];
     }
     
-    async submit(event) {
+// Enhanced submit method with debugging and fallback
+async submit(event) {
         event.preventDefault();
         console.log('Form submission started');
         
@@ -146,9 +147,21 @@ class MembershipApplication {
             const formData = this.collectAllData();
             console.log('Submitting application data:', formData);
             
-            const result = await this.api.submitApplication(formData);
-            console.log('Application submitted successfully:', result);
+            // First, verify the backend method exists
+            console.log('Checking if method exists...');
             
+            let result;
+            try {
+                // Try the standard frappe.call approach first
+                result = await this.api.submitApplication(formData);
+            } catch (error) {
+                console.warn('Standard submission failed, trying direct AJAX:', error);
+                
+                // Fallback to direct AJAX
+                result = await this.api.submitApplicationDirect(formData);
+            }
+            
+            console.log('Application submitted successfully:', result);
             this.ui.showSuccess(result);
             
             // Redirect to payment if URL is provided
@@ -160,8 +173,32 @@ class MembershipApplication {
             
         } catch (error) {
             console.error('Application submission failed:', error);
+            
+            // Show more detailed error information
+            const errorDetails = {
+                message: error.message,
+                stack: error.stack,
+                formData: this.collectAllData()
+            };
+            console.error('Detailed error info:', errorDetails);
+            
             this.ui.showError('Submission failed', error);
-            throw error; // Re-throw so calling code can handle it
+            
+            // Show user-friendly error message
+            frappe.msgprint({
+                title: 'Submission Error',
+                message: `
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p>Please try again or contact support if the problem persists.</p>
+                    <details>
+                        <summary>Technical Details</summary>
+                        <pre>${JSON.stringify(errorDetails, null, 2)}</pre>
+                    </details>
+                `,
+                indicator: 'red'
+            });
+            
+            throw error;
         } finally {
             this.ui.setSubmitting(false);
         }
@@ -1640,3 +1677,30 @@ $(document).ready(function() {
     console.log('- debugMembershipSelection() - Check membership selection');
     console.log('- debugAge(birthDate) - Test age validation');
 });
+
+// Add this debug function to test the backend method
+window.testBackendMethod = async function() {
+    console.log('Testing backend method availability...');
+    
+    try {
+        const result = await new Promise((resolve, reject) => {
+            frappe.call({
+                method: 'verenigingen.api.membership_application.get_application_form_data',
+                callback: (r) => {
+                    if (r.message !== undefined) {
+                        resolve(r.message);
+                    } else {
+                        reject(new Error('No response'));
+                    }
+                },
+                error: reject
+            });
+        });
+        
+        console.log('Backend method test successful:', result);
+        return result;
+    } catch (error) {
+        console.error('Backend method test failed:', error);
+        return null;
+    }
+};
