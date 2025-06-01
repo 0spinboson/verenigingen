@@ -345,7 +345,7 @@ $(document).ready(function() {
             
             // Clear any validation errors
             select.removeClass('is-invalid');
-            select.siblings('.invalid-feedback').hide();
+            select.siblings('.invalid-feedback').remove();
             
             // Mark as valid
             select.addClass('is-valid');
@@ -415,9 +415,12 @@ $(document).ready(function() {
         container.hide();
         fallback.show();
         
-        // Populate fallback dropdown
+        // Get the select element and remove required temporarily
         const select = $('#payment_method');
-        select.empty().append('<option value="">Select payment method...</option>');
+        select.removeAttr('required');
+        
+        // Clear and populate dropdown
+        select.empty();
         
         const fallbackMethods = [
             { 
@@ -446,6 +449,7 @@ $(document).ready(function() {
         // Store fallback methods for later use
         paymentMethods = fallbackMethods;
         
+        // Add options without placeholder first
         fallbackMethods.forEach(function(method) {
             select.append(`<option value="${method.name}">${method.name} - ${method.description}</option>`);
         });
@@ -459,20 +463,13 @@ $(document).ready(function() {
             }
         });
         
-        // AUTO-SELECT FIRST OPTION - Fixed to properly set the value
-        setTimeout(function() {
-            if (fallbackMethods.length > 0) {
-                const defaultMethod = fallbackMethods[0].name;
-                select.val(defaultMethod);
-                selectPaymentMethod(defaultMethod);
-                
-                // Remove the required attribute temporarily to avoid validation issues
-                select.removeAttr('required');
-                setTimeout(() => select.attr('required', 'required'), 100);
-                
-                console.log('Auto-selected payment method:', defaultMethod);
-            }
-        }, 200); // Longer delay to ensure everything is ready
+        // AUTO-SELECT FIRST OPTION immediately
+        if (fallbackMethods.length > 0) {
+            const defaultMethod = fallbackMethods[0].name;
+            select.val(defaultMethod);
+            selectPaymentMethod(defaultMethod);
+            console.log('Auto-selected payment method:', defaultMethod);
+        }
     }
 
     function loadCountries(countries) {
@@ -559,6 +556,28 @@ $(document).ready(function() {
         $('#prev-btn').toggle(step > 1);
         $('#next-btn').toggle(step < maxSteps);
         $('#submit-btn').toggle(step === maxSteps);
+
+        if (step === 5) {
+            console.log('Initializing step 5');
+            
+            // Clear any validation errors from previous visits
+            $('#payment-error, #terms-error, #gdpr-error').remove();
+            
+            // Load payment methods if not already loaded
+            if (!paymentMethods || paymentMethods.length === 0) {
+                console.log('Loading payment methods for step 5');
+                loadPaymentMethods();
+            } else {
+                // Payment methods already loaded, just ensure fallback is shown
+                showPaymentMethodFallback();
+            }
+            
+            // Update summary
+            updateApplicationSummary();
+            
+            // Initialize form submission
+            initializeFormSubmission();
+        }
 
         // Step-specific actions
         if (step === 2) {
@@ -971,65 +990,72 @@ function validateStep5() {
     $('.is-invalid').removeClass('is-invalid');
     $('.is-valid').removeClass('is-valid');
     
-    // Payment method validation - check both interfaces
-    const selectedFromDropdown = $('#payment_method').val();
-    const selectedFromCards = selectedPaymentMethod;
-    const formDataMethod = formData.payment_method;
+    // Payment method validation - be very explicit about what we're checking
+    let finalPaymentMethod = null;
     
-    console.log('Payment method validation:', {
-        dropdown: selectedFromDropdown,
-        cards: selectedFromCards,
-        formData: formDataMethod
+    // Check all possible sources for payment method
+    const dropdownValue = $('#payment_method').val();
+    const selectedValue = selectedPaymentMethod;
+    const formDataValue = formData.payment_method;
+    
+    console.log('Payment method sources:', {
+        dropdown: dropdownValue,
+        selected: selectedValue, 
+        formData: formDataValue
     });
     
-    const finalSelection = selectedFromDropdown || selectedFromCards || formDataMethod;
+    // Use the first valid value we find
+    if (dropdownValue && dropdownValue !== '') {
+        finalPaymentMethod = dropdownValue;
+    } else if (selectedValue) {
+        finalPaymentMethod = selectedValue;
+    } else if (formDataValue) {
+        finalPaymentMethod = formDataValue;
+    }
     
-    if (!finalSelection) {
-        console.log('No payment method selected - showing error');
-        if ($('#payment-method-fallback').is(':visible')) {
-            const select = $('#payment_method');
-            select.addClass('is-invalid');
-            select.after('<div class="invalid-feedback">Please select a payment method</div>');
-        } else {
-            // Show error for card interface
-            const errorDiv = $('<div class="invalid-feedback d-block text-danger mb-3">Please select a payment method</div>');
-            $('#payment-methods-list').after(errorDiv);
+    if (!finalPaymentMethod) {
+        console.log('No payment method found - validation failed');
+        
+        // Show error message
+        const errorHtml = '<div class="alert alert-danger mt-3" id="payment-error">Please select a payment method to continue.</div>';
+        
+        if ($('#payment-error').length === 0) {
+            $('#payment-method-fallback').after(errorHtml);
         }
+        
         isValid = false;
     } else {
-        // Store the selection and mark as valid
-        selectedPaymentMethod = finalSelection;
-        formData.payment_method = finalSelection;
+        // Payment method is valid - store it everywhere
+        selectedPaymentMethod = finalPaymentMethod;
+        formData.payment_method = finalPaymentMethod;
+        $('#payment_method').val(finalPaymentMethod);
         
-        if ($('#payment-method-fallback').is(':visible')) {
-            $('#payment_method').addClass('is-valid').removeClass('is-invalid');
-        }
+        // Remove any error messages
+        $('#payment-error').remove();
         
-        console.log('Payment method validated:', finalSelection);
+        console.log('Payment method validated:', finalPaymentMethod);
     }
 
-    // Terms validation
-    const termsChecked = $('#terms').is(':checked');
-    if (!termsChecked) {
+    // Terms validation - simplified
+    if (!$('#terms').is(':checked')) {
         console.log('Terms not accepted');
-        const termsLabel = $('label[for="terms"]');
-        termsLabel.after('<div class="invalid-feedback d-block">You must accept the terms and conditions</div>');
-        $('#terms').addClass('is-invalid');
+        if ($('#terms-error').length === 0) {
+            $('#terms').closest('.form-check').after('<div class="text-danger mt-1" id="terms-error">You must accept the terms and conditions</div>');
+        }
         isValid = false;
     } else {
-        $('#terms').addClass('is-valid').removeClass('is-invalid');
+        $('#terms-error').remove();
     }
 
-    // GDPR consent validation
-    const gdprChecked = $('#gdpr_consent').is(':checked');
-    if (!gdprChecked) {
+    // GDPR consent validation - simplified  
+    if (!$('#gdpr_consent').is(':checked')) {
         console.log('GDPR consent not given');
-        const gdprLabel = $('label[for="gdpr_consent"]');
-        gdprLabel.after('<div class="invalid-feedback d-block">You must consent to data processing</div>');
-        $('#gdpr_consent').addClass('is-invalid');
+        if ($('#gdpr-error').length === 0) {
+            $('#gdpr_consent').closest('.form-check').after('<div class="text-danger mt-1" id="gdpr-error">You must consent to data processing</div>');
+        }
         isValid = false;
     } else {
-        $('#gdpr_consent').addClass('is-valid').removeClass('is-invalid');
+        $('#gdpr-error').remove();
     }
 
     console.log('Step 5 validation result:', isValid);
@@ -1138,3 +1164,114 @@ const validationCSS = `
 
 // Inject the CSS
 $('head').append(validationCSS);
+
+function collectFormData() {
+    // Make sure we have a valid payment method
+    const paymentMethod = selectedPaymentMethod || $('#payment_method').val() || formData.payment_method;
+    
+    console.log('Collecting form data with payment method:', paymentMethod);
+    
+    const applicationData = {
+        // Personal info
+        first_name: $('#first_name').val() || '',
+        middle_name: $('#middle_name').val() || '',
+        last_name: $('#last_name').val() || '',
+        email: $('#email').val() || '',
+        mobile_no: $('#mobile_no').val() || '',
+        phone: $('#phone').val() || '',
+        birth_date: $('#birth_date').val() || '',
+        pronouns: $('#pronouns').val() || '',
+
+        // Address
+        address_line1: $('#address_line1').val() || '',
+        address_line2: $('#address_line2').val() || '',
+        city: $('#city').val() || '',
+        state: $('#state').val() || '',
+        postal_code: $('#postal_code').val() || '',
+        country: $('#country').val() || '',
+
+        // Membership
+        selected_membership_type: formData.selected_membership_type || '',
+        membership_amount: formData.membership_amount || 0,
+        uses_custom_amount: formData.uses_custom_amount || false,
+        selected_chapter: $('#selected_chapter').val() || '',
+
+        // Volunteer
+        interested_in_volunteering: $('#interested_in_volunteering').is(':checked'),
+        volunteer_availability: $('#volunteer_availability').val() || '',
+        volunteer_experience_level: $('#volunteer_experience_level').val() || '',
+        volunteer_interests: getSelectedVolunteerInterests(),
+
+        // Communication
+        newsletter_opt_in: $('#newsletter_opt_in').is(':checked'),
+        application_source: $('#application_source').val() || '',
+        application_source_details: $('#application_source_details').val() || '',
+
+        // Payment - ensure we have this
+        payment_method: paymentMethod,
+
+        // Additional
+        additional_notes: $('#additional_notes').val() || '',
+        terms: $('#terms').is(':checked'),
+        gdpr_consent: $('#gdpr_consent').is(':checked')
+    };
+
+    return applicationData;
+}
+function initializeFormSubmission() {
+    // Remove any existing handlers first
+    $('#membership-application-form').off('submit');
+    
+    // Add new submit handler
+    $('#membership-application-form').on('submit', function(e) {
+        e.preventDefault();
+        console.log('Form submission triggered');
+        
+        // Clear any existing error messages
+        $('#payment-error, #terms-error, #gdpr-error').remove();
+        
+        // Validate step 5 explicitly
+        if (!validateStep5()) {
+            console.log('Step 5 validation failed - stopping submission');
+            
+            // Scroll to first error
+            const firstError = $('.alert-danger, .text-danger').first();
+            if (firstError.length > 0) {
+                $('html, body').animate({
+                    scrollTop: firstError.offset().top - 100
+                }, 500);
+            }
+            
+            return false;
+        }
+
+        // Disable submit button
+        const $btn = $('#submit-btn');
+        $btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Processing...');
+
+        // Collect form data
+        const applicationData = collectFormData();
+        console.log('Submitting application data:', applicationData);
+
+        // Submit to server
+        frappe.call({
+            method: 'verenigingen.api.membership_application.submit_application',
+            args: { data: applicationData },
+            callback: function(r) {
+                console.log('Server response:', r);
+                if (r.message && r.message.success) {
+                    handleSubmissionSuccess(r.message);
+                } else {
+                    const errorMsg = r.message ? (r.message.message || r.message) : 'Unknown error occurred';
+                    handleSubmissionError(errorMsg);
+                    $btn.prop('disabled', false).html('Submit Application & Pay');
+                }
+            },
+            error: function(r) {
+                console.error('Submission error:', r);
+                handleSubmissionError('Network error. Please check your connection and try again.');
+                $btn.prop('disabled', false).html('Submit Application & Pay');
+            }
+        });
+    });
+}
