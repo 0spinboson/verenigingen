@@ -50,6 +50,46 @@ class MembershipApplication {
         const data = await this.api.getFormData();
         this.state.setInitialData(data);
         console.log('Form data loaded:', data);
+        
+        // Immediately load countries and chapters since they're needed early
+        this.loadStaticData();
+    }
+    
+    loadStaticData() {
+        // Load countries into address step
+        const countries = this.state.get('countries');
+        if (countries && countries.length > 0) {
+            const select = $('#country');
+            if (select.length && select.children().length <= 1) {
+                select.empty().append('<option value="">Select Country...</option>');
+                
+                countries.forEach(country => {
+                    select.append(`<option value="${country.name}">${country.name}</option>`);
+                });
+                
+                // Set Netherlands as default
+                select.val('Netherlands');
+            }
+        }
+        
+        // Load chapters if available
+        const chapters = this.state.get('chapters');
+        if (chapters && chapters.length > 0) {
+            const select = $('#selected_chapter');
+            if (select.length && select.children().length <= 1) {
+                select.empty().append('<option value="">Select a chapter...</option>');
+                
+                chapters.forEach(chapter => {
+                    const displayText = chapter.region ? `${chapter.name} - ${chapter.region}` : chapter.name;
+                    select.append(`<option value="${chapter.name}">${displayText}</option>`);
+                });
+                
+                // Show chapter selection section if chapters are available
+                if (chapters.length > 0) {
+                    $('#chapter-selection').show();
+                }
+            }
+        }
     }
     
     bindEvents() {
@@ -399,6 +439,29 @@ class PersonalInfoStep extends BaseStep {
 class AddressStep extends BaseStep {
     constructor() {
         super('address');
+    }
+    
+    render(state) {
+        // Load countries into dropdown
+        if (state.get('countries')) {
+            this.loadCountries(state.get('countries'));
+        }
+    }
+    
+    loadCountries(countries) {
+        const select = $('#country');
+        
+        // Only populate if empty (avoid duplicate loading)
+        if (select.children().length <= 1) {
+            select.empty().append('<option value="">Select Country...</option>');
+            
+            countries.forEach(country => {
+                select.append(`<option value="${country.name}">${country.name}</option>`);
+            });
+            
+            // Set Netherlands as default
+            select.val('Netherlands');
+        }
     }
     
     bindEvents() {
@@ -771,6 +834,30 @@ class VolunteerStep extends BaseStep {
     render(state) {
         if (state.get('volunteerAreas')) {
             this.renderVolunteerAreas(state.get('volunteerAreas'));
+        }
+        
+        // Load chapters into dropdown
+        if (state.get('chapters')) {
+            this.loadChapters(state.get('chapters'));
+        }
+    }
+    
+    loadChapters(chapters) {
+        const select = $('#selected_chapter');
+        
+        // Only populate if empty (avoid duplicate loading)
+        if (select.children().length <= 1) {
+            select.empty().append('<option value="">Select a chapter...</option>');
+            
+            chapters.forEach(chapter => {
+                const displayText = chapter.region ? `${chapter.name} - ${chapter.region}` : chapter.name;
+                select.append(`<option value="${chapter.name}">${displayText}</option>`);
+            });
+            
+            // Show chapter selection section if chapters are available
+            if (chapters.length > 0) {
+                $('#chapter-selection').show();
+            }
         }
     }
     
