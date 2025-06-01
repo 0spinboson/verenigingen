@@ -324,14 +324,9 @@
                                         </div>
                                     </div>
                                     
-                                    <!-- Immediate fallback with basic options -->
                                     <div id="payment-method-fallback" style="display: none;">
-                                        <label for="payment_method" class="required">{{ _("Payment Method") }}</label>
-                                        <select class="form-control" id="payment_method" name="payment_method" required>
-                                            <option value="">{{ _("Select payment method...") }}</option>
-                                            <option value="Credit Card">{{ _("Credit Card") }}</option>
-                                            <option value="Bank Transfer">{{ _("Bank Transfer") }}</option>
-                                            <option value="Direct Debit">{{ _("Direct Debit (SEPA)") }}</option>
+                                        <select class="form-control" id="payment_method" name="payment_method">
+                                            <!-- Remove required attribute - we'll handle validation in JavaScript -->
                                         </select>
                                         <div class="invalid-feedback"></div>
                                     </div>
