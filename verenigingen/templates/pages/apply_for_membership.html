@@ -484,24 +484,401 @@
 {% endblock %}
 
 {% block script %}
-<script src="/assets/verenigingen/js/membership_application.js"></script>
-{% endblock %}
 <script>
-// Immediate fallback if main script doesn't load within 3 seconds
-setTimeout(function() {
-    if ($('#payment-methods-list').html().indexOf('Loading') !== -1) {
-        console.log('JavaScript not loaded, showing fallback payment methods');
-        $('#payment-methods-list').hide();
-        $('#payment-method-fallback').show();
+// Debug initialization
+console.log('=== MEMBERSHIP APPLICATION DEBUG ===');
+console.log('Page loaded, checking dependencies...');
+
+// Check if jQuery is loaded
+if (typeof $ === 'undefined') {
+    console.error('jQuery is not loaded!');
+} else {
+    console.log('✓ jQuery loaded:', $.fn.jquery);
+}
+
+// Check if frappe is loaded
+if (typeof frappe === 'undefined') {
+    console.error('Frappe is not loaded!');
+} else {
+    console.log('✓ Frappe loaded');
+}
+
+// Simple initialization fallback
+$(document).ready(function() {
+    console.log('Document ready - attempting initialization...');
+    
+    // Check if main script loaded
+    if (typeof MembershipApplication === 'undefined') {
+        console.error('MembershipApplication class not found! Loading fallback...');
         
-        // Add SEPA notice handler
-        $('#payment_method').change(function() {
-            if ($(this).val() === 'Direct Debit') {
-                $('#sepa-mandate-notice').show();
-            } else {
-                $('#sepa-mandate-notice').hide();
+        // Minimal fallback implementation
+        initializeFallbackApplication();
+    } else {
+        console.log('✓ MembershipApplication class found');
+        
+        // Initialize application
+        try {
+            window.membershipApp = new MembershipApplication({
+                maxSteps: 5,
+                autoSaveInterval: 30000
+            });
+            console.log('✓ Application initialized successfully');
+        } catch (error) {
+            console.error('Failed to initialize application:', error);
+            initializeFallbackApplication();
+        }
+    }
+});
+
+// Fallback implementation for basic form navigation
+function initializeFallbackApplication() {
+    console.log('Initializing fallback application...');
+    
+    let currentStep = 1;
+    const maxSteps = 5;
+    
+    // Show first step
+    $('.form-step').hide();
+    $('.form-step[data-step="1"]').show();
+    $('#prev-btn').hide();
+    
+    // Next button handler
+    $('#next-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        console.log('Next clicked, current step:', currentStep);
+        
+        // Basic validation for current step
+        if (validateStep(currentStep)) {
+            if (currentStep < maxSteps) {
+                currentStep++;
+                showStep(currentStep);
+            }
+        }
+    });
+    
+    // Previous button handler
+    $('#prev-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        console.log('Previous clicked, current step:', currentStep);
+        
+        if (currentStep > 1) {
+            currentStep--;
+            showStep(currentStep);
+        }
+    });
+    
+    // Submit button handler
+    $('#submit-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        console.log('Submit clicked');
+        submitForm();
+    });
+    
+    function showStep(step) {
+        console.log('Showing step:', step);
+        
+        // Hide all steps
+        $('.form-step').hide();
+        
+        // Show current step
+        $(`.form-step[data-step="${step}"]`).show();
+        
+        // Update navigation buttons
+        $('#prev-btn').toggle(step > 1);
+        $('#next-btn').toggle(step < maxSteps);
+        $('#submit-btn').toggle(step === maxSteps);
+        
+        // Update progress bar
+        const progress = (step / maxSteps) * 100;
+        $('#form-progress').css('width', `${progress}%`);
+        
+        // Update step indicators
+        $('.step').removeClass('active completed');
+        for (let i = 1; i < step; i++) {
+            $(`.step[data-step="${i}"]`).addClass('completed');
+        }
+        $(`.step[data-step="${step}"]`).addClass('active');
+        
+        // Scroll to top
+        window.scrollTo(0, 0);
+    }
+    
+    function validateStep(step) {
+        console.log('Validating step:', step);
+        let isValid = true;
+        
+        // Clear previous errors
+        $('.is-invalid').removeClass('is-invalid');
+        $('.invalid-feedback').hide();
+        
+        switch(step) {
+            case 1: // Personal info
+                const requiredFields = ['#first_name', '#last_name', '#email', '#birth_date'];
+                requiredFields.forEach(field => {
+                    const $field = $(field);
+                    if (!$field.val() || $field.val().trim() === '') {
+                        $field.addClass('is-invalid');
+                        let feedback = $field.siblings('.invalid-feedback');
+                        if (feedback.length === 0) {
+                            $field.after('<div class="invalid-feedback">This field is required</div>');
+                        }
+                        $field.siblings('.invalid-feedback').show();
+                        isValid = false;
+                    }
+                });
+                
+                // Email validation
+                const email = $('#email').val();
+                if (email && !isValidEmail(email)) {
+                    $('#email').addClass('is-invalid');
+                    $('#email').siblings('.invalid-feedback').text('Please enter a valid email').show();
+                    isValid = false;
+                }
+                break;
+                
+            case 2: // Address
+                const addressFields = ['#address_line1', '#city', '#postal_code', '#country'];
+                addressFields.forEach(field => {
+                    const $field = $(field);
+                    if (!$field.val() || $field.val().trim() === '') {
+                        $field.addClass('is-invalid');
+                        let feedback = $field.siblings('.invalid-feedback');
+                        if (feedback.length === 0) {
+                            $field.after('<div class="invalid-feedback">This field is required</div>');
+                        }
+                        $field.siblings('.invalid-feedback').show();
+                        isValid = false;
+                    }
+                });
+                break;
+                
+            case 3: // Membership type
+                if (!$('input[name="membership_type"]:checked').length && !$('#selected_membership_type').val()) {
+                    $('#membership-type-error').text('Please select a membership type').show();
+                    isValid = false;
+                }
+                break;
+                
+            case 4: // Volunteer (optional)
+                // No required fields
+                break;
+                
+            case 5: // Payment
+                if (!$('#payment_method').val() && !$('input[name="payment_method_selection"]:checked').length) {
+                    alert('Please select a payment method');
+                    isValid = false;
+                }
+                
+                if (!$('#terms').is(':checked')) {
+                    alert('Please accept the terms and conditions');
+                    isValid = false;
+                }
+                
+                if (!$('#gdpr_consent').is(':checked')) {
+                    alert('Please consent to data processing');
+                    isValid = false;
+                }
+                break;
+        }
+        
+        if (!isValid) {
+            console.log('Validation failed for step', step);
+        }
+        
+        return isValid;
+    }
+    
+    function isValidEmail(email) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+    
+    function submitForm() {
+        console.log('Submitting form...');
+        
+        // Collect all form data
+        const formData = {
+            // Personal info
+            first_name: $('#first_name').val(),
+            middle_name: $('#middle_name').val(),
+            last_name: $('#last_name').val(),
+            email: $('#email').val(),
+            mobile_no: $('#mobile_no').val(),
+            phone: $('#phone').val(),
+            birth_date: $('#birth_date').val(),
+            pronouns: $('#pronouns').val(),
+            
+            // Address
+            address_line1: $('#address_line1').val(),
+            address_line2: $('#address_line2').val(),
+            city: $('#city').val(),
+            state: $('#state').val(),
+            postal_code: $('#postal_code').val(),
+            country: $('#country').val(),
+            
+            // Membership
+            selected_membership_type: $('#membership_type').val() || $('input[name="membership_type"]:checked').val(),
+            
+            // Volunteer
+            interested_in_volunteering: $('#interested_in_volunteering').is(':checked'),
+            volunteer_availability: $('#volunteer_availability').val(),
+            volunteer_experience_level: $('#volunteer_experience_level').val(),
+            
+            // Communication
+            newsletter_opt_in: $('#newsletter_opt_in').is(':checked'),
+            application_source: $('#application_source').val(),
+            application_source_details: $('#application_source_details').val(),
+            
+            // Payment
+            payment_method: $('#payment_method').val() || $('input[name="payment_method_selection"]:checked').val(),
+            additional_notes: $('#additional_notes').val(),
+            terms: $('#terms').is(':checked'),
+            gdpr_consent: $('#gdpr_consent').is(':checked')
+        };
+        
+        console.log('Form data:', formData);
+        
+        // Disable submit button
+        $('#submit-btn').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Processing...');
+        
+        // Submit via AJAX
+        frappe.call({
+            method: 'vereiningen.api.membership_application.submit_application',
+            args: {
+                data: formData
+            },
+            callback: function(r) {
+                console.log('Submit response:', r);
+                
+                if (r.message && r.message.success) {
+                    // Show success message
+                    $('.membership-application-form').html(`
+                        <div class="text-center py-5">
+                            <div class="success-icon mb-4">
+                                <i class="fa fa-check-circle text-success" style="font-size: 4rem;"></i>
+                            </div>
+                            <h2 class="text-success">Application Submitted Successfully!</h2>
+                            ${r.message.application_id ? `
+                                <div class="alert alert-info mx-auto" style="max-width: 500px;">
+                                    <h4>Your Application ID: <strong>${r.message.application_id}</strong></h4>
+                                    <p>Please save this ID for future reference.</p>
+                                </div>
+                            ` : ''}
+                            <p class="lead">${r.message.message || 'Thank you for your application!'}</p>
+                        </div>
+                    `);
+                } else {
+                    // Show error
+                    frappe.msgprint({
+                        title: 'Submission Error',
+                        message: r.message.error || 'An error occurred. Please try again.',
+                        indicator: 'red'
+                    });
+                    
+                    $('#submit-btn').prop('disabled', false).html('Submit Application & Pay');
+                }
+            },
+            error: function(r) {
+                console.error('Submit error:', r);
+                frappe.msgprint({
+                    title: 'Error',
+                    message: 'Failed to submit application. Please try again.',
+                    indicator: 'red'
+                });
+                
+                $('#submit-btn').prop('disabled', false).html('Submit Application & Pay');
             }
         });
     }
-}, 3000);
+    
+    // Load initial data
+    loadFormData();
+    
+    function loadFormData() {
+        console.log('Loading form data...');
+        
+        // Load countries
+        frappe.call({
+            method: 'vereiningen.api.membership_application.get_application_form_data',
+            callback: function(r) {
+                console.log('Form data loaded:', r.message);
+                
+                if (r.message && r.message.success !== false) {
+                    // Populate countries
+                    if (r.message.countries) {
+                        const $country = $('#country');
+                        $country.empty().append('<option value="">Select Country...</option>');
+                        r.message.countries.forEach(country => {
+                            $country.append(`<option value="${country.name}">${country.name}</option>`);
+                        });
+                    }
+                    
+                    // Populate membership types
+                    if (r.message.membership_types) {
+                        const $container = $('#membership-types');
+                        $container.empty();
+                        
+                        r.message.membership_types.forEach(type => {
+                            $container.append(`
+                                <div class="membership-type-card" data-type="${type.name}">
+                                    <label>
+                                        <input type="radio" name="membership_type" value="${type.name}" style="display: none;">
+                                        <h5>${type.membership_type_name}</h5>
+                                        <p>${type.description || ''}</p>
+                                        <div class="price">${type.currency} ${type.amount}</div>
+                                    </label>
+                                </div>
+                            `);
+                        });
+                        
+                        // Bind click events
+                        $('.membership-type-card').click(function() {
+                            $('.membership-type-card').removeClass('selected');
+                            $(this).addClass('selected');
+                            $(this).find('input[type="radio"]').prop('checked', true);
+                            $('#membership-type-error').hide();
+                        });
+                    }
+                }
+            },
+            error: function(r) {
+                console.error('Failed to load form data:', r);
+            }
+        });
+    }
+    
+    console.log('Fallback application initialized');
+}
+
+// Additional debugging for form visibility
+console.log('Form steps found:', $('.form-step').length);
+console.log('Navigation buttons found:', {
+    next: $('#next-btn').length,
+    prev: $('#prev-btn').length,
+    submit: $('#submit-btn').length
+});
+
+// Check for console errors
+window.addEventListener('error', function(e) {
+    console.error('JavaScript error:', e.error);
+});
 </script>
+
+<script src="/assets/verenigingen/js/membership_application.js"></script>
+<style>
+.form-step {
+    display: none;
+}
+.form-step.active {
+    display: block !important;
+}
+.invalid-feedback {
+    display: none;
+    color: #dc3545;
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+.is-invalid ~ .invalid-feedback {
+    display: block;
+}
+</style>
+{% endblock %}
