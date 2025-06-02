@@ -318,7 +318,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "Active\nExpired\nSuspended\nBanned\nDeceased"
+   "options": "Pending\nActive\nExpired\nSuspended\nBanned\nDeceased"
   },
   {
   "fieldname": "termination_status_section",
