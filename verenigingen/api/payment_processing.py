@@ -62,7 +62,7 @@ def process_successful_payment(member, invoice, payment_reference, payment_data=
         # Step 1: Create Payment Entry
         payment_entry = create_payment_entry(member, invoice, payment_reference, payment_data)
         
-        # Step 2: Update Member status to Active
+        # Step 2: Update Member status to Active (both regular and application status)
         member.application_status = "Active"
         member.status = "Active"
         member.member_since = today()
@@ -103,17 +103,27 @@ def process_successful_payment(member, invoice, payment_reference, payment_data=
             lead.save()
         
         # Step 6: Send notifications
-        send_payment_success_notifications(member, membership, payment_entry)
+        send_payment_success_notifications_with_app_id(member, membership, payment_entry)
         
         # Step 7: Add member to chapter if assigned
         if member.primary_chapter:
             add_member_to_chapter(member)
+        
+        # Log the payment and activation
+        frappe.get_doc({
+            "doctype": "Comment",
+            "comment_type": "Info",
+            "reference_doctype": "Member",
+            "reference_name": member.name,
+            "content": f"Application {member.application_id} payment received and membership activated"
+        }).insert(ignore_permissions=True)
         
         frappe.db.commit()
         
         return {
             "success": True,
             "message": _("Payment processed successfully. Welcome to our association!"),
+            "application_id": member.application_id,
             "membership": membership.name,
             "redirect_url": f"/members/{member.name}"
         }
@@ -230,71 +240,49 @@ def add_member_to_chapter(member):
     })
     chapter.save()
 
-def send_payment_success_notifications(member, membership, payment_entry):
-    """Send notifications after successful payment"""
+def send_payment_success_notifications_with_app_id(member, membership, payment_entry):
+    """Send notifications after successful payment with application ID"""
     
     # Send welcome email to member
-    send_welcome_email_to_member(member, membership)
+    send_welcome_email_to_member_with_app_id(member, membership)
     
     # Notify chapter board if member joined a chapter
     if member.primary_chapter:
-        notify_chapter_of_new_member(member)
+        notify_chapter_of_new_member_with_app_id(member)
     
     # Send payment receipt
-    send_payment_receipt(member, payment_entry)
+    send_payment_receipt_with_app_id(member, payment_entry)
 
-def send_welcome_email_to_member(member, membership):
-    """Send welcome email to new member"""
+def send_welcome_email_to_member_with_app_id(member, membership):
+    """Send welcome email with application ID reference"""
     try:
         membership_type = frappe.get_doc("Membership Type", membership.membership_type)
         
-        args = {
-            "member": member,
-            "membership": membership,
-            "membership_type": membership_type,
-            "login_url": frappe.utils.get_url("/login"),
-            "member_portal_url": frappe.utils.get_url(f"/members/{member.name}")
-        }
+        message = f"""
+        <h2>Welcome to our Association, {member.first_name}!</h2>
         
-        # Use template if exists, otherwise send default
-        if frappe.db.exists("Email Template", "membership_welcome"):
-            frappe.sendmail(
-                recipients=[member.email],
-                subject=_("Welcome to {0}!").format(frappe.get_value("Company", 
-                         frappe.defaults.get_global_default('company'), "company_name")),
-                template="membership_welcome",
-                args=args,
-                now=True
-            )
-        else:
-            # Send simple welcome email
-            message = f"""
-            <h2>Welcome to our Association, {member.first_name}!</h2>
-            
-            <p>Your membership application has been approved and your payment has been processed successfully.</p>
-            
-            <p><strong>Membership Details:</strong></p>
-            <ul>
-                <li>Member ID: {member.name}</li>
-                <li>Membership Type: {membership_type.membership_type_name}</li>
-                <li>Valid From: {membership.start_date}</li>
-                <li>Valid Until: {membership.renewal_date}</li>
-            </ul>
-            
-            <p>You can access your member portal at: <a href="{args['member_portal_url']}">Member Portal</a></p>
-            
-            <p>If you haven't set up your password yet, please visit: <a href="{args['login_url']}">Login Page</a></p>
-            
-            <p>Best regards,<br>The Membership Team</p>
-            """
-            
-            frappe.sendmail(
-                recipients=[member.email],
-                subject=_("Welcome to our Association!"),
-                message=message,
-                now=True
-            )
-            
+        <p>Your membership application (ID: <strong>{member.application_id}</strong>) has been completed and your payment has been processed successfully.</p>
+        
+        <p><strong>Membership Details:</strong></p>
+        <ul>
+            <li>Member ID: {member.name}</li>
+            <li>Application ID: {member.application_id}</li>
+            <li>Membership Type: {membership_type.membership_type_name}</li>
+            <li>Valid From: {membership.start_date}</li>
+            <li>Valid Until: {membership.renewal_date}</li>
+        </ul>
+        
+        <p>You can access your member portal at: <a href="{frappe.utils.get_url()}/members/{member.name}">Member Portal</a></p>
+        
+        <p>Best regards,<br>The Membership Team</p>
+        """
+        
+        frappe.sendmail(
+            recipients=[member.email],
+            subject=f"Welcome! Application {member.application_id} Complete",
+            message=message,
+            now=True
+        )
     except Exception as e:
         frappe.log_error(f"Error sending welcome email: {str(e)}")
 
@@ -391,8 +379,9 @@ def get_invoice_pdf(invoice):
 def process_failed_payment(member, invoice, payment_reference):
     """Process failed payment"""
     
-    # Update member status
-    member.db_set("application_status", "Payment Failed")
+    # Update member status - use new application_status field
+    member.application_status = "Payment Pending"  # Better than "Payment Failed"
+    member.save()
     
     # Log the failed payment
     frappe.get_doc({
@@ -400,15 +389,16 @@ def process_failed_payment(member, invoice, payment_reference):
         "comment_type": "Info",
         "reference_doctype": "Member",
         "reference_name": member.name,
-        "content": f"Payment failed. Reference: {payment_reference}"
+        "content": f"Payment failed for application {member.application_id}. Reference: {payment_reference}"
     }).insert(ignore_permissions=True)
     
     # Send notification to member
-    send_payment_failed_email(member, invoice)
+    send_payment_failed_email_with_app_id(member, invoice)
     
     return {
         "success": False,
         "message": _("Payment failed. Please try again or contact support."),
+        "application_id": member.application_id,
         "retry_url": f"/payment/retry/{member.name}/{invoice.name}"
     }
 
@@ -427,16 +417,16 @@ def process_cancelled_payment(member, invoice):
         "retry_url": f"/payment/retry/{member.name}/{invoice.name}"
     }
 
-def send_payment_failed_email(member, invoice):
-    """Send email for failed payment"""
+def send_payment_failed_email_with_app_id(member, invoice):
+    """Send email for failed payment with application ID"""
     try:
         frappe.sendmail(
             recipients=[member.email],
-            subject=_("Payment Failed - Membership Application"),
+            subject=f"Payment Failed - Application {member.application_id}",
             message=f"""
             <p>Dear {member.first_name},</p>
             
-            <p>Unfortunately, your payment for the membership application could not be processed.</p>
+            <p>Unfortunately, your payment for membership application {member.application_id} could not be processed.</p>
             
             <p>You can retry the payment using this link: 
             <a href="{frappe.utils.get_url()}/payment/retry/{member.name}/{invoice.name}">Retry Payment</a></p>
