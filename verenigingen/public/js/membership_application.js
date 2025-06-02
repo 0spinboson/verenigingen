@@ -1,3 +1,7 @@
+/**
+ * Fixed Membership Application JavaScript
+ * This fixes the syntax errors causing the class loading issues
+ */
 
 class MembershipApplication {
     constructor(config = {}) {
@@ -20,6 +24,10 @@ class MembershipApplication {
             new PaymentStep()
         ];
         
+        // Storage for loaded data
+        this.membershipTypes = [];
+        this.paymentMethod = '';
+        
         this.init();
     }
     
@@ -41,6 +49,10 @@ class MembershipApplication {
         console.log('Loading form data...');
         const data = await this.api.getFormData();
         this.state.setInitialData(data);
+        
+        // Store for easy access
+        this.membershipTypes = data.membership_types || [];
+        
         console.log('Form data loaded:', data);
         
         // Immediately load countries and chapters since they're needed early
@@ -124,80 +136,127 @@ class MembershipApplication {
         return this.steps[this.state.currentStep - 1];
     }
     
-// Enhanced submit method with debugging and fallback
-async submit(event) {
-    event.preventDefault();
-    console.log('Form submission started');
-
-    if (!await this.getCurrentStep().validate()) {
-        console.log('Final validation failed');
-        return;
+    // Fixed collectAllData method
+    collectAllData() {
+        const allData = {};
+        
+        // Collect data from each step
+        this.steps.forEach(step => {
+            const stepData = step.getData();
+            Object.assign(allData, stepData);
+        });
+        
+        return allData;
+    }
+    
+    // Helper methods for state management
+    setPaymentMethod(method) {
+        this.paymentMethod = method;
+        this.state.set('payment_method', method);
+    }
+    
+    getPaymentMethod() {
+        return this.paymentMethod || this.state.get('payment_method') || '';
+    }
+    
+    startAutoSave() {
+        if (this.config.autoSaveInterval > 0) {
+            setInterval(() => {
+                this.saveDraft();
+            }, this.config.autoSaveInterval);
+        }
+    }
+    
+    async saveDraft() {
+        try {
+            const data = this.collectAllData();
+            await this.api.saveDraft(data);
+        } catch (error) {
+            console.warn('Draft save failed:', error);
+        }
     }
 
-    try {
-        this.ui.setSubmitting(true);
-        const formData = this.collectAllData();
-        console.log('Submitting application data:', formData);
+    // Enhanced submit method with debugging and fallback
+    async submit(event) {
+        event.preventDefault();
+        console.log('Form submission started');
 
-        let result;
+        if (!await this.getCurrentStep().validate()) {
+            console.log('Final validation failed');
+            return;
+        }
+
         try {
-            result = await this.api.submitApplication(formData);
-        } catch (error) {
-            console.warn('Standard submission failed, trying direct AJAX:', error);
-            result = await this.api.submitApplicationDirect(formData);
-        }
+            this.ui.setSubmitting(true);
+            const formData = this.collectAllData();
+            console.log('Submitting application data:', formData);
 
-        console.log('Application submitted successfully:', result);
-
-        // Check if we got an application ID
-        if (result.application_id) {
-            console.log('Application ID received:', result.application_id);
-
-            // Store application ID in session storage for later reference
-            if (window.sessionStorage) {
-                window.sessionStorage.setItem('last_application_id', result.application_id);
+            let result;
+            try {
+                result = await this.api.submitApplication(formData);
+            } catch (error) {
+                console.warn('Standard submission failed, trying direct AJAX:', error);
+                result = await this.api.submitApplicationDirect(formData);
             }
+
+            console.log('Application submitted successfully:', result);
+
+            // Check if we got an application ID
+            if (result.application_id) {
+                console.log('Application ID received:', result.application_id);
+
+                // Store application ID in session storage for later reference
+                if (window.sessionStorage) {
+                    window.sessionStorage.setItem('last_application_id', result.application_id);
+                }
+            }
+
+            this.ui.showSuccess(result);
+
+            // Redirect to payment if URL is provided
+            if (result.payment_url) {
+                this.redirectToPayment(result.payment_url);
+            }
+
+            return result;
+
+        } catch (error) {
+            console.error('Application submission failed:', error);
+
+            // Show more detailed error information
+            const errorDetails = {
+                message: error.message,
+                stack: error.stack,
+                formData: this.collectAllData()
+            };
+            console.error('Detailed error info:', errorDetails);
+
+            this.ui.showError('Submission failed', error);
+
+            // Show user-friendly error message
+            frappe.msgprint({
+                title: 'Submission Error',
+                message: `
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <p>Please try again or contact support if the problem persists.</p>
+                    <details>
+                        <summary>Technical Details</summary>
+                        <pre>${JSON.stringify(errorDetails, null, 2)}</pre>
+                    </details>
+                `,
+                indicator: 'red'
+            });
+
+            throw error;
+        } finally {
+            this.ui.setSubmitting(false);
         }
-
-        this.ui.showSuccess(result);
-
-        // Redirect to payment if URL is provided
-        if (result.payment_url) {
-            this.redirectToPayment(result.payment_url);
-        }
-
-        return result;
-
-    } catch (error) {
-        console.error('Application submission failed:', error);
-
-        // Show more detailed error information
-        const errorDetails = {
-            message: error.message,
-            stack: error.stack,
-            formData: this.collectAllData()
-        };
-        console.error('Detailed error info:', errorDetails);
-
-        this.ui.showError('Submission failed', error);
-
-        // Show user-friendly error message
-        frappe.msgprint({
-            title: 'Submission Error',
-            message: `
-                <p><strong>Error:</strong> ${error.message}</p>
-                <p>Please try again or contact support if the problem persists.</p>
-                <details>
-                    <summary>Technical Details</summary>
-                    <pre>${JSON.stringify(errorDetails, null, 2)}</pre>
-                </details>
-            `,
-            indicator: 'red'
-        });
-
-        throw error;
-    } finally {
-        this.ui.setSubmitting(false);
+    }
+    
+    redirectToPayment(paymentUrl) {
+        setTimeout(() => {
+            window.location.href = paymentUrl;
+        }, 2000);
     }
 }
 
@@ -386,7 +445,7 @@ class PersonalInfoStep extends BaseStep {
         
         let age = today.getFullYear() - birth.getFullYear();
         
-        // FIXED: Proper birthday check (was broken with comma operator)
+        // FIXED: Proper birthday check
         if (today.getMonth() < birth.getMonth() || 
             (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) {
             age--;
@@ -1262,15 +1321,15 @@ class MembershipAPI {
             frappe.call({
                 method: 'verenigingen.api.membership_application.submit_application_with_tracking',
                 args: {
-                    data: formData  // Pass as an argument in the args object
+                    data: data  // Pass as an argument in the args object
                 },
                 callback: function(r) {
                     if (r.message && r.message.success) {
-                        // Show success with application ID
-                        alert(`Success! Application ID: ${r.message.application_id}`);
+                        resolve(r.message);
                     } else {
-                        alert(`Error: ${r.message.error}`);
-                    },
+                        reject(new Error(r.message?.error || 'Unknown error'));
+                    }
+                },
                 error: function(r) {
                     console.error('Submission error:', r);
                     let errorMsg = 'Network error occurred';
@@ -1285,48 +1344,6 @@ class MembershipAPI {
                     
                     reject(new Error(errorMsg));
                 }
-            });
-        });
-    }
-
-    // Alternative methods for testing different approaches
-    async submitApplicationMethod2(data) {
-        return new Promise((resolve, reject) => {
-            // Try passing data as JSON string
-            frappe.call({
-                method: 'verenigingen.api.membership_application.submit_application',
-                args: {
-                    data: JSON.stringify(data)
-                },
-                callback: resolve,
-                error: reject
-            });
-        });
-    }
-
-    async submitApplicationMethod3(data) {
-        return new Promise((resolve, reject) => {
-            // Try passing fields directly
-            frappe.call({
-                method: 'verenigingen.api.membership_application.submit_application',
-                args: data,  // Pass data object directly as args
-                callback: resolve,
-                error: reject
-            });
-        });
-    }
-
-    // Test method to see how data is being passed
-    async testDataPassing(data) {
-        return new Promise((resolve, reject) => {
-            frappe.call({
-                method: 'verenigingen.api.membership_application.test_data_passing',
-                args: {
-                    data: data,
-                    test_field: 'test_value'
-                },
-                callback: resolve,
-                error: reject
             });
         });
     }
@@ -1382,7 +1399,7 @@ class MembershipAPI {
             console.log('Using direct AJAX submission');
             
             $.ajax({
-                url: '/api/method/verenigingen.api.membership_application.submit_application',
+                url: '/api/method/verenigingen.api.membership_application.submit_application_with_tracking',
                 type: 'POST',
                 data: {
                     data: JSON.stringify(data)
@@ -1593,126 +1610,6 @@ $(document).ready(function() {
         
         return age;
     };
-    
-    // Additional CSS for proper styling
-    const appCSS = `
-    <style>
-    .is-valid {
-        border-color: #28a745;
-    }
-
-    .is-invalid {
-        border-color: #dc3545;
-    }
-
-    .invalid-feedback {
-        display: block !important;
-        color: #dc3545;
-        font-size: 0.875rem;
-        margin-top: 0.25rem;
-    }
-
-    .invalid-feedback.d-block {
-        display: block !important;
-    }
-
-    .text-danger {
-        color: #dc3545 !important;
-    }
-
-    #age-warning {
-        font-size: 0.875rem;
-        border-radius: 0.375rem;
-        padding: 0.75rem;
-        margin-top: 0.5rem;
-    }
-
-    #age-warning.alert-info {
-        background-color: #cce7ff;
-        border: 1px solid #99d6ff;
-        color: #004085;
-    }
-
-    #age-warning.alert-warning {
-        background-color: #fff3cd;
-        border: 1px solid #ffeaa7;
-        color: #856404;
-    }
-
-    #age-warning i {
-        margin-right: 0.5rem;
-    }
-
-    .membership-type-card {
-        border: 2px solid #dee2e6;
-        border-radius: 8px;
-        padding: 1rem;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        margin-bottom: 1rem;
-    }
-
-    .membership-type-card:hover {
-        border-color: #007bff;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-
-    .membership-type-card.selected {
-        border-color: #007bff;
-        background-color: #e7f3ff;
-    }
-
-    .payment-method-option {
-        border: 2px solid #dee2e6;
-        border-radius: 8px;
-        padding: 1rem;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        margin-bottom: 1rem;
-    }
-
-    .payment-method-option:hover {
-        border-color: #007bff;
-        box-shadow: 0 2px 8px rgba(0,123,255,0.15);
-    }
-
-    .payment-method-option.selected {
-        border-color: #007bff;
-        background-color: #f8f9ff;
-    }
-
-    .amount-pill {
-        background: #e9ecef;
-        border: 1px solid #dee2e6;
-        border-radius: 20px;
-        padding: 0.25rem 0.75rem;
-        font-size: 0.875rem;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        margin-right: 0.5rem;
-        margin-bottom: 0.5rem;
-        display: inline-block;
-    }
-
-    .amount-pill:hover {
-        background: #007bff;
-        color: white;
-        border-color: #007bff;
-    }
-
-    .amount-pill.selected {
-        background: #007bff;
-        color: white;
-        border-color: #007bff;
-    }
-    </style>
-    `;
-
-    // Inject CSS if not already present
-    if (!$('#membership-app-styles').length) {
-        $('head').append(appCSS);
-        $('head').append('<meta id="membership-app-styles" />');
-    }
     
     console.log('Refactored membership application initialized successfully');
     console.log('Available debug commands:');
