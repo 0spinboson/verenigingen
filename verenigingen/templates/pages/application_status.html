@@ -21,6 +21,10 @@
                         <table class="table table-borderless">
                             <tr>
                                 <td><strong>{{ _("Application ID") }}:</strong></td>
+                                <td class="text-primary">{{ member.application_id }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>{{ _("Member ID") }}:</strong></td>
                                 <td>{{ member.name }}</td>
                             </tr>
                             <tr>
@@ -33,7 +37,7 @@
                             </tr>
                             <tr>
                                 <td><strong>{{ _("Applied On") }}:</strong></td>
-                                <td>{{ frappe.format_date(member.application_date) }}</td>
+                                <td>{{ frappe.format_datetime(member.application_date) }}</td>
                             </tr>
                         </table>
                     </div>
@@ -45,6 +49,23 @@
                                 <h5><i class="fa fa-clock-o"></i> {{ _("Pending Review") }}</h5>
                                 <p>{{ _("Your application is being reviewed. You will receive an email once it's processed.") }}</p>
                             </div>
+                            {% elif member.application_status == "Under Review" %}
+                            <div class="alert alert-info">
+                                <h5><i class="fa fa-search"></i> {{ _("Under Review") }}</h5>
+                                <p>{{ _("Your application is currently being reviewed by our team.") }}</p>
+                            </div>
+                            {% elif member.application_status == "Approved" %}
+                            <div class="alert alert-warning">
+                                <h5><i class="fa fa-check"></i> {{ _("Approved - Payment Required") }}</h5>
+                                <p>{{ _("Your application has been approved! Please complete payment to activate your membership.") }}</p>
+                                <a href="/payment/complete/{{ member.name }}" class="btn btn-primary">{{ _("Complete Payment") }}</a>
+                            </div>
+                            {% elif member.application_status == "Payment Pending" %}
+                            <div class="alert alert-warning">
+                                <h5><i class="fa fa-credit-card"></i> {{ _("Payment Pending") }}</h5>
+                                <p>{{ _("Your payment is being processed or requires retry.") }}</p>
+                                <a href="/payment/retry/{{ member.name }}" class="btn btn-primary">{{ _("Retry Payment") }}</a>
+                            </div>
                             {% elif member.application_status == "Active" %}
                             <div class="alert alert-success">
                                 <h5><i class="fa fa-check-circle"></i> {{ _("Active Member") }}</h5>
@@ -52,6 +73,7 @@
                                 {% if member.primary_chapter %}
                                 <p>{{ _("Chapter") }}: {{ member.primary_chapter }}</p>
                                 {% endif %}
+                                <a href="/members/{{ member.name }}" class="btn btn-success">{{ _("Go to Member Portal") }}</a>
                             </div>
                             {% elif member.application_status == "Rejected" %}
                             <div class="alert alert-danger">
@@ -61,17 +83,18 @@
                                 <p><strong>{{ _("Reason") }}:</strong> {{ member.review_notes }}</p>
                                 {% endif %}
                             </div>
-                            {% elif member.application_status == "Payment Failed" %}
-                            <div class="alert alert-warning">
-                                <h5><i class="fa fa-exclamation-triangle"></i> {{ _("Payment Failed") }}</h5>
-                                <p>{{ _("Your payment could not be processed. Please try again.") }}</p>
-                                <a href="/payment/retry/{{ member.name }}" class="btn btn-primary">{{ _("Retry Payment") }}</a>
-                            </div>
                             {% endif %}
                         </div>
                         
                         {% if member.selected_membership_type %}
                         <p><strong>{{ _("Membership Type") }}:</strong> {{ member.selected_membership_type }}</p>
+                        {% endif %}
+                        
+                        {% if member.reviewed_by %}
+                        <div class="mt-3 text-muted">
+                            <small>{{ _("Reviewed by") }}: {{ frappe.get_value("User", member.reviewed_by, "full_name") }} 
+                            on {{ frappe.format_datetime(member.review_date) }}</small>
+                        </div>
                         {% endif %}
                     </div>
                 </div>
@@ -102,6 +125,11 @@
 
 .status-display .alert h5 {
     margin-bottom: 10px;
+}
+
+.text-primary {
+    color: #007bff;
+    font-weight: bold;
 }
 </style>
 {% endblock %}
