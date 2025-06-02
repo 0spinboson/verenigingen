@@ -742,7 +742,7 @@ function initializeFallbackApplication() {
         
         // Submit via AJAX
         frappe.call({
-            method: 'vereiningen.api.membership_application.submit_application',
+            method: 'verenigingen.api.membership_application.submit_application',
             args: {
                 data: formData
             },
@@ -798,7 +798,7 @@ function initializeFallbackApplication() {
         
         // Load countries
         frappe.call({
-            method: 'vereiningen.api.membership_application.get_application_form_data',
+            method: 'verenigingen.api.membership_application.get_application_form_data',
             callback: function(r) {
                 console.log('Form data loaded:', r.message);
                 
