@@ -2377,3 +2377,24 @@ def submit_application_with_tracking(**kwargs):
     except Exception as e:
         frappe.log_error(str(e))
         return {"success": False, "error": str(e)}
+
+@frappe.whitelist(allow_guest=True)
+def check_application_status(application_id):
+    """Check status using application ID"""
+    member = frappe.db.get_value(
+        "Member", 
+        {"application_id": application_id},
+        ["name", "full_name", "application_status", "application_date", 
+         "review_date", "primary_chapter", "selected_membership_type"],
+        as_dict=True
+    )
+    
+    if not member:
+        return {"found": False, "message": _("No application found with this ID")}
+    
+    return {
+        "found": True,
+        "member": member,
+        "status": member.application_status,
+        "can_retry_payment": member.application_status in ["Approved", "Payment Pending"]
+    }
