@@ -107,24 +107,17 @@ def validate_email(email):
         return {"valid": False, "message": str(e)}
 
 @frappe.whitelist(allow_guest=True)
-@frappe.whitelist(allow_guest=True)
 def submit_application(**kwargs):
-    """Process membership application submission - FIXED PERMISSION HANDLING"""
+    """Process membership application submission - UPDATED WITH APPLICATION_ID"""
     try:
-        # Use a context manager to ensure ignore_permissions for everything
         with frappe.init_site(frappe.local.site):
-            # Set system user context to avoid permission issues
             frappe.set_user("Administrator")
             
-            # Frappe passes arguments as kwargs, extract data
+            # Extract and validate data
             data = kwargs.get('data')
-            
-            # If data is None, check if arguments were passed directly
             if data is None:
-                # Sometimes Frappe passes the form fields directly as kwargs
                 data = kwargs
             
-            # Handle data parameter - it might be a string or dict
             if isinstance(data, str):
                 try:
                     data = json.loads(data)
@@ -134,17 +127,6 @@ def submit_application(**kwargs):
                         "error": f"Invalid data format: {str(e)}",
                         "message": "Invalid data format received"
                     }
-            
-            # Log what we received for debugging
-            frappe.logger().info(f"Received application data keys: {list(data.keys()) if data else 'None'}")
-            
-            # Validate we have data
-            if not data or not isinstance(data, dict):
-                return {
-                    "success": False,
-                    "error": "No application data received",
-                    "message": "No application data received"
-                }
             
             # Validate required fields
             required_fields = ["first_name", "last_name", "email", "birth_date", 
@@ -171,47 +153,30 @@ def submit_application(**kwargs):
                     "message": "A member with this email already exists. Please login or contact support."
                 }
             
-            # Validate membership type exists (with fallback)
-            selected_type = data.get("selected_membership_type")
-            if selected_type and not frappe.db.exists("Membership Type", selected_type):
-                # Try to get any active membership type as fallback
-                fallback_types = frappe.get_all("Membership Type", 
-                                              filters={"is_active": 1}, 
-                                              fields=["name"], 
-                                              limit=1)
-                if fallback_types:
-                    selected_type = fallback_types[0].name
-                    frappe.logger().warning(f"Used fallback membership type: {selected_type}")
-                else:
-                    return {
-                        "success": False,
-                        "error": "No valid membership type found",
-                        "message": "No valid membership type found"
-                    }
+            # Create address
+            address = None
+            if data.get("address_line1") and data.get("city"):
+                address = frappe.get_doc({
+                    "doctype": "Address",
+                    "address_title": f"{data['first_name']} {data['last_name']}",
+                    "address_type": "Personal",
+                    "address_line1": data.get("address_line1"),
+                    "address_line2": data.get("address_line2", ""),
+                    "city": data.get("city"),
+                    "state": data.get("state", ""),
+                    "country": data.get("country"),
+                    "pincode": data.get("postal_code"),
+                    "email_id": data.get("email"),
+                    "phone": data.get("phone", "")
+                })
+                address.flags.ignore_permissions = True
+                address.insert(ignore_permissions=True)
             
-            # Create address with explicit ignore_permissions
-            address = frappe.get_doc({
-                "doctype": "Address",
-                "address_title": f"{data['first_name']} {data['last_name']}",
-                "address_type": "Personal",
-                "address_line1": data.get("address_line1"),
-                "address_line2": data.get("address_line2", ""),
-                "city": data.get("city"),
-                "state": data.get("state", ""),
-                "country": data.get("country"),
-                "pincode": data.get("postal_code"),
-                "email_id": data.get("email"),
-                "phone": data.get("phone", ""),
-                "is_primary_address": 1
-            })
+            # Generate unique application ID
+            import time
+            application_id = f"APP-{frappe.utils.nowdate().replace('-', '')}-{int(time.time() % 10000):04d}"
             
-            # Bypass all validations and permissions for address
-            address.flags.ignore_permissions = True
-            address.flags.ignore_validate = True
-            address.flags.ignore_mandatory = True
-            address.insert(ignore_permissions=True, ignore_if_duplicate=True)
-            
-            # Create member with explicit ignore_permissions and flags
+            # Create member with application tracking
             member = frappe.get_doc({
                 "doctype": "Member",
                 "first_name": data.get("first_name"),
@@ -222,58 +187,51 @@ def submit_application(**kwargs):
                 "phone": data.get("phone", ""),
                 "birth_date": data.get("birth_date"),
                 "pronouns": data.get("pronouns", ""),
-                "primary_address": address.name,
+                "primary_address": address.name if address else None,
                 "status": "Pending",
+                # New application tracking fields
+                "application_id": application_id,
                 "application_status": "Pending",
                 "application_date": now_datetime(),
-                "selected_membership_type": selected_type,
+                "selected_membership_type": data.get("selected_membership_type"),
                 "interested_in_volunteering": data.get("interested_in_volunteering", 0),
                 "newsletter_opt_in": data.get("newsletter_opt_in", 1),
                 "application_source": data.get("application_source", "Website"),
                 "notes": data.get("additional_notes", ""),
-                "payment_method": data.get("payment_method", "")
+                "payment_method": data.get("payment_method", ""),
+                "primary_chapter": data.get("selected_chapter", "")
             })
             
-            # Set flags to bypass all validations that might access settings
             member.flags.ignore_permissions = True
-            member.flags.ignore_validate = True
-            member.flags.ignore_mandatory = True
-            member.flags.ignore_links = True
+            member.insert(ignore_permissions=True)
+            frappe.db.commit()
             
-            # Try to insert with maximum permission bypass
+            # Send notifications
             try:
-                member.insert(ignore_permissions=True, ignore_if_duplicate=True)
-                frappe.db.commit()  # Ensure it's saved
-            except Exception as insert_error:
-                frappe.db.rollback()
-                frappe.logger().error(f"Member insert failed: {str(insert_error)}")
-                return {
-                    "success": False,
-                    "error": f"Failed to create member record: {str(insert_error)}",
-                    "message": f"Failed to create member record. Please try again."
-                }
+                send_application_confirmation_email(member, application_id)
+                notify_reviewers_of_new_application(member, application_id)
+            except Exception as e:
+                frappe.log_error(f"Error sending notifications: {str(e)}", "Notification Error")
             
-            # Create a simple success response
             return {
                 "success": True,
-                "message": "Application submitted successfully! You will receive an email with next steps.",
+                "message": "Application submitted successfully! You will receive an email with your application ID.",
+                "application_id": application_id,
                 "member_id": member.name,
                 "status": "pending_review"
             }
-        
+            
     except Exception as e:
         frappe.db.rollback()
         error_msg = str(e)
         frappe.log_error(f"Error in submit_application: {error_msg}", "Application Submission Error")
         
-        # Return error in a format the frontend can handle
         return {
             "success": False,
             "error": error_msg,
             "message": f"Application submission failed: {error_msg}"
         }
     finally:
-        # Reset to guest user
         try:
             frappe.set_user("Guest")
         except:
@@ -890,22 +848,88 @@ def create_volunteer_record(member):
     return volunteer
 
 # Notification functions
-def send_application_notifications(member):
-    """Send notifications to reviewers"""
+def send_application_confirmation_email(member, application_id):
+    """Send confirmation email with application ID"""
+    try:
+        message = f"""
+        <h3>Thank you for your membership application!</h3>
+        
+        <p>Dear {member.first_name},</p>
+        
+        <p>We have received your membership application and will review it shortly.</p>
+        
+        <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <h4>Application Details:</h4>
+            <ul>
+                <li><strong>Application ID:</strong> {application_id}</li>
+                <li><strong>Name:</strong> {member.full_name}</li>
+                <li><strong>Status:</strong> Pending Review</li>
+                <li><strong>Applied On:</strong> {frappe.format_datetime(member.application_date)}</li>
+            </ul>
+        </div>
+        
+        <p>You can check your application status at any time using your application ID.</p>
+        
+        <p>We will contact you within 2-3 business days with the next steps.</p>
+        
+        <p>Best regards,<br>The Membership Team</p>
+        """
+        
+        frappe.sendmail(
+            recipients=[member.email],
+            subject=f"Membership Application Received - ID: {application_id}",
+            message=message,
+            now=True,
+            reference_doctype="Member",
+            reference_name=member.name
+        )
+    except Exception as e:
+        frappe.log_error(f"Error sending confirmation email: {str(e)}", "Email Error")
+def notify_reviewers_of_new_application(member, application_id):
+    """Notify reviewers with application ID"""
     reviewers = get_application_reviewers(member)
     
     if reviewers:
+        message = f"""
+        <h3>New Membership Application: {application_id}</h3>
+        
+        <p>A new membership application has been submitted:</p>
+        
+        <table style="border-collapse: collapse; width: 100%;">
+            <tr>
+                <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>Application ID:</strong></td>
+                <td style="padding: 8px; border: 1px solid #dee2e6;">{application_id}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>Name:</strong></td>
+                <td style="padding: 8px; border: 1px solid #dee2e6;">{member.full_name}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>Email:</strong></td>
+                <td style="padding: 8px; border: 1px solid #dee2e6;">{member.email}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>Chapter:</strong></td>
+                <td style="padding: 8px; border: 1px solid #dee2e6;">{member.primary_chapter or 'Not assigned'}</td>
+            </tr>
+            <tr>
+                <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>Applied On:</strong></td>
+                <td style="padding: 8px; border: 1px solid #dee2e6;">{frappe.format_datetime(member.application_date)}</td>
+            </tr>
+        </table>
+        
+        <p><a href="{frappe.utils.get_url()}/app/member/{member.name}" 
+             style="background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+            Review Application
+        </a></p>
+        """
+        
         frappe.sendmail(
             recipients=reviewers,
-            subject=f"New Membership Application: {member.full_name}",
-            template="membership_application_review_required",
-            args={
-                "member": member,
-                "review_url": frappe.utils.get_url(f"/app/member/{member.name}")
-            },
+            subject=f"New Application: {application_id} - {member.full_name}",
+            message=message,
             now=True
         )
-
 def get_application_reviewers(member):
     """Get list of reviewers for application"""
     reviewers = []
