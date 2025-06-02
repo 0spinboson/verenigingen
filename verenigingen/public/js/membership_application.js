@@ -1,11 +1,3 @@
-/**
- * Membership Application - Refactored Architecture with Bug Fixes
- * Beta Ready Version with Age Validation and Custom Amount Support
- */
-
-// ===================================
-// 1. CORE APPLICATION CLASS
-// ===================================
 
 class MembershipApplication {
     constructor(config = {}) {
@@ -134,121 +126,78 @@ class MembershipApplication {
     
 // Enhanced submit method with debugging and fallback
 async submit(event) {
-        event.preventDefault();
-        console.log('Form submission started');
-        
-        if (!await this.getCurrentStep().validate()) {
-            console.log('Final validation failed');
-            return;
-        }
-        
+    event.preventDefault();
+    console.log('Form submission started');
+
+    if (!await this.getCurrentStep().validate()) {
+        console.log('Final validation failed');
+        return;
+    }
+
+    try {
+        this.ui.setSubmitting(true);
+        const formData = this.collectAllData();
+        console.log('Submitting application data:', formData);
+
+        let result;
         try {
-            this.ui.setSubmitting(true);
-            const formData = this.collectAllData();
-            console.log('Submitting application data:', formData);
-            
-            // First, verify the backend method exists
-            console.log('Checking if method exists...');
-            
-            let result;
-            try {
-                // Try the standard frappe.call approach first
-                result = await this.api.submitApplication(formData);
-            } catch (error) {
-                console.warn('Standard submission failed, trying direct AJAX:', error);
-                
-                // Fallback to direct AJAX
-                result = await this.api.submitApplicationDirect(formData);
-            }
-            
-            console.log('Application submitted successfully:', result);
-            this.ui.showSuccess(result);
-            
-            // Redirect to payment if URL is provided
-            if (result.payment_url) {
-                this.redirectToPayment(result.payment_url);
-            }
-            
-            return result;
-            
+            result = await this.api.submitApplication(formData);
         } catch (error) {
-            console.error('Application submission failed:', error);
-            
-            // Show more detailed error information
-            const errorDetails = {
-                message: error.message,
-                stack: error.stack,
-                formData: this.collectAllData()
-            };
-            console.error('Detailed error info:', errorDetails);
-            
-            this.ui.showError('Submission failed', error);
-            
-            // Show user-friendly error message
-            frappe.msgprint({
-                title: 'Submission Error',
-                message: `
-                    <p><strong>Error:</strong> ${error.message}</p>
-                    <p>Please try again or contact support if the problem persists.</p>
-                    <details>
-                        <summary>Technical Details</summary>
-                        <pre>${JSON.stringify(errorDetails, null, 2)}</pre>
-                    </details>
-                `,
-                indicator: 'red'
-            });
-            
-            throw error;
-        } finally {
-            this.ui.setSubmitting(false);
+            console.warn('Standard submission failed, trying direct AJAX:', error);
+            result = await this.api.submitApplicationDirect(formData);
         }
-    }
-    
-    collectAllData() {
-        let allData = {};
-        
-        // Collect data from all steps
-        this.steps.forEach(step => {
-            allData = { ...allData, ...step.getData() };
+
+        console.log('Application submitted successfully:', result);
+
+        // Check if we got an application ID
+        if (result.application_id) {
+            console.log('Application ID received:', result.application_id);
+
+            // Store application ID in session storage for later reference
+            if (window.sessionStorage) {
+                window.sessionStorage.setItem('last_application_id', result.application_id);
+            }
+        }
+
+        this.ui.showSuccess(result);
+
+        // Redirect to payment if URL is provided
+        if (result.payment_url) {
+            this.redirectToPayment(result.payment_url);
+        }
+
+        return result;
+
+    } catch (error) {
+        console.error('Application submission failed:', error);
+
+        // Show more detailed error information
+        const errorDetails = {
+            message: error.message,
+            stack: error.stack,
+            formData: this.collectAllData()
+        };
+        console.error('Detailed error info:', errorDetails);
+
+        this.ui.showError('Submission failed', error);
+
+        // Show user-friendly error message
+        frappe.msgprint({
+            title: 'Submission Error',
+            message: `
+                <p><strong>Error:</strong> ${error.message}</p>
+                <p>Please try again or contact support if the problem persists.</p>
+                <details>
+                    <summary>Technical Details</summary>
+                    <pre>${JSON.stringify(errorDetails, null, 2)}</pre>
+                </details>
+            `,
+            indicator: 'red'
         });
-        
-        return allData;
-    }
-    
-    redirectToPayment(url) {
-        if (url) {
-            setTimeout(() => window.location.href = url, 2000);
-        }
-    }
-    
-    startAutoSave() {
-        setInterval(() => {
-            const data = this.collectAllData();
-            this.api.saveDraft(data).catch(error => {
-                console.log('Auto-save failed:', error);
-            });
-        }, this.config.autoSaveInterval);
-    }
-    
-    // Legacy compatibility methods
-    get formData() {
-        return this.state.data;
-    }
-    
-    getPaymentMethod() {
-        return this.state.get('payment')?.method || null;
-    }
-    
-    setPaymentMethod(method) {
-        this.state.set('payment', { method });
-    }
-    
-    get membershipTypes() {
-        return this.state.get('membershipTypes') || [];
-    }
-    
-    get paymentMethods() {
-        return this.state.get('paymentMethods') || [];
+
+        throw error;
+    } finally {
+        this.ui.setSubmitting(false);
     }
 }
 
@@ -1534,20 +1483,45 @@ class UIManager {
     }
     
     showSuccess(result) {
+        // Create success message with application ID prominently displayed
         let successHTML = '<div class="text-center py-5">';
         successHTML += '<div class="success-icon mb-4">';
         successHTML += '<i class="fa fa-check-circle text-success" style="font-size: 4rem;"></i>';
         successHTML += '</div>';
         successHTML += '<h2 class="text-success">Application Submitted Successfully!</h2>';
-        successHTML += '<p class="lead">Thank you for your application. You will be redirected to complete payment.</p>';
-        successHTML += '<div class="mt-4">';
-        successHTML += '<div class="spinner-border text-primary" role="status">';
-        successHTML += '<span class="sr-only">Loading...</span>';
-        successHTML += '</div>';
-        successHTML += '</div>';
+        
+        // Display application ID if available
+        if (result.application_id) {
+            successHTML += '<div class="alert alert-info mx-auto" style="max-width: 500px;">';
+            successHTML += '<h4>Your Application ID: <strong>' + result.application_id + '</strong></h4>';
+            successHTML += '<p>Please save this ID for future reference.</p>';
+            successHTML += '</div>';
+        }
+        
+        successHTML += '<p class="lead">Thank you for your application. ';
+        
+        if (result.payment_url) {
+            successHTML += 'You will be redirected to complete payment.</p>';
+            successHTML += '<div class="mt-4">';
+            successHTML += '<div class="spinner-border text-primary" role="status">';
+            successHTML += '<span class="sr-only">Loading...</span>';
+            successHTML += '</div>';
+            successHTML += '</div>';
+        } else {
+            successHTML += 'You will receive an email with next steps.</p>';
+            successHTML += '<div class="mt-4">';
+            successHTML += '<a href="/application-status?id=' + result.application_id + '" class="btn btn-primary">';
+            successHTML += 'Check Application Status';
+            successHTML += '</a>';
+            successHTML += '</div>';
+        }
+        
         successHTML += '</div>';
         
         $('.membership-application-form').html(successHTML);
+        
+        // Scroll to top
+        window.scrollTo(0, 0);
     }
     
     showError(title, error) {
