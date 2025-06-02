@@ -156,6 +156,65 @@
    "options": "Bank Transfer\nDirect Debit\nCredit Card\nCash\nOther"
   },
   {
+    "fieldname": "application_section",
+    "fieldtype": "Section Break",
+    "label": "Application Details",
+    "insert_after": "member_since",
+    "collapsible": 1
+  },
+  {
+    "fieldname": "application_id",
+    "fieldtype": "Data",
+    "label": "Application ID",
+    "insert_after": "application_section",
+    "read_only": 1,
+    "unique": 1,
+    "description": "Unique identifier for the membership application"
+  },
+  {
+    "fieldname": "application_status",
+    "fieldtype": "Select",
+    "label": "Application Status",
+    "options": "Pending\nUnder Review\nApproved\nRejected\nPayment Pending\nActive",
+    "default": "Pending",
+    "insert_after": "application_id",
+    "in_list_view": 1,
+    "in_standard_filter": 1
+  },
+  {
+    "fieldname": "application_date",
+    "fieldtype": "Datetime",
+    "label": "Application Date",
+    "insert_after": "application_status",
+    "read_only": 1
+  },
+  {
+    "fieldname": "column_break_app1",
+    "fieldtype": "Column Break",
+    "insert_after": "application_date"
+  },
+  {
+    "fieldname": "reviewed_by",
+    "fieldtype": "Link",
+    "label": "Reviewed By",
+    "options": "User",
+    "insert_after": "column_break_app1",
+    "read_only": 1
+  },
+  {
+    "fieldname": "review_date",
+    "fieldtype": "Datetime",
+    "label": "Review Date",
+    "insert_after": "reviewed_by",
+    "read_only": 1
+  },
+  {
+    "fieldname": "review_notes",
+    "fieldtype": "Small Text",
+    "label": "Review Notes",
+    "insert_after": "review_date"
+  },
+  {
    "fieldname": "bic",
    "fieldtype": "Data",
    "label": "BIC/SWIFT",
