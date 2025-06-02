@@ -1,8 +1,4 @@
-import frappe, re
-from frappe import _
-from frappe.utils import today, now_datetime, add_days, getdate, flt, validate_email_address
-
-import frappe, json, re
+import frappe, json, re, traceback
 from frappe import _
 from frappe.utils import today, now_datetime, add_days, getdate, flt, validate_email_address
 from verenigingen.verenigingen.doctype.chapter.chapter import suggest_chapter_for_member
@@ -1840,3 +1836,458 @@ def send_simple_notification(data, member_id):
     except Exception as e:
         # Log but don't raise - email failure shouldn't block application
         frappe.log_error(f"Notification email failed: {str(e)}", "Notification Error")
+
+
+@frappe.whitelist(allow_guest=True)
+def submit_application_debug(**kwargs):
+    """
+    Debug version of submit_application - provides detailed error information
+    """
+    try:
+        # Log the raw input for debugging
+        frappe.logger().info(f"=== SUBMISSION DEBUG START ===")
+        frappe.logger().info(f"Received kwargs: {kwargs}")
+        frappe.logger().info(f"Kwargs keys: {list(kwargs.keys())}")
+        
+        # Extract data
+        data = kwargs.get('data')
+        
+        # If data is None, check if arguments were passed directly
+        if data is None:
+            data = kwargs
+        
+        # Handle JSON string data
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+                frappe.logger().info(f"Parsed JSON data successfully")
+            except json.JSONDecodeError as e:
+                frappe.logger().error(f"JSON parse error: {str(e)}")
+                return {
+                    "success": False,
+                    "error": f"Invalid JSON data: {str(e)}",
+                    "debug_data": str(data)[:500]  # First 500 chars for debugging
+                }
+        
+        frappe.logger().info(f"Final data type: {type(data)}")
+        frappe.logger().info(f"Final data: {data}")
+        
+        # Validate we have data
+        if not data or not isinstance(data, dict):
+            return {
+                "success": False,
+                "error": "No valid application data received",
+                "data_received": str(data),
+                "data_type": str(type(data))
+            }
+        
+        # Check required fields
+        required_fields = ["first_name", "last_name", "email"]
+        missing_fields = []
+        for field in required_fields:
+            if not data.get(field):
+                missing_fields.append(field)
+        
+        if missing_fields:
+            return {
+                "success": False,
+                "error": f"Missing required fields: {', '.join(missing_fields)}",
+                "received_fields": list(data.keys())
+            }
+        
+        # Test database access
+        try:
+            frappe.logger().info("Testing database access...")
+            test_count = frappe.db.count("Member")
+            frappe.logger().info(f"Current member count: {test_count}")
+        except Exception as e:
+            frappe.logger().error(f"Database access error: {str(e)}")
+            return {
+                "success": False,
+                "error": f"Database access failed: {str(e)}"
+            }
+        
+        # Check if email already exists
+        try:
+            existing = frappe.db.exists("Member", {"email": data.get("email")})
+            if existing:
+                return {
+                    "success": False,
+                    "error": f"A member with email {data.get('email')} already exists",
+                    "existing_member": existing
+                }
+        except Exception as e:
+            frappe.logger().error(f"Email check error: {str(e)}")
+            return {
+                "success": False,
+                "error": f"Could not check existing email: {str(e)}"
+            }
+        
+        # Get Member doctype meta to check available fields
+        try:
+            member_meta = frappe.get_meta("Member")
+            available_fields = [field.fieldname for field in member_meta.fields]
+            frappe.logger().info(f"Available Member fields: {available_fields}")
+        except Exception as e:
+            frappe.logger().error(f"Meta access error: {str(e)}")
+            return {
+                "success": False,
+                "error": f"Could not access Member doctype: {str(e)}"
+            }
+        
+        # Create member with only basic fields first
+        try:
+            frappe.logger().info("Creating member record...")
+            
+            # Start with absolutely minimal required fields
+            member_data = {
+                "doctype": "Member",
+                "first_name": data.get("first_name"),
+                "last_name": data.get("last_name"),
+                "email": data.get("email")
+            }
+            
+            # Add optional fields if they exist in the doctype
+            optional_field_mapping = {
+                "middle_name": data.get("middle_name", ""),
+                "mobile_no": data.get("mobile_no", ""),
+                "phone": data.get("phone", ""),
+                "birth_date": data.get("birth_date"),
+                "pronouns": data.get("pronouns", ""),
+                "status": "Pending"
+            }
+            
+            # Only add fields that exist in the doctype
+            for field_name, field_value in optional_field_mapping.items():
+                if field_name in available_fields and field_value:
+                    member_data[field_name] = field_value
+                    frappe.logger().info(f"Added field {field_name}: {field_value}")
+            
+            frappe.logger().info(f"Final member data: {member_data}")
+            
+            # Create the member
+            member = frappe.get_doc(member_data)
+            member.insert(ignore_permissions=True)
+            
+            frappe.logger().info(f"Member created successfully: {member.name}")
+            
+            return {
+                "success": True,
+                "message": "Application submitted successfully! (Basic version)",
+                "member_id": member.name,
+                "debug_info": {
+                    "fields_used": list(member_data.keys()),
+                    "available_fields": available_fields
+                }
+            }
+            
+        except Exception as e:
+            frappe.logger().error(f"Member creation error: {str(e)}")
+            frappe.logger().error(f"Traceback: {traceback.format_exc()}")
+            return {
+                "success": False,
+                "error": f"Could not create member: {str(e)}",
+                "traceback": traceback.format_exc(),
+                "attempted_data": member_data if 'member_data' in locals() else "No data"
+            }
+            
+    except Exception as e:
+        frappe.logger().error(f"=== SUBMISSION ERROR ===")
+        frappe.logger().error(f"Error: {str(e)}")
+        frappe.logger().error(f"Traceback: {traceback.format_exc()}")
+        
+        return {
+            "success": False,
+            "error": f"Unexpected error: {str(e)}",
+            "traceback": traceback.format_exc()
+        }
+    finally:
+        frappe.logger().info(f"=== SUBMISSION DEBUG END ===")
+
+@frappe.whitelist(allow_guest=True)
+def submit_application_minimal(**kwargs):
+    """
+    Minimal version that only creates basic member record
+    """
+    try:
+        # Extract and validate data
+        data = kwargs.get('data')
+        if isinstance(data, str):
+            data = json.loads(data)
+        
+        if not data or not isinstance(data, dict):
+            data = kwargs
+        
+        # Validate required fields
+        if not all(data.get(field) for field in ["first_name", "last_name", "email"]):
+            return {
+                "success": False,
+                "error": "Missing required fields: first_name, last_name, email"
+            }
+        
+        # Check existing email
+        if frappe.db.exists("Member", {"email": data.get("email")}):
+            return {
+                "success": False,
+                "error": "A member with this email already exists"
+            }
+        
+        # Create minimal member record
+        member = frappe.get_doc({
+            "doctype": "Member",
+            "first_name": data.get("first_name"),
+            "last_name": data.get("last_name"),
+            "email": data.get("email"),
+            "mobile_no": data.get("mobile_no", ""),
+            "phone": data.get("phone", ""),
+            "birth_date": data.get("birth_date") if data.get("birth_date") else None,
+            "status": "Active"  # Using a valid status from the Member doctype
+        })
+        
+        member.insert(ignore_permissions=True)
+        
+        # Add notes about the application
+        if data.get("additional_notes"):
+            member.notes = f"Application notes: {data.get('additional_notes')}"
+            member.save(ignore_permissions=True)
+        
+        return {
+            "success": True,
+            "message": "Application submitted successfully!",
+            "member_id": member.name
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Minimal submission error: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist(allow_guest=True)
+def test_member_creation():
+    """
+    Test function to verify member creation works
+    """
+    try:
+        # Test 1: Check if Member doctype exists and is accessible
+        member_meta = frappe.get_meta("Member")
+        
+        # Test 2: Get field information
+        fields = [{"fieldname": f.fieldname, "fieldtype": f.fieldtype, "reqd": f.reqd} 
+                 for f in member_meta.fields if f.fieldname in ["first_name", "last_name", "email", "status"]]
+        
+        # Test 3: Try to create a test member
+        test_email = f"test.{frappe.utils.random_string(5)}@example.com"
+        
+        test_member = frappe.get_doc({
+            "doctype": "Member",
+            "first_name": "Test",
+            "last_name": "User",
+            "email": test_email,
+            "status": "Active"
+        })
+        
+        # Don't actually insert, just validate
+        test_member.run_method("validate")
+        
+        return {
+            "success": True,
+            "doctype_exists": True,
+            "key_fields": fields,
+            "validation_passed": True,
+            "test_email": test_email
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@frappe.whitelist(allow_guest=True)
+def get_member_field_info():
+    """
+    Get information about Member doctype fields
+    """
+    try:
+        meta = frappe.get_meta("Member")
+        fields_info = []
+        
+        for field in meta.fields:
+            fields_info.append({
+                "fieldname": field.fieldname,
+                "fieldtype": field.fieldtype,
+                "label": field.label,
+                "reqd": field.reqd,
+                "options": field.options if hasattr(field, 'options') else None
+            })
+        
+        return {
+            "success": True,
+            "fields": fields_info,
+            "total_fields": len(fields_info)
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+# Enhanced version that handles address creation properly
+@frappe.whitelist(allow_guest=True)
+def submit_application_enhanced(**kwargs):
+    """
+    Enhanced version with proper error handling and field validation
+    """
+    try:
+        # Extract and validate data
+        data = kwargs.get('data')
+        if isinstance(data, str):
+            data = json.loads(data)
+        if not data or not isinstance(data, dict):
+            data = kwargs
+        
+        # Validate required fields
+        required_fields = ["first_name", "last_name", "email"]
+        missing_fields = [field for field in required_fields if not data.get(field)]
+        
+        if missing_fields:
+            return {
+                "success": False,
+                "error": f"Missing required fields: {', '.join(missing_fields)}"
+            }
+        
+        # Validate email format
+        try:
+            validate_email_address(data.get("email"))
+        except Exception:
+            return {
+                "success": False,
+                "error": "Invalid email format"
+            }
+        
+        # Check if email already exists
+        if frappe.db.exists("Member", {"email": data.get("email")}):
+            return {
+                "success": False,
+                "error": "A member with this email already exists"
+            }
+        
+        # Create address if address data is provided
+        address = None
+        if data.get("address_line1") and data.get("city"):
+            try:
+                address = frappe.get_doc({
+                    "doctype": "Address",
+                    "address_title": f"{data['first_name']} {data['last_name']}",
+                    "address_type": "Personal",
+                    "address_line1": data.get("address_line1"),
+                    "address_line2": data.get("address_line2", ""),
+                    "city": data.get("city"),
+                    "state": data.get("state", ""),
+                    "country": data.get("country", ""),
+                    "pincode": data.get("postal_code", ""),
+                    "email_id": data.get("email"),
+                    "phone": data.get("phone", "")
+                })
+                address.insert(ignore_permissions=True)
+                frappe.logger().info(f"Address created: {address.name}")
+            except Exception as e:
+                frappe.logger().error(f"Address creation failed: {str(e)}")
+                # Continue without address if it fails
+                address = None
+        
+        # Get available member fields
+        member_meta = frappe.get_meta("Member")
+        available_fields = [field.fieldname for field in member_meta.fields]
+        
+        # Create member with available fields only
+        member_data = {
+            "doctype": "Member",
+            "first_name": data.get("first_name"),
+            "last_name": data.get("last_name"),
+            "email": data.get("email")
+        }
+        
+        # Add optional fields if they exist
+        optional_fields = {
+            "middle_name": data.get("middle_name", ""),
+            "mobile_no": data.get("mobile_no", ""),
+            "phone": data.get("phone", ""),
+            "birth_date": data.get("birth_date"),
+            "pronouns": data.get("pronouns", ""),
+            "status": "Active",  # Set to Active by default
+            "notes": data.get("additional_notes", "")
+        }
+        
+        # Application-specific fields (add only if they exist)
+        if "application_status" in available_fields:
+            member_data["application_status"] = "Pending"
+        if "application_date" in available_fields:
+            member_data["application_date"] = now_datetime()
+        if "selected_membership_type" in available_fields:
+            member_data["selected_membership_type"] = data.get("selected_membership_type", "")
+        if "interested_in_volunteering" in available_fields:
+            member_data["interested_in_volunteering"] = data.get("interested_in_volunteering", 0)
+        if "newsletter_opt_in" in available_fields:
+            member_data["newsletter_opt_in"] = data.get("newsletter_opt_in", 1)
+        if "application_source" in available_fields:
+            member_data["application_source"] = data.get("application_source", "Website")
+        if "payment_method" in available_fields:
+            member_data["payment_method"] = data.get("payment_method", "")
+        if "primary_chapter" in available_fields:
+            member_data["primary_chapter"] = data.get("selected_chapter", "")
+        
+        # Add address link if created
+        if address and "primary_address" in available_fields:
+            member_data["primary_address"] = address.name
+        
+        # Only add fields that exist and have values
+        final_member_data = {k: v for k, v in member_data.items() 
+                           if k == "doctype" or (k in available_fields and v is not None and v != "")}
+        
+        # Create member
+        member = frappe.get_doc(final_member_data)
+        member.insert(ignore_permissions=True)
+        
+        frappe.logger().info(f"Member created successfully: {member.name}")
+        
+        # Send simple confirmation (without complex email templates for now)
+        try:
+            frappe.sendmail(
+                recipients=[member.email],
+                subject="Membership Application Received",
+                message=f"""
+                <h3>Thank you for your membership application!</h3>
+                <p>Dear {member.first_name},</p>
+                <p>We have received your membership application and will review it shortly.</p>
+                <p>Application ID: {member.name}</p>
+                <p>You will receive another email once your application has been processed.</p>
+                <p>Best regards,<br>The Membership Team</p>
+                """,
+                now=True
+            )
+        except Exception as e:
+            frappe.logger().error(f"Email sending failed: {str(e)}")
+            # Don't fail the whole process if email fails
+        
+        return {
+            "success": True,
+            "message": "Application submitted successfully! You will receive an email confirmation shortly.",
+            "member_id": member.name,
+            "debug_info": {
+                "fields_used": list(final_member_data.keys()),
+                "address_created": address is not None
+            }
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Enhanced submission error: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
