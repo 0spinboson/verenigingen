@@ -1311,19 +1311,17 @@ class MembershipAPI {
             console.log('Submitting application data:', data);
             
             frappe.call({
-                method: 'verenigingen.api.membership_application.submit_application',
+                method: 'verenigingen.api.membership_application.submit_application_with_tracking',
                 args: {
-                    data: data  // Pass as an argument in the args object
+                    data: formData  // Pass as an argument in the args object
                 },
                 callback: function(r) {
-                    console.log('Server response:', r);
                     if (r.message && r.message.success) {
-                        resolve(r.message);
+                        // Show success with application ID
+                        alert(`Success! Application ID: ${r.message.application_id}`);
                     } else {
-                        const errorMsg = r.message ? (r.message.message || JSON.stringify(r.message)) : 'Unknown error occurred';
-                        reject(new Error(errorMsg));
-                    }
-                },
+                        alert(`Error: ${r.message.error}`);
+                    },
                 error: function(r) {
                     console.error('Submission error:', r);
                     let errorMsg = 'Network error occurred';
