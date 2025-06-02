@@ -10,6 +10,8 @@ class Member(Document):
         self.handle_chapter_assignment()
 
     def generate_member_id(self):
+        if frappe.session.user == "Guest":
+            return None
         settings = frappe.get_single("Verenigingen Settings")
 
         if not settings.last_member_id:
@@ -56,6 +58,20 @@ class Member(Document):
                 self.age = None
         except Exception as e:
             frappe.log_error(f"Error calculating age: {str(e)}", "Member Error")
+
+    def generate_application_id(self):
+        """Generate unique application ID"""
+        year = frappe.utils.today()[:4]
+        random_part = str(random.randint(1000, 9999))
+        app_id = f"APP-{year}-{random_part}"
+        
+        # Ensure uniqueness
+        while frappe.db.exists("Member", {"application_id": app_id}):
+            random_part = str(random.randint(1000, 9999))
+            app_id = f"APP-{year}-{random_part}"
+        
+        return app_id
+        
     def handle_chapter_assignment(self):
         """Handle automatic chapter assignment when primary_chapter changes"""
         if not self.primary_chapter or self.is_new():
