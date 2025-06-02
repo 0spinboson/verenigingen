@@ -2291,3 +2291,65 @@ def submit_application_enhanced(**kwargs):
             "error": str(e),
             "traceback": traceback.format_exc()
         }
+
+@frappe.whitelist(allow_guest=True)
+def submit_application_with_tracking(**kwargs):
+    """Submit membership application with application tracking"""
+    try:
+        data = kwargs.get('data')
+        if isinstance(data, str):
+            data = json.loads(data)
+        if not data or not isinstance(data, dict):
+            data = kwargs
+        
+        # Validate required fields
+        required = ["first_name", "last_name", "email"]
+        missing = [f for f in required if not data.get(f)]
+        if missing:
+            return {"success": False, "error": f"Missing: {', '.join(missing)}"}
+        
+        # Check existing email
+        if frappe.db.exists("Member", {"email": data.get("email")}):
+            return {"success": False, "error": "Email already exists"}
+        
+        # Create member with application tracking
+        member = frappe.get_doc({
+            "doctype": "Member",
+            "first_name": data.get("first_name"),
+            "last_name": data.get("last_name"), 
+            "email": data.get("email"),
+            "mobile_no": data.get("mobile_no", ""),
+            "birth_date": data.get("birth_date"),
+            "status": "Pending",
+            "application_status": "Pending",
+            "application_date": frappe.utils.now_datetime(),
+            "notes": data.get("additional_notes", "")
+        })
+        
+        member.insert(ignore_permissions=True)
+        
+        # Send confirmation email
+        frappe.sendmail(
+            recipients=[member.email],
+            subject="Application Received",
+            message=f"""
+            <h3>Thank you for your application!</h3>
+            <p>Dear {member.first_name},</p>
+            <p>Application ID: <strong>{member.application_id}</strong></p>
+            <p>Status: Under Review</p>
+            <p>You will hear from us within 2-3 business days.</p>
+            """,
+            now=True
+        )
+        
+        return {
+            "success": True,
+            "message": "Application submitted successfully!",
+            "application_id": member.application_id,
+            "member_record": member.name,
+            "status": "pending_review"
+        }
+        
+    except Exception as e:
+        frappe.log_error(str(e))
+        return {"success": False, "error": str(e)}
