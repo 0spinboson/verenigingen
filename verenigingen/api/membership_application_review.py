@@ -265,7 +265,7 @@ def get_pending_applications(chapter=None, days_overdue=None):
         "Member",
         filters=filters,
         fields=[
-            "name", "full_name", "email", "mobile_no",
+            "name", "application_id", "full_name", "email", "mobile_no",
             "application_date", "primary_chapter", "suggested_chapter",
             "selected_membership_type", "application_source",
             "interested_in_volunteering", "age"
