@@ -1,3 +1,8 @@
+/**
+ * Member Counter Management Frontend
+ * verenigingen/public/js/member_counter.js
+ */
+
 // Member doctype form customizations
 frappe.ui.form.on('Member', {
     refresh: function(frm) {
@@ -280,3 +285,109 @@ function calculate_age(birth_date) {
     
     return age;
 }
+
+// Verenigingen Settings form customizations
+frappe.ui.form.on('Verenigingen Settings', {
+    refresh: function(frm) {
+        if (frappe.user.has_role('System Manager')) {
+            setup_settings_counter_section(frm);
+        }
+    },
+    
+    member_id_start: function(frm) {
+        // Show warning when changing the start value
+        if (frm.doc.member_id_start) {
+            frm.set_df_property('member_id_start', 'description', 
+                'Changes to this value will update the member ID counter if the new value is higher than the current counter.');
+        }
+    }
+});
+
+function setup_settings_counter_section(frm) {
+    // Add button to view current counter status
+    frm.add_custom_button(__('View Member ID Status'), function() {
+        frappe.call({
+            method: 'verenigingen.verenigingen.doctype.member.member_id_manager.get_member_id_statistics',
+            callback: function(r) {
+                if (r.message) {
+                    const stats = r.message;
+                    
+                    frappe.msgprint({
+                        title: __('Current Member ID Status'),
+                        message: `
+                            <table class="table">
+                                <tr><td><strong>Current Counter:</strong></td><td>${stats.current_counter}</td></tr>
+                                <tr><td><strong>Next ID:</strong></td><td>${stats.next_id}</td></tr>
+                                <tr><td><strong>Settings Start Value:</strong></td><td>${frm.doc.member_id_start || 1000}</td></tr>
+                                <tr><td><strong>Highest Assigned:</strong></td><td>${stats.highest_assigned}</td></tr>
+                            </table>
+                            <p class="text-muted">The counter will only be updated if you set the start value higher than the current counter.</p>
+                        `,
+                        wide: true
+                    });
+                }
+            }
+        });
+    }, __('Member ID Management'));
+}
+
+/**
+ * Migration Script
+ * Run this once after updating the system
+ */
+
+// Console command for manual migration (run in browser console if needed)
+function migrate_member_id_system() {
+    console.log('Starting member ID system migration...');
+    
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.member.member.migrate_member_id_counter',
+        callback: function(r) {
+            if (r.message) {
+                if (r.message.success) {
+                    console.log('✓ Migration successful:', r.message.message);
+                    frappe.show_alert({
+                        message: 'Member ID system migration completed successfully',
+                        indicator: 'green'
+                    }, 8);
+                } else {
+                    console.error('✗ Migration failed:', r.message.error);
+                    frappe.msgprint('Migration failed: ' + r.message.error);
+                }
+            }
+        },
+        error: function(r) {
+            console.error('✗ Migration error:', r);
+            frappe.msgprint('Migration error occurred. Check console for details.');
+        }
+    });
+}
+
+// Make migration function available globally for console use
+window.migrate_member_id_system = migrate_member_id_system;
+
+// Auto-run migration check on page load for System Managers
+$(document).ready(function() {
+    if (frappe.user.has_role('System Manager') && 
+        (frappe.get_route()[0] === 'List' && frappe.get_route()[1] === 'Member') ||
+        (frappe.get_route()[0] === 'Form' && frappe.get_route()[1] === 'Verenigingen Settings')) {
+        
+        // Check if migration might be needed
+        frappe.call({
+            method: 'frappe.client.get_single_value',
+            args: {
+                doctype: 'Verenigingen Settings',
+                field: 'last_member_id'
+            },
+            callback: function(r) {
+                if (r.message && parseInt(r.message) > 0) {
+                    // Old system detected, suggest migration
+                    frappe.show_alert({
+                        message: __('Old member ID system detected. Consider running migration. Type migrate_member_id_system() in console.'),
+                        indicator: 'orange'
+                    }, 10);
+                }
+            }
+        });
+    }
+});
