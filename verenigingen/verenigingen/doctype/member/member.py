@@ -3,11 +3,17 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import getdate, today, add_days, date_diff, now
 
+from verenigingen.verenigingen.doctype.member.member_id_manager import generate_member_id, validate_member_id_change
 class Member(Document):
     def before_save(self):
         if not self.member_id:
             self.member_id = self.generate_member_id()
         self.handle_chapter_assignment()
+        if hasattr(self, 'reset_counter_to') and self.reset_counter_to:
+            self.reset_counter_to = None
+
+    def before_insert(self):
+        self.generate_member_id()
 
     def generate_member_id(self):
         if frappe.session.user == "Guest":
@@ -33,6 +39,7 @@ class Member(Document):
         self.set_payment_reference()
         self.validate_bank_details()
         self.sync_payment_amount()
+        self.validate_member_id_change()
 
     def after_insert(self):
         """Create linked entities after member is created"""
@@ -2027,3 +2034,57 @@ def terminate_membership(self, termination_type, termination_date, termination_r
     self.save()
     
     frappe.logger().info(f"Terminated membership for member {self.name} - Status: {self.status}")
+
+@frappe.whitelist()
+def reset_member_id_counter(counter_value):
+    """Reset the member ID counter (called from client-side)"""
+    if not frappe.has_permission("Member", "write"):
+        frappe.throw(_("Insufficient permissions"))
+    
+    if not frappe.user.has_role("System Manager"):
+        frappe.throw(_("Only System Managers can reset the member ID counter"))
+    
+    counter_value = cint(counter_value)
+    if counter_value <= 0:
+        frappe.throw(_("Counter value must be greater than 0"))
+    
+    MemberIDManager.reset_counter(counter_value)
+    
+    return {
+        "success": True,
+        "message": _("Member ID counter reset to {0}").format(counter_value)
+    }
+
+@frappe.whitelist()
+def get_next_member_id_preview():
+    """Get the next member ID that would be assigned"""
+    if not frappe.has_permission("Member", "read"):
+        frappe.throw(_("Insufficient permissions"))
+    
+    counter_key = "member_id_counter"
+    current_counter = frappe.cache().get(counter_key)
+    
+    if current_counter is None:
+        current_counter = MemberIDManager._initialize_counter()
+    
+    return {
+        "next_id": current_counter + 1,
+        "current_counter": current_counter
+    }
+
+# ADD this hook function (to be called from Verenigingen Settings):
+def sync_member_counter_with_settings(doc, method=None):
+    """
+    Called when Verenigingen Settings is updated
+    Syncs member ID counter if the start value was increased
+    """
+    if doc.doctype != "Verenigingen Settings":
+        return
+    
+    # Check if member_id_start was changed
+    if doc.has_value_changed("member_id_start"):
+        old_start = doc.get_db_value("member_id_start") or 1000
+        new_start = cint(doc.member_id_start) or 1000
+        
+        if new_start > old_start:
+            MemberIDManager.sync_counter_with_settings()
