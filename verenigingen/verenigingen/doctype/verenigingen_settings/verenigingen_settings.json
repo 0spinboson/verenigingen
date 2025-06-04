@@ -7,7 +7,6 @@
  "field_order": [
   "section_break_27",
   "member_id_start",
-  "last_member_id",
   "chapter_settings_section",
   "national_board_chapter",
   "organization_email_domain",
@@ -283,13 +282,6 @@
    "fieldname": "financial_settings_section",
    "fieldtype": "Section Break",
    "label": "Financial settings"
-  },
-  {
-   "description": "The last membership ID that was assigned (system-managed field)",
-   "fieldname": "last_member_id",
-   "fieldtype": "Int",
-   "label": "Last Used Member ID",
-   "read_only": 1
   },
   {
    "default": "1000",
