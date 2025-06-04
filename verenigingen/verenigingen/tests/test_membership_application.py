@@ -4,10 +4,10 @@ from frappe.utils import today, add_days, now_datetime
 from verenigingen.api.membership_application import (
     submit_application,
     approve_membership_application,
-    reject_membership_application,
-    process_application_payment,
-    check_overdue_applications
+    reject_membership_application
 )
+from verenigingen.utils.application_payments import process_application_payment
+from verenigingen.utils.application_notifications import check_overdue_applications
 
 class TestMembershipApplication(unittest.TestCase):
     """Test membership application workflow"""

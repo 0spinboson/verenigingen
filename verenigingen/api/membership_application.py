@@ -1,7 +1,35 @@
-import frappe, json, re, traceback
+import frappe
 from frappe import _
-from frappe.utils import today, now_datetime, add_days, getdate, flt, validate_email_address
-from verenigingen.verenigingen.doctype.chapter.chapter import suggest_chapter_for_member
+from frappe.utils import today, now_datetime
+
+# Import refactored utility modules
+from verenigingen.utils.application_validators import (
+    validate_email, validate_postal_code, validate_phone_number, 
+    validate_birth_date, validate_name, validate_address,
+    validate_membership_amount_selection, validate_custom_amount,
+    check_application_eligibility, validate_required_fields
+)
+
+from verenigingen.utils.application_notifications import (
+    send_application_confirmation_email, notify_reviewers_of_new_application,
+    send_approval_email, send_rejection_email, send_payment_confirmation_email,
+    get_application_reviewers, check_overdue_applications, notify_admins_of_new_application
+)
+
+from verenigingen.utils.application_payments import (
+    create_membership_invoice_with_amount, create_customer_for_member,
+    process_application_payment, get_payment_methods, get_payment_instructions_html,
+    create_membership_invoice, format_currency_for_display
+)
+
+from verenigingen.utils.application_helpers import (
+    generate_application_id, parse_application_data, get_form_data,
+    determine_chapter_from_application, create_address_from_application,
+    create_member_from_application, create_volunteer_record,
+    get_membership_fee_info, get_membership_type_details,
+    suggest_membership_amounts, save_draft_application, load_draft_application,
+    get_member_field_info, check_application_status
+)
 
 # Simple test method to verify the API is working
 @frappe.whitelist(allow_guest=True)
@@ -16,132 +44,44 @@ def test_connection():
 
 @frappe.whitelist(allow_guest=True)
 def get_application_form_data():
-    """Get data needed for application form - FIXED VERSION"""
-    try:
-        # Get active membership types
-        membership_types = frappe.get_all(
-            "Membership Type",
-            filters={"is_active": 1},
-            fields=["name", "membership_type_name", "description", "amount",
-                    "currency", "subscription_period"],
-            order_by="amount"
-        )
-
-        # Get countries - use a fallback list
-        countries = [
-            {"name": "Netherlands"}, {"name": "Germany"}, {"name": "Belgium"},
-            {"name": "France"}, {"name": "United Kingdom"}, {"name": "Other"}
-        ]
-
-        # Try to get from database, fallback to hardcoded
-        try:
-            db_countries = frappe.get_all("Country", fields=["name"], order_by="name")
-            if db_countries:
-                countries = db_countries
-        except:
-            pass  # Use fallback countries
-
-        # Get chapters - with error handling
-        chapters = []
-        try:
-            if frappe.db.get_single_value("Verenigingen Settings", "enable_chapter_management"):
-                chapters = frappe.get_all(
-                    "Chapter",
-                    filters={"published": 1},
-                    fields=["name", "region"],
-                    order_by="name"
-                )
-        except:
-            pass  # Chapter management not enabled or error
-
-        # Get volunteer areas - with error handling
-        volunteer_areas = []
-        try:
-            volunteer_areas = frappe.get_all(
-                "Volunteer Interest Area",
-                fields=["name", "description"],
-                order_by="name"
-            )
-        except:
-            pass  # Table might not exist
-
-        return {
-            "success": True,
-            "membership_types": membership_types,
-            "chapters": chapters,
-            "volunteer_areas": volunteer_areas,
-            "countries": countries
-        }
-
-    except Exception as e:
-        frappe.log_error(f"Error in get_application_form_data: {str(e)}")
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "Error loading form data"
-        }
+    """Get data needed for application form"""
+    return get_form_data()
 
 @frappe.whitelist(allow_guest=True)
-def validate_email(email):
-    """Validate email format and check if it already exists - FIXED VERSION"""
-    try:
-        if not email:
-            return {"valid": False, "message": _("Email is required")}
-
-        # Use Frappe's built-in email validation
-        validate_email_address(email, throw=True)
-
-        # Check if email already exists
-        existing_member = frappe.db.exists("Member", {"email": email})
-        if existing_member:
-            return {
-                "valid": False,
-                "message": _("A member with this email already exists. Please login or contact support."),
-                "exists": True,
-                "member_id": existing_member
-            }
-
-        return {"valid": True, "message": _("Email is available")}
-
-    except Exception as e:
-        return {"valid": False, "message": str(e)}
+def validate_email_endpoint(email):
+    """Validate email format and check if it already exists"""
+    return validate_email(email)
 
 @frappe.whitelist(allow_guest=True)
 def submit_application(**kwargs):
-    """Process membership application submission - UPDATED WITH APPLICATION_ID"""
+    """Process membership application submission - Main entry point"""
     try:
         with frappe.init_site(frappe.local.site):
             frappe.set_user("Administrator")
             
-            # Extract and validate data
-            data = kwargs.get('data')
-            if data is None:
-                data = kwargs
-            
-            if isinstance(data, str):
-                try:
-                    data = json.loads(data)
-                except json.JSONDecodeError as e:
-                    return {
-                        "success": False,
-                        "error": f"Invalid data format: {str(e)}",
-                        "message": "Invalid data format received"
-                    }
+            # Parse and validate data
+            data = parse_application_data(kwargs.get('data', kwargs))
             
             # Validate required fields
             required_fields = ["first_name", "last_name", "email", "birth_date", 
                               "address_line1", "city", "postal_code", "country"]
             
-            missing_fields = []
-            for field in required_fields:
-                if not data.get(field):
-                    missing_fields.append(field)
-            
-            if missing_fields:
+            validation_result = validate_required_fields(data, required_fields)
+            if not validation_result["valid"]:
                 return {
                     "success": False,
-                    "error": f"Missing required fields: {', '.join(missing_fields)}",
-                    "message": f"Missing required fields: {', '.join(missing_fields)}"
+                    "error": f"Missing required fields: {', '.join(validation_result['missing_fields'])}",
+                    "message": f"Missing required fields: {', '.join(validation_result['missing_fields'])}"
+                }
+            
+            # Check eligibility
+            eligibility = check_application_eligibility(data)
+            if not eligibility["eligible"]:
+                return {
+                    "success": False,
+                    "error": "Application not eligible",
+                    "message": "; ".join(eligibility["issues"]),
+                    "issues": eligibility["issues"]
                 }
             
             # Check if member with email already exists
@@ -153,57 +93,25 @@ def submit_application(**kwargs):
                     "message": "A member with this email already exists. Please login or contact support."
                 }
             
+            # Generate application ID
+            application_id = generate_application_id()
+            
             # Create address
-            address = None
-            if data.get("address_line1") and data.get("city"):
-                address = frappe.get_doc({
-                    "doctype": "Address",
-                    "address_title": f"{data['first_name']} {data['last_name']}",
-                    "address_type": "Personal",
-                    "address_line1": data.get("address_line1"),
-                    "address_line2": data.get("address_line2", ""),
-                    "city": data.get("city"),
-                    "state": data.get("state", ""),
-                    "country": data.get("country"),
-                    "pincode": data.get("postal_code"),
-                    "email_id": data.get("email"),
-                    "phone": data.get("phone", "")
-                })
-                address.flags.ignore_permissions = True
-                address.insert(ignore_permissions=True)
+            address = create_address_from_application(data)
             
-            # Generate unique application ID
-            import time
-            application_id = f"APP-{frappe.utils.nowdate().replace('-', '')}-{int(time.time() % 10000):04d}"
+            # Create member
+            member = create_member_from_application(data, application_id, address)
             
-            # Create member with application tracking
-            member = frappe.get_doc({
-                "doctype": "Member",
-                "first_name": data.get("first_name"),
-                "middle_name": data.get("middle_name", ""),
-                "last_name": data.get("last_name"),
-                "email": data.get("email"),
-                "mobile_no": data.get("mobile_no", ""),
-                "phone": data.get("phone", ""),
-                "birth_date": data.get("birth_date"),
-                "pronouns": data.get("pronouns", ""),
-                "primary_address": address.name if address else None,
-                "status": "Pending",
-                # New application tracking fields
-                "application_id": application_id,
-                "application_status": "Pending",
-                "application_date": now_datetime(),
-                "selected_membership_type": data.get("selected_membership_type"),
-                "interested_in_volunteering": data.get("interested_in_volunteering", 0),
-                "newsletter_opt_in": data.get("newsletter_opt_in", 1),
-                "application_source": data.get("application_source", "Website"),
-                "notes": data.get("additional_notes", ""),
-                "payment_method": data.get("payment_method", ""),
-                "primary_chapter": data.get("selected_chapter", "")
-            })
+            # Determine suggested chapter
+            suggested_chapter = determine_chapter_from_application(data)
+            if suggested_chapter:
+                member.suggested_chapter = suggested_chapter
+                member.save()
             
-            member.flags.ignore_permissions = True
-            member.insert(ignore_permissions=True)
+            # Create volunteer record if interested
+            if data.get("interested_in_volunteering"):
+                create_volunteer_record(member)
+            
             frappe.db.commit()
             
             # Send notifications
@@ -237,67 +145,28 @@ def submit_application(**kwargs):
         except:
             pass
 
-def determine_chapter_from_application(data):
-    """Determine suggested chapter from application data"""
-    suggested_chapter = None
-    
-    if data.get("selected_chapter"):
-        suggested_chapter = data.get("selected_chapter")
-    elif data.get("postal_code"):
-        # Use existing chapter suggestion logic
-        try:
-            from verenigingen.verenigingen.doctype.chapter.chapter import suggest_chapter_for_member
-            suggestion_result = suggest_chapter_for_member(
-                None, 
-                data.get("postal_code"),
-                data.get("state"),
-                data.get("city")
-            )
-            if suggestion_result.get("matches_by_postal"):
-                suggested_chapter = suggestion_result["matches_by_postal"][0]["name"]
-        except Exception as e:
-            frappe.log_error(f"Error suggesting chapter: {str(e)}", "Chapter Suggestion Error")
-    
-    return suggested_chapter
+# This function is now in application_helpers.py
 
 @frappe.whitelist(allow_guest=True)
-def validate_postal_code(postal_code, country="Netherlands"):
+def validate_postal_code_endpoint(postal_code, country="Netherlands"):
     """Validate postal code format and suggest chapters"""
-    if not postal_code:
-        return {"valid": False, "message": _("Postal code is required")}
+    result = validate_postal_code(postal_code, country)
     
-    # Basic format validation based on country
-    postal_patterns = {
-        "Netherlands": r"^[1-9][0-9]{3}\s?[A-Z]{2}$",
-        "Germany": r"^[0-9]{5}$",
-        "Belgium": r"^[1-9][0-9]{3}$",
-        "France": r"^[0-9]{5}$"
-    }
-    
-    pattern = postal_patterns.get(country, r"^.+$")  # Default: any non-empty
-    
-    if not re.match(pattern, postal_code.upper().strip()):
-        return {
-            "valid": False,
-            "message": _("Invalid postal code format for {0}").format(country)
-        }
-    
-    # Find matching chapters
-    suggested_chapters = []
-    try:
-        from verenigingen.verenigingen.doctype.member.member import find_chapter_by_postal_code
-        result = find_chapter_by_postal_code(postal_code)
+    if result["valid"]:
+        # Find matching chapters
+        suggested_chapters = []
+        try:
+            from verenigingen.verenigingen.doctype.member.member import find_chapter_by_postal_code
+            chapter_result = find_chapter_by_postal_code(postal_code)
+            
+            if chapter_result.get("success") and chapter_result.get("matching_chapters"):
+                suggested_chapters = chapter_result["matching_chapters"]
+        except Exception as e:
+            frappe.log_error(f"Error finding chapters for postal code {postal_code}: {str(e)}")
         
-        if result.get("success") and result.get("matching_chapters"):
-            suggested_chapters = result["matching_chapters"]
-    except Exception as e:
-        frappe.log_error(f"Error finding chapters for postal code {postal_code}: {str(e)}")
+        result["suggested_chapters"] = suggested_chapters
     
-    return {
-        "valid": True,
-        "message": _("Valid postal code"),
-        "suggested_chapters": suggested_chapters
-    }
+    return result
 
 @frappe.whitelist(allow_guest=True)
 def get_application_form_data():
