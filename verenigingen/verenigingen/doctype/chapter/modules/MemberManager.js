@@ -514,6 +514,118 @@ export class MemberManager {
             );
         }
     }
+    // Event handlers
+    onMemberAdd(cdt, cdn) {
+        const row = locals[cdt][cdn];
+        
+        // Set default values
+        if (!row.enabled) {
+            frappe.model.set_value(cdt, cdn, 'enabled', 1);
+        }
+        
+        // Update member count
+        this.ui.updateMembersSummary();
+    }
+    
+    onMemberRemove(cdt, cdn) {
+        const row = locals[cdt][cdn];
+        
+        // Log member removal
+        if (row.member && row.member_name) {
+            console.log(`Member ${row.member_name} removed from chapter`);
+        }
+        
+        // Update member count
+        this.ui.updateMembersSummary();
+    }
+    
+    async onMemberChange(cdt, cdn) {
+        const row = locals[cdt][cdn];
+        if (!row.member) return;
+        
+        try {
+            // Fetch member details
+            const member = await this.api.getDoc('Member', row.member);
+            
+            frappe.model.set_value(cdt, cdn, {
+                member_name: member.full_name,
+                // Don't override if already set
+                introduction: row.introduction || member.bio || '',
+                website_url: row.website_url || member.website || ''
+            });
+            
+            // Check if this member is already in another chapter
+            if (member.primary_chapter && member.primary_chapter !== this.frm.doc.name) {
+                this.ui.showAlert({
+                    message: __('Note: This member\'s primary chapter is {0}', [member.primary_chapter]),
+                    indicator: 'orange'
+                }, 5);
+            }
+        } catch (error) {
+            console.error('Error fetching member details:', error);
+        }
+    }
+    
+    onEnabledChange(cdt, cdn) {
+        const row = locals[cdt][cdn];
+        
+        if (!row.enabled) {
+            // Member is being disabled
+            frappe.model.set_value(cdt, cdn, 'leave_reason', 
+                row.leave_reason || __('Disabled on {0}', [frappe.datetime.now_datetime()]));
+        } else {
+            // Member is being re-enabled
+            frappe.model.set_value(cdt, cdn, 'leave_reason', '');
+        }
+        
+        // Update UI
+        this.updateMemberRowStyle(row);
+    }
+    
+    onIntroductionChange(cdt, cdn) {
+        const row = locals[cdt][cdn];
+        
+        // Validate introduction length
+        if (row.introduction && row.introduction.length > ChapterConfig.members.maxIntroductionLength) {
+            this.ui.showError(__('Introduction exceeds maximum length of {0} characters', 
+                [ChapterConfig.members.maxIntroductionLength]));
+            
+            // Truncate to max length
+            frappe.model.set_value(cdt, cdn, 'introduction', 
+                row.introduction.substring(0, ChapterConfig.members.maxIntroductionLength));
+        }
+    }
+    
+    onWebsiteURLChange(cdt, cdn) {
+        const row = locals[cdt][cdn];
+        
+        if (row.website_url) {
+            // Validate URL format
+            if (!ChapterValidation.validateURL(row.website_url)) {
+                this.ui.showError(__('Invalid website URL format'));
+                frappe.model.set_value(cdt, cdn, 'website_url', '');
+            } else {
+                // Add protocol if missing
+                if (!row.website_url.startsWith('http://') && !row.website_url.startsWith('https://')) {
+                    frappe.model.set_value(cdt, cdn, 'website_url', 'https://' + row.website_url);
+                }
+            }
+        }
+    }
+    
+    updateMemberRowStyle(row) {
+        // Add visual indication for disabled members
+        if (!row.enabled) {
+            frappe.utils.add_custom_button_to_grid(
+                this.frm.fields_dict.members.grid,
+                row.idx,
+                __('Re-enable'),
+                () => {
+                    frappe.model.set_value(row.doctype, row.name, 'enabled', 1);
+                }
+            );
+        }
+    }
     
     destroy() {
         // Clean up window reference
