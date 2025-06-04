@@ -204,7 +204,186 @@ export class ChapterController {
             this.ui.toggleBulkActions(value);
         }
     }
+    validate() {
+        // Run validation checks
+        const validations = [];
+        
+        // Validate chapter info
+        const chapterValidation = ChapterValidation.validateChapterInfo(this.frm.doc);
+        if (!chapterValidation.isValid) {
+            validations.push(...chapterValidation.errors);
+        }
+        
+        // Validate board members
+        const boardValidation = ChapterValidation.validateBoardMembers(this.frm.doc.board_members);
+        if (!boardValidation.isValid) {
+            validations.push(...boardValidation.errors);
+        }
+        
+        // Validate postal codes
+        if (this.frm.doc.postal_codes) {
+            const postalValidation = ChapterValidation.validatePostalCodes(this.frm.doc.postal_codes);
+            if (!postalValidation.isValid) {
+                validations.push(...postalValidation.errors);
+            }
+        }
+        
+        if (validations.length > 0) {
+            frappe.msgprint({
+                title: __('Validation Errors'),
+                indicator: 'red',
+                message: validations.join('<br>')
+            });
+            return false;
+        }
+        
+        return true;
+    }
     
+    onSubmit() {
+        // Handle form submission
+        console.log('Chapter submitted:', this.frm.doc.name);
+        
+        // Notify board members about chapter submission
+        if (ChapterConfig.features.enableCommunications) {
+            this.communicationManager.notifyBoardMembers('chapter_submitted');
+        }
+    }
+    
+    onPostalCodesChange() {
+        // Handle postal codes change
+        const validation = ChapterValidation.validatePostalCodes(this.frm.doc.postal_codes);
+        
+        if (!validation.isValid) {
+            this.ui.showPostalCodeWarning(validation.invalidPatterns);
+        }
+        
+        this.ui.updatePostalCodePreview();
+    }
+    
+    onChapterHeadChange() {
+        // Handle chapter head change
+        if (this.frm.doc.chapter_head) {
+            // Verify the member exists and is active
+            frappe.db.get_value('Member', this.frm.doc.chapter_head, 'status', (r) => {
+                if (r && r.status !== 'Active') {
+                    frappe.msgprint(__('Warning: Selected chapter head is not an active member'));
+                }
+            });
+        }
+    }
+    
+    onRegionChange() {
+        // Handle region change
+        if (this.frm.doc.region) {
+            // Update state
+            this.state.update('chapter.region', this.frm.doc.region);
+            
+            // Suggest postal codes for the region if available
+            this.suggestPostalCodesForRegion();
+        }
+    }
+    
+    onPublishedChange() {
+        // Handle published status change
+        if (this.frm.doc.published) {
+            frappe.show_alert({
+                message: __('Chapter is now published and visible to members'),
+                indicator: 'green'
+            }, 5);
+        } else {
+            frappe.show_alert({
+                message: __('Chapter is now unpublished and hidden from members'),
+                indicator: 'orange'
+            }, 5);
+        }
+    }
+    
+    async updateChapterHead() {
+        // Update chapter head based on board members with chair role
+        const boardMembers = this.boardManager.getActiveBoardMembers();
+        
+        // Find members with chair roles
+        const chairMembers = [];
+        for (const member of boardMembers) {
+            if (member.chapter_role) {
+                try {
+                    const role = await frappe.db.get_doc('Chapter Role', member.chapter_role);
+                    if (role.is_chair && role.is_active) {
+                        chairMembers.push(member);
+                    }
+                } catch (error) {
+                    console.error('Error checking role:', error);
+                }
+            }
+        }
+        
+        if (chairMembers.length > 0) {
+            // Get the member ID from the volunteer
+            try {
+                const volunteer = await frappe.db.get_doc('Volunteer', chairMembers[0].volunteer);
+                if (volunteer.member) {
+                    this.frm.set_value('chapter_head', volunteer.member);
+                }
+            } catch (error) {
+                console.error('Error setting chapter head:', error);
+            }
+        } else {
+            this.frm.set_value('chapter_head', null);
+        }
+    }
+    
+    validatePostalCodes() {
+        // Validate postal codes field
+        const validation = ChapterValidation.validatePostalCodes(this.frm.doc.postal_codes);
+        
+        if (!validation.isValid) {
+            frappe.msgprint({
+                title: __('Invalid Postal Codes'),
+                indicator: 'red',
+                message: __('The following postal code patterns are invalid: {0}', 
+                    [validation.invalidPatterns.join(', ')])
+            });
+            
+            // Set field to valid patterns only
+            this.frm.set_value('postal_codes', validation.validPatterns.join(', '));
+        }
+        
+        return validation.isValid;
+    }
+    
+    async suggestPostalCodesForRegion() {
+        // Suggest postal codes based on region
+        try {
+            const suggestions = await frappe.db.get_list('Chapter', {
+                filters: { 
+                    region: this.frm.doc.region,
+                    name: ['!=', this.frm.doc.name]
+                },
+                fields: ['postal_codes'],
+                limit: 5
+            });
+            
+            if (suggestions && suggestions.length > 0) {
+                const allCodes = new Set();
+                suggestions.forEach(s => {
+                    if (s.postal_codes) {
+                        s.postal_codes.split(',').forEach(code => allCodes.add(code.trim()));
+                    }
+                });
+                
+                if (allCodes.size > 0) {
+                    frappe.show_alert({
+                        message: __('Other chapters in {0} use postal codes: {1}', 
+                            [this.frm.doc.region, Array.from(allCodes).join(', ')]),
+                        indicator: 'blue'
+                    }, 10);
+                }
+            }
+        } catch (error) {
+            console.error('Error suggesting postal codes:', error);
+        }
+    }
     destroy() {
         // Cleanup all managers
         this.boardManager.destroy();
