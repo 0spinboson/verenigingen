@@ -53,7 +53,7 @@ doc_events = {
         "validate": "verenigingen.verenigingen.doctype.chapter.chapter.validate_chapter_access",
     },
     "Verenigingen Settings": {
-        "on_update": "verenigingen.utils.on_update_verenigingen_settings",
+        "on_update": "verenigingen.verenigingen.doctype.member.member.sync_member_counter_with_settings",
     },
     "Payment Entry": {
         "on_submit": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history",
@@ -89,6 +89,8 @@ doc_events = {
         "after_insert": "verenigingen.verenigingen.doctype.expulsion_report_entry.expulsion_report_entry.after_insert"
     },
     "Member": {
+        "before_insert": "verenigingen.verenigingen.doctype.member.member.before_insert",
+        "validate": "verenigingen.verenigingen.doctype.member.member.validate",
         "before_save": "verenigingen.verenigingen.doctype.member.member.update_termination_status_display"
     },
     
