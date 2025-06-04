@@ -3,7 +3,8 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import getdate, today, add_days, date_diff, now
 
-from verenigingen.verenigingen.doctype.member.member_id_manager import generate_member_id, validate_member_id_change
+from verenigingen.verenigingen.doctype.member.member_id_manager import generate_member_id, validate_member_id_change, MemberIDManager
+
 class Member(Document):
     def before_save(self):
         if not self.member_id:
