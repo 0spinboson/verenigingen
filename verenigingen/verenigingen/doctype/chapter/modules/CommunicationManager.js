@@ -741,6 +741,57 @@ export class CommunicationManager {
     }
     
     // Track email opens (if email tracking is enabled)
+    async notifyBoardMembers(eventType, data = {}) {
+        // Send notification to board members about chapter events
+        const boardMembers = this.getActiveBoardMembersWithEmail();
+        
+        if (!boardMembers.length) {
+            console.log('No active board members with email to notify');
+            return;
+        }
+        
+        let subject, message;
+        
+        switch (eventType) {
+            case 'chapter_submitted':
+                subject = __('Chapter {0} has been submitted', [this.frm.doc.name]);
+                message = __('The chapter {0} has been submitted and is now active.', [this.frm.doc.name]);
+                break;
+                
+            case 'member_added':
+                subject = __('New member added to {0}', [this.frm.doc.name]);
+                message = __('A new member has been added to chapter {0}.', [this.frm.doc.name]);
+                break;
+                
+            case 'board_change':
+                subject = __('Board change in {0}', [this.frm.doc.name]);
+                message = __('There has been a change in the board members of chapter {0}.', [this.frm.doc.name]);
+                break;
+                
+            default:
+                subject = __('Chapter {0} notification', [this.frm.doc.name]);
+                message = __('This is a notification from chapter {0}.', [this.frm.doc.name]);
+        }
+        
+        // Add custom data to message
+        if (data.customMessage) {
+            message += '\n\n' + data.customMessage;
+        }
+        
+        try {
+            await this.sendEmail({
+                recipients: boardMembers.map(m => m.email).join(','),
+                subject: subject,
+                content: message,
+                use_bcc: true
+            });
+            
+            console.log(`Board members notified about ${eventType}`);
+        } catch (error) {
+            console.error('Error notifying board members:', error);
+        }
+    }
+    
     async trackEmailOpen(communicationId) {
         try {
             await this.api.call('frappe.core.doctype.communication.communication.mark_email_as_seen', {
