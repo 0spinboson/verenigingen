@@ -1143,7 +1143,22 @@ export class ChapterStatistics {
             .filter(m => m.is_active && m.volunteer)
             .map(m => m.volunteer);
     }
-    
+    async refresh() {
+        // Refresh statistics if dialog is open
+        if (this.state.get('ui.activeDialog') === 'statistics') {
+            // Find and refresh the statistics dialog
+            const dialog = Array.from(document.querySelectorAll('.modal-dialog'))
+                .find(d => d.querySelector('.modal-title')?.textContent.includes('Statistics'));
+            
+            if (dialog) {
+                await this.refreshStatistics(dialog._frappe_dialog);
+            }
+        }
+        
+        // Clear cache to force fresh data
+        this.state.update('cache.statistics', null);
+        this.state.update('cache.lastUpdated', null);
+    }
     destroy() {
         // Destroy all charts
         this.charts.forEach(chart => chart.destroy());
