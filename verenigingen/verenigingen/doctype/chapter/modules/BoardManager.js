@@ -728,7 +728,38 @@ export class BoardManager {
         
         return result;
     }
+    // Event handlers
+    onBoardMemberAdd(cdt, cdn) {
+        const row = locals[cdt][cdn];
+        
+        // Set default values
+        if (!row.from_date) {
+            frappe.model.set_value(cdt, cdn, 'from_date', frappe.datetime.get_today());
+        }
+        
+        if (!row.is_active) {
+            frappe.model.set_value(cdt, cdn, 'is_active', 1);
+        }
+        
+        // Refresh the grid to show selection checkboxes
+        setTimeout(() => this.addSelectionCheckboxes(), 100);
+    }
     
+    onBoardMemberRemove(cdt, cdn) {
+        const row = locals[cdt][cdn];
+        
+        // If this was an active board member with a volunteer, update history
+        if (row.is_active && row.volunteer) {
+            // Update volunteer history for removal
+            this.updateVolunteerHistory({
+                ...row,
+                to_date: frappe.datetime.get_today()
+            });
+        }
+        
+        // Refresh the grid
+        setTimeout(() => this.addSelectionCheckboxes(), 100);
+    }
     // Event handlers
     async onVolunteerChange(cdt, cdn) {
         const row = locals[cdt][cdn];
