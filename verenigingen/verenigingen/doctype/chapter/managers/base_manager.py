@@ -1,12 +1,12 @@
 # verenigingen/verenigingen/doctype/chapter/managers/basemanager.py
 import frappe
-from frappe import 
+from frappe import _
 from typing import Any, Dict, List, Optional
 from abc import ABC, abstractmethod
 class BaseManager(ABC):
     """Base class for all chapter managers"""
 
-    def init(self, chapter_doc):
+    def __init__(self, chapter_doc):
         """
         Initialize manager with chapter document
 
@@ -32,7 +32,7 @@ class BaseManager(ABC):
             level: Log level (info, warning, error)
         """
         log_data = {
-            "manager": self.class.name,
+            "manager": self.__class__.__name__,
             "chapter": self.chapter_name,
             "action": action,
             "details": details or {},
@@ -51,8 +51,8 @@ class BaseManager(ABC):
 
     def validate_chapter_doc(self):
         """Validate that chapter document is available"""
-        if not self.chapterdoc:
-            frappe.throw(("Chapter document not available"))
+        if not self.chapter_doc:
+            frappe.throw(_("Chapter document not available"))
 
     def get_cached(self, key: str, default: Any = None) -> Any:
         """Get cached value"""
@@ -96,7 +96,7 @@ class BaseManager(ABC):
             # Send email
             frappe.sendmail(
                 recipients=recipients,
-                subject=subject or f"Notification from {self.chaptername}",
+                subject=subject or f"Notification from {self.chapter_name}",
                 template=template,
                 args=context,
                 header=[("Chapter Notification"), "blue"]
@@ -179,7 +179,7 @@ class BaseManager(ABC):
 
         return False
 
-    def isuser_board_member(self, user: str) -> Optional[Dict]:
+    def _is_user_board_member(self, user: str) -> Optional[Dict]:
         """Check if user is a board member"""
         # Get member from user
         member = frappe.db.get_value("Member", {"user": user}, "name")
@@ -208,7 +208,7 @@ class BaseManager(ABC):
 
         return None
 
-    def checkboard_member_permissions(self, board_member: Dict, action: str) -> bool:
+    def _check_board_member_permissions(self, board_member: Dict, action: str) -> bool:
         """Check if board member has permission for action"""
         role_name = board_member.get("role")
         if not role_name:

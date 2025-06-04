@@ -20,7 +20,7 @@ Usage:
 """
 from .base_manager import BaseManager
 from .board_manager import BoardManager
-all = [
+__all__ = [
     'BaseManager',
     'BoardManager'
 ]

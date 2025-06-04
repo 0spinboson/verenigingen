@@ -6,7 +6,7 @@ import time
 import frappe
 from frappe import _
 from frappe.utils import today, now_datetime, getdate, add_days
-from verenigingen.verenigingen.doctype.chapter.chapter import suggest_chapter_for_member
+# Import moved inside function to avoid circular imports
 
 
 def generate_application_id():
@@ -34,13 +34,17 @@ def get_form_data():
     """Get data needed for application form"""
     try:
         # Get active membership types
-        membership_types = frappe.get_all(
-            "Membership Type",
-            filters={"is_active": 1},
-            fields=["name", "membership_type_name", "description", "amount",
-                    "currency", "subscription_period"],
-            order_by="amount"
-        )
+        membership_types = []
+        try:
+            membership_types = frappe.get_all(
+                "Membership Type",
+                filters={"is_active": 1},
+                fields=["name", "membership_type_name", "description", "amount",
+                        "currency", "subscription_period"],
+                order_by="amount"
+            )
+        except Exception as e:
+            frappe.log_error(f"Error getting membership types: {str(e)}")
 
         # Get countries - use a fallback list
         countries = [
@@ -53,20 +57,23 @@ def get_form_data():
             db_countries = frappe.get_all("Country", fields=["name"], order_by="name")
             if db_countries:
                 countries = db_countries
-        except:
+        except Exception as e:
+            frappe.log_error(f"Error getting countries: {str(e)}")
             pass  # Use fallback countries
 
         # Get chapters - with error handling
         chapters = []
         try:
-            if frappe.db.get_single_value("Verenigingen Settings", "enable_chapter_management"):
+            settings_enabled = frappe.db.get_single_value("Verenigingen Settings", "enable_chapter_management")
+            if settings_enabled:
                 chapters = frappe.get_all(
                     "Chapter",
                     filters={"published": 1},
                     fields=["name", "region"],
                     order_by="name"
                 )
-        except:
+        except Exception as e:
+            frappe.log_error(f"Error getting chapters: {str(e)}")
             pass  # Chapter management not enabled or error
 
         # Get volunteer areas - with error handling
@@ -77,7 +84,8 @@ def get_form_data():
                 fields=["name", "description"],
                 order_by="name"
             )
-        except:
+        except Exception as e:
+            frappe.log_error(f"Error getting volunteer areas: {str(e)}")
             pass  # Table might not exist
 
         return {
@@ -106,6 +114,8 @@ def determine_chapter_from_application(data):
     elif data.get("postal_code"):
         # Use existing chapter suggestion logic
         try:
+            # Import only when needed to avoid circular imports
+            from verenigingen.verenigingen.doctype.chapter.chapter import suggest_chapter_for_member
             suggestion_result = suggest_chapter_for_member(
                 None, 
                 data.get("postal_code"),
@@ -114,6 +124,8 @@ def determine_chapter_from_application(data):
             )
             if suggestion_result.get("matches_by_postal"):
                 suggested_chapter = suggestion_result["matches_by_postal"][0]["name"]
+        except ImportError as e:
+            frappe.log_error(f"Could not import chapter module: {str(e)}", "Chapter Import Error")
         except Exception as e:
             frappe.log_error(f"Error suggesting chapter: {str(e)}", "Chapter Suggestion Error")
     

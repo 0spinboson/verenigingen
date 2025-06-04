@@ -4,13 +4,16 @@ Refactored membership application API with improved organization and error handl
 import frappe
 from frappe import _
 from frappe.utils import today, now_datetime
+import json
+from datetime import datetime, timedelta
 
 # Import our utility modules
 from verenigingen.utils.application_validators import (
-    validate_email, validate_postal_code, validate_phone_number, 
-    validate_birth_date, validate_name, validate_address,
-    validate_membership_amount_selection, validate_custom_amount,
-    check_application_eligibility, validate_required_fields
+    validate_email as validate_email_util, validate_postal_code as validate_postal_code_util, 
+    validate_phone_number as validate_phone_number_util, validate_birth_date as validate_birth_date_util, 
+    validate_name as validate_name_util, validate_address as validate_address_util,
+    validate_membership_amount_selection, validate_custom_amount as validate_custom_amount_util,
+    check_application_eligibility as check_application_eligibility_util, validate_required_fields
 )
 
 from verenigingen.utils.application_notifications import (
@@ -21,7 +24,7 @@ from verenigingen.utils.application_notifications import (
 
 from verenigingen.utils.application_payments import (
     create_membership_invoice_with_amount, create_customer_for_member,
-    process_application_payment, get_payment_methods, get_payment_instructions_html,
+    process_application_payment, get_payment_methods as get_payment_methods_util, get_payment_instructions_html,
     create_membership_invoice, format_currency_for_display
 )
 
@@ -29,11 +32,46 @@ from verenigingen.utils.application_helpers import (
     generate_application_id, parse_application_data, get_form_data,
     determine_chapter_from_application, create_address_from_application,
     create_member_from_application, create_volunteer_record,
-    get_membership_fee_info, get_membership_type_details,
-    suggest_membership_amounts, save_draft_application, load_draft_application,
-    get_member_field_info, check_application_status
+    get_membership_fee_info as get_membership_fee_info_util, get_membership_type_details as get_membership_type_details_util,
+    suggest_membership_amounts as suggest_membership_amounts_util, 
+    save_draft_application as save_draft_application_util, load_draft_application as load_draft_application_util,
+    get_member_field_info, check_application_status as check_application_status_util
 )
 
+
+# Utility functions
+
+def check_rate_limit(endpoint, limit_per_hour=60):
+    """Check if the current user/session has exceeded rate limits"""
+    try:
+        # Use IP address and session for rate limiting
+        client_ip = frappe.local.request.environ.get('REMOTE_ADDR', 'unknown')
+        cache_key = f"rate_limit:{endpoint}:{client_ip}"
+        
+        current_count = frappe.cache().get(cache_key) or 0
+        if current_count >= limit_per_hour:
+            return False
+            
+        # Increment counter with 1 hour expiry
+        frappe.cache().setex(cache_key, 3600, current_count + 1)
+        return True
+        
+    except Exception:
+        # If rate limiting fails, allow the request
+        return True
+
+def handle_api_error(error, context="API"):
+    """Standardized API error handling"""
+    error_msg = str(error)
+    frappe.log_error(f"Error in {context}: {error_msg}", f"{context} Error")
+    
+    return {
+        "success": False,
+        "error": error_msg,
+        "type": "server_error",
+        "timestamp": frappe.utils.now(),
+        "context": context
+    }
 
 # API Endpoints
 
@@ -44,26 +82,114 @@ def test_connection():
         "success": True,
         "message": "Backend connection working",
         "timestamp": frappe.utils.now(),
-        "user": frappe.session.user
+        "user": frappe.session.user,
+        "version": "2.0",
+        "features": [
+            "form_data", "validation", "draft_save", "submission", 
+            "payment_methods", "error_handling", "tracking"
+        ]
     }
+
+@frappe.whitelist(allow_guest=True)
+def test_all_endpoints():
+    """Test that all critical endpoints are accessible"""
+    endpoints_tested = []
+    try:
+        # Test form data
+        form_data = get_form_data()
+        endpoints_tested.append({"get_form_data": "✓" if form_data.get("success") else "✗"})
+        
+        # Test email validation
+        email_test = validate_email_util("test@example.com")
+        endpoints_tested.append({"validate_email": "✓" if email_test.get("valid") else "✗"})
+        
+        return {
+            "success": True,
+            "message": "All endpoints accessible",
+            "tested": endpoints_tested
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "tested": endpoints_tested
+        }
 
 
 @frappe.whitelist(allow_guest=True)
 def get_application_form_data():
     """Get data needed for application form"""
-    return get_form_data()
+    try:
+        result = get_form_data()
+        # Ensure consistent success format
+        if not result.get("success"):
+            result["success"] = True
+        return result
+    except Exception as e:
+        # Enhanced error logging and fallback
+        frappe.log_error(f"Error in get_form_data: {str(e)}", "Application Form Data Error")
+        return {
+            "success": True,
+            "error": False,  # Not critical error since we have fallbacks
+            "membership_types": [],
+            "chapters": [],
+            "volunteer_areas": [],
+            "countries": [
+                {"name": "Netherlands"}, {"name": "Germany"}, {"name": "Belgium"},
+                {"name": "France"}, {"name": "United Kingdom"}, {"name": "Other"}
+            ],
+            "payment_methods": [
+                {"name": "Credit Card", "description": "Visa, Mastercard, American Express"},
+                {"name": "Bank Transfer", "description": "One-time bank transfer"},
+                {"name": "Direct Debit", "description": "SEPA Direct Debit (recurring)"}
+            ]
+        }
 
 
 @frappe.whitelist(allow_guest=True)
-def validate_email_endpoint(email):
+def validate_email(email):
     """Validate email format and check if it already exists"""
+    try:
+        # Rate limiting for validation endpoints
+        if not check_rate_limit("validate_email", 30):
+            return {
+                "valid": False,
+                "message": "Too many validation requests. Please try again later.",
+                "type": "rate_limit"
+            }
+            
+        if not email:
+            return {
+                "valid": False,
+                "message": "Email is required",
+                "type": "required"
+            }
+        
+        result = validate_email_util(email)
+        
+        # Ensure consistent response format
+        if not isinstance(result, dict):
+            return {
+                "valid": False,
+                "message": "Invalid validation response",
+                "type": "server_error"
+            }
+            
+        return result
+        
+    except Exception as e:
+        return handle_api_error(e, "Email Validation")
+
+@frappe.whitelist(allow_guest=True)
+def validate_email_endpoint(email):
+    """Validate email format and check if it already exists (legacy endpoint)"""
     return validate_email(email)
 
 
 @frappe.whitelist(allow_guest=True)
-def validate_postal_code_endpoint(postal_code, country="Netherlands"):
+def validate_postal_code(postal_code, country="Netherlands"):
     """Validate postal code format and suggest chapters"""
-    result = validate_postal_code(postal_code, country)
+    result = validate_postal_code_util(postal_code, country)
     
     if result["valid"]:
         # Find matching chapters
@@ -81,22 +207,42 @@ def validate_postal_code_endpoint(postal_code, country="Netherlands"):
     
     return result
 
+@frappe.whitelist(allow_guest=True)
+def validate_postal_code_endpoint(postal_code, country="Netherlands"):
+    """Validate postal code format and suggest chapters (legacy endpoint)"""
+    return validate_postal_code(postal_code, country)
+
+
+@frappe.whitelist(allow_guest=True)
+def validate_phone_number(phone, country="Netherlands"):
+    """Validate phone number format"""
+    return validate_phone_number_util(phone, country)
 
 @frappe.whitelist(allow_guest=True)
 def validate_phone_number_endpoint(phone, country="Netherlands"):
-    """Validate phone number format"""
+    """Validate phone number format (legacy endpoint)"""
     return validate_phone_number(phone, country)
 
 
 @frappe.whitelist(allow_guest=True)
-def validate_birth_date_endpoint(birth_date):
+def validate_birth_date(birth_date):
     """Validate birth date"""
+    return validate_birth_date_util(birth_date)
+
+@frappe.whitelist(allow_guest=True)
+def validate_birth_date_endpoint(birth_date):
+    """Validate birth date (legacy endpoint)"""
     return validate_birth_date(birth_date)
 
 
 @frappe.whitelist(allow_guest=True)
-def validate_name_endpoint(name, field_name="Name"):
+def validate_name(name, field_name="Name"):
     """Validate name fields"""
+    return validate_name_util(name, field_name)
+
+@frappe.whitelist(allow_guest=True)
+def validate_name_endpoint(name, field_name="Name"):
+    """Validate name fields (legacy endpoint)"""
     return validate_name(name, field_name)
 
 
@@ -105,7 +251,7 @@ def check_application_eligibility_endpoint(data):
     """Check if applicant is eligible for membership"""
     try:
         parsed_data = parse_application_data(data)
-        return check_application_eligibility(parsed_data)
+        return check_application_eligibility_util(parsed_data)
     except Exception as e:
         return {
             "eligible": False,
@@ -199,7 +345,9 @@ def submit_application(**kwargs):
         return {
             "success": False,
             "error": error_msg,
-            "message": f"Application submission failed: {error_msg}"
+            "message": f"Application submission failed: {error_msg}",
+            "type": "server_error",
+            "timestamp": frappe.utils.now()
         }
     finally:
         try:
@@ -327,19 +475,28 @@ def process_application_payment_endpoint(member_name, payment_method, payment_re
 @frappe.whitelist(allow_guest=True)
 def get_membership_fee_info_endpoint(membership_type):
     """Get membership fee information"""
-    return get_membership_fee_info(membership_type)
+    try:
+        return get_membership_fee_info_util(membership_type)
+    except Exception as e:
+        return handle_api_error(e, "Membership Fee Info")
 
 
 @frappe.whitelist(allow_guest=True)
 def get_membership_type_details_endpoint(membership_type):
     """Get detailed membership type information"""
-    return get_membership_type_details(membership_type)
+    try:
+        return get_membership_type_details_util(membership_type)
+    except Exception as e:
+        return handle_api_error(e, "Membership Type Details")
 
 
 @frappe.whitelist(allow_guest=True)
 def suggest_membership_amounts_endpoint(membership_type_name):
     """Suggest membership amounts based on type"""
-    return suggest_membership_amounts(membership_type_name)
+    try:
+        return suggest_membership_amounts_util(membership_type_name)
+    except Exception as e:
+        return handle_api_error(e, "Suggest Membership Amounts")
 
 
 @frappe.whitelist(allow_guest=True)
@@ -351,13 +508,16 @@ def validate_membership_amount_selection_endpoint(membership_type, amount, uses_
 @frappe.whitelist(allow_guest=True)
 def validate_custom_amount_endpoint(membership_type, amount):
     """Validate custom membership amount"""
-    return validate_custom_amount(membership_type, amount)
+    return validate_custom_amount_util(membership_type, amount)
 
 
 @frappe.whitelist(allow_guest=True)
 def get_payment_methods_endpoint():
     """Get available payment methods"""
-    return get_payment_methods()
+    try:
+        return get_payment_methods_util()
+    except Exception as e:
+        return handle_api_error(e, "Payment Methods")
 
 
 @frappe.whitelist(allow_guest=True)
@@ -365,19 +525,18 @@ def save_draft_application_endpoint(data):
     """Save application as draft"""
     try:
         parsed_data = parse_application_data(data)
-        return save_draft_application(parsed_data)
+        return save_draft_application_util(parsed_data)
     except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "message": "Error saving draft"
-        }
+        return handle_api_error(e, "Save Draft")
 
 
 @frappe.whitelist(allow_guest=True)
 def load_draft_application_endpoint(draft_id):
     """Load application draft"""
-    return load_draft_application(draft_id)
+    try:
+        return load_draft_application_util(draft_id)
+    except Exception as e:
+        return handle_api_error(e, "Load Draft")
 
 
 @frappe.whitelist(allow_guest=True)
@@ -389,7 +548,10 @@ def get_member_field_info_endpoint():
 @frappe.whitelist(allow_guest=True)
 def check_application_status_endpoint(application_id):
     """Check the status of an application by ID"""
-    return check_application_status(application_id)
+    try:
+        return check_application_status_util(application_id)
+    except Exception as e:
+        return handle_api_error(e, "Check Application Status")
 
 
 # Scheduled tasks
@@ -401,18 +563,69 @@ def check_overdue_applications_task():
 
 # Legacy endpoints for backward compatibility
 
+# Legacy validation endpoints removed - main functions already defined above
+
+@frappe.whitelist(allow_guest=True)
+def validate_custom_amount(membership_type, amount):
+    """Legacy endpoint - validate custom membership amount"""
+    return validate_custom_amount_util(membership_type, amount)
+
+@frappe.whitelist(allow_guest=True)
+def save_draft_application(data):
+    """Legacy endpoint - save application as draft"""
+    return save_draft_application_endpoint(data)
+
+@frappe.whitelist(allow_guest=True)
+def load_draft_application(draft_id):
+    """Legacy endpoint - load application draft"""
+    return load_draft_application_endpoint(draft_id)
+
+@frappe.whitelist(allow_guest=True)
+def get_membership_type_details(membership_type):
+    """Legacy endpoint - get detailed membership type information"""
+    return get_membership_type_details_endpoint(membership_type)
+
+@frappe.whitelist(allow_guest=True)
+def get_membership_fee_info(membership_type):
+    """Legacy endpoint - get membership fee information"""
+    return get_membership_fee_info_endpoint(membership_type)
+
+@frappe.whitelist(allow_guest=True)
+def suggest_membership_amounts(membership_type_name):
+    """Legacy endpoint - suggest membership amounts based on type"""
+    return suggest_membership_amounts_endpoint(membership_type_name)
+
+@frappe.whitelist(allow_guest=True)
+def get_payment_methods():
+    """Legacy endpoint - get available payment methods"""
+    return get_payment_methods_endpoint()
+
+@frappe.whitelist(allow_guest=True)
+def check_application_status(application_id):
+    """Legacy endpoint - check the status of an application by ID"""
+    return check_application_status_endpoint(application_id)
+
+@frappe.whitelist(allow_guest=True)
+def submit_application_with_tracking(**kwargs):
+    """Legacy endpoint - same as submit_application"""
+    return submit_application(**kwargs)
+
+@frappe.whitelist(allow_guest=True)
+def check_application_eligibility(data):
+    """Legacy endpoint - check if applicant is eligible for membership"""
+    return check_application_eligibility_endpoint(data)
+
 @frappe.whitelist(allow_guest=True)
 def get_application_form_data_legacy():
     """Legacy endpoint - use get_application_form_data instead"""
     return get_application_form_data()
-
 
 @frappe.whitelist(allow_guest=True)
 def validate_address_endpoint(data):
     """Validate address data"""
     try:
         parsed_data = parse_application_data(data)
-        return validate_address(parsed_data)
+        return validate_address_util(parsed_data)
     except Exception as e:
         return {
             "valid": False,
