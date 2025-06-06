@@ -419,3 +419,9 @@ def execute_safe_member_termination(member, termination_type, termination_date=N
     """Public API to execute termination using safe methods"""
     from verenigingen.api.termination_api import execute_safe_termination
     return execute_safe_termination(member, termination_type, termination_date)
+
+@frappe.whitelist()
+def get_member_termination_status(member):
+    """Get termination status for a member - redirect to member_utils"""
+    from verenigingen.verenigingen.doctype.member.member_utils import get_member_termination_status
+    return get_member_termination_status(member)

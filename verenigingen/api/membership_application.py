@@ -195,7 +195,7 @@ def validate_postal_code(postal_code, country="Netherlands"):
         # Find matching chapters
         suggested_chapters = []
         try:
-            from verenigingen.verenigingen.doctype.member.member import find_chapter_by_postal_code
+            from verenigingen.verenigingen.doctype.member.member_utils import find_chapter_by_postal_code
             chapter_result = find_chapter_by_postal_code(postal_code)
             
             if chapter_result.get("success") and chapter_result.get("matching_chapters"):
@@ -264,83 +264,90 @@ def check_application_eligibility_endpoint(data):
 def submit_application(**kwargs):
     """Process membership application submission - Main entry point"""
     try:
-        with frappe.init_site(frappe.local.site):
-            frappe.set_user("Administrator")
-            
-            # Parse and validate data
-            data = parse_application_data(kwargs.get('data', kwargs))
-            
-            # Validate required fields
-            required_fields = ["first_name", "last_name", "email", "birth_date", 
-                              "address_line1", "city", "postal_code", "country"]
-            
-            validation_result = validate_required_fields(data, required_fields)
-            if not validation_result["valid"]:
-                return {
-                    "success": False,
-                    "error": f"Missing required fields: {', '.join(validation_result['missing_fields'])}",
-                    "message": f"Missing required fields: {', '.join(validation_result['missing_fields'])}"
-                }
-            
-            # Check eligibility
-            eligibility = check_application_eligibility(data)
-            if not eligibility["eligible"]:
-                return {
-                    "success": False,
-                    "error": "Application not eligible",
-                    "message": "; ".join(eligibility["issues"]),
-                    "issues": eligibility["issues"]
-                }
-            
-            # Check if member with email already exists
-            existing = frappe.db.exists("Member", {"email": data.get("email")})
-            if existing:
-                return {
-                    "success": False,
-                    "error": "A member with this email already exists",
-                    "message": "A member with this email already exists. Please login or contact support."
-                }
-            
-            # Generate application ID
-            application_id = generate_application_id()
-            
-            # Create address
-            address = create_address_from_application(data)
-            
-            # Create member
-            member = create_member_from_application(data, application_id, address)
-            
-            # Determine suggested chapter
-            suggested_chapter = determine_chapter_from_application(data)
-            if suggested_chapter:
-                member.suggested_chapter = suggested_chapter
-                member.save()
-            
-            # Create volunteer record if interested
-            if data.get("interested_in_volunteering"):
-                create_volunteer_record(member)
-            
-            frappe.db.commit()
-            
-            # Send notifications
-            try:
-                send_application_confirmation_email(member, application_id)
-                notify_reviewers_of_new_application(member, application_id)
-            except Exception as e:
-                frappe.log_error(f"Error sending notifications: {str(e)}", "Notification Error")
-            
+        # Parse and validate data
+        data = parse_application_data(kwargs.get('data', kwargs))
+        
+        # Validate required fields
+        required_fields = ["first_name", "last_name", "email", "birth_date", 
+                          "address_line1", "city", "postal_code", "country"]
+        
+        validation_result = validate_required_fields(data, required_fields)
+        if not validation_result["valid"]:
             return {
-                "success": True,
-                "message": "Application submitted successfully! You will receive an email with your application ID.",
-                "application_id": application_id,
-                "member_id": member.name,
-                "status": "pending_review"
+                "success": False,
+                "error": f"Missing required fields: {', '.join(validation_result['missing_fields'])}",
+                "message": f"Missing required fields: {', '.join(validation_result['missing_fields'])}"
             }
-            
+        
+        # Check eligibility
+        eligibility = check_application_eligibility_util(data)
+        if not eligibility["eligible"]:
+            return {
+                "success": False,
+                "error": "Application not eligible", 
+                "message": f"Validation failed: {'; '.join(eligibility['issues'])}",
+                "issues": eligibility["issues"],
+                "warnings": eligibility.get("warnings", [])
+            }
+        
+        # Check if member with email already exists
+        existing = frappe.db.exists("Member", {"email": data.get("email")})
+        if existing:
+            return {
+                "success": False,
+                "error": "A member with this email already exists",
+                "message": "A member with this email already exists. Please login or contact support."
+            }
+        
+        # Generate application ID
+        application_id = generate_application_id()
+        
+        # Create address
+        address = create_address_from_application(data)
+        
+        # Create member
+        member = create_member_from_application(data, application_id, address)
+        
+        # Determine suggested chapter
+        suggested_chapter = determine_chapter_from_application(data)
+        if suggested_chapter:
+            member.suggested_chapter = suggested_chapter
+            member.save()
+        
+        # Create volunteer record if interested
+        if data.get("interested_in_volunteering"):
+            create_volunteer_record(member)
+        
+        frappe.db.commit()
+        
+        # Send notifications
+        try:
+            send_application_confirmation_email(member, application_id)
+            notify_reviewers_of_new_application(member, application_id)
+        except Exception as e:
+            frappe.log_error(f"Error sending notifications: {str(e)}", "Notification Error")
+        
+        return {
+            "success": True,
+            "message": "Application submitted successfully! You will receive an email with your application ID.",
+            "application_id": application_id,
+            "member_id": member.name,
+            "status": "pending_review"
+        }
+        
     except Exception as e:
         frappe.db.rollback()
+        
+        # Get full error details
+        import traceback
         error_msg = str(e)
-        frappe.log_error(f"Error in submit_application: {error_msg}", "Application Submission Error")
+        full_traceback = traceback.format_exc()
+        
+        frappe.log_error(f"Error in submit_application: {error_msg}\n\nFull traceback:\n{full_traceback}", "Application Submission Error")
+        
+        # Also print to console for immediate debugging
+        print(f"🚨 Application submission error: {error_msg}")
+        print(f"📍 Full traceback:\n{full_traceback}")
         
         return {
             "success": False,
@@ -349,11 +356,6 @@ def submit_application(**kwargs):
             "type": "server_error",
             "timestamp": frappe.utils.now()
         }
-    finally:
-        try:
-            frappe.set_user("Guest")
-        except:
-            pass
 
 
 @frappe.whitelist()
@@ -560,6 +562,22 @@ def check_overdue_applications_task():
     """Scheduled task to check for overdue applications"""
     check_overdue_applications()
 
+
+# Test endpoint
+@frappe.whitelist(allow_guest=True)
+def test_submit():
+    """Simple test submission function"""
+    try:
+        return {
+            "success": True,
+            "message": "Test submission working",
+            "timestamp": frappe.utils.now()
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 # Legacy endpoints for backward compatibility
 

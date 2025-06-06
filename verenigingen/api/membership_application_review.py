@@ -52,13 +52,23 @@ def approve_membership_application(member_name, membership_type=None, chapter=No
         "status": "Draft",  # Will be activated after payment
         "auto_renew": 1
     })
+    
+    # Handle custom amount if member selected one during application
+    from verenigingen.utils.application_helpers import get_member_custom_amount_data
+    custom_amount_data = get_member_custom_amount_data(member)
+    
+    if custom_amount_data and custom_amount_data.get("uses_custom_amount"):
+        membership.uses_custom_amount = 1
+        if custom_amount_data.get("membership_amount"):
+            membership.custom_amount = custom_amount_data.get("membership_amount")
+    
     membership.insert()
     
     # Get membership type details
     membership_type_doc = frappe.get_doc("Membership Type", membership_type)
     
     # Create invoice
-    from vereiningen.api.payment_processing import create_application_invoice, get_or_create_customer
+    from verenigingen.api.payment_processing import create_application_invoice, get_or_create_customer
     customer = get_or_create_customer(member)
     invoice = create_application_invoice(member, membership)
     

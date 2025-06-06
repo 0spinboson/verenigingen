@@ -225,17 +225,14 @@ function create_organization_user(frm) {
 }
 
 function setup_member_id_display(frm) {
-    // Update member ID display
-    frm.set_df_property('member_id', 'read_only', 1);
-    
+    // Update member ID display - just set read-only, skip styling to avoid errors
     if (frm.doc.member_id) {
-        frm.fields_dict.member_id.wrapper.find('input').css({
-            'font-weight': 'bold',
-            'font-family': 'monospace',
-            'background-color': '#f8f9fa',
-            'border': '1px solid #28a745',
-            'color': '#28a745'
-        });
+        try {
+            frm.set_df_property('member_id', 'read_only', 1);
+            console.debug('Member ID set to read-only');
+        } catch (e) {
+            console.debug('Failed to set member_id read-only:', e);
+        }
     }
 }
 

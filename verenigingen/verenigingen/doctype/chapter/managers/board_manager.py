@@ -1,6 +1,6 @@
 # verenigingen/verenigingen/doctype/chapter/managers/boardmanager.py
 import frappe
-from frappe import 
+from frappe import _
 from frappe.utils import getdate, today, add_days
 from typing import Dict, List, Optional, Any, Tuple
 import json
@@ -40,8 +40,8 @@ class BoardManager(BaseManager):
             volunteer_doc = frappe.get_doc("Volunteer", volunteer)
             member_doc = frappe.get_doc("Member", volunteer_doc.member) if volunteer_doc.member else None
 
-            if not memberdoc:
-                frappe.throw(("Volunteer {0} does not have an associated member").format(volunteer_doc.volunteer_name))
+            if not member_doc:
+                frappe.throw(_("Volunteer {0} does not have an associated member").format(volunteer_doc.volunteer_name))
 
             # Handle unique role constraints
             self._handle_unique_role_assignment(role, from_date)
@@ -64,12 +64,12 @@ class BoardManager(BaseManager):
             self.chapter_doc.save()
 
             # Add to volunteer assignment history
-            self._add_volunteer_assignment_history(volunteer, role, from_date)
+            self.addvolunteer_assignment_history(volunteer, role, from_date)
 
             # Create audit comment
-            self.createcomment(
+            self.create_comment(
                 "Info",
-                ("Added {0} as {1} starting {2}").format(
+                _("Added {0} as {1} starting {2}").format(
                     volunteer_doc.volunteer_name, role, from_date
                 )
             )
@@ -90,8 +90,8 @@ class BoardManager(BaseManager):
 
             return {
                 "success": True,
-                "board_member": boardmember,
-                "message": ("Board member added successfully")
+                "board_member": board_member,
+                "message": _("Board member added successfully")
             }
 
         except Exception as e:
@@ -152,7 +152,7 @@ class BoardManager(BaseManager):
             self.chapter_doc.save()
 
             # Update volunteer assignment history
-            self._update_volunteer_assignment_history(
+            self.updatevolunteer_assignment_history(
                 board_member_data['volunteer'],
                 board_member_data['chapter_role'],
                 board_member_data['from_date'],
@@ -160,7 +160,7 @@ class BoardManager(BaseManager):
             )
 
             # Create audit comment
-            self.createcomment(
+            self.create_comment(
                 "Info",
                 ("Removed {0} from {1} role on {2}").format(
                     board_member_data['volunteer_name'],
@@ -237,7 +237,7 @@ class BoardManager(BaseManager):
             result = self.add_board_member(volunteer, new_role, transition_date, notify=False)
 
             # Create audit comment for transition
-            self.createcomment(
+            self.create_comment(
                 "Info",
                 ("Role transition: {0} changed from {1} to {2} on {3}").format(
                     volunteer_name, current_role, new_role, transition_date
@@ -330,7 +330,7 @@ class BoardManager(BaseManager):
                             processed_count += 1
 
                             # Update volunteer assignment history
-                            self._update_volunteer_assignment_history(
+                            self.updatevolunteer_assignment_history(
                                 history_data['volunteer'],
                                 history_data['chapter_role'],
                                 history_data['from_date'],
@@ -338,7 +338,7 @@ class BoardManager(BaseManager):
                             )
 
                             # Create audit comment
-                            self.createcomment(
+                            self.create_comment(
                                 "Info",
                                 ("Bulk removal: {0} removed from {1} role").format(
                                     history_data['volunteer_name'],
@@ -440,7 +440,7 @@ class BoardManager(BaseManager):
                             processed_count += 1
 
                             # Update volunteer assignment history
-                            self._update_volunteer_assignment_history(
+                            self.updatevolunteer_assignment_history(
                                 board_member.volunteer,
                                 board_member.chapter_role,
                                 board_member.from_date,
@@ -448,7 +448,7 @@ class BoardManager(BaseManager):
                             )
 
                             # Create audit comment
-                            self.createcomment(
+                            self.create_comment(
                                 "Info",
                                 ("Bulk deactivation: {0} deactivated from {1} role").format(
                                     board_member.volunteer_name,
@@ -701,7 +701,7 @@ class BoardManager(BaseManager):
                     board_member.to_date = today()
 
                 # Update volunteer assignment history
-                self._update_volunteer_assignment_history(
+                self.updatevolunteer_assignment_history(
                     board_member.volunteer,
                     board_member.chapter_role,
                     board_member.from_date,
@@ -719,7 +719,7 @@ class BoardManager(BaseManager):
             # For new chapters, add all active board members to history
             for board_member in self.chapter_doc.board_members or []:
                 if board_member.is_active and board_member.volunteer:
-                    self._add_volunteer_assignment_history(
+                    self.addvolunteer_assignment_history(
                         board_member.volunteer,
                         board_member.chapter_role,
                         board_member.from_date
@@ -735,7 +735,7 @@ class BoardManager(BaseManager):
                 board_member.volunteer and 
                 board_member.volunteer not in old_board_member_volunteers):
 
-                self._add_volunteer_assignment_history(
+                self.addvolunteer_assignment_history(
                     board_member.volunteer,
                     board_member.chapter_role,
                     board_member.from_date

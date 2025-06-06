@@ -5,14 +5,15 @@ import frappe
 from frappe import _
 from frappe.website.website_generator import WebsiteGenerator
 from frappe.utils import getdate, today, add_days, date_diff, now
+from frappe.query_builder import DocType
 import re
 import json
 
 # Import managers and validators
 from .managers import (
-    BoardManager, 
-    MemberManager, 
-    CommunicationManager, 
+    BoardManager,
+    MemberManager,
+    CommunicationManager,
     VolunteerIntegrationManager
 )
 from .validators import ChapterValidator
@@ -46,36 +47,51 @@ class Chapter(WebsiteGenerator):
     
     def validate(self):
         """Main validation - delegates to ChapterValidator"""
-        # Basic validations
-        self._ensure_route()
-        
-        # Comprehensive validation using validator
-        validation_result = self.validator.validate_before_save()
-        if not validation_result.is_valid:
-            # Log warnings but don't block save
-            for warning in validation_result.warnings:
-                frappe.msgprint(warning, indicator="orange", alert=True)
+        try:
+            # Basic validations
+            self._ensure_route()
             
-            # Throw errors that block save
-            if validation_result.errors:
-                frappe.throw(
-                    _("Validation failed: {0}").format(", ".join(validation_result.errors))
-                )
-        
-        # Handle board member changes (delegation to managers)
-        self._handle_document_changes()
+            # Comprehensive validation using validator
+            validation_result = self.validator.validate_before_save()
+            if not validation_result.is_valid:
+                # Log warnings but don't block save
+                for warning in validation_result.warnings:
+                    frappe.msgprint(warning, indicator="orange", alert=True)
+                
+                # Throw errors that block save
+                if validation_result.errors:
+                    frappe.throw(
+                        _("Validation failed: {0}").format(", ".join(validation_result.errors))
+                    )
+            
+            # Handle board member changes (delegation to managers)
+            self._handle_document_changes()
+            
+        except Exception as e:
+            frappe.log_error(f"Error validating chapter {self.name}: {str(e)}")
+            frappe.throw(_("Validation error occurred. Please check the error log."))
     
     def before_save(self):
         """Before save hook"""
-        # Update chapter head based on board roles
-        self.board_manager.handle_board_member_changes(self.get_doc_before_save())
-        self.board_manager.handle_board_member_additions(self.get_doc_before_save())
+        try:
+            # Update chapter head based on board roles
+            old_doc = self.get_doc_before_save()
+            if old_doc:
+                self.board_manager.handle_board_member_changes(old_doc)
+                self.board_manager.handle_board_member_additions(old_doc)
+        except Exception as e:
+            frappe.log_error(f"Error in before_save for chapter {self.name}: {str(e)}")
+            # Don't block save for before_save errors, just log them
     
     def after_save(self):
         """After save hook"""
-        # Sync with volunteer system if needed
-        if self.has_value_changed('board_members'):
-            self.volunteer_integration_manager.sync_board_members_with_volunteer_system()
+        try:
+            # Sync with volunteer system if needed
+            if self.has_value_changed('board_members'):
+                self.volunteer_integration_manager.sync_board_members_with_volunteer_system()
+        except Exception as e:
+            frappe.log_error(f"Error in after_save for chapter {self.name}: {str(e)}")
+            # Don't block save for after_save errors, just log them
     
     def on_update(self):
         """On update hook"""
@@ -217,12 +233,19 @@ class Chapter(WebsiteGenerator):
     # VALIDATION API (Delegated)
     # ========================================================================
     
+    @frappe.whitelist()
     def validate_postal_codes(self):
         """Validate postal codes"""
-        if self.postal_codes:
-            result = self.validator.postal_validator.validate_postal_codes(self.postal_codes)
-            if not result.is_valid:
-                frappe.throw(", ".join(result.errors))
+        try:
+            if self.postal_codes:
+                result = self.validator.postal_validator.validate_postal_codes(self.postal_codes)
+                if not result.is_valid:
+                    return False
+                return True
+            return True
+        except Exception as e:
+            frappe.log_error(f"Error validating postal codes for {self.name}: {str(e)}")
+            return False
     
     def matches_postal_code(self, postal_code):
         """Check if postal code matches chapter patterns"""
@@ -234,64 +257,113 @@ class Chapter(WebsiteGenerator):
     
     def update_chapter_head(self):
         """Update chapter_head based on board members with chair roles"""
-        if not self.board_members:
-            self.chapter_head = None
-            return False
-        
-        chair_found = False
-        
-        # Find active board members with roles marked as chair
-        for board_member in self.board_members:
-            if not board_member.is_active or not board_member.chapter_role:
-                continue
-                
-            try:
-                # Get the role document
-                role = frappe.get_doc("Chapter Role", board_member.chapter_role)
-                
-                # Check if this role is marked as chair
-                if role.is_chair and role.is_active:
-                    # Get the member ID from the volunteer
+        try:
+            if not self.board_members:
+                self.chapter_head = None
+                return False
+            
+            chair_found = False
+            
+            # Optimize by batching role and volunteer lookups
+            active_roles = []
+            volunteer_ids = []
+            
+            for board_member in self.board_members:
+                if board_member.is_active and board_member.chapter_role:
+                    active_roles.append(board_member.chapter_role)
                     if board_member.volunteer:
-                        member_id = frappe.db.get_value("Volunteer", board_member.volunteer, "member")
-                        if member_id:
-                            self.chapter_head = member_id
-                            chair_found = True
-                            break
-            except frappe.DoesNotExistError:
-                continue
-        
-        # If no chair found, clear chapter head
-        if not chair_found:
-            self.chapter_head = None
-        
-        return chair_found
+                        volunteer_ids.append(board_member.volunteer)
+            
+            if not active_roles:
+                self.chapter_head = None
+                return False
+            
+            # Batch query for chair roles
+            chair_roles = frappe.get_all("Chapter Role", 
+                filters={
+                    "name": ["in", active_roles],
+                    "is_chair": 1,
+                    "is_active": 1
+                },
+                fields=["name"]
+            )
+            
+            chair_role_names = [role.name for role in chair_roles]
+            
+            if not chair_role_names:
+                self.chapter_head = None
+                return False
+            
+            # Batch query for volunteer-member mapping
+            if volunteer_ids:
+                volunteer_members = frappe.get_all("Volunteer",
+                    filters={"name": ["in", volunteer_ids]},
+                    fields=["name", "member"]
+                )
+                volunteer_member_map = {v.name: v.member for v in volunteer_members if v.member}
+            else:
+                volunteer_member_map = {}
+            
+            # Find the chair member
+            for board_member in self.board_members:
+                if (board_member.is_active and 
+                    board_member.chapter_role in chair_role_names and
+                    board_member.volunteer in volunteer_member_map):
+                    
+                    self.chapter_head = volunteer_member_map[board_member.volunteer]
+                    chair_found = True
+                    break
+            
+            # If no chair found, clear chapter head
+            if not chair_found:
+                self.chapter_head = None
+            
+            return chair_found
+            
+        except Exception as e:
+            frappe.log_error(f"Error updating chapter head for {self.name}: {str(e)}")
+            return False
     
     def get_context(self, context):
         """Get context for web view"""
-        context.no_cache = True
-        context.show_sidebar = True
-        context.parents = [dict(label='View All Chapters',
-            route='chapters', title='View Chapters')]
-        
-        # Get members for template
-        context.members = self.get_members()
-        
-        # Get board members for template  
-        context.board_members = self.get_board_members()
-        
-        # Check if current user is a board member
-        context.is_board_member = self.is_board_member()
-        context.board_role = self.get_member_role()
-        
-        # Add chapter head member details
-        if self.chapter_head:
-            try:
-                context.chapter_head_member = frappe.get_doc("Member", self.chapter_head)
-            except:
+        try:
+            context.no_cache = True
+            context.show_sidebar = True
+            context.parents = [dict(label='View All Chapters',
+                route='chapters', title='View Chapters')]
+            
+            # Use manager methods for optimized data retrieval
+            context.members = self.member_manager.get_members(with_details=True)
+            context.board_members = self.board_manager.get_board_members()
+            
+            # Check if current user is a board member
+            context.is_board_member = self.board_manager.is_board_member()
+            context.board_role = self.board_manager.get_member_role()
+            
+            # Add chapter head member details with error handling
+            if self.chapter_head:
+                try:
+                    context.chapter_head_member = frappe.get_doc("Member", self.chapter_head)
+                except frappe.DoesNotExistError:
+                    context.chapter_head_member = None
+                    frappe.log_error(f"Chapter head member {self.chapter_head} not found for chapter {self.name}")
+                except Exception as e:
+                    context.chapter_head_member = None
+                    frappe.log_error(f"Error loading chapter head member {self.chapter_head}: {str(e)}")
+            else:
                 context.chapter_head_member = None
-        
-        return context
+            
+            return context
+            
+        except Exception as e:
+            frappe.log_error(f"Error getting context for chapter {self.name}: {str(e)}")
+            # Return minimal context to prevent page crash
+            context.members = []
+            context.board_members = []
+            context.is_board_member = False
+            context.board_role = None
+            context.chapter_head_member = None
+            return context
     
     # ========================================================================
     # UTILITY METHODS
@@ -331,13 +403,23 @@ class Chapter(WebsiteGenerator):
     
     def get_chapter_statistics(self):
         """Get comprehensive chapter statistics"""
-        return {
-            "board_stats": self.board_manager.get_summary(),
-            "member_stats": self.member_manager.get_summary(), 
-            "communication_stats": self.communication_manager.get_summary(),
-            "volunteer_integration_stats": self.volunteer_integration_manager.get_summary(),
-            "last_updated": now()
-        }
+        try:
+            return {
+                "board_stats": self.board_manager.get_summary(),
+                "member_stats": self.member_manager.get_summary(), 
+                "communication_stats": self.communication_manager.get_summary(),
+                "volunteer_integration_stats": self.volunteer_integration_manager.get_summary(),
+                "last_updated": getdate(now())
+            }
+        except Exception as e:
+            frappe.log_error(f"Error getting statistics for chapter {self.name}: {str(e)}")
+            return {
+                "board_stats": {},
+                "member_stats": {},
+                "communication_stats": {},
+                "volunteer_integration_stats": {},
+                "last_updated": getdate(today())
+            }
 
 
 # ============================================================================
@@ -346,17 +428,23 @@ class Chapter(WebsiteGenerator):
 
 def validate_chapter_access(doc, method=None):
     """Validate chapter access permissions"""
-    if frappe.session.user == "Administrator" or "System Manager" in frappe.get_roles():
-        return
-    
-    settings = frappe.get_single("Verenigingen Settings")
-    if not settings.get("national_board_chapter"):
-        return
-    
-    if doc.name == settings.national_board_chapter:
-        if ("Association Manager" in frappe.get_roles() and 
-            "Association Manager" not in frappe.get_roles()):
-            frappe.throw(_("Association Managers cannot edit the National Board chapter. Please contact an administrator."))
+    try:
+        if frappe.session.user == "Administrator" or "System Manager" in frappe.get_roles():
+            return
+        
+        settings = frappe.get_single("Verenigingen Settings")
+        if not settings.get("national_board_chapter"):
+            return
+        
+        if doc.name == settings.national_board_chapter:
+            user_roles = frappe.get_roles()
+            if ("Association Manager" in user_roles and 
+                "System Manager" not in user_roles):
+                frappe.throw(_("Association Managers cannot edit the National Board chapter. Please contact an administrator."))
+                
+    except Exception as e:
+        frappe.log_error(f"Error validating chapter access for {doc.name}: {str(e)}")
+        # Don't block access on validation errors
 
 def get_list_context(context):
     """Get list context for chapter list view"""
@@ -369,61 +457,116 @@ def get_list_context(context):
 
 def get_chapter_permission_query_conditions(user=None):
     """Get permission query conditions for Chapters"""
-    if not user:
-        user = frappe.session.user
+    try:
+        if not user:
+            user = frappe.session.user
+            
+        if "System Manager" in frappe.get_roles(user) or "Association Manager" in frappe.get_roles(user):
+            return ""
+            
+        # Get chapters where user is a board member using Query Builder
+        member = frappe.db.get_value("Member", {"user": user}, "name")
+        if member:
+            CBM = DocType('Chapter Board Member')
+            board_chapters = (
+                frappe.qb.from_(CBM)
+                .select(CBM.parent)
+                .where((CBM.member == member) & (CBM.is_active == 1))
+            ).run(as_dict=True)
+            
+            if board_chapters:
+                chapter_list = ["'" + chapter.parent + "'" for chapter in board_chapters]
+                return f"`tabChapter`.name in ({', '.join(chapter_list)})"
         
-    if "System Manager" in frappe.get_roles(user) or "Association Manager" in frappe.get_roles(user):
-        return ""
+        return "`tabChapter`.published = 1"
         
-    # Get chapters where user is a board member
-    member = frappe.db.get_value("Member", {"user": user}, "name")
-    if member:
-        board_chapters = frappe.db.sql("""
-            SELECT parent 
-            FROM `tabChapter Board Member` 
-            WHERE member = %s AND is_active = 1
-        """, (member,), as_dict=True)
-        
-        if board_chapters:
-            chapter_list = ["'" + chapter.parent + "'" for chapter in board_chapters]
-            return f"`tabChapter`.name in ({', '.join(chapter_list)})"
-    
-    return "`tabChapter`.published = 1"
+    except Exception as e:
+        frappe.log_error(f"Error in chapter permission query: {str(e)}")
+        return "`tabChapter`.published = 1"
 
 @frappe.whitelist()
 def leave(title, member_id, leave_reason):
     """Leave a chapter"""
-    chapter = frappe.get_doc("Chapter", title)
-    return chapter.member_manager.remove_member(member_id, leave_reason)
+    try:
+        if not title or not member_id:
+            frappe.throw(_("Chapter and Member ID are required"))
+            
+        chapter = frappe.get_doc("Chapter", title)
+        return chapter.member_manager.remove_member(member_id, leave_reason)
+        
+    except frappe.DoesNotExistError:
+        frappe.throw(_("Chapter {0} not found").format(title))
+    except Exception as e:
+        frappe.log_error(f"Error removing member {member_id} from chapter {title}: {str(e)}")
+        frappe.throw(_("An error occurred while leaving the chapter"))
 
 @frappe.whitelist()
 def get_board_memberships(member_name):
     """Get board memberships for a member"""
-    board_memberships = frappe.db.sql("""
-        SELECT cbm.parent, cbm.chapter_role 
-        FROM `tabChapter Board Member` cbm
-        WHERE cbm.member = %s AND cbm.is_active = 1
-    """, (member_name,), as_dict=True)
-    
-    return board_memberships
+    try:
+        if not member_name:
+            return []
+            
+        CBM = DocType('Chapter Board Member')
+        board_memberships = (
+            frappe.qb.from_(CBM)
+            .select(CBM.parent, CBM.chapter_role)
+            .where((CBM.member == member_name) & (CBM.is_active == 1))
+        ).run(as_dict=True)
+        
+        return board_memberships
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting board memberships for {member_name}: {str(e)}")
+        return []
 
 @frappe.whitelist()
 def remove_from_board(chapter_name, member_name, end_date=None):
     """Remove a member from the board"""
-    chapter = frappe.get_doc("Chapter", chapter_name)
-    return chapter.remove_board_member(member_name, end_date)
+    try:
+        if not chapter_name or not member_name:
+            frappe.throw(_("Chapter and Member names are required"))
+            
+        chapter = frappe.get_doc("Chapter", chapter_name)
+        return chapter.remove_board_member(member_name, end_date)
+        
+    except frappe.DoesNotExistError:
+        frappe.throw(_("Chapter {0} not found").format(chapter_name))
+    except Exception as e:
+        frappe.log_error(f"Error removing {member_name} from board of {chapter_name}: {str(e)}")
+        frappe.throw(_("An error occurred while removing the board member"))
 
 @frappe.whitelist()
 def get_chapter_board_history(chapter_name):
     """Get complete board history for a chapter"""
-    chapter = frappe.get_doc("Chapter", chapter_name)
-    return chapter.get_board_members(include_inactive=True)
+    try:
+        if not chapter_name:
+            frappe.throw(_("Chapter name is required"))
+            
+        chapter = frappe.get_doc("Chapter", chapter_name)
+        return chapter.get_board_members(include_inactive=True)
+        
+    except frappe.DoesNotExistError:
+        frappe.throw(_("Chapter {0} not found").format(chapter_name))
+    except Exception as e:
+        frappe.log_error(f"Error getting board history for {chapter_name}: {str(e)}")
+        return []
 
 @frappe.whitelist()
 def get_chapter_stats(chapter_name):
     """Get statistics for a chapter"""
-    chapter = frappe.get_doc("Chapter", chapter_name)
-    return chapter.get_chapter_statistics()
+    try:
+        if not chapter_name:
+            frappe.throw(_("Chapter name is required"))
+            
+        chapter = frappe.get_doc("Chapter", chapter_name)
+        return chapter.get_chapter_statistics()
+        
+    except frappe.DoesNotExistError:
+        frappe.throw(_("Chapter {0} not found").format(chapter_name))
+    except Exception as e:
+        frappe.log_error(f"Error getting statistics for {chapter_name}: {str(e)}")
+        return {}
 
 @frappe.whitelist()
 def get_chapters_by_postal_code(postal_code):

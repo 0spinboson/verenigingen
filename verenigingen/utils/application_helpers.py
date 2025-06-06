@@ -183,6 +183,35 @@ def create_member_from_application(data, application_id, address=None):
         "primary_chapter": data.get("selected_chapter", "")
     })
     
+    # Handle custom membership amount by storing in notes
+    if data.get("membership_amount") or data.get("uses_custom_amount"):
+        try:
+            
+            # Safely convert membership_amount to float
+            membership_amount = 0
+            if data.get("membership_amount"):
+                try:
+                    membership_amount = float(data.get("membership_amount"))
+                except (ValueError, TypeError):
+                    membership_amount = 0
+            
+            custom_amount_data = {
+                "membership_amount": membership_amount,
+                "uses_custom_amount": bool(data.get("uses_custom_amount", False))
+            }
+            
+            # Only store if there's actually custom amount data
+            if membership_amount > 0 or custom_amount_data["uses_custom_amount"]:
+                existing_notes = member.notes or ""
+                if existing_notes:
+                    existing_notes += "\n\n"
+                
+                member.notes = existing_notes + f"Custom Amount Data: {json.dumps(custom_amount_data)}"
+        except Exception as e:
+            # Log the error for debugging but don't fail the submission
+            frappe.log_error(f"Error storing custom amount data: {str(e)}", "Custom Amount Storage Error")
+            pass
+    
     member.flags.ignore_permissions = True
     member.insert(ignore_permissions=True)
     return member
@@ -265,7 +294,10 @@ def get_membership_type_details(membership_type):
             "amount": membership_type_doc.amount,
             "currency": membership_type_doc.currency or "EUR",
             "subscription_period": membership_type_doc.subscription_period,
-            "allows_custom_amount": getattr(membership_type_doc, 'allows_custom_amount', False),
+            "allow_custom_amount": True,  # Enable custom amounts for all membership types
+            "minimum_amount": membership_type_doc.amount * 0.5,  # 50% of standard amount
+            "maximum_amount": membership_type_doc.amount * 5,    # 5x standard amount
+            "custom_amount_note": "You can adjust your contribution amount. Minimum is 50% of standard fee.",
             "suggested_amounts": suggested_amounts
         }
         
@@ -275,6 +307,29 @@ def get_membership_type_details(membership_type):
             "error": str(e),
             "message": "Error retrieving membership type details"
         }
+
+
+def get_member_custom_amount_data(member):
+    """Extract custom amount data from member notes"""
+    try:
+        import re
+        
+        if not hasattr(member, 'notes') or not member.notes:
+            return None
+            
+        # Look for JSON data in notes - make pattern more specific
+        pattern = r'Custom Amount Data: (\{[^}]*\})'
+        match = re.search(pattern, member.notes, re.DOTALL)
+        
+        if match:
+            json_str = match.group(1)
+            return json.loads(json_str)
+            
+        return None
+    except Exception as e:
+        # Log error for debugging but don't fail
+        frappe.log_error(f"Error parsing custom amount data: {str(e)}", "Custom Amount Parse Error")
+        return None
 
 
 def get_amount_impact_message(selected_amount, standard_amount, percentage):

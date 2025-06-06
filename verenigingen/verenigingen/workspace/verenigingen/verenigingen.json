@@ -27,17 +27,6 @@
    "dependencies": "",
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Volunteer Type",
-   "link_count": 0,
-   "link_to": "Volunteer Type",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "hidden": 0,
-   "is_query_report": 0,
    "label": "Chapter",
    "link_count": 0,
    "link_to": "Chapter",
@@ -63,16 +52,6 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
-  },
-  {
-  "hidden": 0,
-  "is_query_report": 1,
-  "label": "Orphaned Subscriptions Report",
-  "link_count": 0,
-  "link_to": "Orphaned Subscriptions Report",
-  "link_type": "Report",
-  "onboard": 0,
-  "type": "Link"
   },
   {
    "hidden": 0,
@@ -179,16 +158,6 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Team Roles",
-   "link_count": 0,
-   "link_to": "Team Role",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
    "label": "Volunteers",
    "link_count": 2,
    "link_type": "DocType",
@@ -209,11 +178,11 @@
   {
    "dependencies": "",
    "hidden": 0,
-   "is_query_report": 0,
-   "label": "Volunteer Type",
+   "is_query_report": 1,
+   "label": "Pending Membership Applications",
    "link_count": 0,
-   "link_to": "Volunteer Type",
-   "link_type": "DocType",
+   "link_to": "Pending Membership Applications",
+   "link_type": "Report",
    "onboard": 0,
    "type": "Link"
   },
@@ -248,7 +217,7 @@
    "type": "Link"
   }
  ],
- "modified": "2025-05-06 07:19:29.043773",
+ "modified": "2025-06-06 16:45:57.782027",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Verenigingen",
@@ -283,6 +252,13 @@
    "label": "Chapter",
    "link_to": "Chapter",
    "type": "DocType"
+  },
+  {
+   "icon": "pending",
+   "label": "Pending Applications",
+   "link_to": "Pending Membership Applications",
+   "report_ref_doctype": "Member",
+   "type": "Report"
   }
  ],
  "title": "Verenigingen"

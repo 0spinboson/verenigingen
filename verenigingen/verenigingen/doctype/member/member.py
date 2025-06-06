@@ -268,3 +268,22 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         
         frappe.msgprint(_("User {0} created successfully").format(user.name))
         return user.name
+    
+    @frappe.whitelist()
+    def get_active_sepa_mandate(self):
+        """Get the active SEPA mandate for this member - exposed for JavaScript calls"""
+        return self.get_default_sepa_mandate()
+    
+    @frappe.whitelist() 
+    def get_linked_donations(self):
+        """Get linked donations for this member"""
+        from verenigingen.verenigingen.doctype.member.member_utils import get_linked_donations
+        return get_linked_donations(self.name)
+
+
+# Module-level functions for static calls
+@frappe.whitelist()
+def is_chapter_management_enabled():
+    """Check if chapter management is enabled in settings"""
+    from verenigingen.verenigingen.doctype.member.member_utils import is_chapter_management_enabled as check_enabled
+    return check_enabled()

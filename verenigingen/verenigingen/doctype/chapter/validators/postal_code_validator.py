@@ -1,6 +1,6 @@
 # verenigingen/verenigingen/doctype/chapter/validators/postal_codevalidator.py
 import frappe
-from frappe import 
+from frappe import _
 from typing import List, Dict, Tuple
 import re
 from .base_validator import BaseValidator, ValidationResult
@@ -17,8 +17,8 @@ class PostalCodeValidator(BaseValidator):
         'FR': r'^[0-9]{5}$',           # France: 00000-99999
     }
 
-    def init(self, chapter_doc=None, default_country='NL'):
-        super().init(chapter_doc)
+    def __init__(self, chapter_doc=None, default_country='NL'):
+        super().__init__(chapter_doc)
         self.default_country = default_country
         self.max_patterns = self._get_setting('max_postal_patterns', 50)
 
@@ -34,7 +34,7 @@ class PostalCodeValidator(BaseValidator):
 
         # Check maximum number of patterns
         if len(patterns) > self.max_patterns:
-            result.adderror(
+            result.add_error(
                 ("Maximum {0} postal code patterns allowed, found {1}").format(
                     self.max_patterns, len(patterns)
                 )
@@ -61,7 +61,7 @@ class PostalCodeValidator(BaseValidator):
         result = self.create_result()
 
         if not pattern:
-            result.adderror(("Empty postal code pattern"))
+            result.add_error(("Empty postal code pattern"))
             return result
 
         pattern = pattern.strip().upper()
@@ -80,28 +80,28 @@ class PostalCodeValidator(BaseValidator):
 
         return result
 
-    def parsepostal_codes(self, postal_codes: str) -> List[str]:
+    def _parse_postal_codes(self, postal_codes: str) -> List[str]:
         """Parse comma-separated postal codes into list"""
         if not postal_codes:
             return []
 
         return [p.strip() for p in postal_codes.split(',') if p.strip()]
 
-    def isrange_pattern(self, pattern: str) -> bool:
+    def _is_range_pattern(self, pattern: str) -> bool:
         """Check if pattern is a range (e.g., 1000-1099)"""
         return '-' in pattern and pattern.count('-') == 1
 
-    def iswildcard_pattern(self, pattern: str) -> bool:
+    def _is_wildcard_pattern(self, pattern: str) -> bool:
         """Check if pattern contains wildcards (e.g., 10)"""
-        return '' in pattern
+        return '*' in pattern
 
-    def validaterange_pattern(self, pattern: str) -> ValidationResult:
+    def _validate_range_pattern(self, pattern: str) -> ValidationResult:
         """Validate range pattern like 1000-1099"""
         result = self.create_result()
 
         parts = pattern.split('-')
         if len(parts) != 2:
-            result.adderror(("Invalid range pattern: {0}").format(pattern))
+            result.add_error(("Invalid range pattern: {0}").format(pattern))
             return result
 
         start, end = parts
@@ -113,60 +113,60 @@ class PostalCodeValidator(BaseValidator):
         end_result = self._validate_simple_postal_code(end)
 
         if not start_result.is_valid:
-            result.adderror(("Invalid start of range: {0}").format(start))
+            result.add_error(("Invalid start of range: {0}").format(start))
 
         if not end_result.is_valid:
-            result.adderror(("Invalid end of range: {0}").format(end))
+            result.add_error(("Invalid end of range: {0}").format(end))
 
         if start_result.is_valid and end_result.is_valid:
             # For numeric postal codes, ensure start <= end
             if start.isdigit() and end.isdigit():
                 if int(start) > int(end):
-                    result.adderror(
+                    result.add_error(
                         ("Range start {0} cannot be greater than range end {1}").format(start, end)
                     )
 
         return result
 
-    def validatewildcard_pattern(self, pattern: str) -> ValidationResult:
+    def _validate_wildcard_pattern(self, pattern: str) -> ValidationResult:
         """Validate wildcard pattern like 10*"""
         result = self.create_result()
 
         # Check for valid wildcard usage
         if pattern.count('*') > 1:
-            result.adderror(("Multiple wildcards not allowed: {0}").format(pattern))
+            result.add_error(("Multiple wildcards not allowed: {0}").format(pattern))
             return result
 
         if not pattern.endswith('*'):
-            result.adderror(("Wildcard must be at the end: {0}").format(pattern))
+            result.add_error(("Wildcard must be at the end: {0}").format(pattern))
             return result
 
         # Validate the base part (without *)
         base = pattern[:-1]
         if not base:
-            result.adderror(("Wildcard pattern must have a base: {0}").format(pattern))
+            result.add_error(("Wildcard pattern must have a base: {0}").format(pattern))
             return result
 
         # Base should be alphanumeric
         if not re.match(r'^[A-Z0-9]+$', base):
-            result.adderror(("Invalid base for wildcard pattern: {0}").format(base))
+            result.add_error(("Invalid base for wildcard pattern: {0}").format(base))
             return result
 
         # Check minimum base length
         min_base_length = 2
         if len(base) < min_base_length:
-            result.addwarning(
+            result.add_warning(
                 ("Wildcard base '{0}' is very short, may match too many codes").format(base)
             )
 
         return result
 
-    def validatesimple_postal_code(self, postal_code: str) -> ValidationResult:
+    def _validate_simple_postal_code(self, postal_code: str) -> ValidationResult:
         """Validate a simple postal code"""
         result = self.create_result()
 
         if not postal_code:
-            result.adderror(("Empty postal code"))
+            result.add_error(("Empty postal code"))
             return result
 
         # Get validation pattern for country
@@ -174,16 +174,16 @@ class PostalCodeValidator(BaseValidator):
 
         if pattern and not re.match(pattern, postal_code):
             result.add_error(
-                ("Invalid postal code format for {0}: {1}").format(self.defaultcountry, postal_code)
+                ("Invalid postal code format for {0}: {1}").format(self.default_country, postal_code)
             )
         elif not pattern:
             # Fallback to basic alphanumeric validation
             if not re.match(r'^[A-Z0-9]+$', postal_code):
-                result.adderror(("Postal code must be alphanumeric: {0}").format(postal_code))
+                result.add_error(("Postal code must be alphanumeric: {0}").format(postal_code))
 
         return result
 
-    def getcountry_pattern(self, country_code: str) -> str:
+    def _get_country_pattern(self, country_code: str) -> str:
         """Get regex pattern for country"""
         return self.COUNTRY_PATTERNS.get(country_code.upper())
 
@@ -200,7 +200,7 @@ class PostalCodeValidator(BaseValidator):
 
         return False
 
-    def matchespattern(self, postal_code: str, pattern: str) -> bool:
+    def _matches_pattern(self, postal_code: str, pattern: str) -> bool:
         """Check if postal code matches a specific pattern"""
         if self._is_range_pattern(pattern):
             return self._matches_range(postal_code, pattern)
@@ -209,7 +209,7 @@ class PostalCodeValidator(BaseValidator):
         else:
             return postal_code == pattern
 
-    def matchesrange(self, postal_code: str, range_pattern: str) -> bool:
+    def _matches_range(self, postal_code: str, range_pattern: str) -> bool:
         """Check if postal code matches range pattern"""
         try:
             start, end = range_pattern.split('-')
@@ -225,7 +225,7 @@ class PostalCodeValidator(BaseValidator):
         except (ValueError, AttributeError):
             return False
 
-    def matcheswildcard(self, postal_code: str, wildcard_pattern: str) -> bool:
+    def _matches_wildcard(self, postal_code: str, wildcard_pattern: str) -> bool:
         """Check if postal code matches wildcard pattern"""
         base = wildcard_pattern[:-1]  # Remove the *
         return postal_code.startswith(base)
@@ -268,7 +268,7 @@ class PostalCodeValidator(BaseValidator):
             'coverage_estimate': self._estimate_coverage(valid_patterns)
         }
 
-    def estimatecoverage(self, patterns: List[str]) -> Dict:
+    def _estimate_coverage(self, patterns: List[str]) -> Dict:
         """Estimate how many postal codes are covered by patterns"""
         # This is a rough estimate
         coverage = {'exact': 0, 'range': 0, 'wildcard': 0}
@@ -329,7 +329,7 @@ class PostalCodeValidator(BaseValidator):
             ranges.append(current_range)
 
         for range_patterns in ranges:
-            if len(rangepatterns) >= 3:  # Only suggest if 3+ consecutive codes
+            if len(range_patterns) >= 3:  # Only suggest if 3+ consecutive codes
                 suggestions.append(
                     ("Consider using range {0}-{1} instead of individual codes {2}").format(
                         range_patterns[0], range_patterns[-1], ', '.join(range_patterns)
@@ -338,7 +338,7 @@ class PostalCodeValidator(BaseValidator):
 
         return suggestions
 
-    def getsetting(self, setting_name: str, default_value):
+    def _get_setting(self, setting_name: str, default_value):
         """Get setting from Verenigingen Settings"""
         try:
             settings = frappe.get_single("Verenigingen Settings")

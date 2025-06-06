@@ -1,14 +1,13 @@
-# verenigingen/verenigingen/doctype/chapter/validators/board_membervalidator.py
 import frappe
-from frappe import 
+from frappe import _
 from frappe.utils import getdate, today, date_diff
 from typing import List, Dict, Set
 from .base_validator import BaseValidator, ValidationResult
 class BoardMemberValidator(BaseValidator):
     """Validator for chapter board members"""
 
-    def init(self, chapter_doc=None):
-        super().init(chapter_doc)
+    def __init__(self, chapter_doc=None):
+        super().__init__(chapter_doc)
         self._unique_roles_cache = None
 
     def validate_all_board_members(self, board_members: List[Dict]) -> ValidationResult:
@@ -56,7 +55,7 @@ class BoardMemberValidator(BaseValidator):
                 to_date = getdate(member.get('to_date'))
                 if to_date < getdate(today()):
                     result.add_error(
-                        ("Active board member {0} has end date in the past").format(membername)
+                        ("Active board member {0} has end date in the past").format(member_name)
                     )
             except (ValueError, TypeError):
                 pass  # Date validation will catch this
@@ -64,7 +63,7 @@ class BoardMemberValidator(BaseValidator):
         # Validate volunteer exists
         if member.get('volunteer'):
             if not frappe.db.exists("Volunteer", member.get('volunteer')):
-                result.adderror(
+                result.add_error(
                     ("Volunteer {0} does not exist").format(member.get('volunteer'))
                 )
 
@@ -72,7 +71,7 @@ class BoardMemberValidator(BaseValidator):
         if member.get('chapter_role'):
             if not frappe.db.exists("Chapter Role", member.get('chapter_role')):
                 result.add_error(
-                    ("Chapter Role {0} does not exist").format(member.get('chapterrole'))
+                    ("Chapter Role {0} does not exist").format(member.get('chapter_role'))
                 )
 
         # Validate email format if provided
@@ -98,7 +97,7 @@ class BoardMemberValidator(BaseValidator):
 
         return result
 
-    def validateunique_roles(self, active_members: List[Dict], result: ValidationResult):
+    def _validate_unique_roles(self, active_members: List[Dict], result: ValidationResult):
         """Validate that unique roles are only assigned once"""
         unique_roles = self._get_unique_roles()
 
@@ -107,33 +106,33 @@ class BoardMemberValidator(BaseValidator):
             role = member.get('chapter_role')
             if role and role in unique_roles:
                 if role in role_assignments:
-                    result.adderror(
+                    result.add_error(
                         ("Unique role '{0}' is assigned to multiple active board members").format(role)
                     )
                 else:
                     role_assignments[role] = member.get('volunteer_name', member.get('volunteer'))
 
-    def validateboard_size(self, active_members: List[Dict], result: ValidationResult):
+    def _validate_board_size(self, active_members: List[Dict], result: ValidationResult):
         """Validate board size constraints"""
         # Get configuration from settings or use defaults
         min_size = self._get_setting('minimum_board_size', 3)
         max_size = self._get_setting('maximum_board_size', 15)
 
         if len(active_members) < min_size:
-            result.addwarning(
+            result.add_warning(
                 ("Board has only {0} active members. Recommended minimum is {1}").format(
                     len(active_members), min_size
                 )
             )
 
         if len(active_members) > max_size:
-            result.addwarning(
+            result.add_warning(
                 ("Board has {0} active members. Recommended maximum is {1}").format(
                     len(active_members), max_size
                 )
             )
 
-    def validaterequired_roles(self, active_members: List[Dict], result: ValidationResult):
+    def _validate_required_roles(self, active_members: List[Dict], result: ValidationResult):
         """Validate that required roles are assigned"""
         required_roles = self._get_setting('required_board_roles', ['Chair', 'Secretary', 'Treasurer'])
 
@@ -142,10 +141,10 @@ class BoardMemberValidator(BaseValidator):
         for required_role in required_roles:
             if required_role not in assigned_roles:
                 result.add_warning(
-                    ("Required role '{0}' is not assigned to any active board member").format(requiredrole)
+                    ("Required role '{0}' is not assigned to any active board member").format(required_role)
                 )
 
-    def getunique_roles(self) -> Set[str]:
+    def _get_unique_roles(self) -> Set[str]:
         """Get list of roles marked as unique"""
         if self._unique_roles_cache is None:
             try:
@@ -161,7 +160,7 @@ class BoardMemberValidator(BaseValidator):
 
         return self._unique_roles_cache
 
-    def getsetting(self, setting_name: str, default_value):
+    def _get_setting(self, setting_name: str, default_value):
         """Get a setting value from Verenigingen Settings or use default"""
         try:
             settings = frappe.get_single("Verenigingen Settings")
@@ -184,7 +183,7 @@ class BoardMemberValidator(BaseValidator):
                 member.get('is_active') and 
                 member.get('name') != current_member_id):
 
-                result.adderror(
+                result.add_error(
                     ("Role '{0}' is already assigned to {1}. This role can only be assigned to one person at a time.").format(
                         role, member.get('volunteer_name', member.get('volunteer'))
                     )
@@ -210,7 +209,7 @@ class BoardMemberValidator(BaseValidator):
 
         return result
 
-    def validatemember_change(self, old_member: Dict, new_member: Dict) -> ValidationResult:
+    def _validate_member_change(self, old_member: Dict, new_member: Dict) -> ValidationResult:
         """Validate changes to a single board member"""
         result = self.create_result()
 
@@ -218,7 +217,7 @@ class BoardMemberValidator(BaseValidator):
         if old_member.get('is_active') and not new_member.get('is_active'):
             # Ensure to_date is set
             if not new_member.get('to_date'):
-                result.addwarning(
+                result.add_warning(
                     ("Board member {0} is being deactivated but no end date is set").format(
                         new_member.get('volunteer_name', new_member.get('volunteer'))
                     )

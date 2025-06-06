@@ -70,8 +70,8 @@ verenigingen.member_review = {
                     
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <strong>${__('Selected Membership Type')}:</strong> 
-                            ${frm.doc.selected_membership_type || 'Not selected'}
+                            <strong>${__('Current Membership Type')}:</strong> 
+                            ${frm.doc.current_membership_type || 'Not selected'}
                         </div>
                         <div class="col-md-6">
                             <strong>${__('Payment Amount')}:</strong> 
@@ -94,8 +94,13 @@ verenigingen.member_review = {
             </div>
         `;
         
-        // Add to form
-        $(frm.fields_dict.application_section.wrapper).html(review_html);
+        // Add to form - find the application section or add to dashboard
+        if (frm.fields_dict.application_section && frm.fields_dict.application_section.wrapper) {
+            $(frm.fields_dict.application_section.wrapper).html(review_html);
+        } else {
+            // If application_section wrapper is not available, add to dashboard
+            frm.dashboard.add_comment(review_html, 'orange', true);
+        }
         
         // Bind events
         $('#approve-btn').click(() => this.approve_application(frm));
@@ -116,7 +121,7 @@ verenigingen.member_review = {
     },
     
     get_membership_amount: function(frm) {
-        if (!frm.doc.selected_membership_type) return 'N/A';
+        if (!frm.doc.current_membership_type) return 'N/A';
         
         // This would fetch from server, simplified here
         return new Promise((resolve) => {
@@ -124,7 +129,7 @@ verenigingen.member_review = {
                 method: 'frappe.client.get_value',
                 args: {
                     doctype: 'Membership Type',
-                    filters: { name: frm.doc.selected_membership_type },
+                    filters: { name: frm.doc.current_membership_type },
                     fieldname: ['amount', 'currency']
                 },
                 callback: function(r) {
@@ -138,15 +143,13 @@ verenigingen.member_review = {
     },
     
     get_chapter_info_html: function(frm) {
-        let chapter = frm.doc.selected_chapter || frm.doc.suggested_chapter;
+        let chapter = frm.doc.primary_chapter;
         if (!chapter) return '';
         
         return `
             <div class="row mb-3">
                 <div class="col-md-12">
                     <strong>${__('Chapter')}:</strong> ${chapter}
-                    ${frm.doc.suggested_chapter && frm.doc.selected_chapter !== frm.doc.suggested_chapter ? 
-                        `<br><small class="text-muted">${__('Suggested')}: ${frm.doc.suggested_chapter}</small>` : ''}
                 </div>
             </div>
         `;
@@ -191,7 +194,7 @@ verenigingen.member_review = {
     
     is_chapter_reviewer: function(frm) {
         // Check if current user is a board member of the applicant's chapter
-        let chapter = frm.doc.selected_chapter || frm.doc.suggested_chapter;
+        let chapter = frm.doc.primary_chapter;
         if (!chapter) return false;
         
         // This would be an async call in reality
@@ -201,7 +204,7 @@ verenigingen.member_review = {
     
     approve_application: function(frm) {
         // Validate membership type is selected
-        if (!frm.doc.selected_membership_type) {
+        if (!frm.doc.current_membership_type) {
             frappe.msgprint(__('Please select a membership type before approving'));
             return;
         }
@@ -214,7 +217,7 @@ verenigingen.member_review = {
                     fieldtype: 'Link',
                     label: __('Membership Type'),
                     options: 'Membership Type',
-                    default: frm.doc.selected_membership_type,
+                    default: frm.doc.current_membership_type,
                     reqd: 1
                 },
                 {
@@ -222,7 +225,7 @@ verenigingen.member_review = {
                     fieldtype: 'Link',
                     label: __('Assign to Chapter'),
                     options: 'Chapter',
-                    default: frm.doc.selected_chapter || frm.doc.suggested_chapter
+                    default: frm.doc.primary_chapter
                 },
                 {
                     fieldname: 'notes',
@@ -336,7 +339,8 @@ verenigingen.member_review = {
             </div>
         `;
         
-        $(frm.fields_dict.membership_details.wrapper).html(html);
+        // Add to dashboard since membership_details field may not exist
+        frm.dashboard.add_comment(html, 'green', true);
     },
     
     show_refund_options: function(frm) {

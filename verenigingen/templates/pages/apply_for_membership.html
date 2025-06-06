@@ -23,7 +23,7 @@
         </div>
     </div>
     
-    <form id="membership-application-form" class="application-form">
+    <form id="membership-application-form" class="application-form" onsubmit="return false;">
         <!-- Step 1: Personal Information -->
         <div class="form-step active" data-step="1">
             <div class="card">
@@ -393,7 +393,7 @@
             <button type="button" class="btn btn-primary" id="next-btn">
                 {{ _("Next") }}
             </button>
-            <button type="submit" class="btn btn-success" id="submit-btn" style="display: none;">
+            <button type="button" class="btn btn-success" id="submit-btn" style="display: none;">
                 {{ _("Submit Application & Pay") }}
             </button>
         </div>
@@ -570,7 +570,8 @@ function initializeFallbackApplication() {
     // Submit button handler
     $('#submit-btn').off('click').on('click', function(e) {
         e.preventDefault();
-        console.log('Submit clicked');
+        console.log('FALLBACK Submit clicked - this should not happen if main script loaded');
+        alert('Using fallback submission - main script failed to load');
         submitForm();
     });
     

@@ -16,7 +16,7 @@ app_license = "AGPL-3"
 on_app_init = ["verenigingen.subscription_override.setup_subscription_override"]
 app_include_css = "/assets/verenigingen/css/verenigingen_custom.css"
 app_include_js = [
-    "/assets/verenigingen/js/termination_dashboard.js"
+    # Removed termination_dashboard.js as it's a React component and causes import errors
 ]
 
 # include js in doctype views
@@ -53,57 +53,32 @@ doc_events = {
         "validate": "verenigingen.verenigingen.doctype.chapter.chapter.validate_chapter_access",
     },
     "Verenigingen Settings": {
-        "on_update": "verenigingen.verenigingen.doctype.member.member.sync_member_counter_with_settings",
+        "on_update": "verenigingen.verenigingen.doctype.member.member_utils.sync_member_counter_with_settings",
     },
     "Payment Entry": {
-        "on_submit": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history",
-        "on_cancel": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history",
-        "on_trash": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history"
+        "on_submit": "verenigingen.verenigingen.doctype.member.member_utils.update_member_payment_history",
+        "on_cancel": "verenigingen.verenigingen.doctype.member.member_utils.update_member_payment_history",
+        "on_trash": "verenigingen.verenigingen.doctype.member.member_utils.update_member_payment_history"
     },
     "Sales Invoice": {
         "before_validate": [
             "verenigingen.utils.apply_tax_exemption_from_source"
         ],
-        "on_submit": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history_from_invoice",
-        "on_update_after_submit": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history_from_invoice",
-        "on_cancel": "verenigingen.verenigingen.doctype.member.member.update_member_payment_history_from_invoice"
+        "on_submit": "verenigingen.verenigingen.doctype.member.member_utils.update_member_payment_history_from_invoice",
+        "on_update_after_submit": "verenigingen.verenigingen.doctype.member.member_utils.update_member_payment_history_from_invoice",
+        "on_cancel": "verenigingen.verenigingen.doctype.member.member_utils.update_member_payment_history_from_invoice"
     },
     
     # Termination system events
     "Membership Termination Request": {
         "validate": "verenigingen.validations.validate_termination_request",
-        "on_update_after_submit": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.handle_status_change",
-        "on_submit": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.handle_status_change",
-        "before_save": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.before_save",
-        "after_insert": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.after_insert"
     },
     "Termination Appeals Process": {
         "validate": "verenigingen.validations.validate_appeal_filing",
-        "before_save": "verenigingen.verenigingen.doctype.termination_appeals_process.termination_appeals_process.before_save",
-        "after_insert": "verenigingen.verenigingen.doctype.termination_appeals_process.termination_appeals_process.after_insert",
-        "on_update": "verenigingen.verenigingen.doctype.termination_appeals_process.termination_appeals_process.on_update"
-    },
-    "Expulsion Report Entry": {
-        "validate": "verenigingen.verenigingen.doctype.expulsion_report_entry.expulsion_report_entry.validate",
-        "before_save": "verenigingen.verenigingen.doctype.expulsion_report_entry.expulsion_report_entry.before_save",
-        "after_insert": "verenigingen.verenigingen.doctype.expulsion_report_entry.expulsion_report_entry.after_insert"
     },
     "Member": {
-        "before_insert": "verenigingen.verenigingen.doctype.member.member.before_insert",
-        "validate": "verenigingen.verenigingen.doctype.member.member.validate",
-        "before_save": "verenigingen.verenigingen.doctype.member.member.update_termination_status_display"
+        "before_save": "verenigingen.verenigingen.doctype.member.member_utils.update_termination_status_display"
     },
-    
-    # Child table events (if needed)
-    "Appeal Timeline Entry": {
-        "validate": "verenigingen.verenigingen.doctype.appeal_timeline_entry.appeal_timeline_entry.validate"
-    },
-    "Appeal Communication Entry": {
-        "validate": "verenigingen.verenigingen.doctype.appeal_communication_entry.appeal_communication_entry.validate"
-    },
-    "Termination Audit Entry": {
-        "validate": "verenigingen.verenigingen.doctype.termination_audit_entry.termination_audit_entry.validate"
-    }
 }
 
 # Scheduled Tasks
@@ -117,15 +92,6 @@ scheduler_events = {
         "verenigingen.subscription_handler.process_all_subscriptions",
         "verenigingen.verenigingen.doctype.membership.scheduler.notify_about_orphaned_records",
         "verenigingen.api.membership_application_review.send_overdue_notifications",
-        
-        # Termination system
-        "verenigingen.verenigingen.notification.overdue_appeal_reviews.send_overdue_appeal_notifications",
-        "verenigingen.utils.termination_utils.process_overdue_termination_requests"
-    ],
-    "weekly": [
-        # Termination system
-        "verenigingen.utils.termination_utils.generate_weekly_termination_report",
-        "verenigingen.verenigingen.report.governance_compliance_report.governance_compliance_report.generate_governance_compliance_report"
     ]
 }
 
@@ -160,11 +126,8 @@ has_permission = {
 
 # Workflow Action Handlers
 # -------------------------
-workflow_action_handlers = {
-    "Membership Termination Request": {
-        "Execute": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.on_workflow_action"
-    }
-}
+# Note: Workflow handlers removed as they were pointing to non-existent files
+workflow_action_handlers = {}
 
 # Fixtures
 # --------

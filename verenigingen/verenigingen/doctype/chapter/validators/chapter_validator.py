@@ -1,6 +1,6 @@
 # verenigingen/verenigingen/doctype/chapter/validators/chaptervalidator.py
 import frappe
-from frappe import 
+from frappe import _
 from typing import Dict, List, Optional
 from .base_validator import BaseValidator, ValidationResult
 from .board_member_validator import BoardMemberValidator
@@ -9,8 +9,8 @@ from .chapter_info_validator import ChapterInfoValidator
 class ChapterValidator(BaseValidator):
     """Main validator that coordinates all chapter validation"""
 
-    def init(self, chapter_doc=None):
-        super().init(chapter_doc)
+    def __init__(self, chapter_doc=None):
+        super().__init__(chapter_doc)
 
         # Initialize component validators
         self.board_validator = BoardMemberValidator(chapter_doc)
@@ -21,7 +21,7 @@ class ChapterValidator(BaseValidator):
         """Validate all aspects of the chapter"""
         if not self.chapter_doc:
             result = self.create_result(False)
-            result.adderror(("No chapter document provided for validation"))
+            result.add_error(("No chapter document provided for validation"))
             return result
 
         result = self.create_result()
@@ -96,7 +96,7 @@ class ChapterValidator(BaseValidator):
         patterns = self.postal_validator._parse_postal_codes(self.chapter_doc.postal_codes)
         return self.postal_validator.test_postal_code_match(postal_code, patterns)
 
-    def validatecross_cutting_concerns(self, chapter_data: Dict) -> ValidationResult:
+    def _validate_cross_cutting_concerns(self, chapter_data: Dict) -> ValidationResult:
         """Validate concerns that span multiple validators"""
         result = self.create_result()
 
@@ -108,7 +108,7 @@ class ChapterValidator(BaseValidator):
 
         return result
 
-    def validatechapter_head_consistency(self, chapter_data: Dict, result: ValidationResult):
+    def _validate_chapter_head_consistency(self, chapter_data: Dict, result: ValidationResult):
         """Validate chapter head is consistent with board members"""
         chapter_head = chapter_data.get('chapter_head')
         if not chapter_head:
@@ -117,7 +117,7 @@ class ChapterValidator(BaseValidator):
         # Get board members
         board_members = chapter_data.get('board_members', [])
         if not board_members:
-            result.addwarning(
+            result.add_warning(
                 ("Chapter head is set but there are no board members")
             )
             return
@@ -138,10 +138,10 @@ class ChapterValidator(BaseValidator):
 
         if chair_members and chapter_head not in chair_members:
             result.add_warning(
-                ("Chapter head '{0}' is not associated with any active board member with a chair role").format(chapterhead)
+                ("Chapter head '{0}' is not associated with any active board member with a chair role").format(chapter_head)
             )
 
-    def validatemember_management(self, chapter_data: Dict, result: ValidationResult):
+    def _validate_member_management(self, chapter_data: Dict, result: ValidationResult):
         """Validate member management consistency"""
         # This can include validation of member lists, permissions, etc.
         # For now, basic validation
@@ -162,7 +162,7 @@ class ChapterValidator(BaseValidator):
                             for m in members
                         )
                         if not member_in_chapter:
-                            result.addwarning(
+                            result.add_warning(
                                 ("Board member {0} is not listed as an active chapter member").format(
                                     volunteer_doc.volunteer_name
                                 )
@@ -170,7 +170,7 @@ class ChapterValidator(BaseValidator):
                 except frappe.DoesNotExistError:
                     continue
 
-    def validatefor_publication(self) -> ValidationResult:
+    def _validate_for_publication(self) -> ValidationResult:
         """Additional validation for published chapters"""
         result = self.create_result()
 
@@ -179,12 +179,12 @@ class ChapterValidator(BaseValidator):
 
         # Check required content for publication
         if not self.chapter_doc.introduction or len(self.chapter_doc.introduction) < 100:
-            result.adderror(
+            result.add_error(
                 ("Published chapters must have a detailed introduction (at least 100 characters)")
             )
 
         if not self.chapter_doc.region:
-            result.adderror(
+            result.add_error(
                 ("Published chapters must have a region specified")
             )
 
@@ -193,13 +193,13 @@ class ChapterValidator(BaseValidator):
         has_members = bool(self.chapter_doc.members)
 
         if not has_board_members and not has_members:
-            result.addwarning(
+            result.add_warning(
                 ("Published chapter has no board members or regular members")
             )
 
         return result
 
-    def autoupdate_chapter_head(self):
+    def _auto_update_chapter_head(self):
         """Automatically update chapter head based on board members"""
         if not self.chapter_doc or not hasattr(self.chapter_doc, 'board_members'):
             return
@@ -226,19 +226,19 @@ class ChapterValidator(BaseValidator):
         if self.chapter_doc.chapter_head != chair_member:
             self.chapter_doc.chapter_head = chair_member
 
-    def generateroute(self, chapter_name: str) -> str:
+    def _generate_route(self, chapter_name: str) -> str:
         """Generate a route for the chapter"""
         if not chapter_name:
             return ""
 
         # Convert to URL-friendly format
-        route = chaptername.lower()
+        route = chapter_name.lower()
         route = route.replace(' ', '-')
         route = ''.join(c for c in route if c.isalnum() or c in '-')
 
         return f"chapters/{route}"
 
-    def chapterto_dict(self, chapter_doc) -> Dict:
+    def _chapter_to_dict(self, chapter_doc) -> Dict:
         """Convert chapter document to dictionary for validation"""
         data = {}
 
@@ -259,7 +259,7 @@ class ChapterValidator(BaseValidator):
 
         return data
 
-    def boardmembers_to_list(self, board_members) -> List[Dict]:
+    def _board_members_to_list(self, board_members) -> List[Dict]:
         """Convert board members to list of dictionaries"""
         result = []
 
@@ -276,7 +276,7 @@ class ChapterValidator(BaseValidator):
 
         return result
 
-    def membersto_list(self, members) -> List[Dict]:
+    def _members_to_list(self, members) -> List[Dict]:
         """Convert members to list of dictionaries"""
         result = []
 
@@ -323,7 +323,7 @@ class ChapterValidator(BaseValidator):
             'last_validated': frappe.utils.now()
         }
 
-    def checkpublication_readiness(self, chapter_data: Dict) -> Dict:
+    def _check_publication_readiness(self, chapter_data: Dict) -> Dict:
         """Check if chapter is ready for publication"""
         issues = []
 
@@ -354,7 +354,7 @@ class ChapterValidator(BaseValidator):
             'score': max(0, 100 - len(issues) * 20)  # Simple scoring
         }
 
-    def ischair_role(self, role_name: str) -> bool:
+    def _is_chair_role(self, role_name: str) -> bool:
         """Check if a role is a chair role"""
         if not role_name:
             return False

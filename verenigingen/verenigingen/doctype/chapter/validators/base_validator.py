@@ -1,6 +1,6 @@
 # verenigingen/verenigingen/doctype/chapter/validators/basevalidator.py
 import frappe
-from frappe import 
+from frappe import _
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 @dataclass
@@ -32,7 +32,7 @@ class ValidationResult:
 class BaseValidator:
     """Base class for all chapter validators"""
 
-    def init(self, chapter_doc=None):
+    def __init__(self, chapter_doc=None):
         self.chapter_doc = chapter_doc
         self.context = {}
 
@@ -43,13 +43,13 @@ class BaseValidator:
     def validate_required_field(self, value: Any, field_name: str, result: ValidationResult):
         """Validate that a required field has a value"""
         if not value:
-            result.adderror(("Field '{0}' is required").format(field_name))
+            result.add_error(("Field '{0}' is required").format(field_name))
 
     def validate_field_length(self, value: str, field_name: str, max_length: int, result: ValidationResult):
         """Validate field length"""
         if value and len(value) > max_length:
             result.add_error(
-                ("Field '{0}' exceeds maximum length of {1} characters").format(fieldname, max_length)
+                ("Field '{0}' exceeds maximum length of {1} characters").format(field_name, max_length)
             )
 
     def validate_date_range(self, start_date: str, end_date: str, 
@@ -62,15 +62,15 @@ class BaseValidator:
 
                 if start_obj > end_obj:
                     result.add_error(
-                        ("{0} cannot be after {1}").format(startfield, end_field)
+                        ("{0} cannot be after {1}").format(start_field, end_field)
                     )
             except (ValueError, TypeError):
-                result.adderror(("Invalid date format"))
+                result.add_error(("Invalid date format"))
 
     def validate_email(self, email: str, field_name: str, result: ValidationResult):
         """Validate email format"""
         if email and not frappe.utils.validate_email_address(email):
-            result.adderror(("Invalid email format in field '{0}'").format(field_name))
+            result.add_error(("Invalid email format in field '{0}'").format(field_name))
 
     def validate_unique_in_list(self, items: List[Dict], key: str, 
                                item_name: str, result: ValidationResult):
@@ -82,7 +82,7 @@ class BaseValidator:
             if value:
                 if value in seen_values:
                     result.add_error(
-                        ("Duplicate {0} found: {1}").format(itemname, value)
+                        ("Duplicate {0} found: {1}").format(item_name, value)
                     )
                 seen_values.add(value)
 

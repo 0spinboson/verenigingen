@@ -60,8 +60,7 @@ def get_columns():
         {
             "label": _("Membership Type"),
             "fieldname": "selected_membership_type",
-            "fieldtype": "Link",
-            "options": "Membership Type",
+            "fieldtype": "Data",
             "width": 130
         },
         {
@@ -99,7 +98,7 @@ def get_data(filters):
     # Apply filters
     if filters:
         if filters.get("chapter"):
-            conditions.append(f"(m.primary_chapter = %(chapter)s OR m.suggested_chapter = %(chapter)s)")
+            conditions.append("m.primary_chapter = %(chapter)s")
         
         if filters.get("from_date"):
             conditions.append("DATE(m.application_date) >= %(from_date)s")
@@ -108,7 +107,7 @@ def get_data(filters):
             conditions.append("DATE(m.application_date) <= %(to_date)s")
         
         if filters.get("membership_type"):
-            conditions.append("m.selected_membership_type = %(membership_type)s")
+            conditions.append("m.current_membership_type = %(membership_type)s")
         
         if filters.get("overdue_only"):
             overdue_date = add_days(today(), -14)
@@ -123,16 +122,16 @@ def get_data(filters):
             m.email,
             m.application_date,
             DATEDIFF(CURDATE(), DATE(m.application_date)) as days_pending,
-            COALESCE(m.primary_chapter, m.suggested_chapter) as chapter,
-            m.selected_membership_type,
+            m.primary_chapter as chapter,
+            m.current_membership_type as selected_membership_type,
             m.age,
-            m.interested_in_volunteering,
-            m.application_source,
+            '' as interested_in_volunteering,
+            '' as application_source,
             m.application_status
         FROM `tabMember` m
         WHERE {where_clause}
         ORDER BY m.application_date ASC
-    """, filters, as_dict=True)
+    """, filters or {}, as_dict=True)
     
     # Process data
     for row in data:
@@ -140,9 +139,10 @@ def get_data(filters):
         row["volunteer_interest"] = "Yes" if row.get("interested_in_volunteering") else "No"
         
         # Add status indicator with color coding
-        if row["days_pending"] > 14:
+        days_pending = row.get("days_pending") or 0
+        if days_pending > 14:
             row["status_indicator"] = '<span class="indicator red">Overdue</span>'
-        elif row["days_pending"] > 7:
+        elif days_pending > 7:
             row["status_indicator"] = '<span class="indicator orange">Aging</span>'
         else:
             row["status_indicator"] = '<span class="indicator blue">Recent</span>'
@@ -155,10 +155,10 @@ def get_summary(data):
         return []
     
     total_pending = len(data)
-    overdue_count = len([d for d in data if d["days_pending"] > 14])
+    overdue_count = len([d for d in data if (d.get("days_pending") or 0) > 14])
     volunteer_interested = len([d for d in data if d.get("interested_in_volunteering")])
     
-    avg_days_pending = sum(d["days_pending"] for d in data) / len(data) if data else 0
+    avg_days_pending = sum((d.get("days_pending") or 0) for d in data) / len(data) if data else 0
     
     return [
         {

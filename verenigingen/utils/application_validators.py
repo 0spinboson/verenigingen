@@ -103,11 +103,11 @@ def validate_birth_date(birth_date):
         age_delta = relativedelta(today_date, birth_date_obj)
         age = age_delta.years
         
-        # Check reasonable age limits (under 120, over 0)
-        if age > 120:
+        # Check reasonable age limits (under 1000 for our immortal members, over 0)
+        if age > 1000:
             return {
                 "valid": False,
-                "message": _("Birth date indicates unrealistic age")
+                "message": _("Even for immortals, ages over 1000 years require additional verification")
             }
         
         if age < 0:
@@ -215,7 +215,23 @@ def validate_custom_amount(membership_type, amount):
     try:
         membership_type_doc = frappe.get_doc("Membership Type", membership_type)
         standard_amount = float(membership_type_doc.amount)
-        custom_amount = float(amount)
+        
+        # Handle null, empty, or invalid amount values
+        if amount is None or amount == 'null' or amount == '':
+            return {
+                "valid": False,
+                "message": _("Please enter a valid amount")
+            }
+        
+        try:
+            custom_amount = float(amount)
+        except (ValueError, TypeError):
+            return {
+                "valid": False,
+                "message": _("Please enter a valid numeric amount")
+            }
+        
+        # Custom amounts are allowed for all membership types in this simpler approach
         
         if custom_amount <= 0:
             return {
@@ -223,19 +239,20 @@ def validate_custom_amount(membership_type, amount):
                 "message": _("Amount must be greater than 0")
             }
         
-        # Check minimum threshold (50% of standard)
+        # Use 50% of standard amount as minimum
         min_amount = standard_amount * 0.5
+            
         if custom_amount < min_amount:
             return {
                 "valid": False,
-                "message": _("Minimum amount is {0}").format(frappe.utils.fmt_money(min_amount, currency="EUR"))
+                "message": _("Minimum amount is {0}").format(frappe.utils.fmt_money(min_amount, currency=membership_type_doc.currency or "EUR"))
             }
         
-        # Check if it's significantly higher than standard (flag for review)
+        # Use 5x standard amount as reasonable maximum, warn if exceeded
         max_reasonable = standard_amount * 5
         warning = None
         if custom_amount > max_reasonable:
-            warning = _("Amount is significantly higher than standard - will require review")
+            warning = _("Amount is significantly higher than standard - may require review")
         
         return {
             "valid": True,

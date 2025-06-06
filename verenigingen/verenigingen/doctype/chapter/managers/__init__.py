@@ -20,9 +20,16 @@ Usage:
 """
 from .base_manager import BaseManager
 from .board_manager import BoardManager
+from .member_manager import MemberManager
+from .communication_manager import CommunicationManager
+from .volunteer_integration_manager import VolunteerIntegrationManager
+
 __all__ = [
     'BaseManager',
-    'BoardManager'
+    'BoardManager',
+    'MemberManager',
+    'CommunicationManager',
+    'VolunteerIntegrationManager'
 ]
 # Version info
 version = '1.0.0'
@@ -77,10 +84,9 @@ def bulk_board_operation(chapter_doc, operation_type, board_members_data):
 # Manager registry for dynamic manager creation
 MANAGER_REGISTRY = {
     'board': BoardManager,
-    # Future managers will be added here
-    # 'member': MemberManager,
-    # 'communication': CommunicationManager,
-    # 'volunteer_integration': VolunteerIntegrationManager,
+    'member': MemberManager,
+    'communication': CommunicationManager,
+    'volunteer_integration': VolunteerIntegrationManager,
 }
 def get_manager(manager_type, chapter_doc):
     """
