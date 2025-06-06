@@ -127,7 +127,7 @@ function show_board_memberships(frm) {
     frappe.call({
         method: 'verenigingen.verenigingen.doctype.member.member.get_board_memberships',
         args: {
-            member: frm.doc.name
+            member_name: frm.doc.name
         },
         callback: function(r) {
             if (r.message && r.message.length > 0) {
@@ -140,7 +140,7 @@ function show_board_memberships(frm) {
                 html += '</ul></div>';
                 
                 // Insert after a suitable field, or create a dedicated section
-                if (!$('.board-memberships').length) {
+                if (!$('.board-memberships').length && frm.fields_dict.primary_chapter) {
                     $(frm.fields_dict.primary_chapter.wrapper).after(html);
                 }
             }

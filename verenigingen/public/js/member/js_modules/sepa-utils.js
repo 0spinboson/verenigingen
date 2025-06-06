@@ -212,6 +212,10 @@ function create_mandate_with_values(frm, values, dialog) {
 function check_sepa_mandate_status(frm) {
     if (!frm.doc.iban) return;
     
+    // Prevent duplicate SEPA mandate displays
+    if (frm._sepa_check_done) return;
+    frm._sepa_check_done = true;
+    
     let currentMandate = null;
     
     frappe.call({

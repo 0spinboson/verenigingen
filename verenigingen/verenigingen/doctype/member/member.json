@@ -48,6 +48,16 @@
   "payment_reference",
   "column_break_31",
   "membership_status",
+  "fee_management_section",
+  "membership_fee_override",
+  "fee_override_reason",
+  "column_break_fee",
+  "fee_override_date",
+  "fee_override_by",
+  "fee_change_history_section",
+  "fee_change_history",
+  "subscription_history_section",
+  "subscription_history",
   "termination_status_section",
   "termination_status_html",
   "permission_category",
@@ -176,7 +186,6 @@
     "fieldtype": "Select",
     "label": "Application Status",
     "options": "Pending\nUnder Review\nApproved\nRejected\nPayment Pending\nActive",
-    "default": "Pending",
     "insert_after": "application_id",
     "in_list_view": 1,
     "in_standard_filter": 1
@@ -228,9 +237,16 @@
     "read_only": 1
   },
   {
+    "fieldname": "selected_membership_type",
+    "fieldtype": "Link",
+    "label": "Selected Membership Type",
+    "options": "Membership Type",
+    "insert_after": "application_date"
+  },
+  {
     "fieldname": "column_break_app1",
     "fieldtype": "Column Break",
-    "insert_after": "application_date"
+    "insert_after": "selected_membership_type"
   },
   {
     "fieldname": "reviewed_by",
@@ -357,7 +373,7 @@
    "fieldname": "status",
    "fieldtype": "Select",
    "label": "Status",
-   "options": "Pending\nActive\nExpired\nSuspended\nBanned\nDeceased"
+   "options": "Pending\nActive\nRejected\nExpired\nSuspended\nBanned\nDeceased"
   },
   {
   "fieldname": "termination_status_section",
@@ -544,6 +560,69 @@
    "fieldname": "volunteer_details_html",
    "fieldtype": "HTML",
    "label": "Volunteer Information"
+  },
+  {
+   "fieldname": "fee_management_section",
+   "fieldtype": "Section Break",
+   "label": "Membership Fee Management",
+   "depends_on": "eval:!doc.__islocal"
+  },
+  {
+   "fieldname": "membership_fee_override",
+   "fieldtype": "Currency",
+   "label": "Custom Membership Fee",
+   "description": "Override the standard membership fee with a custom amount"
+  },
+  {
+   "fieldname": "fee_override_reason",
+   "fieldtype": "Small Text",
+   "label": "Reason for Fee Override",
+   "depends_on": "eval:doc.membership_fee_override"
+  },
+  {
+   "fieldname": "column_break_fee",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "fee_override_date",
+   "fieldtype": "Date",
+   "label": "Override Date",
+   "read_only": 1,
+   "depends_on": "eval:doc.membership_fee_override"
+  },
+  {
+   "fieldname": "fee_override_by",
+   "fieldtype": "Link",
+   "label": "Override Set By",
+   "options": "User",
+   "read_only": 1,
+   "depends_on": "eval:doc.membership_fee_override"
+  },
+  {
+   "fieldname": "fee_change_history_section",
+   "fieldtype": "Section Break",
+   "label": "Fee Change History",
+   "depends_on": "eval:doc.fee_change_history && doc.fee_change_history.length > 0"
+  },
+  {
+   "fieldname": "fee_change_history",
+   "fieldtype": "Table",
+   "label": "Fee Change History",
+   "options": "Member Fee Change History",
+   "read_only": 1
+  },
+  {
+   "fieldname": "subscription_history_section",
+   "fieldtype": "Section Break",
+   "label": "Subscription History",
+   "depends_on": "eval:doc.customer"
+  },
+  {
+   "fieldname": "subscription_history",
+   "fieldtype": "Table",
+   "label": "Subscription History",
+   "options": "Member Subscription History",
+   "read_only": 1
   }
  ],
  "links": [
@@ -619,7 +698,38 @@
  "show_title_field_in_link": 1,
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": [],
+ "states": [
+  {
+   "title": "Pending",
+   "color": "yellow",
+   "criteria": "status:Pending"
+  },
+  {
+   "title": "Active",
+   "color": "green", 
+   "criteria": "status:Active"
+  },
+  {
+   "title": "Rejected",
+   "color": "red",
+   "criteria": "status:Rejected"
+  },
+  {
+   "title": "Expired",
+   "color": "orange",
+   "criteria": "status:Expired"
+  },
+  {
+   "title": "Suspended",
+   "color": "dark grey",
+   "criteria": "status:Suspended"
+  },
+  {
+   "title": "Banned",
+   "color": "black",
+   "criteria": "status:Banned"
+  }
+ ],
  "title_field": "full_name",
  "track_changes": 1
 }

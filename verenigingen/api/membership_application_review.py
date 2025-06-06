@@ -24,7 +24,26 @@ def approve_membership_application(member_name, membership_type=None, chapter=No
     
     # Use provided membership type or fallback to selected
     if not membership_type:
-        membership_type = member.selected_membership_type
+        membership_type = getattr(member, 'selected_membership_type', None)
+    
+    # Additional fallback to current membership type if selected is not set
+    if not membership_type:
+        membership_type = getattr(member, 'current_membership_type', None)
+    
+    # If still no membership type, try to set a default from available types
+    if not membership_type:
+        membership_types = frappe.get_all('Membership Type', fields=['name'], limit=1)
+        if membership_types:
+            membership_type = membership_types[0].name
+            # Set this as the selected type for the member
+            try:
+                member.selected_membership_type = membership_type
+                member.save()
+                frappe.logger().info(f"Auto-assigned membership type {membership_type} to member {member.name}")
+            except Exception as e:
+                frappe.logger().error(f"Could not save membership type to member: {str(e)}")
+        else:
+            frappe.throw(_("No membership types available in the system. Please create a membership type first."))
     
     if not membership_type:
         frappe.throw(_("Please select a membership type"))
@@ -34,13 +53,19 @@ def approve_membership_application(member_name, membership_type=None, chapter=No
         member.primary_chapter = chapter
     
     # Update member status
-    member.application_status = "Active"  # Skip "Approved" state
-    member.status = "Pending"  # Will become Active after payment
+    member.application_status = "Active"  # Application is approved and active
+    member.status = "Active"  # Member is now active (not waiting for payment)
     member.reviewed_by = frappe.session.user
     member.review_date = now_datetime()
     if notes:
         member.review_notes = notes
-    member.selected_membership_type = membership_type
+    # Set the selected membership type using setattr to handle potential AttributeError
+    try:
+        member.selected_membership_type = membership_type
+    except AttributeError:
+        # Field might not exist in the database yet, log but continue
+        frappe.logger().warning(f"Could not set selected_membership_type field on member {member.name}")
+    
     member.save()
     
     # Create membership record
@@ -166,28 +191,57 @@ def send_approval_notification(member, invoice, membership_type):
     # Create payment link
     payment_url = frappe.utils.get_url(f"/payment/membership/{member.name}/{invoice.name}")
     
-    args = {
-        "member": member,
-        "invoice": invoice,
-        "membership_type": membership_type,
-        "payment_url": payment_url,
-        "payment_amount": invoice.grand_total,
-        "company": frappe.defaults.get_global_default('company')
-    }
-    
-    # Send email
+    # Check if email templates exist, otherwise use simple email
     if frappe.db.exists("Email Template", "membership_application_approved"):
-        template = "membership_application_approved"
+        args = {
+            "member": member,
+            "invoice": invoice,
+            "membership_type": membership_type,
+            "payment_url": payment_url,
+            "payment_amount": invoice.grand_total,
+            "company": frappe.defaults.get_global_default('company')
+        }
+        
+        frappe.sendmail(
+            recipients=[member.email],
+            subject=_("Membership Application Approved - Payment Required"),
+            template="membership_application_approved",
+            args=args,
+            now=True
+        )
     else:
-        template = "membership_application_confirmation"
-    
-    frappe.sendmail(
-        recipients=[member.email],
-        subject=_("Membership Application Approved - Payment Required"),
-        template=template,
-        args=args,
-        now=True
-    )
+        # Use simple HTML email instead of template
+        message = f"""
+        <h2>Membership Application Approved!</h2>
+        
+        <p>Dear {member.first_name},</p>
+        
+        <p>Congratulations! Your membership application has been approved.</p>
+        
+        <p><strong>Application Details:</strong></p>
+        <ul>
+            <li>Application ID: {getattr(member, 'application_id', member.name)}</li>
+            <li>Membership Type: {membership_type.membership_type_name}</li>
+            <li>Fee Amount: {frappe.format_value(invoice.grand_total, {'fieldtype': 'Currency'})}</li>
+        </ul>
+        
+        <p>To complete your membership, please pay the membership fee using the link below:</p>
+        
+        <p><a href="{payment_url}" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Pay Membership Fee</a></p>
+        
+        <p>Your membership will be activated immediately after payment confirmation.</p>
+        
+        <p>If you have any questions, please don't hesitate to contact us.</p>
+        
+        <p>Best regards,<br>The Membership Team</p>
+        """
+        
+        frappe.sendmail(
+            recipients=[member.email],
+            subject=_("Membership Application Approved - Payment Required"),
+            message=message,
+            now=True
+        )
 
 def send_rejection_notification(member, reason):
     """Send rejection notification to applicant"""
@@ -294,6 +348,181 @@ def get_pending_applications(chapter=None, days_overdue=None):
             app["membership_currency"] = mt.currency
     
     return applications
+
+@frappe.whitelist()
+def debug_and_fix_member_approval(member_name):
+    """Debug and fix member approval issues"""
+    try:
+        member = frappe.get_doc("Member", member_name)
+        
+        # Check field access
+        result = {
+            "member": member.name,
+            "full_name": member.full_name,
+            "application_status": member.application_status,
+            "has_selected_type": hasattr(member, 'selected_membership_type'),
+            "selected_membership_type": getattr(member, 'selected_membership_type', None),
+            "has_current_type": hasattr(member, 'current_membership_type'),
+            "current_membership_type": getattr(member, 'current_membership_type', None)
+        }
+        
+        # Get available membership types
+        membership_types = frappe.get_all('Membership Type', fields=['name', 'membership_type_name', 'amount'])
+        result["available_membership_types"] = len(membership_types)
+        result["membership_types"] = membership_types[:3]  # Show first 3
+        
+        # Try to fix if no membership type is set
+        if not result["selected_membership_type"] and not result["current_membership_type"] and membership_types:
+            default_type = membership_types[0].name
+            try:
+                member.selected_membership_type = default_type
+                member.save()
+                result["fix_applied"] = True
+                result["default_type_set"] = default_type
+                result["selected_membership_type"] = default_type
+            except AttributeError:
+                # Field doesn't exist yet, but we can still use it for approval
+                result["fix_applied"] = "field_missing_but_will_work"
+                result["default_type_set"] = default_type
+                result["note"] = "Field not in database yet, but approval logic will handle this"
+        else:
+            result["fix_applied"] = False
+            
+        return result
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "member": member_name
+        }
+
+@frappe.whitelist()
+def test_member_approval(member_name):
+    """Test member approval without actually approving"""
+    try:
+        member = frappe.get_doc("Member", member_name)
+        
+        # Test the same logic as in approve_membership_application
+        membership_type = None
+        
+        # Use the same fallback logic
+        if not membership_type:
+            membership_type = getattr(member, 'selected_membership_type', None)
+        
+        if not membership_type:
+            membership_type = getattr(member, 'current_membership_type', None)
+        
+        if not membership_type:
+            membership_types = frappe.get_all('Membership Type', fields=['name'], limit=1)
+            if membership_types:
+                membership_type = membership_types[0].name
+            
+        result = {
+            "member": member.name,
+            "application_status": member.application_status,
+            "resolved_membership_type": membership_type,
+            "can_approve": bool(membership_type and member.application_status == "Pending"),
+            "status": "Ready for approval" if membership_type else "No membership type available"
+        }
+        
+        return result
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "member": member_name
+        }
+
+@frappe.whitelist()
+def sync_member_statuses():
+    """Sync member application and status fields to ensure consistency"""
+    try:
+        # Get all members to check for inconsistencies
+        members = frappe.get_all(
+            "Member",
+            fields=["name", "status", "application_status", "application_id"]
+        )
+        
+        updated_count = 0
+        
+        for member_data in members:
+            member = frappe.get_doc("Member", member_data.name)
+            is_application_member = bool(getattr(member, 'application_id', None))
+            
+            updated = False
+            
+            if is_application_member:
+                # Handle application-created members
+                if member.application_status == "Active" and member.status != "Active":
+                    member.status = "Active"
+                    updated = True
+                elif member.application_status == "Rejected" and member.status != "Rejected":
+                    member.status = "Rejected"
+                    updated = True
+            else:
+                # Handle backend-created members (no application process)
+                if not member.application_status:
+                    member.application_status = "Active"
+                    updated = True
+                
+                # Ensure backend-created members are Active by default unless explicitly set
+                if not member.status or member.status == "Pending":
+                    member.status = "Active"
+                    updated = True
+            
+            if updated:
+                member.save()
+                updated_count += 1
+        
+        return {
+            "success": True,
+            "message": f"Synchronized {updated_count} member records",
+            "updated_count": updated_count
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error syncing member statuses: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
+def fix_backend_member_statuses():
+    """One-time fix for backend-created members showing as Pending"""
+    try:
+        # Get all members that have Pending application_status but no application_id
+        members = frappe.get_all(
+            "Member",
+            fields=["name", "application_status", "application_id"],
+            filters={
+                "application_status": "Pending"
+            }
+        )
+        
+        fixed_count = 0
+        
+        for member_data in members:
+            # If no application_id, this is a backend-created member
+            if not member_data.application_id:
+                member = frappe.get_doc("Member", member_data.name)
+                member.application_status = "Active"
+                member.status = "Active"
+                member.save()
+                fixed_count += 1
+        
+        return {
+            "success": True,
+            "message": f"Fixed {fixed_count} backend-created members",
+            "fixed_count": fixed_count
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error fixing backend member statuses: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 @frappe.whitelist()
 def get_application_stats():

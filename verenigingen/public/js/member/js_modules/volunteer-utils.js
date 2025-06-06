@@ -8,7 +8,7 @@ function show_volunteer_info(frm) {
             filters: {
                 'member': frm.doc.name
             },
-            fields: ['name', 'volunteer_id', 'status', 'volunteer_since', 'total_hours_logged']
+            fields: ['name', 'status', 'start_date']
         },
         callback: function(r) {
             if (r.message && r.message.length > 0) {
@@ -47,10 +47,8 @@ function show_volunteer_info(frm) {
                                     <h5>🤝 Volunteer Information</h5>
                                     <div class="row">
                                         <div class="col-md-6">
-                                            <p><strong>Volunteer ID:</strong> ${volunteerDoc.volunteer_id || 'N/A'}</p>
                                             <p><strong>Status:</strong> <span class="badge ${get_status_class(volunteerDoc.status)}">${volunteerDoc.status}</span></p>
-                                            <p><strong>Volunteer Since:</strong> ${frappe.datetime.str_to_user(volunteerDoc.volunteer_since) || 'N/A'}</p>
-                                            <p><strong>Total Hours:</strong> ${volunteerDoc.total_hours_logged || 0} hours</p>
+                                            <p><strong>Volunteer Since:</strong> ${frappe.datetime.str_to_user(volunteerDoc.start_date) || 'N/A'}</p>
                                         </div>
                                         <div class="col-md-6">
                                             ${skillsHtml}

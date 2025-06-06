@@ -20,7 +20,8 @@ def get_board_memberships(member_name):
         return []
         
     board_memberships = frappe.db.sql("""
-        SELECT cbm.parent, cbm.chapter_role 
+        SELECT cbm.parent as chapter, cbm.chapter_role as role,
+               cbm.from_date as start_date, cbm.to_date as end_date
         FROM `tabChapter Board Member` cbm
         JOIN `tabVolunteer` v ON cbm.volunteer = v.name
         WHERE v.member = %s AND cbm.is_active = 1

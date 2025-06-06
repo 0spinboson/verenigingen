@@ -431,20 +431,28 @@ function add_termination_buttons(frm) {
                     let button_class = 'btn-danger';
                     let button_text = __('Terminate Membership');
                     
-                    frm.add_custom_button(button_text, function() {
+                    let btn = frm.add_custom_button(button_text, function() {
                         if (window.TerminationUtils) {
                             TerminationUtils.show_termination_dialog(frm.doc.name, frm.doc.full_name);
                         }
-                    }, __('Actions')).addClass(button_class + ' termination-button');
+                    }, __('Actions'));
+                    
+                    if (btn && btn.addClass) {
+                        btn.addClass(button_class + ' termination-button');
+                    }
                 }
                 
                 // Add appeal button for disciplinary terminations
                 if (status.pending_requests && status.pending_requests.length > 0) {
                     const pending = status.pending_requests[0];
                     if (['Policy Violation', 'Disciplinary Action', 'Expulsion'].includes(pending.termination_type)) {
-                        frm.add_custom_button(__('File Appeal'), function() {
+                        let btn = frm.add_custom_button(__('File Appeal'), function() {
                             show_appeal_creation_dialog(pending.name);
-                        }, __('Actions')).addClass('btn-warning');
+                        }, __('Actions'));
+                        
+                        if (btn && btn.addClass) {
+                            btn.addClass('btn-warning');
+                        }
                     }
                 }
                 
@@ -459,11 +467,15 @@ function add_termination_buttons(frm) {
         error: function(r) {
             // If API call fails, still add basic termination button
             console.log('Error checking termination status, adding basic termination button');
-            frm.add_custom_button(__('Terminate Membership'), function() {
+            let btn = frm.add_custom_button(__('Terminate Membership'), function() {
                 if (window.TerminationUtils) {
                     TerminationUtils.show_termination_dialog(frm.doc.name, frm.doc.full_name);
                 }
-            }, __('Actions')).addClass('btn-danger termination-button');
+            }, __('Actions'));
+            
+            if (btn && btn.addClass) {
+                btn.addClass('btn-danger termination-button');
+            }
         }
     });
 }

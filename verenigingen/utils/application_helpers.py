@@ -183,10 +183,9 @@ def create_member_from_application(data, application_id, address=None):
         "primary_chapter": data.get("selected_chapter", "")
     })
     
-    # Handle custom membership amount by storing in notes
+    # Handle custom membership amount using new fee override fields
     if data.get("membership_amount") or data.get("uses_custom_amount"):
         try:
-            
             # Safely convert membership_amount to float
             membership_amount = 0
             if data.get("membership_amount"):
@@ -195,6 +194,14 @@ def create_member_from_application(data, application_id, address=None):
                 except (ValueError, TypeError):
                     membership_amount = 0
             
+            # Set fee override fields if custom amount is specified
+            if membership_amount > 0:
+                member.membership_fee_override = membership_amount
+                member.fee_override_reason = f"Custom amount selected during application: {data.get('custom_amount_reason', 'Member-specified contribution level')}"
+                member.fee_override_date = today()
+                member.fee_override_by = "System"
+            
+            # Store legacy data in notes for audit purposes
             custom_amount_data = {
                 "membership_amount": membership_amount,
                 "uses_custom_amount": bool(data.get("uses_custom_amount", False))

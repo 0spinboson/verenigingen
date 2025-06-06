@@ -77,7 +77,8 @@ doc_events = {
         "validate": "verenigingen.validations.validate_appeal_filing",
     },
     "Member": {
-        "before_save": "verenigingen.verenigingen.doctype.member.member_utils.update_termination_status_display"
+        "before_save": "verenigingen.verenigingen.doctype.member.member_utils.update_termination_status_display",
+        "after_save": "verenigingen.verenigingen.doctype.member.member.handle_fee_override_after_save"
     },
 }
 

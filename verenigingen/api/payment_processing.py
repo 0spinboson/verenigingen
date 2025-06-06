@@ -7,6 +7,94 @@ from frappe import _
 from frappe.utils import today, now_datetime, getdate, flt, add_days
 from verenigingen.utils import DutchTaxExemptionHandler
 
+def get_or_create_customer(member):
+    """Get or create customer for member"""
+    if member.customer:
+        return frappe.get_doc("Customer", member.customer)
+    
+    # Create new customer
+    customer = frappe.get_doc({
+        "doctype": "Customer",
+        "customer_name": member.full_name,
+        "customer_type": "Individual",
+        "email_id": member.email,
+        "mobile_no": member.mobile_no,
+        "phone": member.phone
+    })
+    
+    customer.insert(ignore_permissions=True)
+    
+    # Update member with customer link
+    member.customer = customer.name
+    member.save()
+    
+    return customer
+
+def create_application_invoice(member, membership):
+    """Create invoice for membership application"""
+    
+    # Get or create customer
+    customer = get_or_create_customer(member)
+    
+    # Get membership type details
+    membership_type = frappe.get_doc("Membership Type", membership.membership_type)
+    
+    # Use custom amount if member has fee override
+    amount = member.membership_fee_override if hasattr(member, 'membership_fee_override') and member.membership_fee_override else membership_type.amount
+    
+    # Create Sales Invoice
+    invoice = frappe.get_doc({
+        "doctype": "Sales Invoice",
+        "customer": customer.name,
+        "posting_date": today(),
+        "due_date": add_days(today(), 7),  # 7 days to pay
+        "currency": membership_type.currency or "EUR",
+        "items": [{
+            "item_code": get_or_create_membership_item_code(),
+            "item_name": f"Membership Fee - {membership_type.membership_type_name}",
+            "description": f"Membership fee for {member.full_name} - {membership_type.membership_type_name}",
+            "qty": 1,
+            "rate": amount,
+            "amount": amount
+        }],
+        "taxes_and_charges": "",  # Will be set by tax handler if needed
+        "remarks": f"Membership application invoice for {member.full_name} (Application ID: {getattr(member, 'application_id', member.name)})"
+    })
+    
+    # Apply Dutch tax exemption if applicable
+    try:
+        tax_handler = DutchTaxExemptionHandler()
+        tax_handler.apply_exemption_to_invoice(invoice)
+    except Exception as e:
+        frappe.log_error(f"Could not apply tax exemption: {str(e)}")
+    
+    invoice.insert(ignore_permissions=True)
+    invoice.submit()
+    
+    return invoice
+
+def get_or_create_membership_item_code():
+    """Get or create the membership fee item code"""
+    item_code = "MEMBERSHIP-FEE"
+    
+    if not frappe.db.exists("Item", item_code):
+        # Create the item
+        item = frappe.get_doc({
+            "doctype": "Item",
+            "item_code": item_code,
+            "item_name": "Membership Fee",
+            "item_group": "Services",
+            "is_service_item": 1,
+            "maintain_stock": 0,
+            "include_item_in_manufacturing": 0,
+            "is_purchase_item": 0,
+            "is_sales_item": 1,
+            "description": "Annual membership fee for association membership"
+        })
+        item.insert(ignore_permissions=True)
+    
+    return item_code
+
 @frappe.whitelist(allow_guest=True)
 def process_application_payment(payment_id, payment_reference, payment_status, payment_data=None):
     """
@@ -299,6 +387,14 @@ def send_volunteer_welcome_email(volunteer):
             )
     except Exception as e:
         frappe.log_error(f"Error sending volunteer welcome email: {str(e)}")
+
+def notify_chapter_of_new_member_with_app_id(member):
+    """Notify chapter board of new member with application ID"""
+    notify_chapter_of_new_member(member)
+
+def send_payment_receipt_with_app_id(member, payment_entry):
+    """Send payment receipt with application ID"""
+    send_payment_receipt(member, payment_entry)
 
 def notify_chapter_of_new_member(member):
     """Notify chapter board of new member"""
