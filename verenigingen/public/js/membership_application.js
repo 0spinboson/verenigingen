@@ -555,8 +555,7 @@ class MembershipApplication {
             middle_name: $('#middle_name').val() || '',
             last_name: $('#last_name').val() || '',
             email: $('#email').val() || '',
-            mobile_no: $('#mobile_no').val() || '',
-            phone: $('#phone').val() || '',
+            contact_number: $('#contact_number').val() || '',
             birth_date: $('#birth_date').val() || '',
             pronouns: $('#pronouns').val() || '',
             
@@ -584,6 +583,10 @@ class MembershipApplication {
             
             // Step 5: Payment and Terms
             payment_method: $('input[name="payment_method_selection"]:checked').val() || $('#payment_method').val() || '',
+            iban: $('#iban').val() || '',
+            bic: $('#bic').val() || '',
+            bank_account_name: $('#bank_account_name').val() || '',
+            credit_card_number: $('#credit_card_number').val() || '',
             additional_notes: $('#additional_notes').val() || '',
             terms: $('#terms').is(':checked'),
             gdpr_consent: $('#gdpr_consent').is(':checked'),
@@ -1132,8 +1135,8 @@ class MembershipApplication {
             content += `<p><strong>Birth Date:</strong> ${data.birth_date}</p>`;
         }
         
-        if (data.mobile_no) {
-            content += `<p><strong>Mobile:</strong> ${data.mobile_no}</p>`;
+        if (data.contact_number) {
+            content += `<p><strong>Contact:</strong> ${data.contact_number}</p>`;
         }
         content += '</div>';
         
@@ -1196,6 +1199,24 @@ class MembershipApplication {
         
         if (data.payment_method) {
             content += `<p><strong>Payment Method:</strong> ${data.payment_method}</p>`;
+            
+            // Show bank details for Direct Debit
+            if (data.payment_method === 'Direct Debit') {
+                if (data.iban) {
+                    content += `<p><strong>IBAN:</strong> ${data.iban}</p>`;
+                }
+                if (data.bank_account_name) {
+                    content += `<p><strong>Account Holder:</strong> ${data.bank_account_name}</p>`;
+                }
+                if (data.bic) {
+                    content += `<p><strong>BIC:</strong> ${data.bic}</p>`;
+                }
+            }
+            
+            // Show credit card info for Credit Card
+            if (data.payment_method === 'Credit Card' && data.credit_card_number) {
+                content += `<p><strong>Card (last 4 digits):</strong> ****${data.credit_card_number}</p>`;
+            }
         } else {
             content += `<p><em>No payment method selected</em></p>`;
         }

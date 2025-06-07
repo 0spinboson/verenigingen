@@ -164,8 +164,7 @@ def create_member_from_application(data, application_id, address=None):
         "middle_name": data.get("middle_name", ""),
         "last_name": data.get("last_name"),
         "email": data.get("email"),
-        "mobile_no": data.get("mobile_no", ""),
-        "phone": data.get("phone", ""),
+        "contact_number": data.get("contact_number", ""),
         "birth_date": data.get("birth_date"),
         "pronouns": data.get("pronouns", ""),
         "primary_address": address.name if address else None,
@@ -186,12 +185,17 @@ def create_member_from_application(data, application_id, address=None):
     # Handle custom membership amount using new fee override fields
     if data.get("membership_amount") or data.get("uses_custom_amount"):
         try:
+            # Debug logging
+            frappe.logger().info(f"Processing custom amount for application. membership_amount: {data.get('membership_amount')}, uses_custom_amount: {data.get('uses_custom_amount')}")
+            
             # Safely convert membership_amount to float
             membership_amount = 0
             if data.get("membership_amount"):
                 try:
                     membership_amount = float(data.get("membership_amount"))
-                except (ValueError, TypeError):
+                    frappe.logger().info(f"Converted membership_amount to: {membership_amount}")
+                except (ValueError, TypeError) as e:
+                    frappe.logger().error(f"Error converting membership_amount '{data.get('membership_amount')}' to float: {str(e)}")
                     membership_amount = 0
             
             # Set fee override fields if custom amount is specified
@@ -199,7 +203,34 @@ def create_member_from_application(data, application_id, address=None):
                 member.membership_fee_override = membership_amount
                 member.fee_override_reason = f"Custom amount selected during application: {data.get('custom_amount_reason', 'Member-specified contribution level')}"
                 member.fee_override_date = today()
-                member.fee_override_by = "System"
+                
+                # Use a safe fallback for fee_override_by - ensure the user exists
+                override_user = None
+                
+                # Try current session user first
+                if frappe.session.user and frappe.session.user != "Guest":
+                    if frappe.db.exists("User", frappe.session.user):
+                        override_user = frappe.session.user
+                
+                # Fallback to Administrator if it exists
+                if not override_user and frappe.db.exists("User", "Administrator"):
+                    override_user = "Administrator"
+                
+                # Final fallback - find any valid user
+                if not override_user:
+                    first_user = frappe.db.get_value("User", {"enabled": 1}, "name")
+                    if first_user:
+                        override_user = first_user
+                
+                # Only set the field if we found a valid user
+                if override_user:
+                    member.fee_override_by = override_user
+                else:
+                    # Log warning but don't fail - just skip the fee override fields
+                    frappe.log_error("No valid user found for fee_override_by field", "Fee Override User Error")
+                    member.membership_fee_override = None
+                    member.fee_override_reason = None
+                    member.fee_override_date = None
             
             # Store legacy data in notes for audit purposes
             custom_amount_data = {
@@ -466,7 +497,7 @@ def get_member_field_info():
         field_info = {}
         
         for field in member_meta.fields:
-            if field.fieldname in ["first_name", "last_name", "email", "birth_date", "mobile_no", "phone"]:
+            if field.fieldname in ["first_name", "last_name", "email", "birth_date", "contact_number"]:
                 field_info[field.fieldname] = {
                     "label": field.label,
                     "fieldtype": field.fieldtype,

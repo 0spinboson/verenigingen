@@ -14,52 +14,6 @@ from verenigingen.verenigingen.doctype.member.mixins.sepa_mixin import SEPAManda
 from verenigingen.verenigingen.doctype.member.mixins.chapter_mixin import ChapterMixin
 from verenigingen.verenigingen.doctype.member.mixins.termination_mixin import TerminationMixin
 
-# Run one-time migration on module load
-def run_backend_member_migration():
-    """One-time migration to fix backend members showing as Pending"""
-    try:
-        # Check if migration has already been run
-        if frappe.db.exists("Singles", {"doctype": "System Settings", "field": "backend_member_migration_done"}):
-            return
-        
-        # Get members with Pending application_status but no application_id
-        members = frappe.db.sql("""
-            SELECT name, full_name 
-            FROM `tabMember` 
-            WHERE application_status = 'Pending' 
-            AND (application_id IS NULL OR application_id = '')
-            LIMIT 100
-        """, as_dict=True)
-        
-        if members:
-            frappe.logger().info(f"Fixing {len(members)} backend-created members")
-            
-            for member_data in members:
-                try:
-                    frappe.db.sql("""
-                        UPDATE `tabMember` 
-                        SET application_status = 'Active', status = 'Active'
-                        WHERE name = %s
-                    """, member_data.name)
-                except Exception as e:
-                    frappe.logger().error(f"Error fixing member {member_data.name}: {str(e)}")
-            
-            frappe.db.commit()
-            frappe.logger().info(f"Fixed {len(members)} backend-created members")
-        
-        # Mark migration as done
-        frappe.db.set_value("System Settings", "System Settings", "backend_member_migration_done", 1)
-        frappe.db.commit()
-        
-    except Exception as e:
-        frappe.logger().error(f"Backend member migration error: {str(e)}")
-
-# Run migration when module is imported
-if frappe.db:
-    try:
-        run_backend_member_migration()
-    except:
-        pass  # Ignore errors during import
 
 
 class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, TerminationMixin):
@@ -149,6 +103,9 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             if hasattr(self, 'application_status') and self.application_status:
                 if self.application_status == "Active" and self.status != "Active":
                     self.status = "Active"
+                    # Set member_since date when application becomes active
+                    if not self.member_since:
+                        self.member_since = today()
                 elif self.application_status == "Rejected" and self.status != "Rejected":
                     self.status = "Rejected"
                 elif self.application_status == "Pending" and self.status not in ["Pending", "Active"]:
@@ -209,8 +166,24 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
                     .format(field.replace('_', ' ').title()))
                     
     def update_full_name(self):
-        """Update the full name based on first, middle and last name"""
-        full_name = " ".join(filter(None, [self.first_name, self.middle_name, self.last_name]))
+        """Update the full name based on first names, name particles (tussenvoegsels), and last name"""
+        # Build full name with proper handling of name particles
+        name_parts = []
+        
+        if self.first_name:
+            name_parts.append(self.first_name.strip())
+        
+        # Handle name particles (tussenvoegsels) - these should be lowercase when in the middle
+        if self.middle_name:
+            particles = self.middle_name.strip()
+            # Ensure particles are lowercase when between first and last name
+            if particles:
+                name_parts.append(particles.lower())
+        
+        if self.last_name:
+            name_parts.append(self.last_name.strip())
+        
+        full_name = " ".join(name_parts)
         if self.full_name != full_name:
             self.full_name = full_name
             
@@ -317,9 +290,11 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
 
         if self.email:
             customer.email_id = self.email
-        if self.mobile_no:
+        if hasattr(self, 'contact_number') and self.contact_number:
+            customer.mobile_no = self.contact_number
+        elif hasattr(self, 'mobile_no') and self.mobile_no:
             customer.mobile_no = self.mobile_no
-        if self.phone:
+        if hasattr(self, 'phone') and self.phone:
             customer.phone = self.phone
 
         customer.flags.ignore_mandatory = True
@@ -387,13 +362,46 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
     
     def handle_fee_override_changes(self):
         """Handle changes to membership fee override"""
-        if not self.has_value_changed("membership_fee_override"):
+        # Skip fee override change tracking for new member applications
+        # Applications should set initial fee amounts without triggering change tracking
+        if not self.name or self.is_new():
+            # For new documents, validate and set audit fields but no change tracking
+            if self.membership_fee_override:
+                if self.membership_fee_override <= 0:
+                    frappe.throw(_("Membership fee override must be greater than 0"))
+                if not self.fee_override_reason:
+                    frappe.throw(_("Please provide a reason for the fee override"))
+                    
+                # Set audit fields for new members (but no change tracking)
+                if not self.fee_override_date:
+                    self.fee_override_date = today()
+                if not self.fee_override_by:
+                    self.fee_override_by = frappe.session.user
             return
-            
-        old_amount = self.get_db_value("membership_fee_override")
-        new_amount = self.membership_fee_override
         
-        # Set audit fields
+        # Get current and old values for existing documents
+        new_amount = self.membership_fee_override
+        old_amount = None
+        
+        try:
+            # Method 1: Use has_value_changed if available
+            if hasattr(self, 'has_value_changed') and self.has_value_changed("membership_fee_override"):
+                old_amount = self.get_db_value("membership_fee_override")
+            # Method 2: Compare with database value directly  
+            else:
+                old_amount = frappe.db.get_value("Member", self.name, "membership_fee_override")
+                # Check if values are actually different
+                if old_amount == new_amount:
+                    return  # No change detected
+        except Exception as e:
+            # Fallback: Log error but continue processing if new_amount differs from database
+            frappe.logger().error(f"Error detecting fee override changes for member {self.name}: {str(e)}")
+            return
+        
+        # If we reach here, there's an actual change to process for an existing member
+        frappe.logger().info(f"Processing fee override change for existing member {self.name}: {old_amount} -> {new_amount}")
+        
+        # Set audit fields when adding or changing override
         if new_amount and not old_amount:
             self.fee_override_date = today()
             self.fee_override_by = frappe.session.user
@@ -409,10 +417,12 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         self._pending_fee_change = {
             "old_amount": old_amount,
             "new_amount": new_amount,
-            "reason": self.fee_override_reason,
+            "reason": self.fee_override_reason or "No reason provided",
             "change_date": now(),
             "changed_by": frappe.session.user
         }
+        
+        frappe.logger().info(f"Set pending fee change for existing member {self.name}: {self._pending_fee_change}")
     
     
     def record_fee_change(self, change_data):
@@ -448,6 +458,76 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             }
         
         return {"amount": 0, "source": "none"}
+    
+    @frappe.whitelist()
+    def get_current_subscription_details(self):
+        """Get current active subscription details including billing interval"""
+        if not self.customer:
+            return {"error": "No customer linked to this member"}
+        
+        try:
+            # Get active subscriptions for this customer
+            active_subscriptions = frappe.get_all(
+                "Subscription",
+                filters={
+                    "party": self.customer,
+                    "party_type": "Customer",
+                    "status": "Active",
+                    "docstatus": 1
+                },
+                fields=["name", "start_date", "end_date", "status"]
+            )
+            
+            if not active_subscriptions:
+                return {
+                    "has_subscription": False,
+                    "message": "No active subscriptions found"
+                }
+            
+            subscription_details = []
+            for sub_data in active_subscriptions:
+                try:
+                    subscription = frappe.get_doc("Subscription", sub_data.name)
+                    
+                    # Get subscription plan details
+                    plan_details = []
+                    total_amount = 0
+                    
+                    for plan in subscription.plans:
+                        plan_doc = frappe.get_doc("Subscription Plan", plan.plan)
+                        plan_details.append({
+                            "plan_name": plan_doc.plan_name,
+                            "price": plan.price,
+                            "billing_interval": plan_doc.billing_interval,
+                            "billing_interval_count": plan_doc.billing_interval_count,
+                            "currency": plan_doc.currency
+                        })
+                        total_amount += plan.price
+                    
+                    subscription_details.append({
+                        "name": subscription.name,
+                        "status": subscription.status,
+                        "start_date": subscription.start_date,
+                        "end_date": subscription.end_date,
+                        "current_invoice_start": subscription.current_invoice_start,
+                        "current_invoice_end": subscription.current_invoice_end,
+                        "total_amount": total_amount,
+                        "plans": plan_details
+                    })
+                    
+                except Exception as e:
+                    frappe.log_error(f"Error getting subscription details for {sub_data.name}: {str(e)}")
+                    continue
+            
+            return {
+                "has_subscription": True,
+                "subscriptions": subscription_details,
+                "count": len(subscription_details)
+            }
+            
+        except Exception as e:
+            frappe.log_error(f"Error getting subscription details for member {self.name}: {str(e)}")
+            return {"error": str(e)}
     
     @frappe.whitelist()
     def refresh_subscription_history(self):
@@ -757,6 +837,86 @@ def get_active_sepa_mandate(member, iban=None):
 def handle_fee_override_after_save(doc, method=None):
     """Hook function to handle fee override changes after save"""
     if hasattr(doc, '_pending_fee_change'):
-        doc.record_fee_change(doc._pending_fee_change)
-        doc.update_active_subscriptions()
-        delattr(doc, '_pending_fee_change')
+        try:
+            frappe.logger().info(f"Processing pending fee change for member {doc.name}")
+            doc.record_fee_change(doc._pending_fee_change)
+            doc.update_active_subscriptions()
+            delattr(doc, '_pending_fee_change')
+            frappe.logger().info(f"Successfully processed fee override change for member {doc.name}")
+        except Exception as e:
+            frappe.logger().error(f"Error processing fee override for member {doc.name}: {str(e)}")
+            # Don't re-raise to avoid blocking the save operation
+    else:
+        frappe.logger().debug(f"No pending fee change found for member {doc.name}")
+
+@frappe.whitelist()
+def get_current_subscription_details(member):
+    """Get current active subscription details including billing interval for a member"""
+    member_doc = frappe.get_doc("Member", member)
+    
+    if not member_doc.customer:
+        return {"error": "No customer linked to this member"}
+    
+    try:
+        # Get active subscriptions for this customer
+        active_subscriptions = frappe.get_all(
+            "Subscription",
+            filters={
+                "party": member_doc.customer,
+                "party_type": "Customer",
+                "status": "Active",
+                "docstatus": 1
+            },
+            fields=["name", "start_date", "end_date", "status"]
+        )
+        
+        if not active_subscriptions:
+            return {
+                "has_subscription": False,
+                "message": "No active subscriptions found"
+            }
+        
+        subscription_details = []
+        for sub_data in active_subscriptions:
+            try:
+                subscription = frappe.get_doc("Subscription", sub_data.name)
+                
+                # Get subscription plan details
+                plan_details = []
+                total_amount = 0
+                
+                for plan in subscription.plans:
+                    plan_doc = frappe.get_doc("Subscription Plan", plan.plan)
+                    plan_details.append({
+                        "plan_name": plan_doc.plan_name,
+                        "price": plan.price,
+                        "billing_interval": plan_doc.billing_interval,
+                        "billing_interval_count": plan_doc.billing_interval_count,
+                        "currency": plan_doc.currency
+                    })
+                    total_amount += plan.price
+                
+                subscription_details.append({
+                    "name": subscription.name,
+                    "status": subscription.status,
+                    "start_date": subscription.start_date,
+                    "end_date": subscription.end_date,
+                    "current_invoice_start": subscription.current_invoice_start,
+                    "current_invoice_end": subscription.current_invoice_end,
+                    "total_amount": total_amount,
+                    "plans": plan_details
+                })
+                
+            except Exception as e:
+                frappe.log_error(f"Error getting subscription details for {sub_data.name}: {str(e)}")
+                continue
+        
+        return {
+            "has_subscription": True,
+            "subscriptions": subscription_details,
+            "count": len(subscription_details)
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting subscription details for member {member}: {str(e)}")
+        return {"error": str(e)}

@@ -299,10 +299,7 @@ function add_chapter_buttons(frm) {
                 // Add chapter suggestion UI when no chapter is assigned
                 add_chapter_suggestion_UI(frm);
                 
-                // Add visual indicator for chapter membership
-                if (frm.doc.primary_chapter && !frm.doc.__unsaved) {
-                    frm.dashboard.add_indicator(__("Member of {0}", [frm.doc.primary_chapter]), "blue");
-                }
+                // Chapter indicator is handled in main member form JS
                 
                 // Add debug button for postal code matching (development only)
                 if (frappe.boot.developer_mode && window.UIUtils) {

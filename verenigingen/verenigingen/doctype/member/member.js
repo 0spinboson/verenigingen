@@ -38,8 +38,11 @@ frappe.ui.form.on('Member', {
         // Add volunteer-related buttons
         add_volunteer_buttons(frm);
         
-        // Add termination buttons
+        // Add termination buttons and status display
         add_termination_buttons(frm);
+        
+        // Display termination status
+        display_termination_status(frm);
         
         // Add fee management functionality
         add_fee_management_buttons(frm);
@@ -54,6 +57,9 @@ frappe.ui.form.on('Member', {
         
         // Show board memberships if any
         UIUtils.show_board_memberships(frm);
+        
+        // Load and display current subscription details
+        load_subscription_summary(frm);
     },
     
     onload: function(frm) {
@@ -64,15 +70,20 @@ frappe.ui.form.on('Member', {
     // ==================== FIELD EVENT HANDLERS ====================
     
     full_name: function(frm) {
-        if (frm.doc.full_name) {
-            let full_name = [frm.doc.first_name, frm.doc.middle_name, frm.doc.last_name]
-                .filter(name => name && name.trim())
-                .join(' ');
-            
-            if (frm.doc.full_name !== full_name && full_name) {
-                frm.set_value('full_name', full_name);
-            }
-        }
+        // Auto-generate full name from component fields when individual fields change
+        update_full_name_from_components(frm);
+    },
+    
+    first_name: function(frm) {
+        update_full_name_from_components(frm);
+    },
+    
+    middle_name: function(frm) {
+        update_full_name_from_components(frm);
+    },
+    
+    last_name: function(frm) {
+        update_full_name_from_components(frm);
     },
     
     payment_method: function(frm) {
@@ -470,6 +481,10 @@ function add_fee_management_buttons(frm) {
             frm.add_custom_button(__('Refresh Subscription History'), function() {
                 refresh_subscription_history(frm);
             }, __('Fee Management'));
+            
+            frm.add_custom_button(__('Refresh Subscription Summary'), function() {
+                load_subscription_summary(frm);
+            }, __('Fee Management'));
         }
     }
 }
@@ -595,4 +610,266 @@ function refresh_subscription_history(frm) {
             }
         }
     });
+}
+
+function display_termination_status(frm) {
+    if (!frm.doc.name) return;
+    
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_member_termination_status',
+        args: {
+            member: frm.doc.name
+        },
+        callback: function(r) {
+            if (r.message) {
+                const status = r.message;
+                
+                // Update termination status HTML field
+                update_termination_status_html(frm, status);
+                
+                // Add dashboard indicators
+                add_termination_dashboard_indicators(frm, status);
+            }
+        }
+    });
+}
+
+function update_termination_status_html(frm, status) {
+    let html = '<div class="termination-status-display">';
+    
+    if (status.is_terminated && status.executed_requests && status.executed_requests.length > 0) {
+        const term_data = status.executed_requests[0];
+        html += `
+            <div class="alert alert-danger">
+                <h5><i class="fa fa-exclamation-triangle"></i> Membership Terminated</h5>
+                <p><strong>Termination Type:</strong> ${term_data.termination_type}</p>
+                <p><strong>Execution Date:</strong> ${frappe.datetime.str_to_user(term_data.execution_date)}</p>
+                <p><strong>Request:</strong> <a href="/app/membership-termination-request/${term_data.name}">${term_data.name}</a></p>
+            </div>
+        `;
+        
+        // Check for appeals
+        if (status.active_appeals && status.active_appeals.length > 0) {
+            const appeal = status.active_appeals[0];
+            html += `
+                <div class="alert alert-info">
+                    <h6><i class="fa fa-gavel"></i> Appeal in Progress</h6>
+                    <p><strong>Appeal Status:</strong> ${appeal.appeal_status}</p>
+                    <p><strong>Appeal Reference:</strong> <a href="/app/termination-appeals-process/${appeal.name}">${appeal.name}</a></p>
+                </div>
+            `;
+        }
+        
+    } else if (status.pending_requests && status.pending_requests.length > 0) {
+        const pending = status.pending_requests[0];
+        const status_colors = {
+            'Draft': 'warning',
+            'Pending Approval': 'warning',
+            'Approved': 'info'
+        };
+        const alert_class = status_colors[pending.status] || 'secondary';
+        
+        html += `
+            <div class="alert alert-${alert_class}">
+                <h5><i class="fa fa-clock-o"></i> Termination Request Pending</h5>
+                <p><strong>Status:</strong> ${pending.status}</p>
+                <p><strong>Type:</strong> ${pending.termination_type}</p>
+                <p><strong>Request Date:</strong> ${frappe.datetime.str_to_user(pending.request_date)}</p>
+                <p><strong>Request:</strong> <a href="/app/membership-termination-request/${pending.name}">${pending.name}</a></p>
+            </div>
+        `;
+        
+    } else {
+        html += `
+            <div class="alert alert-success">
+                <h6><i class="fa fa-check-circle"></i> Active Membership</h6>
+                <p>No termination requests or actions on record.</p>
+            </div>
+        `;
+    }
+    
+    html += '</div>';
+    
+    // Update the HTML field
+    if (frm.fields_dict.termination_status_html) {
+        frm.fields_dict.termination_status_html.html(html);
+    }
+}
+
+function add_termination_dashboard_indicators(frm, status) {
+    if (status.is_terminated && status.executed_requests && status.executed_requests.length > 0) {
+        const term_data = status.executed_requests[0];
+        
+        frm.dashboard.add_indicator(
+            __('Membership Terminated'), 
+            'red'
+        );
+        
+        if (term_data.execution_date) {
+            frm.dashboard.add_indicator(
+                __('Terminated on {0}', [frappe.datetime.str_to_user(term_data.execution_date)]), 
+                'grey'
+            );
+        }
+        
+    } else if (status.pending_requests && status.pending_requests.length > 0) {
+        const pending = status.pending_requests[0];
+        
+        if (pending.status === 'Pending Approval') {
+            frm.dashboard.add_indicator(
+                __('Termination Pending Approval'), 
+                'orange'
+            );
+        } else if (pending.status === 'Approved') {
+            frm.dashboard.add_indicator(
+                __('Termination Approved - Awaiting Execution'), 
+                'yellow'
+            );
+        }
+    }
+}
+
+// ==================== SUBSCRIPTION SUMMARY FUNCTIONS ====================
+
+function load_subscription_summary(frm) {
+    if (!frm.doc.customer || !frm.doc.name) {
+        return;
+    }
+    
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.member.member.get_current_subscription_details',
+        args: {
+            member: frm.doc.name
+        },
+        callback: function(r) {
+            if (r.message) {
+                update_subscription_summary_display(frm, r.message);
+            }
+        }
+    });
+}
+
+function update_subscription_summary_display(frm, subscription_data) {
+    let html = '<div class="subscription-summary-display">';
+    
+    if (subscription_data.error) {
+        html += `
+            <div class="alert alert-warning">
+                <h6><i class="fa fa-exclamation-triangle"></i> Error Loading Subscriptions</h6>
+                <p>${subscription_data.error}</p>
+            </div>
+        `;
+    } else if (!subscription_data.has_subscription) {
+        html += `
+            <div class="alert alert-info">
+                <h6><i class="fa fa-info-circle"></i> No Active Subscriptions</h6>
+                <p>${subscription_data.message || 'This member has no active subscription plans.'}</p>
+            </div>
+        `;
+    } else {
+        html += `
+            <div class="alert alert-success">
+                <h6><i class="fa fa-check-circle"></i> Active Subscriptions (${subscription_data.count})</h6>
+            </div>
+        `;
+        
+        subscription_data.subscriptions.forEach(function(subscription) {
+            html += `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">
+                            <a href="/app/subscription/${subscription.name}">${subscription.name}</a>
+                            <span class="badge badge-success float-right">${subscription.status}</span>
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Period:</strong> ${frappe.datetime.str_to_user(subscription.start_date)} - ${subscription.end_date ? frappe.datetime.str_to_user(subscription.end_date) : 'Ongoing'}</p>
+                                <p><strong>Current Billing:</strong> ${frappe.datetime.str_to_user(subscription.current_invoice_start)} - ${frappe.datetime.str_to_user(subscription.current_invoice_end)}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Total Amount:</strong> ${format_currency(subscription.total_amount)}</p>
+                            </div>
+                        </div>
+            `;
+            
+            if (subscription.plans && subscription.plans.length > 0) {
+                html += `
+                    <h6>Subscription Plans:</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Plan</th>
+                                    <th>Amount</th>
+                                    <th>Billing Frequency</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                subscription.plans.forEach(function(plan) {
+                    let billing_text = plan.billing_interval_count > 1 
+                        ? `Every ${plan.billing_interval_count} ${plan.billing_interval}s`
+                        : `${plan.billing_interval}ly`;
+                    
+                    html += `
+                        <tr>
+                            <td>${plan.plan_name}</td>
+                            <td>${format_currency(plan.price, plan.currency)}</td>
+                            <td>${billing_text}</td>
+                        </tr>
+                    `;
+                });
+                
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+            
+            html += `
+                    </div>
+                </div>
+            `;
+        });
+    }
+    
+    html += '</div>';
+    
+    // Update the HTML field
+    if (frm.fields_dict.current_subscription_summary) {
+        frm.fields_dict.current_subscription_summary.html(html);
+    }
+}
+
+// ==================== NAME HANDLING FUNCTIONS ====================
+
+function update_full_name_from_components(frm) {
+    // Build full name with proper handling of name particles (tussenvoegsels)
+    let name_parts = [];
+    
+    if (frm.doc.first_name && frm.doc.first_name.trim()) {
+        name_parts.push(frm.doc.first_name.trim());
+    }
+    
+    // Handle name particles (tussenvoegsels) - these should be lowercase when in the middle
+    if (frm.doc.middle_name && frm.doc.middle_name.trim()) {
+        let particles = frm.doc.middle_name.trim();
+        // Ensure particles are lowercase when between first and last name
+        name_parts.push(particles.toLowerCase());
+    }
+    
+    if (frm.doc.last_name && frm.doc.last_name.trim()) {
+        name_parts.push(frm.doc.last_name.trim());
+    }
+    
+    let full_name = name_parts.join(' ');
+    
+    // Only update if the generated name is different and not empty
+    if (full_name && frm.doc.full_name !== full_name) {
+        frm.set_value('full_name', full_name);
+    }
 }

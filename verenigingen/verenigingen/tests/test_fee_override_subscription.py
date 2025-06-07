@@ -269,6 +269,75 @@ class TestFeeOverrideSubscription(unittest.TestCase):
             print(f"✗ Refresh subscription history failed: {str(e)}")
             import traceback
             traceback.print_exc()
+    
+    def test_new_member_fee_logic(self):
+        """Test that new members with custom fees don't trigger change tracking"""
+        print(f"\n=== Testing new member fee logic ===")
+        
+        # Create a completely new member with custom fee
+        new_member = frappe.get_doc({
+            "doctype": "Member",
+            "first_name": "NewApp",
+            "last_name": "TestMember",
+            "email": "newapp.test@example.com",
+            "birth_date": "1992-01-01",
+            "membership_fee_override": 75.0,
+            "fee_override_reason": "Custom contribution during application",
+            "status": "Pending",
+            "application_status": "Pending"
+        })
+        
+        # Insert (this will trigger validation including handle_fee_override_changes)
+        new_member.insert(ignore_permissions=True)
+        
+        # Check that _pending_fee_change was NOT set (this was the bug)
+        if hasattr(new_member, '_pending_fee_change'):
+            print(f"❌ ERROR: New member should not have _pending_fee_change!")
+            print(f"   Member: {new_member.name}")
+            print(f"   Pending change: {new_member._pending_fee_change}")
+            self.fail("New member should not trigger fee change tracking")
+        else:
+            print(f"✅ New member correctly skips fee change tracking")
+            print(f"   Member: {new_member.name}")
+            print(f"   Fee override: €{new_member.membership_fee_override}")
+            
+        # Verify fee override fields are set correctly
+        self.assertEqual(new_member.membership_fee_override, 75.0)
+        self.assertEqual(new_member.fee_override_reason, "Custom contribution during application")
+        
+        # Clean up
+        frappe.delete_doc("Member", new_member.name, ignore_permissions=True)
+        
+    def test_existing_member_fee_change_tracking(self):
+        """Test that existing members with fee changes DO trigger tracking"""
+        print(f"\n=== Testing existing member fee change tracking ===")
+        
+        # Use the test member (already created and saved)
+        member = frappe.get_doc("Member", self.test_member.name)
+        
+        # Initially no fee override
+        self.assertIsNone(member.membership_fee_override)
+        
+        # Now set a fee override (this should trigger change tracking)
+        member.membership_fee_override = 125.0
+        member.fee_override_reason = "Premium supporter upgrade"
+        member.save(ignore_permissions=True)
+        
+        # Check if change tracking was triggered
+        if hasattr(member, '_pending_fee_change'):
+            print(f"✅ Existing member correctly triggers fee change tracking")
+            pending = member._pending_fee_change
+            print(f"   Old amount: {pending.get('old_amount')}")
+            print(f"   New amount: {pending.get('new_amount')}")
+            print(f"   Reason: {pending.get('reason')}")
+            
+            # Verify the tracking data
+            self.assertEqual(pending.get('new_amount'), 125.0)
+            self.assertIsNone(pending.get('old_amount'))  # First time setting override
+            self.assertIn("Premium supporter", pending.get('reason'))
+        else:
+            print(f"❌ ERROR: Existing member should have _pending_fee_change!")
+            self.fail("Existing member should trigger fee change tracking")
 
 
 def run_fee_override_tests():

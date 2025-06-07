@@ -286,6 +286,46 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         for result in results:
             if "member_id" in result:
                 frappe.delete_doc("Member", result["member_id"])
+    
+    def test_custom_fee_application_no_change_tracking(self):
+        """Test that applications with custom fees don't trigger fee change tracking"""
+        print("\n🧪 Testing custom fee application submission...")
+        
+        # Application data with custom amount
+        custom_fee_data = self.application_data.copy()
+        custom_fee_data["membership_amount"] = 75.0
+        custom_fee_data["uses_custom_amount"] = True
+        custom_fee_data["custom_amount_reason"] = "Supporter contribution level"
+        custom_fee_data["email"] = f"customfee_{self.test_email}"
+        
+        # Submit application with custom fee
+        result = submit_application(custom_fee_data)
+        
+        # Verify submission successful
+        self.assertTrue(result["success"])
+        self.assertIn("member_id", result)
+        
+        # Get created member
+        member = frappe.get_doc("Member", result["member_id"])
+        
+        # Verify custom fee was set correctly
+        self.assertEqual(member.membership_fee_override, 75.0)
+        self.assertIn("Supporter contribution", member.fee_override_reason)
+        self.assertEqual(member.application_status, "Pending")
+        
+        # KEY TEST: Verify no fee change tracking was triggered
+        self.assertFalse(hasattr(member, '_pending_fee_change'),
+                        "Application with custom fee should not trigger fee change tracking")
+        
+        print(f"✅ Custom fee application successful for {member.name}")
+        print(f"   Custom fee: €{member.membership_fee_override}")
+        print(f"   Reason: {member.fee_override_reason}")
+        print(f"   No fee change tracking triggered (correct for new application)")
+        
+        # Clean up
+        if member.customer:
+            frappe.delete_doc("Customer", member.customer, force=True)
+        frappe.delete_doc("Member", member.name, force=True)
 
 
 def run_tests():

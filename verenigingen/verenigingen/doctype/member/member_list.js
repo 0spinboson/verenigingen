@@ -27,7 +27,8 @@ frappe.listview_settings['Member'] = {
             'Expired': ['orange', 'Membership Expired'],
             'Suspended': ['dark grey', 'Account Suspended'],
             'Banned': ['black', 'Permanently Banned'],
-            'Deceased': ['purple', 'Deceased']
+            'Deceased': ['purple', 'Deceased'],
+            'Terminated': ['red', 'Membership Terminated']
         };
         
         // Get indicator for main status
@@ -84,7 +85,8 @@ frappe.listview_settings['Member'] = {
                 'Expired': '⏰',
                 'Suspended': '⏸️',
                 'Banned': '🚫',
-                'Deceased': '🕊️'
+                'Deceased': '🕊️',
+                'Terminated': '🔴'
             };
             
             const emoji = status_emojis[value] || '';
@@ -120,7 +122,8 @@ frappe.listview_settings['Member'] = {
                     'Expired': '⏰',
                     'Suspended': '⏸️',
                     'Banned': '🚫',
-                    'Deceased': '🕊️'
+                    'Deceased': '🕊️',
+                    'Terminated': '🔴'
                 };
                 
                 const badge_emoji = member_status_badges[doc.status] || '';
@@ -209,6 +212,8 @@ frappe.listview_settings['Member'] = {
                 frappe.confirm(
                     __('This will fix backend-created members that are incorrectly showing as "Pending". Continue?'),
                     function() {
+                        frappe.show_alert(__('Fixing backend member statuses...'), 2);
+                        
                         frappe.call({
                             method: 'verenigingen.api.membership_application_review.fix_backend_member_statuses',
                             callback: function(r) {
@@ -220,10 +225,17 @@ frappe.listview_settings['Member'] = {
                                     listview.refresh();
                                 } else {
                                     frappe.show_alert({
-                                        message: __('Error fixing member statuses'),
+                                        message: __('Error: Please run manually: bench execute verenigingen.manual_fix.fix_backend_members_now'),
                                         indicator: 'red'
-                                    }, 3);
+                                    }, 8);
                                 }
+                            },
+                            error: function(err) {
+                                console.error('Fix backend members error:', err);
+                                frappe.show_alert({
+                                    message: __('Error occurred. Please run manually: bench execute verenigingen.manual_fix.fix_backend_members_now'),
+                                    indicator: 'red'
+                                }, 8);
                             }
                         });
                     }

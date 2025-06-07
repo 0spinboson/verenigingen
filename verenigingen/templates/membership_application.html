@@ -16,12 +16,12 @@
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-4 mb-3">
-                        <label for="first_name" class="required">{{ _("First Name") }}</label>
+                        <label for="first_name" class="required">{{ _("Roepnaam") }}</label>
                         <input type="text" class="form-control" id="first_name" name="first_name" required>
                     </div>
                     <div class="col-md-4 mb-3">
-                        <label for="middle_name">{{ _("Middle Name") }}</label>
-                        <input type="text" class="form-control" id="middle_name" name="middle_name">
+                        <label for="middle_name">{{ _("Name Particles") }}</label>
+                        <input type="text" class="form-control" id="middle_name" name="middle_name" placeholder="{{ _('van, de, von, etc.') }}">
                     </div>
                     <div class="col-md-4 mb-3">
                         <label for="last_name" class="required">{{ _("Last Name") }}</label>
@@ -35,8 +35,8 @@
                         <input type="email" class="form-control" id="email" name="email" required>
                     </div>
                     <div class="col-md-6 mb-3">
-                        <label for="mobile_no">{{ _("Mobile Number") }}</label>
-                        <input type="tel" class="form-control" id="mobile_no" name="mobile_no">
+                        <label for="contact_number">{{ _("Contact Number") }}</label>
+                        <input type="tel" class="form-control" id="contact_number" name="contact_number">
                     </div>
                 </div>
                 
@@ -95,7 +95,7 @@
                 </div>
                 
                 <div class="row">
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-12 mb-3">
                         <label for="country" class="required">{{ _("Country") }}</label>
                         <select class="form-control" id="country" name="country" required>
                             <option value="">{{ _("Select Country...") }}</option>
@@ -104,9 +104,16 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-6 mb-3">
-                        <label for="phone">{{ _("Phone") }}</label>
-                        <input type="tel" class="form-control" id="phone" name="phone">
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="is_primary_address" name="is_primary_address" checked>
+                            <label class="form-check-label" for="is_primary_address">
+                                {{ _("Use this as my primary/shipping address") }}
+                            </label>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -175,6 +182,20 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- Credit Card Fields -->
+                <div id="credit-card-fields" style="display: none;">
+                    <div class="alert alert-info">
+                        {{ _("We only store the last 4 digits of your credit card for verification purposes. Full payment processing is handled securely through our payment provider.") }}
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label for="credit_card_number">{{ _("Credit Card Number (Last 4 digits only)") }}</label>
+                            <input type="text" class="form-control" id="credit_card_number" name="credit_card_number" maxlength="4" pattern="[0-9]{4}" placeholder="1234">
+                            <small class="form-text text-muted">{{ _("Enter only the last 4 digits for verification purposes") }}</small>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -189,6 +210,74 @@
                         <label for="motivation">{{ _("Why do you want to join our association?") }}</label>
                         <textarea class="form-control" id="motivation" name="motivation" rows="4"></textarea>
                     </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Financial Details -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h4>{{ _("Additional Financial Information") }}</h4>
+                <small class="text-muted">{{ _("Optional information to help us process your membership") }}</small>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="employer">{{ _("Employer") }}</label>
+                        <input type="text" class="form-control" id="employer" name="employer">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="occupation">{{ _("Occupation/Job Title") }}</label>
+                        <input type="text" class="form-control" id="occupation" name="occupation">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label for="annual_income">{{ _("Annual Income Range") }}</label>
+                        <select class="form-control" id="annual_income" name="annual_income">
+                            <option value="">{{ _("Prefer not to say") }}</option>
+                            <option value="Under €25,000">{{ _("Under €25,000") }}</option>
+                            <option value="€25,000 - €40,000">{{ _("€25,000 - €40,000") }}</option>
+                            <option value="€40,000 - €60,000">{{ _("€40,000 - €60,000") }}</option>
+                            <option value="€60,000 - €80,000">{{ _("€60,000 - €80,000") }}</option>
+                            <option value="€80,000 - €100,000">{{ _("€80,000 - €100,000") }}</option>
+                            <option value="Over €100,000">{{ _("Over €100,000") }}</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label for="tax_residence">{{ _("Tax Residence Country") }}</label>
+                        <select class="form-control" id="tax_residence" name="tax_residence">
+                            <option value="">{{ _("Select Country...") }}</option>
+                            {% for country in countries %}
+                            <option value="{{ country.name }}">{{ country.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="student_status" name="student_status">
+                            <label class="form-check-label" for="student_status">
+                                {{ _("I am currently a student (may qualify for reduced membership fees)") }}
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12 mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="donation_interest" name="donation_interest">
+                            <label class="form-check-label" for="donation_interest">
+                                {{ _("I am interested in making additional donations to support the association") }}
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="alert alert-info">
+                    <small>
+                        {{ _("This information is optional and will be kept strictly confidential. It helps us understand our membership base and may qualify you for special membership rates or programs.") }}
+                    </small>
                 </div>
             </div>
         </div>
@@ -245,14 +334,25 @@
 
 <script>
 $(document).ready(function() {
-    // Show/hide direct debit fields
+    // Show/hide payment method specific fields
     $('#payment_method').change(function() {
-        if ($(this).val() === 'Direct Debit') {
+        var paymentMethod = $(this).val();
+        
+        // Hide all payment method specific fields first
+        $('#direct-debit-fields').hide();
+        $('#credit-card-fields').hide();
+        
+        // Remove all payment method field requirements
+        $('#iban').prop('required', false);
+        $('#credit_card_number').prop('required', false);
+        
+        // Show relevant fields based on selection
+        if (paymentMethod === 'Direct Debit') {
             $('#direct-debit-fields').show();
             $('#iban').prop('required', true);
-        } else {
-            $('#direct-debit-fields').hide();
-            $('#iban').prop('required', false);
+        } else if (paymentMethod === 'Credit Card') {
+            $('#credit-card-fields').show();
+            $('#credit_card_number').prop('required', true);
         }
     });
     

@@ -85,6 +85,26 @@ function show_termination_dialog(member_id, member_name) {
                     description: impact_data.subscriptions > 0 ? 
                         __('Will cancel {0} active subscription(s)', [impact_data.subscriptions]) : 
                         __('No active subscriptions found')
+                },
+                {
+                    fieldtype: 'Section Break',
+                    label: __('Disciplinary Actions'),
+                    depends_on: 'eval:["Policy Violation", "Disciplinary Action", "Expulsion"].includes(doc.termination_type)'
+                },
+                {
+                    fieldname: 'appeal_deadline',
+                    fieldtype: 'Date',
+                    label: __('Appeal Deadline'),
+                    default: frappe.datetime.add_days(frappe.datetime.get_today(), 30),
+                    description: __('Last date for filing appeals'),
+                    depends_on: 'eval:["Policy Violation", "Disciplinary Action", "Expulsion"].includes(doc.termination_type)'
+                },
+                {
+                    fieldname: 'disciplinary_documentation',
+                    fieldtype: 'Small Text',
+                    label: __('Disciplinary Documentation'),
+                    description: __('Reference to supporting documentation'),
+                    depends_on: 'eval:["Policy Violation", "Disciplinary Action", "Expulsion"].includes(doc.termination_type)'
                 }
             ],
             primary_action_label: __('Create Termination Request'),
@@ -98,20 +118,9 @@ function show_termination_dialog(member_id, member_name) {
 }
 
 function update_termination_dialog_fields(dialog) {
-    const termination_type = dialog.get_value('termination_type');
-    const disciplinary_types = ['Policy Violation', 'Disciplinary Action', 'Expulsion'];
-    const is_disciplinary = disciplinary_types.includes(termination_type);
-    
-    // Add additional fields for disciplinary actions
-    if (is_disciplinary && !dialog.fields_dict.appeal_deadline) {
-        dialog.add_field({
-            fieldname: 'appeal_deadline',
-            fieldtype: 'Date',
-            label: __('Appeal Deadline'),
-            default: frappe.datetime.add_days(frappe.datetime.get_today(), 30),
-            description: __('Last date for filing appeals')
-        });
-    }
+    // The depends_on expressions in field definitions handle visibility automatically
+    // Just refresh the dialog to update field visibility
+    dialog.refresh();
 }
 
 function create_termination_request_v2(member_id, member_name, values, dialog) {
@@ -129,18 +138,24 @@ function create_termination_request_v2(member_id, member_name, values, dialog) {
         cancel_subscriptions: values.cancel_subscriptions
     };
     
+    // Add disciplinary fields if applicable
+    const disciplinary_types = ['Policy Violation', 'Disciplinary Action', 'Expulsion'];
+    const is_disciplinary = disciplinary_types.includes(values.termination_type);
+    
+    if (is_disciplinary) {
+        if (values.appeal_deadline) {
+            termination_data.appeal_deadline = values.appeal_deadline;
+        }
+        if (values.disciplinary_documentation) {
+            termination_data.disciplinary_documentation = values.disciplinary_documentation;
+        }
+    }
+    
     const confirmation_msg = create_confirmation_message(values, termination_data);
     
     frappe.confirm(
         confirmation_msg,
         function() {
-            const disciplinary_types = ['Policy Violation', 'Disciplinary Action', 'Expulsion'];
-            const is_disciplinary = disciplinary_types.includes(values.termination_type);
-            
-            if (is_disciplinary && values.appeal_deadline) {
-                termination_data.appeal_deadline = values.appeal_deadline;
-            }
-            
             frappe.call({
                 method: 'frappe.client.insert',
                 args: {

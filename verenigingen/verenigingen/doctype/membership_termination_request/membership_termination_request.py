@@ -412,7 +412,27 @@ def handle_status_change(doc, method=None):
 def get_termination_impact_preview(member):
     """Public API to get termination impact preview"""
     from verenigingen.utils.termination_utils import validate_termination_readiness
-    return validate_termination_readiness(member)
+    readiness_data = validate_termination_readiness(member)
+    
+    # Return the impact data in the format expected by the frontend
+    if readiness_data and "impact" in readiness_data:
+        impact = readiness_data["impact"]
+        
+        # Add customer linkage info
+        member_doc = frappe.get_doc("Member", member)
+        impact["customer_linked"] = bool(member_doc.customer)
+        
+        return impact
+    else:
+        # Fallback - return empty impact data
+        return {
+            "active_memberships": 0,
+            "sepa_mandates": 0,
+            "board_positions": 0,
+            "outstanding_invoices": 0,
+            "subscriptions": 0,
+            "customer_linked": False
+        }
 
 @frappe.whitelist()
 def execute_safe_member_termination(member, termination_type, termination_date=None):
@@ -425,3 +445,43 @@ def get_member_termination_status(member):
     """Get termination status for a member - redirect to member_utils"""
     from verenigingen.verenigingen.doctype.member.member_utils import get_member_termination_status
     return get_member_termination_status(member)
+
+@frappe.whitelist()
+def get_member_termination_history(member):
+    """Get termination history for a member"""
+    try:
+        # Get all termination requests for this member
+        termination_requests = frappe.get_all(
+            "Membership Termination Request",
+            filters={"member": member},
+            fields=[
+                "name", "termination_type", "termination_reason", "status", 
+                "request_date", "termination_date", "execution_date",
+                "requested_by", "approved_by", "executed_by"
+            ],
+            order_by="request_date desc"
+        )
+        
+        # Get audit trail for each request
+        for request in termination_requests:
+            audit_trail = frappe.get_all(
+                "Termination Audit Entry",
+                filters={"parent": request.name},
+                fields=["timestamp", "action", "user", "details", "system_action"],
+                order_by="timestamp desc"
+            )
+            request["audit_trail"] = audit_trail
+        
+        return {
+            "success": True,
+            "termination_requests": termination_requests,
+            "total_requests": len(termination_requests)
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting termination history for {member}: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "termination_requests": []
+        }

@@ -9,7 +9,7 @@
   "member",
   "member_name",
   "email",
-  "mobile_no",
+  "contact_number",
   "column_break_5",
   "membership_type",
   "auto_renew",
@@ -75,10 +75,10 @@
    "read_only": 1
   },
   {
-   "fetch_from": "member.mobile_no",
-   "fieldname": "mobile_no",
+   "fetch_from": "member.contact_number",
+   "fieldname": "contact_number",
    "fieldtype": "Data",
-   "label": "Mobile No",
+   "label": "Contact Number",
    "read_only": 1
   },
   {

@@ -55,6 +55,7 @@ def approve_membership_application(member_name, membership_type=None, chapter=No
     # Update member status
     member.application_status = "Active"  # Application is approved and active
     member.status = "Active"  # Member is now active (not waiting for payment)
+    member.member_since = today()  # Set member since date when approved
     member.reviewed_by = frappe.session.user
     member.review_date = now_datetime()
     if notes:

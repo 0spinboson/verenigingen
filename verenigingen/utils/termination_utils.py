@@ -44,14 +44,28 @@ def validate_termination_readiness(member_name):
         })
         readiness["impact"]["sepa_mandates"] = active_mandates
         
-        # Check board positions
-        volunteer_records = frappe.get_all("Volunteer", filters={"member": member_name}, fields=["name"])
+        # Check board positions - look for both volunteer-linked and direct member-linked positions
         board_positions = 0
+        
+        # Method 1: Check via volunteer records
+        volunteer_records = frappe.get_all("Volunteer", filters={"member": member_name}, fields=["name"])
         for volunteer in volunteer_records:
             board_positions += frappe.db.count("Chapter Board Member", {
                 "volunteer": volunteer.name,
                 "is_active": 1
             })
+        
+        # Method 2: Check for direct member linkage (if Chapter Board Member has member field)
+        try:
+            direct_board_positions = frappe.db.count("Chapter Board Member", {
+                "member": member_name,
+                "is_active": 1
+            })
+            board_positions += direct_board_positions
+        except:
+            # If member field doesn't exist in Chapter Board Member, that's OK
+            pass
+        
         readiness["impact"]["board_positions"] = board_positions
         
         if board_positions > 0:
