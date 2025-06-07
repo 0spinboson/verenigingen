@@ -33,10 +33,16 @@
   "current_membership_type",
   "current_membership_start",
   "current_membership_end",
-  "chapter_and_volunteer_activity_section",
-  "primary_chapter",
-  "volunteer_details_section",
-  "volunteer_details_html",
+  "current_subscription_summary_section",
+  "current_subscription_summary",
+  "fee_management_section",
+  "membership_fee_override",
+  "fee_override_reason",
+  "column_break_fee",
+  "fee_override_date",
+  "fee_override_by",
+  "fee_change_history_section",
+  "fee_change_history",
   "payments_tab",
   "payment_method_section",
   "payment_method",
@@ -48,20 +54,11 @@
   "credit_card_number",
   "column_break_31",
   "membership_status",
-  "fee_management_section",
-  "membership_fee_override",
-  "fee_override_reason",
-  "column_break_fee",
-  "fee_override_date",
-  "fee_override_by",
-  "fee_change_history_section",
-  "fee_change_history",
-  "subscription_history_section",
-  "subscription_history",
-  "current_subscription_summary_section",
-  "current_subscription_summary",
   "sepa_mandates_section",
   "sepa_mandates",
+  "subscription_history_section",
+  "subscription_history",
+  "payment_history_tab",
   "payment_history_section",
   "payment_history",
   "administration_tab",
@@ -80,9 +77,7 @@
   "customer",
   "column_break_24",
   "user",
-  "member_id_management_section",
   "next_member_id",
-  "counter_reset_section",
   "reset_counter_to",
   "reset_counter_button",
   "permission_category",
@@ -100,7 +95,12 @@
   "annual_income",
   "tax_residence",
   "student_status",
-  "donation_interest"
+  "donation_interest",
+  "volunteer_data_tab",
+  "chapter_and_volunteer_activity_section",
+  "primary_chapter",
+  "volunteer_details_section",
+  "volunteer_details_html"
  ],
  "fields": [
   {
@@ -166,99 +166,81 @@
    "options": "Bank Transfer\nDirect Debit\nCredit Card\nCash\nOther"
   },
   {
-    "fieldname": "application_section",
-    "fieldtype": "Section Break",
-    "label": "Application Details",
-    "collapsible": 1
+   "collapsible": 1,
+   "fieldname": "application_section",
+   "fieldtype": "Section Break",
+   "label": "Application Details"
   },
   {
-    "fieldname": "application_id",
-    "fieldtype": "Data",
-    "label": "Application ID",
-    "read_only": 1,
-    "unique": 1,
-    "description": "Unique identifier for the membership application"
+   "description": "Unique identifier for the membership application",
+   "fieldname": "application_id",
+   "fieldtype": "Data",
+   "label": "Application ID",
+   "read_only": 1,
+   "unique": 1
   },
   {
-    "fieldname": "application_status",
-    "fieldtype": "Select",
-    "label": "Application Status",
-    "options": "Pending\nUnder Review\nApproved\nRejected\nPayment Pending\nActive",
-    "in_list_view": 1,
-    "in_standard_filter": 1
+   "fieldname": "application_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Application Status",
+   "options": "Pending\nUnder Review\nApproved\nRejected\nPayment Pending\nActive"
   },
   {
-    "fieldname": "member_id_counter_section",
-    "fieldtype": "Section Break",
-    "label": "Member ID Management",
-    "insert_after": "technical_stuff_tab",
-    "collapsible": 1,
-    "depends_on": "eval:frappe.user.has_role('System Manager')"
+   "depends_on": "eval:frappe.user.has_role('System Manager')",
+   "description": "The next sequential member ID that will be assigned",
+   "fieldname": "next_member_id",
+   "fieldtype": "Int",
+   "label": "Next Member ID",
+   "read_only": 1
   },
   {
-    "fieldname": "next_member_id", 
-    "fieldtype": "Int",
-    "label": "Next Member ID",
-    "insert_after": "member_id_counter_section",
-    "read_only": 1,
-    "description": "The next sequential member ID that will be assigned",
-    "depends_on": "eval:frappe.user.has_role('System Manager')"
+   "depends_on": "eval:frappe.user.has_role('System Manager')",
+   "description": "Set this to reset the member ID counter to a specific number",
+   "fieldname": "reset_counter_to",
+   "fieldtype": "Int",
+   "label": "Reset Counter To"
   },
   {
-    "fieldname": "reset_counter_section",
-    "fieldtype": "Section Break", 
-    "label": "Counter Reset",
-    "insert_after": "next_member_id",
-    "depends_on": "eval:frappe.user.has_role('System Manager')"
+   "depends_on": "eval:doc.reset_counter_to && frappe.user.has_role('System Manager')",
+   "fieldname": "reset_counter_button",
+   "fieldtype": "Button",
+   "label": "Reset Counter"
   },
   {
-    "fieldname": "reset_counter_to",
-    "fieldtype": "Int",
-    "label": "Reset Counter To",
-    "insert_after": "reset_counter_section",
-    "description": "Set this to reset the member ID counter to a specific number",
-    "depends_on": "eval:frappe.user.has_role('System Manager')"
+   "fieldname": "application_date",
+   "fieldtype": "Datetime",
+   "label": "Application Date",
+   "read_only": 1
   },
   {
-    "fieldname": "reset_counter_button",
-    "fieldtype": "Button", 
-    "label": "Reset Counter",
-    "insert_after": "reset_counter_to",
-    "depends_on": "eval:doc.reset_counter_to && frappe.user.has_role('System Manager')"
+   "fieldname": "selected_membership_type",
+   "fieldtype": "Link",
+   "label": "Selected Membership Type",
+   "options": "Membership Type"
   },
   {
-    "fieldname": "application_date",
-    "fieldtype": "Datetime",
-    "label": "Application Date",
-    "read_only": 1
+   "fieldname": "column_break_app1",
+   "fieldtype": "Column Break"
   },
   {
-    "fieldname": "selected_membership_type",
-    "fieldtype": "Link",
-    "label": "Selected Membership Type",
-    "options": "Membership Type"
+   "fieldname": "reviewed_by",
+   "fieldtype": "Link",
+   "label": "Reviewed By",
+   "options": "User",
+   "read_only": 1
   },
   {
-    "fieldname": "column_break_app1",
-    "fieldtype": "Column Break"
+   "fieldname": "review_date",
+   "fieldtype": "Datetime",
+   "label": "Review Date",
+   "read_only": 1
   },
   {
-    "fieldname": "reviewed_by",
-    "fieldtype": "Link",
-    "label": "Reviewed By",
-    "options": "User",
-    "read_only": 1
-  },
-  {
-    "fieldname": "review_date",
-    "fieldtype": "Datetime",
-    "label": "Review Date",
-    "read_only": 1
-  },
-  {
-    "fieldname": "review_notes",
-    "fieldtype": "Small Text",
-    "label": "Review Notes"
+   "fieldname": "review_notes",
+   "fieldtype": "Small Text",
+   "label": "Review Notes"
   },
   {
    "fieldname": "bic",
@@ -278,11 +260,11 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:doc.payment_method === 'Credit Card'",
+   "description": "Last 4 digits only for verification purposes",
    "fieldname": "credit_card_number",
    "fieldtype": "Data",
-   "label": "Credit Card Number",
-   "description": "Last 4 digits only for verification purposes",
-   "depends_on": "eval:doc.payment_method === 'Credit Card'"
+   "label": "Credit Card Number"
   },
   {
    "fieldname": "member_details_section",
@@ -311,10 +293,10 @@
    "reqd": 1
   },
   {
+   "description": "Prefixes like 'van', 'de', 'von', etc.",
    "fieldname": "middle_name",
    "fieldtype": "Data",
-   "label": "Name Particles",
-   "description": "Prefixes like 'van', 'de', 'von', etc."
+   "label": "Name Particles"
   },
   {
    "fieldname": "last_name",
@@ -351,11 +333,11 @@
    "options": "Email"
   },
   {
+   "description": "Primary contact number (mobile or landline)",
    "fieldname": "contact_number",
    "fieldtype": "Data",
    "label": "Contact Number",
-   "options": "Phone",
-   "description": "Primary contact number (mobile or landline)"
+   "options": "Phone"
   },
   {
    "fieldname": "image",
@@ -370,17 +352,17 @@
    "options": "Pending\nActive\nRejected\nExpired\nSuspended\nBanned\nDeceased\nTerminated"
   },
   {
-  "fieldname": "termination_status_section",
-  "fieldtype": "Section Break",
-  "label": "Termination Status",
-  "collapsible": 1
+   "collapsible": 1,
+   "fieldname": "termination_status_section",
+   "fieldtype": "Section Break",
+   "label": "Termination Status"
   },
   {
+   "description": "Shows current termination status and any pending requests",
    "fieldname": "termination_status_html",
    "fieldtype": "HTML",
    "label": "Termination Status",
-   "read_only": 1,
-   "description": "Shows current termination status and any pending requests"
+   "read_only": 1
   },
   {
    "fieldname": "address_section",
@@ -511,21 +493,21 @@
    "options": "Address"
   },
   {
+   "description": "Date when membership application was approved",
    "fieldname": "member_since",
    "fieldtype": "Date",
    "label": "Member Since",
-   "read_only": 1,
-   "description": "Date when membership application was approved"
+   "read_only": 1
   },
   {
    "fieldname": "membership_tab",
    "fieldtype": "Tab Break",
-   "label": "Membership"
+   "label": "Membership Data"
   },
   {
    "fieldname": "payments_tab",
    "fieldtype": "Tab Break",
-   "label": "Payments"
+   "label": "Financial information"
   },
   {
    "fieldname": "administration_tab",
@@ -538,10 +520,10 @@
    "label": "Miscellaneous"
   },
   {
+   "collapsible": 1,
    "fieldname": "financial_details_section",
    "fieldtype": "Section Break",
-   "label": "Financial Details",
-   "collapsible": 1
+   "label": "Financial Details"
   },
   {
    "fieldname": "employer",
@@ -561,7 +543,7 @@
    "fieldname": "annual_income",
    "fieldtype": "Select",
    "label": "Annual Income Range",
-   "options": "\nUnder €25,000\n€25,000 - €40,000\n€40,000 - €60,000\n€60,000 - €80,000\n€80,000 - €100,000\nOver €100,000\nPrefer not to say"
+   "options": "\nUnder \u20ac25,000\n\u20ac25,000 - \u20ac40,000\n\u20ac40,000 - \u20ac60,000\n\u20ac60,000 - \u20ac80,000\n\u20ac80,000 - \u20ac100,000\nOver \u20ac100,000\nPrefer not to say"
   },
   {
    "fieldname": "tax_residence",
@@ -569,11 +551,13 @@
    "label": "Tax Residence Country"
   },
   {
+   "default": "0",
    "fieldname": "student_status",
    "fieldtype": "Check",
    "label": "Student Status"
   },
   {
+   "default": "0",
    "fieldname": "donation_interest",
    "fieldtype": "Check",
    "label": "Interested in Donations"
@@ -599,47 +583,47 @@
    "label": "Volunteer Information"
   },
   {
+   "depends_on": "eval:!doc.__islocal",
    "fieldname": "fee_management_section",
    "fieldtype": "Section Break",
-   "label": "Membership Fee Management",
-   "depends_on": "eval:!doc.__islocal"
+   "label": "Membership Fee Management"
   },
   {
+   "description": "Override the standard membership fee with a custom amount",
    "fieldname": "membership_fee_override",
    "fieldtype": "Currency",
-   "label": "Custom Membership Fee",
-   "description": "Override the standard membership fee with a custom amount"
+   "label": "Custom Membership Fee"
   },
   {
+   "depends_on": "eval:doc.membership_fee_override",
    "fieldname": "fee_override_reason",
    "fieldtype": "Small Text",
-   "label": "Reason for Fee Override",
-   "depends_on": "eval:doc.membership_fee_override"
+   "label": "Reason for Fee Override"
   },
   {
    "fieldname": "column_break_fee",
    "fieldtype": "Column Break"
   },
   {
+   "depends_on": "eval:doc.membership_fee_override",
    "fieldname": "fee_override_date",
    "fieldtype": "Date",
    "label": "Override Date",
-   "read_only": 1,
-   "depends_on": "eval:doc.membership_fee_override"
+   "read_only": 1
   },
   {
+   "depends_on": "eval:doc.membership_fee_override",
    "fieldname": "fee_override_by",
    "fieldtype": "Link",
    "label": "Override Set By",
    "options": "User",
-   "read_only": 1,
-   "depends_on": "eval:doc.membership_fee_override"
+   "read_only": 1
   },
   {
+   "depends_on": "eval:doc.fee_change_history && doc.fee_change_history.length > 0",
    "fieldname": "fee_change_history_section",
    "fieldtype": "Section Break",
-   "label": "Fee Change History",
-   "depends_on": "eval:doc.fee_change_history && doc.fee_change_history.length > 0"
+   "label": "Fee Change History"
   },
   {
    "fieldname": "fee_change_history",
@@ -649,10 +633,10 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:doc.customer",
    "fieldname": "subscription_history_section",
    "fieldtype": "Section Break",
-   "label": "Subscription History",
-   "depends_on": "eval:doc.customer"
+   "label": "Subscription History"
   },
   {
    "fieldname": "subscription_history",
@@ -662,16 +646,26 @@
    "read_only": 1
   },
   {
+   "depends_on": "eval:doc.customer",
    "fieldname": "current_subscription_summary_section",
    "fieldtype": "Section Break",
-   "label": "Current Subscription Details",
-   "depends_on": "eval:doc.customer"
+   "label": "Current Subscription Details"
   },
   {
    "fieldname": "current_subscription_summary",
    "fieldtype": "HTML",
    "label": "Current Subscription Summary",
-   "options": "<div id='subscription-summary-placeholder'>Loading subscription details...</div>"
+   "options": "<div id=\"subscription-summary-placeholder\">Loading subscription details...</div>"
+  },
+  {
+   "fieldname": "payment_history_tab",
+   "fieldtype": "Tab Break",
+   "label": "Payment history"
+  },
+  {
+   "fieldname": "volunteer_data_tab",
+   "fieldtype": "Tab Break",
+   "label": "Volunteer Data"
   }
  ],
  "links": [
@@ -692,7 +686,7 @@
    "link_fieldname": "member"
   }
  ],
- "modified": "2025-05-17 12:43:45.267592",
+ "modified": "2025-06-07 22:42:45.646332",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
@@ -749,39 +743,32 @@
  "sort_order": "DESC",
  "states": [
   {
-   "title": "Pending",
-   "color": "yellow",
-   "criteria": "status:Pending"
+   "color": "Yellow",
+   "title": "Pending"
   },
   {
-   "title": "Active",
-   "color": "green", 
-   "criteria": "status:Active"
+   "color": "Green",
+   "title": "Active"
   },
   {
-   "title": "Rejected",
-   "color": "red",
-   "criteria": "status:Rejected"
+   "color": "Red",
+   "title": "Rejected"
   },
   {
-   "title": "Expired",
-   "color": "orange",
-   "criteria": "status:Expired"
+   "color": "Orange",
+   "title": "Expired"
   },
   {
-   "title": "Suspended",
-   "color": "dark grey",
-   "criteria": "status:Suspended"
+   "color": "Gray",
+   "title": "Suspended"
   },
   {
-   "title": "Banned",
-   "color": "black",
-   "criteria": "status:Banned"
+   "color": "Purple",
+   "title": "Banned"
   },
   {
-   "title": "Terminated",
-   "color": "red",
-   "criteria": "status:Terminated"
+   "color": "Red",
+   "title": "Terminated"
   }
  ],
  "title_field": "full_name",
