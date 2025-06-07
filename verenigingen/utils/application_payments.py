@@ -70,7 +70,7 @@ def create_customer_for_member(member):
         "customer_group": frappe.db.get_single_value("Selling Settings", "customer_group") or "Individual",
         "territory": frappe.db.get_single_value("Selling Settings", "territory") or "All Territories",
         "email_id": member.email,
-        "mobile_no": member.mobile_no or ""
+        "mobile_no": member.contact_number or ""
     })
     customer.insert(ignore_permissions=True)
     return customer

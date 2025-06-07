@@ -428,7 +428,6 @@ class MemberManager(BaseManager):
                         member_doc = frappe.get_doc("Member", member.member)
                         member_data.update({
                             "email": member_doc.email,
-                            "mobile_no": member_doc.mobile_no,
                             "status": member_doc.status,
                             "member_since": member_doc.member_since,
                             "primary_chapter": member_doc.primary_chapter
@@ -542,7 +541,7 @@ class MemberManager(BaseManager):
                 return "No members to export"
             
             # CSV headers
-            headers = ["Member ID", "Name", "Email", "Mobile", "Status", 
+            headers = ["Member ID", "Name", "Email", "Status", 
                       "Introduction", "Website", "Enabled", "Leave Reason"]
             
             lines = [",".join(f'"{h}"' for h in headers)]
@@ -552,7 +551,6 @@ class MemberManager(BaseManager):
                     member.get('member_id', ''),
                     member.get('member_name', ''),
                     member.get('email', ''),
-                    member.get('mobile_no', ''),
                     member.get('status', ''),
                     member.get('introduction', ''),
                     member.get('website_url', ''),

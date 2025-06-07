@@ -79,7 +79,6 @@ def submit_membership_application(data):
             "middle_name": data.get("middle_name", ""),
             "last_name": data.get("last_name"),
             "email": data.get("email"),
-            "mobile_no": data.get("mobile_no", ""),
             "phone": data.get("phone", ""),
             "birth_date": data.get("birth_date"),
             "pronouns": data.get("pronouns", ""),

@@ -12,7 +12,7 @@
     <!-- Progress Bar -->
     <div class="progress-container mb-4">
         <div class="progress">
-            <div class="progress-bar" role="progressbar" style="width: 20%" id="form-progress"></div>
+            <div class="progress-bar" role="progressbar" style="width: 16.67%" id="form-progress"></div>
         </div>
         <div class="progress-steps">
             <span class="step active" data-step="1">Personal Info</span>
@@ -20,6 +20,7 @@
             <span class="step" data-step="3">Membership</span>
             <span class="step" data-step="4">Volunteer</span>
             <span class="step" data-step="5">Payment</span>
+            <span class="step" data-step="6">Confirm</span>
         </div>
     </div>
     
@@ -297,60 +298,199 @@
             </div>
         </div>
         
-        <!-- Enhanced Step 5: Payment with Better Method Selection -->
+        <!-- Step 5: Payment Details -->
         <div class="form-step" data-step="5" style="display: none;">
             <div class="card">
                 <div class="card-header">
-                    <h3>{{ _("Payment Information") }}</h3>
+                    <h3>{{ _("Payment Details") }}</h3>
                 </div>
                 <div class="card-body">
-                    <!-- Summary -->
-                    <div class="alert alert-info">
-                        <h5>{{ _("Application Summary") }}</h5>
-                        <div id="application-summary">
-                            <!-- Summary will be populated here -->
-                        </div>
-                    </div>
-                    
                     <!-- Payment Method Selection -->
                     <h5 class="required">{{ _("Payment Method") }}</h5>
-                        <div class="payment-methods-container">
-                            <div class="row">
-                                <div class="col-md-8">
-                                    <div id="payment-methods-list">
-                                        <!-- This will be populated by JavaScript -->
-                                        <div class="text-center">
-                                            <i class="fa fa-spinner fa-spin"></i> Loading payment methods...
-                                        </div>
-                                    </div>
-                                    
-                                    <div id="payment-method-fallback" style="display: none;">
-                                        <select class="form-control" id="payment_method" name="payment_method">
-                                            <!-- Remove required attribute - we'll handle validation in JavaScript -->
-                                        </select>
-                                        <div class="invalid-feedback"></div>
+                    <div class="payment-methods-container">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div id="payment-methods-list">
+                                    <!-- This will be populated by JavaScript -->
+                                    <div class="text-center">
+                                        <i class="fa fa-spinner fa-spin"></i> Loading payment methods...
                                     </div>
                                 </div>
-                                <div class="col-md-4">
-                                    <div class="payment-info-panel">
-                                        <div id="payment-method-details" style="display: none;">
-                                            <h6>Payment Details</h6>
-                                            <div id="payment-details-content"></div>
-                                        </div>
+                                
+                                <div id="payment-method-fallback" style="display: none;">
+                                    <select class="form-control" id="payment_method" name="payment_method">
+                                        <!-- Remove required attribute - we'll handle validation in JavaScript -->
+                                    </select>
+                                    <div class="invalid-feedback"></div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="payment-info-panel">
+                                    <div id="payment-method-details" style="display: none;">
+                                        <h6>Payment Details</h6>
+                                        <div id="payment-details-content"></div>
                                     </div>
                                 </div>
                             </div>
                         </div>
+                    </div>
                     
-                    <!-- SEPA Mandate Notice (shown when Direct Debit is selected) -->
-                    <div id="sepa-mandate-notice" class="alert alert-warning mt-3" style="display: none;">
-                        <h6><i class="fa fa-info-circle"></i> {{ _("SEPA Direct Debit Information") }}</h6>
-                        <p>{{ _("By selecting Direct Debit, you authorize us to collect payments from your bank account via SEPA Direct Debit.") }}</p>
-                        <ul class="mb-0">
-                            <li>{{ _("You can cancel the mandate at any time") }}</li>
-                            <li>{{ _("First collection will occur 5-7 business days after setup") }}</li>
-                            <li>{{ _("You will receive advance notice before each collection") }}</li>
-                        </ul>
+                    <!-- Credit Card Details (shown when Credit Card is selected) -->
+                    <div id="credit-card-details" class="mt-4" style="display: none;">
+                        <h5>{{ _("Credit Card Information") }}</h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="card_number" class="required">{{ _("Card Number") }}</label>
+                                <input type="text" class="form-control" id="card_number" name="card_number" 
+                                       placeholder="1234 5678 9012 3456" maxlength="19">
+                                <div class="invalid-feedback"></div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="card_holder_name" class="required">{{ _("Cardholder Name") }}</label>
+                                <input type="text" class="form-control" id="card_holder_name" name="card_holder_name" 
+                                       placeholder="{{ _('Full name on card') }}">
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-3 mb-3">
+                                <label for="expiry_month" class="required">{{ _("Month") }}</label>
+                                <select class="form-control" id="expiry_month" name="expiry_month">
+                                    <option value="">{{ _("MM") }}</option>
+                                    <option value="01">01</option>
+                                    <option value="02">02</option>
+                                    <option value="03">03</option>
+                                    <option value="04">04</option>
+                                    <option value="05">05</option>
+                                    <option value="06">06</option>
+                                    <option value="07">07</option>
+                                    <option value="08">08</option>
+                                    <option value="09">09</option>
+                                    <option value="10">10</option>
+                                    <option value="11">11</option>
+                                    <option value="12">12</option>
+                                </select>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="expiry_year" class="required">{{ _("Year") }}</label>
+                                <select class="form-control" id="expiry_year" name="expiry_year">
+                                    <option value="">{{ _("YYYY") }}</option>
+                                    {% for year in range(2024, 2035) %}
+                                    <option value="{{ year }}">{{ year }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="cvv" class="required">{{ _("CVV") }}</label>
+                                <input type="text" class="form-control" id="cvv" name="cvv" 
+                                       placeholder="123" maxlength="4">
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Bank Account Details (shown when Direct Debit is selected) -->
+                    <div id="bank-account-details" class="mt-4" style="display: none;">
+                        <h5>{{ _("Bank Account Information") }}</h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="iban" class="required">{{ _("IBAN") }}</label>
+                                <input type="text" class="form-control" id="iban" name="iban" 
+                                       placeholder="NL91 ABNA 0417 1643 00" maxlength="34">
+                                <small class="form-text text-muted">{{ _("International Bank Account Number") }}</small>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                            <div class="col-md-6 mb-3" style="display: none;">
+                                <label for="bic">{{ _("BIC/SWIFT Code") }} <small class="text-muted">({{ _("Auto-derived") }})</small></label>
+                                <input type="text" class="form-control" id="bic" name="bic" 
+                                       placeholder="ABNANL2A" maxlength="11" readonly>
+                                <small class="form-text text-muted">{{ _("Automatically derived from IBAN") }}</small>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="bank_account_name" class="required">{{ _("Account Holder Name") }}</label>
+                                <input type="text" class="form-control" id="bank_account_name" name="bank_account_name" 
+                                       placeholder="{{ _('Full name on bank account') }}">
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- SEPA Mandate Notice -->
+                        <div id="sepa-mandate-notice" class="alert alert-warning mt-3">
+                            <h6><i class="fa fa-info-circle"></i> {{ _("SEPA Direct Debit Information") }}</h6>
+                            <p>{{ _("By providing your bank details, you authorize us to collect payments from your bank account via SEPA Direct Debit.") }}</p>
+                            <ul class="mb-0">
+                                <li>{{ _("You can cancel the mandate at any time") }}</li>
+                                <li>{{ _("First collection will occur 5-7 business days after setup") }}</li>
+                                <li>{{ _("You will receive advance notice before each collection") }}</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <!-- Bank Transfer Details (shown when Bank Transfer is selected) -->
+                    <div id="bank-transfer-details" class="mt-4" style="display: none;">
+                        <h5>{{ _("Bank Transfer & Account Information") }}</h5>
+                        
+                        <!-- Bank Account Information for Payment Matching -->
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="transfer_iban">{{ _("Your Bank Account (IBAN)") }} <small class="text-muted">({{ _("Optional") }})</small></label>
+                                <input type="text" class="form-control" id="transfer_iban" name="transfer_iban" 
+                                       placeholder="NL91 ABNA 0417 1643 00" maxlength="34">
+                                <small class="form-text text-muted">{{ _("Helps us match your payment to your application") }}</small>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                            <div class="col-md-6 mb-3" style="display: none;">
+                                <label for="transfer_bic">{{ _("BIC/SWIFT Code") }} <small class="text-muted">({{ _("Auto-derived") }})</small></label>
+                                <input type="text" class="form-control" id="transfer_bic" name="transfer_bic" 
+                                       placeholder="ABNANL2A" maxlength="11" readonly>
+                                <small class="form-text text-muted">{{ _("Automatically derived from IBAN") }}</small>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="transfer_account_name">{{ _("Account Holder Name") }} <small class="text-muted">({{ _("Optional") }})</small></label>
+                                <input type="text" class="form-control" id="transfer_account_name" name="transfer_account_name" 
+                                       placeholder="{{ _('Full name on bank account') }}">
+                                <small class="form-text text-muted">{{ _("Name as it appears on your bank account") }}</small>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Payment Instructions -->
+                        <div class="alert alert-info mt-3">
+                            <h6><i class="fa fa-info-circle"></i> {{ _("Bank Transfer Payment Instructions") }}</h6>
+                            <p>{{ _("After submitting your application, you will receive payment instructions via email.") }}</p>
+                            <ul class="mb-0">
+                                <li>{{ _("Payment must be completed within 14 days") }}</li>
+                                <li>{{ _("Your membership will be activated after payment confirmation") }}</li>
+                                <li>{{ _("Please include your application reference in the payment description") }}</li>
+                                <li>{{ _("Providing your bank account details above helps us match your payment faster") }}</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Step 6: Final Confirmation -->
+        <div class="form-step" data-step="6" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <h3>{{ _("Review & Confirm") }}</h3>
+                </div>
+                <div class="card-body">
+                    <!-- Complete Application Summary -->
+                    <div class="alert alert-info">
+                        <h5>{{ _("Application Summary") }}</h5>
+                        <div id="final-application-summary">
+                            <!-- Summary will be populated here -->
+                        </div>
                     </div>
                     
                     <!-- Terms and Conditions -->
@@ -373,6 +513,14 @@
                             </label>
                             <div class="invalid-feedback"></div>
                         </div>
+                        
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" id="confirm_accuracy" name="confirm_accuracy" required>
+                            <label class="form-check-label" for="confirm_accuracy">
+                                {{ _("I confirm that all information provided is accurate and complete") }}
+                            </label>
+                            <div class="invalid-feedback"></div>
+                        </div>
                     </div>
                     
                     <!-- Additional Notes -->
@@ -380,6 +528,12 @@
                         <label for="additional_notes">{{ _("Additional Notes") }} <small class="text-muted">({{ _("Optional") }})</small></label>
                         <textarea class="form-control" id="additional_notes" name="additional_notes" rows="3" 
                                  placeholder="{{ _('Any additional information or special requests...') }}"></textarea>
+                    </div>
+                    
+                    <!-- Final Submission Notice -->
+                    <div class="alert alert-success mt-4">
+                        <h6><i class="fa fa-check-circle"></i> {{ _("Ready to Submit") }}</h6>
+                        <p class="mb-0">{{ _("By clicking 'Submit Application', your membership application will be processed and you will receive a confirmation email.") }}</p>
                     </div>
                 </div>
             </div>
@@ -519,7 +673,7 @@ $(document).ready(function() {
         // Initialize application
         try {
             window.membershipApp = new MembershipApplication({
-                maxSteps: 5,
+                maxSteps: 6,
                 autoSaveInterval: 30000
             });
             console.log('✓ Application initialized successfully');
@@ -535,7 +689,7 @@ function initializeFallbackApplication() {
     console.log('Initializing fallback application...');
     
     let currentStep = 1;
-    const maxSteps = 5;
+    const maxSteps = 6;
     
     // Show first step
     $('.form-step').hide();

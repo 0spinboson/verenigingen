@@ -75,6 +75,15 @@ function refresh_financial_history(frm) {
         callback: function(r) {
             frm.refresh_field("payment_history");
             
+            // Also refresh subscription history
+            frappe.call({
+                method: "refresh_subscription_history",
+                doc: frm.doc,
+                callback: function(r) {
+                    frm.refresh_field("subscription_history");
+                }
+            });
+            
             // Count records by type
             let records = frm.doc.payment_history || [];
             let stats = calculate_financial_stats(records);

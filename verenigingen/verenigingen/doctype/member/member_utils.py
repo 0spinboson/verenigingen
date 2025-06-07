@@ -177,13 +177,13 @@ def create_donor_from_member(member):
     donor.donor_type = "Individual"
     donor.donor_email = member_doc.email
     donor.contact_person = member_doc.full_name or member_doc.name
-    donor.phone = member_doc.mobile_no or member_doc.phone
+    donor.phone = member_doc.contact_number or member_doc.phone
     
     donor.donor_category = "Regular Donor"
     
     if member_doc.email:
         donor.preferred_communication_method = "Email"
-    elif member_doc.mobile_no:
+    elif member_doc.contact_number:
         donor.preferred_communication_method = "Phone"
     
     donor.insert(ignore_permissions=True)

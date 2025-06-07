@@ -388,6 +388,28 @@ class Membership(Document):
         # Check if member has a customer
         member = frappe.get_doc("Member", self.member)
         
+        # Check if there's already an application invoice for this membership
+        has_application_invoice = False
+        if member.customer:
+            existing_invoice = frappe.db.exists(
+                "Sales Invoice",
+                {
+                    "customer": member.customer,
+                    "status": ["in", ["Draft", "Submitted", "Unpaid", "Paid", "Partly Paid"]],
+                    "posting_date": [">=", self.start_date],
+                    "docstatus": ["!=", 2]  # Not cancelled
+                }
+            )
+            if existing_invoice:
+                has_application_invoice = True
+                frappe.log_error(
+                    f"Application invoice {existing_invoice} exists for membership {self.name} - adjusting subscription to prevent duplicates",
+                    "Membership Subscription Creation"
+                )
+                # Modify options to prevent immediate invoice generation
+                options['generate_invoice_at_period_start'] = 0
+                options['generate_new_invoices_past_due_date'] = 0
+        
         if not member.customer:
             # Create a customer for this member
             member.create_customer()
@@ -410,7 +432,25 @@ class Membership(Document):
             # Set basic subscription properties
             subscription.party_type = "Customer"
             subscription.party = member.customer
-            subscription.start_date = getdate(self.start_date)
+            
+            # If application invoice exists, adjust subscription start date to next billing period
+            if has_application_invoice:
+                # Calculate next billing period start date
+                from frappe.utils import add_months, add_days
+                if subscription_plan.billing_interval == "Month":
+                    next_period_start = add_months(getdate(self.start_date), subscription_plan.billing_interval_count)
+                elif subscription_plan.billing_interval == "Year":
+                    next_period_start = add_months(getdate(self.start_date), subscription_plan.billing_interval_count * 12)
+                else:
+                    # Fallback for other intervals
+                    next_period_start = add_days(getdate(self.start_date), 30)
+                subscription.start_date = next_period_start
+                frappe.log_error(
+                    f"Adjusted subscription start date to {next_period_start} for membership {self.name} to avoid overlap with application invoice",
+                    "Membership Subscription Date Adjustment"
+                )
+            else:
+                subscription.start_date = getdate(self.start_date)
             
             # Set company
             subscription.company = frappe.defaults.get_global_default('company') or '_Test Company'

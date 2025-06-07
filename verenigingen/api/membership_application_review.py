@@ -89,6 +89,7 @@ def approve_membership_application(member_name, membership_type=None, chapter=No
             membership.custom_amount = custom_amount_data.get("membership_amount")
     
     membership.insert()
+    membership.submit()  # Submit the membership to activate it
     
     # Get membership type details
     membership_type_doc = frappe.get_doc("Membership Type", membership_type)
@@ -330,7 +331,7 @@ def get_pending_applications(chapter=None, days_overdue=None):
         "Member",
         filters=filters,
         fields=[
-            "name", "application_id", "full_name", "email", "mobile_no",
+            "name", "application_id", "full_name", "email", "contact_number",
             "application_date", "primary_chapter", "suggested_chapter",
             "selected_membership_type", "application_source",
             "interested_in_volunteering", "age"
@@ -589,6 +590,28 @@ def get_application_stats():
     stats["volunteer_interest_rate"] = round((volunteer_interested / total_apps * 100) if total_apps > 0 else 0, 1)
     
     return stats
+
+@frappe.whitelist()
+def check_member_iban_data(member_name):
+    """Check the current IBAN data for a member"""
+    try:
+        member = frappe.get_doc("Member", member_name)
+        
+        result = {
+            "member_name": member.name,
+            "full_name": member.full_name,
+            "payment_method": getattr(member, 'payment_method', 'Not set'),
+            "iban": getattr(member, 'iban', 'Not set'),
+            "bic": getattr(member, 'bic', 'Not set'),
+            "bank_account_name": getattr(member, 'bank_account_name', 'Not set'),
+            "application_id": getattr(member, 'application_id', 'Not set'),
+            "application_status": getattr(member, 'application_status', 'Not set')
+        }
+        
+        return result
+        
+    except Exception as e:
+        return {"error": str(e)}
 
 @frappe.whitelist()
 def send_overdue_notifications():

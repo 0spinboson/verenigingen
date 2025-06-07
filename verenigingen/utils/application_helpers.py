@@ -179,7 +179,11 @@ def create_member_from_application(data, application_id, address=None):
         "application_source": data.get("application_source", "Website"),
         "notes": data.get("additional_notes", ""),
         "payment_method": data.get("payment_method", ""),
-        "primary_chapter": data.get("selected_chapter", "")
+        "primary_chapter": data.get("selected_chapter", ""),
+        # Bank details for bank transfer/direct debit
+        "iban": data.get("iban", ""),
+        "bic": data.get("bic", ""),
+        "bank_account_name": data.get("bank_account_name", "")
     })
     
     # Handle custom membership amount using new fee override fields

@@ -246,8 +246,69 @@ function handle_payment_method_change(frm) {
     frm.toggle_display('bic', show_bank_details);
     frm.toggle_display('bank_name', show_bank_details);
     
+    // Set up IBAN change handler for BIC derivation
+    if (show_bank_details) {
+        setup_iban_bic_derivation(frm);
+    }
+    
     if (is_direct_debit && frm.doc.iban) {
         SepaUtils.check_sepa_mandate_status(frm);
+    }
+}
+
+function setup_iban_bic_derivation(frm) {
+    // Set up IBAN field to auto-derive BIC
+    frm.fields_dict.iban.$input.off('change.bic_derivation').on('change.bic_derivation', function() {
+        const iban = $(this).val();
+        if (iban) {
+            const derivedBic = get_bic_from_iban(iban);
+            if (derivedBic && derivedBic !== frm.doc.bic) {
+                frm.set_value('bic', derivedBic);
+                frappe.show_alert({
+                    message: __('BIC automatically derived from IBAN: {0}', [derivedBic]),
+                    indicator: 'green'
+                }, 3);
+            }
+        }
+    });
+}
+
+function get_bic_from_iban(iban) {
+    /**
+     * Derive BIC from IBAN using the same logic as the backend
+     * This matches the get_bic_from_iban() function in direct_debit_batch.py
+     */
+    if (!iban || iban.length < 8) {
+        return null;
+    }
+    
+    try {
+        // Remove spaces and convert to uppercase
+        iban = iban.replace(/\s+/g, '').toUpperCase();
+        
+        // Dutch IBAN - extract bank code
+        if (iban.startsWith('NL')) {
+            const bankCode = iban.substring(4, 8);
+            
+            // Common Dutch bank codes (matching backend)
+            const bankCodes = {
+                'INGB': 'INGBNL2A',  // ING Bank
+                'ABNA': 'ABNANL2A',  // ABN AMRO
+                'RABO': 'RABONL2U',  // Rabobank
+                'TRIO': 'TRIONL2U',  // Triodos Bank
+                'SNSB': 'SNSBNL2A',  // SNS Bank
+                'ASNB': 'ASNBNL21',  // ASN Bank
+                'KNAB': 'KNABNL2H'   // Knab
+            };
+            
+            return bankCodes[bankCode] || null;
+        }
+        
+        // For other countries, we would need a more extensive mapping
+        return null;
+    } catch (error) {
+        console.error('Error determining BIC from IBAN:', iban, error);
+        return null;
     }
 }
 
@@ -259,5 +320,7 @@ window.UIUtils = {
     show_board_memberships,
     create_organization_user,
     setup_member_id_display,
-    handle_payment_method_change
+    handle_payment_method_change,
+    setup_iban_bic_derivation,
+    get_bic_from_iban
 };

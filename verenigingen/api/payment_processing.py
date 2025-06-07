@@ -18,7 +18,7 @@ def get_or_create_customer(member):
         "customer_name": member.full_name,
         "customer_type": "Individual",
         "email_id": member.email,
-        "mobile_no": member.mobile_no,
+        "mobile_no": member.contact_number,
         "phone": member.phone
     })
     

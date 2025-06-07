@@ -331,7 +331,8 @@ def submit_application(**kwargs):
             "success": True,
             "message": "Application submitted successfully! You will receive an email with your application ID.",
             "application_id": application_id,
-            "member_id": member.name,
+            "applicant_id": getattr(member, 'applicant_id', None),
+            "member_record": member.name,
             "status": "pending_review"
         }
         
@@ -367,42 +368,22 @@ def approve_membership_application(member_name, notes=None):
         if member.application_status not in ["Pending", "Under Review"]:
             frappe.throw(_("This application cannot be approved in its current state"))
         
-        # Update member
-        member.application_status = "Approved"
-        member.reviewed_by = frappe.session.user
-        member.review_date = now_datetime()
+        # Add notes if provided
         if notes:
             member.review_notes = notes
-        member.save()
         
-        # Create membership record
-        membership = frappe.get_doc({
-            "doctype": "Membership",
-            "member": member.name,
-            "membership_type": member.selected_membership_type,
-            "start_date": today(),
-            "status": "Pending",  # Will become Active after payment
-            "auto_renew": 1  # Default to auto-renew
-        })
-        membership.insert()
-        
-        # Get membership type details
-        membership_type = frappe.get_doc("Membership Type", member.selected_membership_type)
-        
-        # Generate invoice
-        invoice = create_membership_invoice(member, membership, membership_type)
-        
-        # Update member with invoice reference
-        member.application_invoice = invoice.name
-        member.application_payment_status = "Pending"
-        member.save()
+        # Use the new approve_application method which handles member ID assignment
+        membership = member.approve_application()
         
         # Send approval email with payment instructions
+        invoice = frappe.get_doc("Sales Invoice", member.application_invoice)
         send_approval_email(member, invoice)
         
         return {
             "success": True,
-            "message": "Application approved and invoice generated",
+            "message": f"Application approved! Member ID {member.member_id} assigned and invoice {invoice.name} generated",
+            "member_id": member.member_id,
+            "applicant_id": getattr(member, 'applicant_id', None),
             "invoice": invoice.name
         }
         

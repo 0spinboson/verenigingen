@@ -23,8 +23,13 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
     
     def before_save(self):
         """Execute before saving the document"""
+        # Only generate member ID for approved members or non-application members
         if not self.member_id:
-            self.member_id = self.generate_member_id()
+            if self.should_have_member_id():
+                self.member_id = self.generate_member_id()
+            elif self.is_application_member() and not self.applicant_id:
+                self.applicant_id = self.generate_applicant_id()
+        
         self.handle_chapter_assignment()
         if hasattr(self, 'reset_counter_to') and self.reset_counter_to:
             self.reset_counter_to = None
@@ -34,7 +39,46 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
 
     def before_insert(self):
         """Execute before inserting new document"""
-        self.generate_member_id()
+        # Member ID generation is now handled in before_save based on application status
+        pass
+
+    def is_application_member(self):
+        """Check if this member was created through the application process"""
+        return bool(getattr(self, 'application_id', None))
+    
+    def should_have_member_id(self):
+        """Check if this member should have a member ID assigned"""
+        # Non-application members should get member ID immediately
+        if not self.is_application_member():
+            return True
+        
+        # Application members only get member ID when approved
+        return getattr(self, 'application_status', '') == 'Approved'
+    
+    def generate_applicant_id(self):
+        """Generate a unique applicant ID for applications"""
+        if frappe.session.user == "Guest":
+            return None
+        
+        try:
+            settings = frappe.get_single("Verenigingen Settings")
+            
+            # Check if the field exists
+            if not hasattr(settings, 'last_applicant_id'):
+                # Initialize applicant ID starting from 1000
+                start_id = getattr(settings, 'applicant_id_start', 1000)
+                settings.last_applicant_id = start_id - 1
+                settings.save()
+
+            new_id = int(getattr(settings, 'last_applicant_id', 999)) + 1
+            settings.last_applicant_id = new_id
+            settings.save()
+
+            return f"APP-{new_id:05d}"  # Format: APP-01000, APP-01001, etc.
+        except Exception as e:
+            # Fallback to timestamp-based ID
+            import time
+            return f"APP-{str(int(time.time() * 1000))[-8:]}"
 
     def generate_member_id(self):
         """Generate a unique member ID"""
@@ -64,6 +108,65 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             # Fallback to simple ID generation
             import time
             return str(int(time.time() * 1000))[-8:]
+            
+    def approve_application(self):
+        """Approve this application and assign member ID"""
+        if not self.is_application_member():
+            frappe.throw(_("This is not an application member"))
+        
+        if self.application_status == 'Approved':
+            frappe.throw(_("Application is already approved"))
+        
+        # Assign member ID
+        if not self.member_id:
+            self.member_id = self.generate_member_id()
+        
+        # Update status
+        self.application_status = 'Approved'
+        self.status = 'Active'
+        self.reviewed_by = frappe.session.user
+        self.review_date = now_datetime()
+        
+        # Save the member
+        self.save()
+        
+        # Create membership - this should trigger the subscription logic
+        return self.create_membership_on_approval()
+    
+    def create_membership_on_approval(self):
+        """Create membership record when application is approved"""
+        try:
+            # Get membership type
+            if not self.selected_membership_type:
+                frappe.throw(_("No membership type selected for this application"))
+            
+            membership_type = frappe.get_doc("Membership Type", self.selected_membership_type)
+            
+            # Create membership record
+            membership = frappe.get_doc({
+                "doctype": "Membership",
+                "member": self.name,
+                "membership_type": self.selected_membership_type,
+                "start_date": today(),
+                "status": "Pending",  # Will become Active after payment
+                "auto_renew": 1
+            })
+            membership.insert()
+            
+            # Generate invoice
+            from verenigingen.utils.application_payments import create_membership_invoice
+            invoice = create_membership_invoice(self, membership, membership_type)
+            
+            # Update member with invoice reference
+            self.application_invoice = invoice.name
+            self.application_payment_status = "Pending"
+            self.save()
+            
+            return membership
+            
+        except Exception as e:
+            frappe.log_error(f"Error creating membership on approval: {str(e)}")
+            frappe.throw(_("Error creating membership: {0}").format(str(e)))
     
     def validate(self):
         """Validate document data"""
