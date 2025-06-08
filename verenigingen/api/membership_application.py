@@ -311,7 +311,11 @@ def submit_application(**kwargs):
         # Determine suggested chapter
         suggested_chapter = determine_chapter_from_application(data)
         if suggested_chapter:
-            member.suggested_chapter = suggested_chapter
+            # Use getattr to safely set chapter field, fallback to primary_chapter
+            if hasattr(member, 'suggested_chapter'):
+                member.suggested_chapter = suggested_chapter
+            else:
+                member.primary_chapter = suggested_chapter
             member.save()
         
         # Create volunteer record if interested

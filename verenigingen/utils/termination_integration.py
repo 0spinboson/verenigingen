@@ -238,3 +238,373 @@ def end_board_positions_safe(member_name, end_date, reason):
     except Exception as e:
         frappe.logger().error(f"Failed to end board positions for {member_name}: {str(e)}")
         return 0
+
+def suspend_team_memberships_safe(member_name, termination_date, reason):
+    """
+    Suspend or remove all team memberships for terminated member
+    """
+    try:
+        if not termination_date:
+            termination_date = today()
+        
+        teams_affected = 0
+        
+        # Get all active team memberships for this member
+        team_memberships = frappe.get_all(
+            "Team Member",
+            filters={
+                "user": frappe.db.get_value("Member", member_name, "user"),
+                "docstatus": ["!=", 2]  # Not cancelled
+            },
+            fields=["name", "parent", "user", "role"]
+        )
+        
+        for team_membership in team_memberships:
+            try:
+                team_member_doc = frappe.get_doc("Team Member", team_membership.name)
+                
+                # Cancel the team membership document
+                if team_member_doc.docstatus == 1:
+                    team_member_doc.flags.ignore_permissions = True
+                    team_member_doc.cancel()
+                    teams_affected += 1
+                    frappe.logger().info(f"Cancelled team membership for {team_membership.user} in team {team_membership.parent}")
+                elif team_member_doc.docstatus == 0:
+                    # Delete draft team memberships
+                    team_member_doc.flags.ignore_permissions = True
+                    team_member_doc.delete()
+                    teams_affected += 1
+                    frappe.logger().info(f"Deleted draft team membership for {team_membership.user} in team {team_membership.parent}")
+                
+            except Exception as e:
+                frappe.logger().error(f"Failed to suspend team membership {team_membership.name}: {str(e)}")
+        
+        # Also check if member has any team leadership roles and remove those
+        user_email = frappe.db.get_value("Member", member_name, "user")
+        if user_email:
+            teams_led = frappe.get_all(
+                "Team",
+                filters={"team_lead": user_email},
+                fields=["name", "team_lead"]
+            )
+            
+            for team in teams_led:
+                try:
+                    team_doc = frappe.get_doc("Team", team.name)
+                    team_doc.team_lead = None
+                    
+                    # Add note about leadership change
+                    termination_note = f"Team lead removed on {termination_date} - {reason}"
+                    if hasattr(team_doc, 'description'):
+                        if team_doc.description:
+                            team_doc.description += f"\n\n{termination_note}"
+                        else:
+                            team_doc.description = termination_note
+                    
+                    team_doc.flags.ignore_permissions = True
+                    team_doc.save()
+                    
+                    frappe.logger().info(f"Removed team leadership from team {team.name}")
+                    
+                except Exception as e:
+                    frappe.logger().error(f"Failed to remove team leadership from {team.name}: {str(e)}")
+        
+        return teams_affected
+        
+    except Exception as e:
+        frappe.logger().error(f"Failed to suspend team memberships for {member_name}: {str(e)}")
+        return 0
+
+def deactivate_user_account_safe(member_name, termination_type, reason, suspend_only=False):
+    """
+    Deactivate or suspend backend user account for terminated member
+    """
+    try:
+        # Get the user associated with this member
+        user_email = frappe.db.get_value("Member", member_name, "user")
+        if not user_email:
+            frappe.logger().info(f"No user account found for member {member_name}")
+            return True
+        
+        # Check if user exists
+        if not frappe.db.exists("User", user_email):
+            frappe.logger().info(f"User {user_email} does not exist")
+            return True
+        
+        user_doc = frappe.get_doc("User", user_email)
+        
+        # Determine action based on termination type and parameter
+        disciplinary_types = ['Policy Violation', 'Disciplinary Action', 'Expulsion']
+        should_disable = termination_type in disciplinary_types and not suspend_only
+        
+        if should_disable:
+            # Permanent disable for disciplinary actions
+            user_doc.enabled = 0
+            action_taken = "disabled"
+            frappe.logger().info(f"Disabled user account {user_email} due to disciplinary termination")
+        else:
+            # For voluntary/non-payment, just disable to prevent login but preserve data
+            user_doc.enabled = 0
+            action_taken = "suspended"
+            frappe.logger().info(f"Suspended user account {user_email}")
+        
+        # Add termination note to user bio/about
+        termination_note = f"Account {action_taken} on {today()} - {reason}"
+        if hasattr(user_doc, 'bio') and user_doc.bio:
+            user_doc.bio += f"\n\n{termination_note}"
+        elif hasattr(user_doc, 'bio'):
+            user_doc.bio = termination_note
+        
+        # Clear user roles except basic ones for audit trail
+        if should_disable and hasattr(user_doc, 'roles'):
+            # Keep only essential roles for audit purposes
+            essential_roles = ['Guest']
+            user_doc.roles = [role for role in user_doc.roles if role.role in essential_roles]
+        
+        # Save user changes
+        user_doc.flags.ignore_permissions = True
+        user_doc.save()
+        
+        frappe.logger().info(f"Successfully {action_taken} user account {user_email}")
+        return True
+        
+    except Exception as e:
+        frappe.logger().error(f"Failed to deactivate user account for {member_name}: {str(e)}")
+        return False
+
+def reactivate_user_account_safe(member_name, reason):
+    """
+    Reactivate user account (for appeal reversals)
+    """
+    try:
+        user_email = frappe.db.get_value("Member", member_name, "user")
+        if not user_email or not frappe.db.exists("User", user_email):
+            return True
+        
+        user_doc = frappe.get_doc("User", user_email)
+        user_doc.enabled = 1
+        
+        # Add reactivation note
+        reactivation_note = f"Account reactivated on {today()} - {reason}"
+        if hasattr(user_doc, 'bio') and user_doc.bio:
+            user_doc.bio += f"\n\n{reactivation_note}"
+        elif hasattr(user_doc, 'bio'):
+            user_doc.bio = reactivation_note
+        
+        user_doc.flags.ignore_permissions = True
+        user_doc.save()
+        
+        frappe.logger().info(f"Reactivated user account {user_email}")
+        return True
+        
+    except Exception as e:
+        frappe.logger().error(f"Failed to reactivate user account for {member_name}: {str(e)}")
+        return False
+
+def suspend_member_safe(member_name, suspension_reason, suspension_date=None, suspend_user=True, suspend_teams=True):
+    """
+    Suspend a member (temporary, reversible action)
+    """
+    try:
+        if not suspension_date:
+            suspension_date = today()
+        
+        member = frappe.get_doc("Member", member_name)
+        
+        results = {
+            "success": True,
+            "actions_taken": [],
+            "errors": [],
+            "member_suspended": False,
+            "user_suspended": False,
+            "teams_suspended": 0
+        }
+        
+        # 1. Update member status to Suspended
+        original_status = member.status
+        member.status = "Suspended"
+        
+        # Add suspension note
+        suspension_note = f"Member suspended on {suspension_date} - Reason: {suspension_reason}"
+        if member.notes:
+            member.notes += f"\n\n{suspension_note}"
+        else:
+            member.notes = suspension_note
+        
+        # Store original status for unsuspension
+        if hasattr(member, 'pre_suspension_status'):
+            member.pre_suspension_status = original_status
+        
+        member.flags.ignore_permissions = True
+        member.save()
+        
+        results["member_suspended"] = True
+        results["actions_taken"].append(f"Member status changed from {original_status} to Suspended")
+        
+        # 2. Suspend user account if requested
+        if suspend_user:
+            user_email = frappe.db.get_value("Member", member_name, "user")
+            if user_email and frappe.db.exists("User", user_email):
+                user_doc = frappe.get_doc("User", user_email)
+                user_doc.enabled = 0
+                
+                # Add suspension note to user
+                user_suspension_note = f"Account suspended on {suspension_date} - {suspension_reason}"
+                if hasattr(user_doc, 'bio') and user_doc.bio:
+                    user_doc.bio += f"\n\n{user_suspension_note}"
+                elif hasattr(user_doc, 'bio'):
+                    user_doc.bio = user_suspension_note
+                
+                user_doc.flags.ignore_permissions = True
+                user_doc.save()
+                
+                results["user_suspended"] = True
+                results["actions_taken"].append(f"User account suspended")
+        
+        # 3. Suspend team memberships if requested
+        if suspend_teams:
+            teams_suspended = suspend_team_memberships_safe(
+                member_name,
+                suspension_date,
+                f"Member suspended - {suspension_reason}"
+            )
+            results["teams_suspended"] = teams_suspended
+            if teams_suspended > 0:
+                results["actions_taken"].append(f"Suspended {teams_suspended} team membership(s)")
+        
+        frappe.logger().info(f"Successfully suspended member {member_name}")
+        return results
+        
+    except Exception as e:
+        frappe.logger().error(f"Failed to suspend member {member_name}: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "actions_taken": [],
+            "errors": [str(e)]
+        }
+
+def unsuspend_member_safe(member_name, unsuspension_reason, restore_teams=True):
+    """
+    Unsuspend a member (restore from suspension)
+    """
+    try:
+        member = frappe.get_doc("Member", member_name)
+        
+        results = {
+            "success": True,
+            "actions_taken": [],
+            "errors": [],
+            "member_unsuspended": False,
+            "user_unsuspended": False
+        }
+        
+        # Check if member is actually suspended
+        if member.status != "Suspended":
+            return {
+                "success": False,
+                "error": f"Member {member_name} is not suspended (current status: {member.status})",
+                "actions_taken": [],
+                "errors": ["Member is not suspended"]
+            }
+        
+        # 1. Restore member status
+        restore_status = getattr(member, 'pre_suspension_status', 'Active')
+        member.status = restore_status
+        
+        # Add unsuspension note
+        unsuspension_note = f"Member unsuspended on {today()} - Reason: {unsuspension_reason}"
+        if member.notes:
+            member.notes += f"\n\n{unsuspension_note}"
+        else:
+            member.notes = unsuspension_note
+        
+        # Clear pre-suspension status
+        if hasattr(member, 'pre_suspension_status'):
+            member.pre_suspension_status = None
+        
+        member.flags.ignore_permissions = True
+        member.save()
+        
+        results["member_unsuspended"] = True
+        results["actions_taken"].append(f"Member status restored to {restore_status}")
+        
+        # 2. Reactivate user account
+        user_email = frappe.db.get_value("Member", member_name, "user")
+        if user_email and frappe.db.exists("User", user_email):
+            user_doc = frappe.get_doc("User", user_email)
+            
+            # Only reactivate if it was disabled (not if it was disabled for other reasons)
+            if not user_doc.enabled:
+                user_doc.enabled = 1
+                
+                # Add unsuspension note
+                user_unsuspension_note = f"Account unsuspended on {today()} - {unsuspension_reason}"
+                if hasattr(user_doc, 'bio') and user_doc.bio:
+                    user_doc.bio += f"\n\n{user_unsuspension_note}"
+                elif hasattr(user_doc, 'bio'):
+                    user_doc.bio = user_unsuspension_note
+                
+                user_doc.flags.ignore_permissions = True
+                user_doc.save()
+                
+                results["user_unsuspended"] = True
+                results["actions_taken"].append("User account reactivated")
+        
+        # Note: Team memberships are not automatically restored as they may have been 
+        # legitimately changed during suspension. Manual team re-assignment is recommended.
+        if restore_teams:
+            results["actions_taken"].append("Note: Team memberships require manual restoration")
+        
+        frappe.logger().info(f"Successfully unsuspended member {member_name}")
+        return results
+        
+    except Exception as e:
+        frappe.logger().error(f"Failed to unsuspend member {member_name}: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "actions_taken": [],
+            "errors": [str(e)]
+        }
+
+def get_member_suspension_status(member_name):
+    """
+    Get current suspension status of a member
+    """
+    try:
+        member = frappe.get_doc("Member", member_name)
+        
+        is_suspended = member.status == "Suspended"
+        
+        # Get user account status
+        user_suspended = False
+        user_email = frappe.db.get_value("Member", member_name, "user")
+        if user_email and frappe.db.exists("User", user_email):
+            user_doc = frappe.get_doc("User", user_email)
+            user_suspended = not user_doc.enabled
+        
+        # Check for active team memberships
+        active_teams = 0
+        if user_email:
+            active_teams = frappe.db.count("Team Member", {
+                "user": user_email,
+                "docstatus": 1
+            })
+        
+        return {
+            "is_suspended": is_suspended,
+            "member_status": member.status,
+            "user_suspended": user_suspended,
+            "active_teams": active_teams,
+            "pre_suspension_status": getattr(member, 'pre_suspension_status', None),
+            "can_unsuspend": is_suspended
+        }
+        
+    except Exception as e:
+        frappe.logger().error(f"Failed to get suspension status for {member_name}: {str(e)}")
+        return {
+            "error": str(e),
+            "is_suspended": False,
+            "can_unsuspend": False
+        }

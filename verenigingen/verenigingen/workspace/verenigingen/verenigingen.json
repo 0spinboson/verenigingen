@@ -187,6 +187,28 @@
    "type": "Link"
   },
   {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Overdue Applications (14+ days)",
+   "link_count": 0,
+   "link_to": "Pending Membership Applications?preset=overdue",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Aging Applications (7+ days)",
+   "link_count": 0,
+   "link_to": "Pending Membership Applications?preset=aging",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
    "hidden": 0,
    "is_query_report": 0,
    "label": "Chapters",
@@ -257,6 +279,22 @@
    "icon": "pending",
    "label": "Pending Applications",
    "link_to": "Pending Membership Applications",
+   "report_ref_doctype": "Member",
+   "type": "Report"
+  },
+  {
+   "color": "Red",
+   "icon": "warning",
+   "label": "Overdue Applications",
+   "link_to": "Pending Membership Applications?preset=overdue",
+   "report_ref_doctype": "Member",
+   "type": "Report"
+  },
+  {
+   "color": "Orange",
+   "icon": "clock",
+   "label": "Aging Applications",
+   "link_to": "Pending Membership Applications?preset=aging",
    "report_ref_doctype": "Member",
    "type": "Report"
   }

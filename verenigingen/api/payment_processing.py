@@ -42,6 +42,31 @@ def create_application_invoice(member, membership):
     # Use custom amount if member has fee override
     amount = member.membership_fee_override if hasattr(member, 'membership_fee_override') and member.membership_fee_override else membership_type.amount
     
+    # Calculate subscription period dates
+    from frappe.utils import add_months, add_days
+    subscription_start = membership.start_date
+    
+    # Get subscription plan to determine billing interval
+    subscription_plan = None
+    if hasattr(membership, 'subscription_plan') and membership.subscription_plan:
+        subscription_plan = frappe.get_doc("Subscription Plan", membership.subscription_plan)
+    
+    # Calculate subscription end date based on billing interval
+    if subscription_plan:
+        if subscription_plan.billing_interval == "Month":
+            subscription_end = add_months(subscription_start, subscription_plan.billing_interval_count)
+        elif subscription_plan.billing_interval == "Year":
+            subscription_end = add_months(subscription_start, subscription_plan.billing_interval_count * 12)
+        else:
+            # Fallback to 1 year for other intervals
+            subscription_end = add_months(subscription_start, 12)
+    else:
+        # Default to 1 year if no subscription plan
+        subscription_end = add_months(subscription_start, 12)
+    
+    # Adjust end date to be the day before next period starts
+    subscription_end = add_days(subscription_end, -1)
+    
     # Create Sales Invoice
     invoice = frappe.get_doc({
         "doctype": "Sales Invoice",
@@ -49,16 +74,18 @@ def create_application_invoice(member, membership):
         "posting_date": today(),
         "due_date": add_days(today(), 7),  # 7 days to pay
         "currency": membership_type.currency or "EUR",
+        "from_date": subscription_start,
+        "to_date": subscription_end,
         "items": [{
             "item_code": get_or_create_membership_item_code(),
             "item_name": f"Membership Fee - {membership_type.membership_type_name}",
-            "description": f"Membership fee for {member.full_name} - {membership_type.membership_type_name}",
+            "description": f"Membership fee for {member.full_name} - {membership_type.membership_type_name}\nSubscription Period: {frappe.format_date(subscription_start)} to {frappe.format_date(subscription_end)}",
             "qty": 1,
             "rate": amount,
             "amount": amount
         }],
         "taxes_and_charges": "",  # Will be set by tax handler if needed
-        "remarks": f"Membership application invoice for {member.full_name} (Application ID: {getattr(member, 'application_id', member.name)})"
+        "remarks": f"Membership application invoice for {member.full_name} (Application ID: {getattr(member, 'application_id', member.name)})\nSubscription Period: {frappe.format_date(subscription_start)} to {frappe.format_date(subscription_end)}"
     })
     
     # Apply Dutch tax exemption if applicable

@@ -30,6 +30,18 @@ frappe.query_reports["Pending Membership Applications"] = {
             "label": __("Overdue Only (>14 days)"),
             "fieldtype": "Check",
             "default": 0
+        },
+        {
+            "fieldname": "aging_only",
+            "label": __("Aging Only (>7 days)"),
+            "fieldtype": "Check",
+            "default": 0
+        },
+        {
+            "fieldname": "days_filter",
+            "label": __("Days Old (Custom)"),
+            "fieldtype": "Int",
+            "description": __("Show applications older than X days")
         }
     ],
     
@@ -48,6 +60,40 @@ frappe.query_reports["Pending Membership Applications"] = {
     },
     
     onload: function(report) {
+        // Check for URL parameters to auto-set filters
+        const urlParams = new URLSearchParams(window.location.search);
+        const preset = urlParams.get('preset');
+        
+        if (preset === 'overdue') {
+            report.set_filter_value('overdue_only', 1);
+            report.refresh();
+        } else if (preset === 'aging') {
+            report.set_filter_value('aging_only', 1);
+            report.refresh();
+        } else if (preset === 'days' && urlParams.get('days')) {
+            const days = parseInt(urlParams.get('days'));
+            if (days > 0) {
+                report.set_filter_value('days_filter', days);
+                report.refresh();
+            }
+        }
+        
+        // Add role-based chapter filter for non-admin users
+        frappe.call({
+            method: "verenigingen.api.membership_application_review.get_user_chapter_access",
+            callback: function(r) {
+                if (r.message && r.message.restrict_to_chapters && r.message.chapters.length === 1) {
+                    // Auto-set chapter filter if user only has access to one chapter
+                    report.set_filter_value('chapter', r.message.chapters[0]);
+                    report.refresh();
+                } else if (r.message && r.message.restrict_to_chapters && r.message.chapters.length > 1) {
+                    // Add info message about user's chapter access
+                    const chapter_names = r.message.chapters.join(', ');
+                    report.page.set_indicator(__('Filtered to your chapters: {0}', [chapter_names]), 'blue');
+                }
+            }
+        });
+        
         // Add custom button to export overdue applications
         report.page.add_inner_button(__("Email Overdue List"), function() {
             frappe.call({

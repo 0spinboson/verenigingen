@@ -80,7 +80,7 @@ def get_form_data():
         volunteer_areas = []
         try:
             volunteer_areas = frappe.get_all(
-                "Volunteer Interest Area",
+                "Volunteer Interest Category",
                 fields=["name", "description"],
                 order_by="name"
             )

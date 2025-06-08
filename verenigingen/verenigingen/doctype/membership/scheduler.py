@@ -31,10 +31,10 @@ def notify_about_orphaned_records():
         
         for item in orphaned_data:
             email_content += f"<tr>"
-            email_content += f"<td>{item.record_type}</td>"
-            email_content += f"<td><a href='/app/{item.record_type.lower()}/{item.document}'>{item.document}</a></td>"
-            email_content += f"<td>{item.status}</td>"
-            email_content += f"<td>{item.issue}</td>"
+            email_content += f"<td>{item['record_type']}</td>"
+            email_content += f"<td><a href='/app/{item['record_type'].lower()}/{item['document']}'>{item['document']}</a></td>"
+            email_content += f"<td>{item['status']}</td>"
+            email_content += f"<td>{item['issue']}</td>"
             email_content += f"</tr>"
         
         email_content += "</table>"

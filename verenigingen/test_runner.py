@@ -60,8 +60,7 @@ def run_quick_smoke_tests():
     total_tests += 1
     print("1. Testing workflow existence...")
     try:
-        if (frappe.db.exists("Workflow", "Membership Termination Workflow") and 
-            frappe.db.exists("Workflow", "Termination Appeals Workflow")):
+        if frappe.db.exists("Workflow", "Membership Termination Workflow"):
             print("   ✅ Workflows exist")
             tests_passed += 1
         else:
@@ -98,8 +97,7 @@ def run_quick_smoke_tests():
     total_tests += 1
     print("4. Testing target doctypes...")
     try:
-        if (frappe.db.exists("DocType", "Membership Termination Request") and
-            frappe.db.exists("DocType", "Termination Appeals Process")):
+        if frappe.db.exists("DocType", "Membership Termination Request"):
             print("   ✅ Target doctypes exist")
             tests_passed += 1
         else:

@@ -165,6 +165,9 @@ class Membership(Document):
             self.amount_difference = flt(self.effective_amount) - flt(membership_type.amount)
         else:
             self.amount_difference = 0
+        
+        # Set membership fee field for display
+        self.membership_fee = self.effective_amount
                 
     def on_submit(self):
         import frappe

@@ -26,7 +26,6 @@ doctype_js = {
     "Membership Type": "public/js/membership_type.js",
     "Direct Debit Batch": "public/js/direct_debit_batch.js",
     "Membership Termination Request": "public/js/membership_termination_request.js",
-    "Termination Appeals Process": "public/js/termination_appeals_process.js",
     "Expulsion Report Entry": "public/js/expulsion_report_entry.js"
 }
 
@@ -73,9 +72,6 @@ doc_events = {
     "Membership Termination Request": {
         "validate": "verenigingen.validations.validate_termination_request",
     },
-    "Termination Appeals Process": {
-        "validate": "verenigingen.validations.validate_appeal_filing",
-    },
     "Member": {
         "before_save": "verenigingen.verenigingen.doctype.member.member_utils.update_termination_status_display",
         "after_save": "verenigingen.verenigingen.doctype.member.member.handle_fee_override_after_save"
@@ -110,14 +106,14 @@ jinja = {
 # Installation
 # ------------
 after_install = "verenigingen.setup.execute_after_install"
-# after_migrate = "verenigingen.verenigingen.notification.overdue_appeal_reviews.create_custom_fields"
 
 # Permissions
 # -----------
 permission_query_conditions = {
     "Member": "verenigingen.permissions.get_member_permission_query",
     "Membership": "verenigingen.permissions.get_membership_permission_query",
-    "Chapter": "verenigingen.verenigingen.doctype.chapter.chapter.get_chapter_permission_query_conditions"
+    "Chapter": "verenigingen.verenigingen.doctype.chapter.chapter.get_chapter_permission_query_conditions",
+    "Membership Termination Request": "verenigingen.permissions.get_termination_permission_query"
 }
 
 has_permission = {
@@ -145,12 +141,7 @@ fixtures = [
         "filters": [
             ["name", "in", [
                 "Termination Approval Required",
-                "Appeal Acknowledgment", 
-                "Appeal Decision Notification",
-                "Termination Execution Notice",
-                "termination_approval_request",
-                "appeal_acknowledgment",
-                "appeal_decision_notification"
+                "Termination Execution Notice"
             ]]
         ]
     },
@@ -160,8 +151,7 @@ fixtures = [
         "doctype": "Workflow",
         "filters": [
             ["name", "in", [
-                "Membership Termination Workflow",
-                "Termination Appeals Workflow"
+                "Membership Termination Workflow"
             ]]
         ]
     },
@@ -188,7 +178,6 @@ fixtures = [
         "filters": [
             ["name", "in", [
                 "Association Manager",
-                "Appeals Reviewer", 
                 "Governance Auditor",
                 "Chapter Board Member",
                 "Member Portal User"
@@ -202,11 +191,7 @@ fixtures = [
         "filters": [
             ["name", "in", [
                 "Termination Audit Report",
-                "Appeals Analysis Report",
-                "Termination Compliance Report",
-                "Board Position Termination Impact",
-                "Expulsion Governance Report",
-                "Governance Compliance Report"
+                "Termination Compliance Report"
             ]]
         ]
     },
@@ -256,11 +241,3 @@ fixtures = [
 #	}
 # ]
 
-# Additional termination-specific configurations
-termination_config = {
-    "appeal_deadline_days": 30,
-    "review_deadline_days": 60,
-    "governance_notification_roles": ["Association Manager", "System Manager"],
-    "enable_automatic_execution": True,
-    "require_documentation_for_disciplinary": True
-}

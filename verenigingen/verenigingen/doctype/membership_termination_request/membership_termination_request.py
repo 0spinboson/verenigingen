@@ -113,7 +113,9 @@ class MembershipTerminationRequest(Document):
             update_member_status_safe,
             end_board_positions_safe,
             cancel_subscription_safe,
-            update_invoice_safe
+            update_invoice_safe,
+            suspend_team_memberships_safe,
+            deactivate_user_account_safe
         )
         
         results = {
@@ -202,7 +204,26 @@ class MembershipTerminationRequest(Document):
             if positions_ended > 0:
                 results["actions_taken"].append(f"Ended {positions_ended} board position(s)")
         
-        # 4. Update member status
+        # 4. Suspend team memberships
+        teams_suspended = suspend_team_memberships_safe(
+            member_doc.name,
+            self.termination_date or today(),
+            f"Member terminated - Request: {self.name}"
+        )
+        results["teams_suspended"] = teams_suspended
+        if teams_suspended > 0:
+            results["actions_taken"].append(f"Suspended {teams_suspended} team membership(s)")
+        
+        # 5. Deactivate user account
+        termination_reason = f"Member terminated - Type: {self.termination_type} - Request: {self.name}"
+        if deactivate_user_account_safe(member_doc.name, self.termination_type, termination_reason):
+            results["user_deactivated"] = True
+            results["actions_taken"].append("Deactivated user account")
+        else:
+            results["user_deactivated"] = False
+            results["errors"].append("Failed to deactivate user account")
+        
+        # 6. Update member status
         if update_member_status_safe(
             member_doc.name,
             self.termination_type,
@@ -360,16 +381,15 @@ class MembershipTerminationRequest(Document):
     
     def validate_permissions(self):
         """Validate user permissions for different termination types"""
-        user_roles = frappe.get_roles(frappe.session.user)
+        from verenigingen.permissions import can_terminate_member, can_access_termination_functions
         
-        # Check if user can initiate terminations
-        can_initiate = (
-            "System Manager" in user_roles or
-            "Association Manager" in user_roles
-        )
+        # Check if user can access termination functions in general
+        if not can_access_termination_functions():
+            frappe.throw(_("You don't have permission to access termination functions"))
         
-        if not can_initiate and self.is_new():
-            frappe.throw(_("You don't have permission to initiate membership terminations"))
+        # Check if user can terminate this specific member
+        if self.member and not can_terminate_member(self.member):
+            frappe.throw(_("You don't have permission to terminate this member"))
     
     def validate_dates(self):
         """Validate termination and grace period dates"""

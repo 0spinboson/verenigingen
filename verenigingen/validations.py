@@ -56,26 +56,3 @@ def validate_approver_permissions(approver_user):
             if not (is_national_board and is_national_board[0][0] > 0):
                 frappe.throw(_("Secondary approver must be Association Manager or National Board Member"))
 
-def validate_appeal_filing(doc, method):
-    """Validation function for appeal filing"""
-    
-    # Validate appeal deadline
-    if doc.termination_request:
-        termination = frappe.get_doc("Membership Termination Request", doc.termination_request)
-        if not termination.execution_date:
-            frappe.throw(_("Cannot file appeal - termination has not been executed"))
-        
-        # Check 30-day deadline
-        deadline = add_days(termination.execution_date, 30)
-        if getdate(doc.appeal_date) > getdate(deadline):
-            frappe.throw(_("Appeal deadline has passed. Appeals must be filed within 30 days of termination."))
-    
-    # Validate appellant authority
-    if doc.appellant_relationship == "Self":
-        # Verify appellant is the member or their user
-        member_user = frappe.db.get_value("Member", doc.member, "user")
-        member_email = frappe.db.get_value("Member", doc.member, "email")
-        
-        if not (doc.appellant_email == member_email or 
-               (member_user and frappe.db.get_value("User", member_user, "email") == doc.appellant_email)):
-            frappe.throw(_("Appellant email must match member's email for self-filed appeals"))

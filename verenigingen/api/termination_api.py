@@ -23,12 +23,19 @@ def execute_safe_termination(member_name, termination_type, termination_date=Non
     """
     Execute termination using safe integration methods
     """
+    # Check permissions first
+    from verenigingen.permissions import can_terminate_member
+    if not can_terminate_member(member_name):
+        frappe.throw(_("You don't have permission to terminate this member"))
+    
     from verenigingen.utils.termination_integration import (
         cancel_membership_safe,
         cancel_sepa_mandate_safe,
         update_customer_safe,
         update_member_status_safe,
-        end_board_positions_safe
+        end_board_positions_safe,
+        suspend_team_memberships_safe,
+        deactivate_user_account_safe
     )
     
     if not termination_date:
@@ -94,7 +101,26 @@ def execute_safe_termination(member_name, termination_type, termination_date=Non
         if positions_ended > 0:
             results["actions_taken"].append(f"Ended {positions_ended} board position(s)")
         
-        # 4. Update member status
+        # 4. Suspend team memberships
+        teams_suspended = suspend_team_memberships_safe(
+            member_name,
+            termination_date,
+            f"Member terminated - Request: {request_name or 'Direct'}"
+        )
+        if teams_suspended > 0:
+            results["actions_taken"].append(f"Suspended {teams_suspended} team membership(s)")
+        
+        # 5. Deactivate user account
+        termination_reason = f"Membership terminated - Type: {termination_type}"
+        if request_name:
+            termination_reason += f" - Request: {request_name}"
+        
+        if deactivate_user_account_safe(member_name, termination_type, termination_reason):
+            results["actions_taken"].append("Deactivated user account")
+        else:
+            results["errors"].append("Failed to deactivate user account")
+        
+        # 6. Update member status
         if update_member_status_safe(
             member_name,
             termination_type,
@@ -105,7 +131,7 @@ def execute_safe_termination(member_name, termination_type, termination_date=Non
         else:
             results["errors"].append("Failed to update member status")
         
-        # 5. Update customer if exists
+        # 7. Update customer if exists
         if member.customer:
             termination_note = f"Member terminated on {termination_date} - Type: {termination_type}"
             if request_name:

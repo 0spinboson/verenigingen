@@ -41,8 +41,14 @@ frappe.ui.form.on('Member', {
         // Add termination buttons and status display
         add_termination_buttons(frm);
         
+        // Add suspension buttons
+        add_suspension_buttons(frm);
+        
         // Display termination status
         display_termination_status(frm);
+        
+        // Display suspension status
+        display_suspension_status(frm);
         
         // Add fee management functionality
         add_fee_management_buttons(frm);
@@ -254,49 +260,52 @@ function add_volunteer_buttons(frm) {
 }
 
 function add_termination_buttons(frm) {
-    // Check termination status and add appropriate buttons
+    // Check termination status and permissions first
     frappe.call({
-        method: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_member_termination_status',
+        method: 'verenigingen.permissions.can_terminate_member_api',
         args: {
-            member: frm.doc.name
+            member_name: frm.doc.name
         },
-        callback: function(r) {
-            if (r.message) {
-                const status = r.message;
-                
-                // Add terminate button if no active termination
-                if (!status.has_active_termination) {
-                    let button_class = 'btn-danger';
-                    let button_text = __('Terminate Membership');
-                    
-                    let btn = frm.add_custom_button(button_text, function() {
-                        TerminationUtils.show_termination_dialog(frm.doc.name, frm.doc.full_name);
-                    }, __('Actions'));
-                    
-                    if (btn && btn.addClass) {
-                        btn.addClass(button_class + ' termination-button');
-                    }
-                }
-                
-                // Add appeal button for disciplinary terminations
-                if (status.pending_requests && status.pending_requests.length > 0) {
-                    const pending = status.pending_requests[0];
-                    if (['Policy Violation', 'Disciplinary Action', 'Expulsion'].includes(pending.termination_type)) {
-                        let btn = frm.add_custom_button(__('File Appeal'), function() {
-                            show_appeal_creation_dialog(pending.name);
-                        }, __('Actions'));
-                        
-                        if (btn && btn.addClass) {
-                            btn.addClass('btn-warning');
-                        }
-                    }
-                }
-                
-                // Add view termination history button
-                frm.add_custom_button(__('Termination History'), function() {
-                    TerminationUtils.show_termination_history(frm.doc.name);
-                }, __('View'));
+        callback: function(perm_result) {
+            const can_terminate = perm_result.message;
+            
+            if (!can_terminate) {
+                // User doesn't have permission, don't show termination buttons
+                return;
             }
+            
+            // User has permission, check termination status
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_member_termination_status',
+                args: {
+                    member: frm.doc.name
+                },
+                callback: function(r) {
+                    if (r.message) {
+                        const status = r.message;
+                        
+                        // Add terminate button if no active termination
+                        if (!status.has_active_termination) {
+                            let button_class = 'btn-danger';
+                            let button_text = __('Terminate Membership');
+                            
+                            let btn = frm.add_custom_button(button_text, function() {
+                                TerminationUtils.show_termination_dialog(frm.doc.name, frm.doc.full_name);
+                            }, __('Actions'));
+                            
+                            if (btn && btn.addClass) {
+                                btn.addClass(button_class + ' termination-button');
+                            }
+                        }
+                        
+                        
+                        // Add view termination history button
+                        frm.add_custom_button(__('Termination History'), function() {
+                            TerminationUtils.show_termination_history(frm.doc.name);
+                        }, __('View'));
+                    }
+                }
+            });
         }
     });
 }
@@ -349,118 +358,6 @@ function setup_organization_user_creation(frm) {
     });
 }
 
-// ==================== APPEAL DIALOG FUNCTION ====================
-
-function show_appeal_creation_dialog(termination_request_id) {
-    frappe.call({
-        method: 'frappe.client.get',
-        args: {
-            doctype: 'Membership Termination Request',
-            name: termination_request_id
-        },
-        callback: function(r) {
-            if (r.message) {
-                const termination_data = r.message;
-                
-                const dialog = new frappe.ui.Dialog({
-                    title: __('File Appeal for {0}', [termination_data.member_name]),
-                    size: 'large',
-                    fields: [
-                        {
-                            fieldtype: 'Section Break',
-                            label: __('Termination Details')
-                        },
-                        {
-                            fieldtype: 'HTML',
-                            options: `<div class="alert alert-info">
-                                <strong>Termination Type:</strong> ${termination_data.termination_type}<br>
-                                <strong>Execution Date:</strong> ${frappe.datetime.str_to_user(termination_data.execution_date)}<br>
-                                <strong>Reason:</strong> ${termination_data.termination_reason}
-                            </div>`
-                        },
-                        {
-                            fieldtype: 'Section Break',
-                            label: __('Appellant Information')
-                        },
-                        {
-                            fieldname: 'appellant_name',
-                            fieldtype: 'Data',
-                            label: __('Appellant Name'),
-                            reqd: 1
-                        },
-                        {
-                            fieldname: 'appellant_email',
-                            fieldtype: 'Data',
-                            label: __('Appellant Email'),
-                            reqd: 1
-                        },
-                        {
-                            fieldname: 'appellant_relationship',
-                            fieldtype: 'Select',
-                            label: __('Relationship to Member'),
-                            options: 'Self\nLegal Representative\nFamily Member\nAuthorized Representative',
-                            reqd: 1
-                        },
-                        {
-                            fieldtype: 'Section Break',
-                            label: __('Appeal Details')
-                        },
-                        {
-                            fieldname: 'appeal_type',
-                            fieldtype: 'Select',
-                            label: __('Appeal Type'),
-                            options: 'Procedural Appeal\nSubstantive Appeal\nNew Evidence Appeal\nFull Review Appeal',
-                            reqd: 1
-                        },
-                        {
-                            fieldname: 'appeal_grounds',
-                            fieldtype: 'Text Editor',
-                            label: __('Grounds for Appeal'),
-                            reqd: 1,
-                            description: __('Detailed explanation of why the termination should be overturned')
-                        },
-                        {
-                            fieldname: 'remedy_sought',
-                            fieldtype: 'Select',
-                            label: __('Remedy Sought'),
-                            options: 'Full Reinstatement\nReduction of Penalty\nNew Hearing\nProcedural Correction\nOther',
-                            reqd: 1
-                        }
-                    ],
-                    primary_action_label: __('File Appeal'),
-                    primary_action: function(values) {
-                        frappe.call({
-                            method: 'frappe.client.insert',
-                            args: {
-                                doc: {
-                                    doctype: 'Termination Appeals Process',
-                                    termination_request: termination_data.name,
-                                    member: termination_data.member,
-                                    member_name: termination_data.member_name,
-                                    appeal_date: frappe.datetime.get_today(),
-                                    appeal_status: 'Draft',
-                                    ...values
-                                }
-                            },
-                            callback: function(r) {
-                                if (r.message) {
-                                    dialog.hide();
-                                    frappe.set_route('Form', 'Termination Appeals Process', r.message.name);
-                                    frappe.show_alert({
-                                        message: __('Appeal created successfully'),
-                                        indicator: 'green'
-                                    }, 5);
-                                }
-                            }
-                        });
-                    }
-                });
-                
-                dialog.show();
-            }
-        }
-    });
-}
 
 function add_fee_management_buttons(frm) {
     if (frm.doc.docstatus === 1) {
@@ -648,17 +545,6 @@ function update_termination_status_html(frm, status) {
             </div>
         `;
         
-        // Check for appeals
-        if (status.active_appeals && status.active_appeals.length > 0) {
-            const appeal = status.active_appeals[0];
-            html += `
-                <div class="alert alert-info">
-                    <h6><i class="fa fa-gavel"></i> Appeal in Progress</h6>
-                    <p><strong>Appeal Status:</strong> ${appeal.appeal_status}</p>
-                    <p><strong>Appeal Reference:</strong> <a href="/app/termination-appeals-process/${appeal.name}">${appeal.name}</a></p>
-                </div>
-            `;
-        }
         
     } else if (status.pending_requests && status.pending_requests.length > 0) {
         const pending = status.pending_requests[0];
@@ -872,4 +758,252 @@ function update_full_name_from_components(frm) {
     if (full_name && frm.doc.full_name !== full_name) {
         frm.set_value('full_name', full_name);
     }
+}
+
+// ==================== SUSPENSION FUNCTIONS ====================
+
+function add_suspension_buttons(frm) {
+    if (!frm.doc.name) return;
+    
+    // Check if user can perform suspension actions
+    frappe.call({
+        method: 'verenigingen.api.suspension_api.can_suspend_member',
+        args: {
+            member_name: frm.doc.name
+        },
+        callback: function(perm_result) {
+            const can_suspend = perm_result.message;
+            
+            if (!can_suspend) {
+                return; // No permission, don't show buttons
+            }
+            
+            // Get current suspension status
+            frappe.call({
+                method: 'verenigingen.api.suspension_api.get_suspension_status',
+                args: {
+                    member_name: frm.doc.name
+                },
+                callback: function(status_result) {
+                    if (status_result.message) {
+                        const status = status_result.message;
+                        
+                        if (status.is_suspended) {
+                            // Member is suspended - show unsuspend button
+                            let btn = frm.add_custom_button(__('Unsuspend Member'), function() {
+                                show_unsuspension_dialog(frm);
+                            }, __('Actions'));
+                            
+                            if (btn && btn.addClass) {
+                                btn.addClass('btn-success suspension-button');
+                            }
+                        } else {
+                            // Member is not suspended - show suspend button
+                            let btn = frm.add_custom_button(__('Suspend Member'), function() {
+                                show_suspension_dialog(frm);
+                            }, __('Actions'));
+                            
+                            if (btn && btn.addClass) {
+                                btn.addClass('btn-warning suspension-button');
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    });
+}
+
+function show_suspension_dialog(frm) {
+    // First get suspension preview
+    frappe.call({
+        method: 'verenigingen.api.suspension_api.get_suspension_preview',
+        args: {
+            member_name: frm.doc.name
+        },
+        callback: function(r) {
+            if (r.message) {
+                const preview = r.message;
+                
+                let preview_html = `
+                    <div class="suspension-preview">
+                        <h5>Suspension Impact</h5>
+                        <ul>
+                            <li><strong>Member Status:</strong> ${preview.member_status} → Suspended</li>
+                `;
+                
+                if (preview.has_user_account) {
+                    preview_html += `<li><strong>User Account:</strong> Will be disabled</li>`;
+                }
+                
+                if (preview.active_teams > 0) {
+                    preview_html += `<li><strong>Team Memberships:</strong> ${preview.active_teams} team(s) will be suspended</li>`;
+                    if (preview.team_details && preview.team_details.length > 0) {
+                        preview_html += `<li><strong>Teams:</strong> `;
+                        preview_html += preview.team_details.map(t => `${t.team} (${t.role})`).join(', ');
+                        preview_html += `</li>`;
+                    }
+                }
+                
+                if (preview.active_memberships > 0) {
+                    preview_html += `<li><strong>Active Memberships:</strong> ${preview.active_memberships} membership(s) remain active</li>`;
+                }
+                
+                preview_html += `</ul></div>`;
+                
+                const dialog = new frappe.ui.Dialog({
+                    title: __('Suspend Member: {0}', [frm.doc.full_name]),
+                    size: 'large',
+                    fields: [
+                        {
+                            fieldtype: 'HTML',
+                            options: preview_html
+                        },
+                        {
+                            fieldtype: 'Section Break',
+                            label: __('Suspension Details')
+                        },
+                        {
+                            fieldname: 'suspension_reason',
+                            fieldtype: 'Small Text',
+                            label: __('Reason for Suspension'),
+                            reqd: 1,
+                            description: __('Explain why this member is being suspended')
+                        },
+                        {
+                            fieldtype: 'Column Break'
+                        },
+                        {
+                            fieldname: 'suspend_user',
+                            fieldtype: 'Check',
+                            label: __('Suspend User Account'),
+                            default: 1,
+                            description: __('Disable the member\'s backend user account')
+                        },
+                        {
+                            fieldname: 'suspend_teams',
+                            fieldtype: 'Check',
+                            label: __('Suspend Team Memberships'),
+                            default: 1,
+                            description: __('Remove member from all teams')
+                        }
+                    ],
+                    primary_action_label: __('Suspend Member'),
+                    primary_action: function(values) {
+                        frappe.confirm(
+                            __('Are you sure you want to suspend {0}?', [frm.doc.full_name]),
+                            function() {
+                                frappe.call({
+                                    method: 'verenigingen.api.suspension_api.suspend_member',
+                                    args: {
+                                        member_name: frm.doc.name,
+                                        suspension_reason: values.suspension_reason,
+                                        suspend_user: values.suspend_user,
+                                        suspend_teams: values.suspend_teams
+                                    },
+                                    callback: function(r) {
+                                        if (r.message && r.message.success) {
+                                            dialog.hide();
+                                            frm.reload_doc();
+                                        }
+                                    }
+                                });
+                            }
+                        );
+                    }
+                });
+                
+                dialog.show();
+            }
+        }
+    });
+}
+
+function show_unsuspension_dialog(frm) {
+    const dialog = new frappe.ui.Dialog({
+        title: __('Unsuspend Member: {0}', [frm.doc.full_name]),
+        fields: [
+            {
+                fieldtype: 'HTML',
+                options: `
+                    <div class="alert alert-info">
+                        <h5>Unsuspension Process</h5>
+                        <ul>
+                            <li>Member status will be restored to previous state</li>
+                            <li>User account will be reactivated</li>
+                            <li>Team memberships require manual restoration</li>
+                        </ul>
+                    </div>
+                `
+            },
+            {
+                fieldname: 'unsuspension_reason',
+                fieldtype: 'Small Text',
+                label: __('Reason for Unsuspension'),
+                reqd: 1,
+                description: __('Explain why this member is being unsuspended')
+            }
+        ],
+        primary_action_label: __('Unsuspend Member'),
+        primary_action: function(values) {
+            frappe.confirm(
+                __('Are you sure you want to unsuspend {0}?', [frm.doc.full_name]),
+                function() {
+                    frappe.call({
+                        method: 'verenigingen.api.suspension_api.unsuspend_member',
+                        args: {
+                            member_name: frm.doc.name,
+                            unsuspension_reason: values.unsuspension_reason
+                        },
+                        callback: function(r) {
+                            if (r.message && r.message.success) {
+                                dialog.hide();
+                                frm.reload_doc();
+                            }
+                        }
+                    });
+                }
+            );
+        }
+    });
+    
+    dialog.show();
+}
+
+function display_suspension_status(frm) {
+    if (!frm.doc.name) return;
+    
+    frappe.call({
+        method: 'verenigingen.api.suspension_api.get_suspension_status',
+        args: {
+            member_name: frm.doc.name
+        },
+        callback: function(r) {
+            if (r.message) {
+                const status = r.message;
+                
+                if (status.is_suspended) {
+                    // Add dashboard indicator for suspended member
+                    frm.dashboard.add_indicator(
+                        __('Member Suspended'), 
+                        'orange'
+                    );
+                    
+                    if (status.user_suspended) {
+                        frm.dashboard.add_indicator(
+                            __('User Account Disabled'), 
+                            'red'
+                        );
+                    }
+                    
+                    if (status.active_teams === 0) {
+                        frm.dashboard.add_indicator(
+                            __('No Active Teams'), 
+                            'grey'
+                        );
+                    }
+                }
+            }
+        }
+    });
 }

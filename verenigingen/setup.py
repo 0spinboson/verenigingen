@@ -132,17 +132,26 @@ def execute_after_install():
         # Execute the setup function from this file
         setup_verenigingen()
         
+        # Set up membership application system
+        setup_membership_application_system()
+        
         # Set up tax exemption templates if enabled
         setup_tax_exemption_on_install()
 
-        # NEW: Set up termination system
+        # Set up termination system
         setup_termination_system_integration()
+        
+        # Set up workspace
+        setup_workspace()
+        
+        # Load fixtures
+        load_application_fixtures()
         
         # Log the successful setup
         frappe.logger().info("Verenigingen setup completed successfully")
         print("Verenigingen app setup completed successfully")
         
-    except Exception as e:  # <-- This except has no matching try!
+    except Exception as e:
         frappe.logger().error(f"Error during Verenigingen setup: {str(e)}")
         print(f"Error during setup: {str(e)}")
 
@@ -228,7 +237,7 @@ def setup_termination_system_integration():
         # Step 1: Setup termination-specific settings
         setup_termination_settings()
         
-        # Step 2: Setup workflows
+        # Step 2: Setup workflows (using separate workflow setup module)
         from verenigingen.corrected_workflow_setup import setup_workflows_corrected
         workflow_success = setup_workflows_corrected()
         
@@ -399,7 +408,6 @@ def run_termination_diagnostics():
     
     required_doctypes = [
         "Membership Termination Request",
-        "Termination Appeals Process", 
         "Expulsion Report Entry"
     ]
     
@@ -488,3 +496,450 @@ def setup_email_templates():
             print(f"   ⚠️ Template commit warning: {str(e)}")
     
     return created_count
+
+def setup_membership_application_system():
+    """Set up membership application system with email templates and web pages"""
+    print("📧 Setting up membership application system...")
+    
+    try:
+        # Create email templates
+        create_application_email_templates()
+        
+        # Create web pages configuration
+        setup_application_web_pages()
+        
+        print("✅ Membership application system setup completed")
+        
+    except Exception as e:
+        print(f"⚠️ Membership application system setup failed: {str(e)}")
+
+def create_application_email_templates():
+    """Create email templates for application workflow"""
+    
+    templates = [
+        {
+            "name": "membership_application_confirmation",
+            "subject": "Membership Application Received - Payment Required",
+            "response": """
+                <h3>Thank you for your membership application!</h3>
+                
+                <p>Dear {{ member.first_name }},</p>
+                
+                <p>We have received your membership application for {{ membership_type }}.</p>
+                
+                <p><strong>Next Step: Complete Payment</strong></p>
+                <p>To activate your membership, please complete the payment of {{ frappe.format_value(payment_amount, {"fieldtype": "Currency"}) }}.</p>
+                
+                <p><a href="{{ payment_url }}" class="btn btn-primary">Complete Payment</a></p>
+                
+                <p>Once your payment is processed, you will receive a welcome email with your member portal access details.</p>
+                
+                <p>If you have any questions, please don't hesitate to contact us.</p>
+                
+                <p>Best regards,<br>The Membership Team</p>
+            """
+        },
+        {
+            "name": "membership_welcome",
+            "subject": "Welcome to {{ frappe.db.get_value('Company', company, 'company_name') }}!",
+            "response": """
+                <h2>Welcome to our Association, {{ member.first_name }}!</h2>
+                
+                <p>Your membership is now active and you have full access to all member benefits.</p>
+                
+                <h3>Your Membership Details:</h3>
+                <table style="width: 100%; max-width: 500px;">
+                    <tr>
+                        <td><strong>Member ID:</strong></td>
+                        <td>{{ member.name }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Membership Type:</strong></td>
+                        <td>{{ membership_type.membership_type_name }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Valid From:</strong></td>
+                        <td>{{ frappe.format_date(membership.start_date) }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Valid Until:</strong></td>
+                        <td>{{ frappe.format_date(membership.renewal_date) }}</td>
+                    </tr>
+                    {% if member.primary_chapter %}
+                    <tr>
+                        <td><strong>Chapter:</strong></td>
+                        <td>{{ member.primary_chapter }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+                
+                {% if member.interested_in_volunteering %}
+                <h3>Thank you for your interest in volunteering!</h3>
+                <p>Our volunteer coordinator will be in touch with you soon to discuss opportunities that match your interests and availability.</p>
+                {% endif %}
+                
+                <h3>Access Your Member Portal</h3>
+                <p>You can access your member portal at: <a href="{{ member_portal_url }}">{{ member_portal_url }}</a></p>
+                
+                <p>If you haven't set up your password yet, please visit: <a href="{{ login_url }}">{{ login_url }}</a></p>
+                
+                <h3>Stay Connected</h3>
+                <ul>
+                    <li>Follow us on social media</li>
+                    <li>Join our member forum</li>
+                    <li>Attend our upcoming events</li>
+                </ul>
+                
+                <p>We're excited to have you as part of our community!</p>
+                
+                <p>Best regards,<br>The {{ frappe.db.get_value('Company', company, 'company_name') }} Team</p>
+            """
+        },
+        {
+            "name": "volunteer_welcome",
+            "subject": "Welcome to our Volunteer Team!",
+            "response": """
+                <h2>Welcome to our Volunteer Team, {{ volunteer.volunteer_name }}!</h2>
+                
+                <p>Thank you for your interest in volunteering with us. We're excited to have you join our team!</p>
+                
+                <h3>Your Volunteer Profile:</h3>
+                <ul>
+                    <li><strong>Availability:</strong> {{ volunteer.commitment_level }}</li>
+                    <li><strong>Experience Level:</strong> {{ volunteer.experience_level }}</li>
+                    {% if volunteer.interests %}
+                    <li><strong>Areas of Interest:</strong>
+                        <ul>
+                        {% for interest in volunteer.interests %}
+                            <li>{{ interest.interest_area }}</li>
+                        {% endfor %}
+                        </ul>
+                    </li>
+                    {% endif %}
+                </ul>
+                
+                <h3>Next Steps:</h3>
+                <ol>
+                    <li>Complete your volunteer orientation (online)</li>
+                    <li>Review our volunteer handbook</li>
+                    <li>Sign up for your first volunteer opportunity</li>
+                </ol>
+                
+                <p>Your volunteer coordinator will contact you within the next few days to discuss specific opportunities.</p>
+                
+                <p>In the meantime, you can access your volunteer portal using your organization email: <strong>{{ volunteer.email }}</strong></p>
+                
+                <p>Thank you for making a difference!</p>
+                
+                <p>Best regards,<br>The Volunteer Team</p>
+            """
+        },
+        {
+            "name": "membership_payment_failed",
+            "subject": "Payment Failed - Membership Application",
+            "response": """
+                <p>Dear {{ member.first_name }},</p>
+                
+                <p>Unfortunately, your payment for the membership application could not be processed.</p>
+                
+                <p><strong>Don't worry - your application is still valid!</strong></p>
+                
+                <p>You can retry the payment at any time using this link:</p>
+                <p><a href="{{ retry_url }}" class="btn btn-primary">Retry Payment</a></p>
+                
+                <p>If you continue to experience issues, please contact our support team at support@example.com</p>
+                
+                <p>Common reasons for payment failure:</p>
+                <ul>
+                    <li>Insufficient funds</li>
+                    <li>Card declined by bank</li>
+                    <li>Incorrect payment details</li>
+                    <li>Technical issues</li>
+                </ul>
+                
+                <p>Best regards,<br>The Membership Team</p>
+            """
+        }
+    ]
+    
+    created_count = 0
+    for template_data in templates:
+        if not frappe.db.exists("Email Template", template_data["name"]):
+            template = frappe.get_doc({
+                "doctype": "Email Template",
+                "name": template_data["name"],
+                "subject": template_data["subject"],
+                "use_html": 1,
+                "response": template_data["response"]
+            })
+            template.insert(ignore_permissions=True)
+            created_count += 1
+            print(f"   ✓ Created email template: {template_data['name']}")
+        else:
+            print(f"   ✓ Email template already exists: {template_data['name']}")
+    
+    if created_count > 0:
+        print(f"   📧 Created {created_count} new email templates")
+    
+    return created_count
+
+def setup_application_web_pages():
+    """Set up web pages for application process"""
+    
+    print("   🌐 Configuring web pages for membership application...")
+    
+    # Create routes in website settings - this is just informational
+    # The actual page templates should exist in verenigingen/templates/pages/
+    pages = [
+        {
+            "route": "apply-for-membership",
+            "title": "Apply for Membership",
+            "published": 1
+        },
+        {
+            "route": "payment/complete",
+            "title": "Complete Payment", 
+            "published": 1
+        },
+        {
+            "route": "payment/success",
+            "title": "Payment Successful",
+            "published": 1
+        },
+        {
+            "route": "payment/failed",
+            "title": "Payment Failed",
+            "published": 1
+        }
+    ]
+    
+    print(f"   ✓ Web pages configured for {len(pages)} routes")
+    print("   ℹ️  Ensure template files exist in verenigingen/templates/pages/")
+
+def setup_workspace():
+    """Set up and update workspace for verenigingen"""
+    print("🏢 Setting up Verenigingen workspace...")
+    
+    try:
+        # Clean up workspace first
+        cleanup_workspace_links()
+        
+        # Then add new links
+        update_workspace_links()
+        
+        print("✅ Workspace setup completed")
+        
+    except Exception as e:
+        print(f"⚠️ Workspace setup failed: {str(e)}")
+
+def cleanup_workspace_links():
+    """Clean up invalid workspace links"""
+    try:
+        if not frappe.db.exists('Workspace', 'Verenigingen'):
+            print("   ℹ️  Verenigingen workspace doesn't exist yet - will be created")
+            return
+            
+        workspace = frappe.get_doc('Workspace', 'Verenigingen')
+        
+        # Find and remove links to non-existent doctypes
+        links_to_remove = []
+        for i, link in enumerate(workspace.links):
+            link_to = link.get('link_to')
+            if link_to and not frappe.db.exists('DocType', link_to):
+                print(f"   🗑️  Removing invalid link: {link.get('label')} -> {link_to}")
+                links_to_remove.append(i)
+        
+        # Remove in reverse order to maintain indices
+        for i in reversed(links_to_remove):
+            del workspace.links[i]
+        
+        if links_to_remove:
+            workspace.save(ignore_permissions=True)
+            print(f"   ✓ Cleaned up {len(links_to_remove)} invalid links")
+        else:
+            print("   ✓ No invalid links found")
+            
+    except Exception as e:
+        print(f"   ⚠️ Workspace cleanup failed: {str(e)}")
+
+def update_workspace_links():
+    """Add new links to workspace"""
+    try:
+        if not frappe.db.exists('Workspace', 'Verenigingen'):
+            print("   ℹ️  Verenigingen workspace doesn't exist - skipping link updates")
+            return
+            
+        workspace = frappe.get_doc('Workspace', 'Verenigingen')
+        
+        # Links to add (only if doctype exists)
+        potential_links = [
+            # Termination & Appeals Section
+            {
+                "hidden": 0,
+                "is_query_report": 0,
+                "label": "Termination & Appeals",
+                "link_count": 2,
+                "link_type": "DocType",
+                "onboard": 0,
+                "type": "Card Break"
+            },
+            {
+                "dependencies": "",
+                "hidden": 0,
+                "is_query_report": 0,
+                "label": "Membership Termination Request",
+                "link_count": 0,
+                "link_to": "Membership Termination Request",
+                "link_type": "DocType",
+                "onboard": 0,
+                "type": "Link"
+            },
+            {
+                "dependencies": "",
+                "hidden": 0,
+                "is_query_report": 0,
+                "label": "SEPA Mandate",
+                "link_count": 0,
+                "link_to": "SEPA Mandate",
+                "link_type": "DocType",
+                "onboard": 0,
+                "type": "Link"
+            },
+            {
+                "dependencies": "",
+                "hidden": 0,
+                "is_query_report": 0,
+                "label": "Direct Debit Batch", 
+                "link_count": 0,
+                "link_to": "Direct Debit Batch",
+                "link_type": "DocType",
+                "onboard": 0,
+                "type": "Link"
+            }
+        ]
+        
+        # Only add links for existing doctypes
+        links_added = 0
+        for link in potential_links:
+            link_to = link.get('link_to')
+            if not link_to or frappe.db.exists('DocType', link_to) or link.get('type') == 'Card Break':
+                # Check if link already exists
+                exists = False
+                for existing_link in workspace.links:
+                    if existing_link.get('label') == link.get('label'):
+                        exists = True
+                        break
+                
+                if not exists:
+                    workspace.append('links', link)
+                    links_added += 1
+                    print(f"   ✓ Added link: {link.get('label')}")
+        
+        # Add new shortcuts (only for existing doctypes)
+        potential_shortcuts = [
+            {
+                "color": "Red",
+                "label": "Termination Requests",
+                "link_to": "Membership Termination Request",
+                "type": "DocType"
+            },
+            {
+                "color": "Blue", 
+                "label": "SEPA Mandates",
+                "link_to": "SEPA Mandate",
+                "type": "DocType"
+            }
+        ]
+        
+        shortcuts_added = 0
+        for shortcut in potential_shortcuts:
+            link_to = shortcut.get('link_to')
+            if frappe.db.exists('DocType', link_to):
+                # Check if shortcut already exists
+                exists = False
+                for existing_shortcut in workspace.shortcuts:
+                    if existing_shortcut.get('label') == shortcut.get('label'):
+                        exists = True
+                        break
+                
+                if not exists:
+                    workspace.append('shortcuts', shortcut)
+                    shortcuts_added += 1
+                    print(f"   ✓ Added shortcut: {shortcut.get('label')}")
+        
+        if links_added > 0 or shortcuts_added > 0:
+            workspace.save(ignore_permissions=True)
+            print(f"   ✅ Added {links_added} links and {shortcuts_added} shortcuts")
+        else:
+            print("   ✓ No new links or shortcuts needed")
+            
+    except Exception as e:
+        print(f"   ⚠️ Workspace update failed: {str(e)}")
+
+def load_application_fixtures():
+    """Load necessary fixtures for the application"""
+    print("📦 Loading application fixtures...")
+    
+    try:
+        import os
+        from frappe.desk.page.setup_wizard.setup_wizard import install_fixtures
+        
+        # Get fixtures directory
+        app_path = frappe.get_app_path("verenigingen")
+        fixtures_path = os.path.join(app_path, "..", "fixtures")
+        
+        # Load workflow fixtures if they exist
+        fixture_files = [
+            "workflow.json",
+            "membership_workflow.json"
+        ]
+        
+        loaded_count = 0
+        for fixture_file in fixture_files:
+            fixture_path = os.path.join(fixtures_path, fixture_file)
+            if os.path.exists(fixture_path):
+                try:
+                    install_fixtures(fixture_path)
+                    loaded_count += 1
+                    print(f"   ✓ Loaded fixture: {fixture_file}")
+                except Exception as e:
+                    print(f"   ⚠️ Could not load fixture {fixture_file}: {str(e)}")
+            else:
+                print(f"   ℹ️  Fixture not found: {fixture_file}")
+        
+        if loaded_count > 0:
+            print(f"   📦 Loaded {loaded_count} fixtures")
+        else:
+            print("   ℹ️  No fixtures loaded")
+            
+    except Exception as e:
+        print(f"   ⚠️ Fixture loading failed: {str(e)}")
+
+# Consolidated API endpoints for all setup functions
+
+@frappe.whitelist()
+def run_complete_setup():
+    """Run the complete setup process manually"""
+    try:
+        execute_after_install()
+        return {"success": True, "message": "Complete setup completed successfully"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@frappe.whitelist() 
+def setup_membership_application_system_manual():
+    """Manual setup endpoint for membership application system"""
+    try:
+        setup_membership_application_system()
+        return {"success": True, "message": "Membership application system setup completed"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@frappe.whitelist()
+def setup_workspace_manual():
+    """Manual setup endpoint for workspace"""
+    try:
+        setup_workspace()
+        return {"success": True, "message": "Workspace setup completed"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}

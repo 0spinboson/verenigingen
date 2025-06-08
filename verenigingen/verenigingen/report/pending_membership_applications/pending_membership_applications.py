@@ -95,6 +95,11 @@ def get_data(filters):
     # Base conditions
     conditions = ["m.application_status = 'Pending'"]
     
+    # Apply role-based chapter filtering
+    user_chapter_condition = get_user_chapter_filter()
+    if user_chapter_condition:
+        conditions.append(user_chapter_condition)
+    
     # Apply filters
     if filters:
         if filters.get("chapter"):
@@ -112,6 +117,17 @@ def get_data(filters):
         if filters.get("overdue_only"):
             overdue_date = add_days(today(), -14)
             conditions.append(f"DATE(m.application_date) < '{overdue_date}'")
+        
+        # Support for aging filter (7+ days)
+        if filters.get("aging_only"):
+            aging_date = add_days(today(), -7)
+            conditions.append(f"DATE(m.application_date) < '{aging_date}'")
+        
+        # Support for days filter from URL parameters
+        if filters.get("days_filter"):
+            days = int(filters.get("days_filter"))
+            cutoff_date = add_days(today(), -days)
+            conditions.append(f"DATE(m.application_date) < '{cutoff_date}'")
     
     where_clause = " AND ".join(conditions)
     
@@ -206,3 +222,88 @@ def get_chart_data(data):
         "type": "bar",
         "colors": ["#7cd6fd"]
     }
+
+def get_user_chapter_filter():
+    """Get chapter filter based on user's role and permissions"""
+    user = frappe.session.user
+    
+    # System managers and Association/Membership managers see all
+    admin_roles = ["System Manager", "Association Manager", "Membership Manager"]
+    if any(role in frappe.get_roles(user) for role in admin_roles):
+        return None  # No filter - see all
+    
+    # Get user's member record
+    user_member = frappe.db.get_value("Member", {"user": user}, "name")
+    if not user_member:
+        return "1=0"  # No access if not a member
+    
+    # Get chapters where user has board access with membership permissions
+    user_chapters = []
+    volunteer_records = frappe.get_all("Volunteer", filters={"member": user_member}, fields=["name"])
+    
+    for volunteer_record in volunteer_records:
+        board_positions = frappe.get_all(
+            "Chapter Board Member",
+            filters={
+                "volunteer": volunteer_record.name,
+                "is_active": 1
+            },
+            fields=["parent", "chapter_role"]
+        )
+        
+        for position in board_positions:
+            # Check if the role has membership permissions
+            try:
+                role_doc = frappe.get_doc("Chapter Role", position.chapter_role)
+                if role_doc.permissions_level in ["Admin", "Membership"]:
+                    if position.parent not in user_chapters:
+                        user_chapters.append(position.parent)
+            except Exception:
+                continue
+    
+    # Add national chapter if configured and user has access
+    try:
+        settings = frappe.get_single("Verenigingen Settings")
+        if hasattr(settings, 'national_chapter') and settings.national_chapter:
+            # Check if user has board access to national chapter
+            national_board_positions = frappe.get_all(
+                "Chapter Board Member",
+                filters={
+                    "parent": settings.national_chapter,
+                    "volunteer": ["in", [v.name for v in volunteer_records]],
+                    "is_active": 1
+                },
+                fields=["chapter_role"]
+            )
+            
+            for position in national_board_positions:
+                try:
+                    role_doc = frappe.get_doc("Chapter Role", position.chapter_role)
+                    if role_doc.permissions_level in ["Admin", "Membership"]:
+                        if settings.national_chapter not in user_chapters:
+                            user_chapters.append(settings.national_chapter)
+                        break
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    
+    if not user_chapters:
+        return "1=0"  # No access if not on any board with membership permissions
+    
+    # Return filter for user's chapters, including null/empty chapters for national access
+    if len(user_chapters) == 1 and user_chapters[0] == getattr(frappe.get_single("Verenigingen Settings"), 'national_chapter', None):
+        # National chapter access - can see all including unassigned
+        return None
+    else:
+        # Chapter-specific access
+        chapter_conditions = [f"m.primary_chapter = '{chapter}'" for chapter in user_chapters]
+        # Also include applications without a chapter assigned if user has national access
+        try:
+            settings = frappe.get_single("Verenigingen Settings")
+            if hasattr(settings, 'national_chapter') and settings.national_chapter in user_chapters:
+                chapter_conditions.append("(m.primary_chapter IS NULL OR m.primary_chapter = '')")
+        except Exception:
+            pass
+        
+        return f"({' OR '.join(chapter_conditions)})"

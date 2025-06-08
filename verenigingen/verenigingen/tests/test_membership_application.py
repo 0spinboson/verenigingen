@@ -58,7 +58,7 @@ class TestMembershipApplication(unittest.TestCase):
             "postal_code": "1234",
             "country": "Netherlands",
             "selected_membership_type": "Test Membership",
-            "mobile_no": "+31612345678",
+            "contact_number": "+31612345678",
             "interested_in_volunteering": 1,
             "volunteer_availability": "Monthly",
             "volunteer_interests": ["Event Planning", "Technical Support"],
@@ -321,6 +321,264 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         print(f"   Custom fee: €{member.membership_fee_override}")
         print(f"   Reason: {member.fee_override_reason}")
         print(f"   No fee change tracking triggered (correct for new application)")
+        
+        # Clean up
+        if member.customer:
+            frappe.delete_doc("Customer", member.customer, force=True)
+        frappe.delete_doc("Member", member.name, force=True)
+    
+    def test_iban_data_preservation(self):
+        """Test that IBAN data from application is properly saved to member"""
+        # Application data with IBAN details
+        iban_data = self.application_data.copy()
+        iban_data["payment_method"] = "Direct Debit"
+        iban_data["iban"] = "NL02ABNA0123456789"
+        iban_data["bic"] = "ABNANL2A"
+        iban_data["bank_account_name"] = "Test Account Holder"
+        iban_data["email"] = f"iban_{self.test_email}"
+        
+        # Submit application
+        result = submit_application(iban_data)
+        
+        # Verify submission successful
+        self.assertTrue(result["success"])
+        self.assertIn("member_id", result)
+        
+        # Get created member
+        member = frappe.get_doc("Member", result["member_id"])
+        
+        # Verify IBAN data was preserved
+        self.assertEqual(member.iban, "NL02 ABNA 0123 4567 89")  # Should be formatted
+        self.assertEqual(member.bic, "ABNANL2A")
+        self.assertEqual(member.bank_account_name, "Test Account Holder")
+        self.assertEqual(member.payment_method, "Direct Debit")
+        
+        print(f"✅ IBAN data properly transferred for {member.name}")
+        
+        # Clean up
+        if member.customer:
+            frappe.delete_doc("Customer", member.customer, force=True)
+        frappe.delete_doc("Member", member.name, force=True)
+    
+    def test_contact_number_field_usage(self):
+        """Test that contact_number is used instead of mobile_no"""
+        # Submit application with contact number
+        result = submit_application(self.application_data)
+        
+        # Get created member
+        member = frappe.get_doc("Member", result["member_id"])
+        
+        # Verify contact_number field is used
+        self.assertEqual(member.contact_number, "+31612345678")
+        
+        # Verify no mobile_no field is set (should not exist or be empty)
+        self.assertFalse(hasattr(member, 'mobile_no') and getattr(member, 'mobile_no', None))
+        
+        print(f"✅ Contact number field properly used for {member.name}")
+    
+    def test_membership_submission_after_approval(self):
+        """Test that membership is properly submitted after approval"""
+        # Submit application
+        result = submit_application(self.application_data)
+        member_name = result["member_id"]
+        
+        # Approve application
+        frappe.set_user("Administrator")
+        approval_result = approve_membership_application(member_name, "Approved for testing")
+        
+        self.assertTrue(approval_result["success"])
+        
+        # Verify member status
+        member = frappe.get_doc("Member", member_name)
+        self.assertEqual(member.application_status, "Approved")
+        
+        # Verify membership was created and submitted properly
+        memberships = frappe.get_all("Membership", filters={"member": member_name}, fields=["name", "docstatus", "status"])
+        self.assertEqual(len(memberships), 1)
+        
+        membership = frappe.get_doc("Membership", memberships[0].name)
+        self.assertEqual(membership.docstatus, 1)  # Should be submitted, not draft
+        
+        print(f"✅ Membership properly submitted for {member_name}")
+    
+    def test_invoice_period_dates(self):
+        """Test that invoices have proper subscription period dates"""
+        # Submit and approve application
+        result = submit_application(self.application_data)
+        member_name = result["member_id"]
+        
+        frappe.set_user("Administrator")
+        approval_result = approve_membership_application(member_name)
+        
+        self.assertTrue(approval_result["success"])
+        self.assertIn("invoice", approval_result)
+        
+        # Get the invoice
+        invoice = frappe.get_doc("Sales Invoice", approval_result["invoice"])
+        
+        # Verify invoice has subscription period dates
+        self.assertTrue(invoice.subscription_period_start, "Invoice should have subscription period start date")
+        self.assertTrue(invoice.subscription_period_end, "Invoice should have subscription period end date")
+        
+        # Verify dates are logical (end after start)
+        from frappe.utils import getdate
+        start_date = getdate(invoice.subscription_period_start)
+        end_date = getdate(invoice.subscription_period_end)
+        self.assertTrue(end_date > start_date, "Subscription end date should be after start date")
+        
+        print(f"✅ Invoice {invoice.name} has proper subscription period: {start_date} to {end_date}")
+    
+    def test_no_duplicate_invoices(self):
+        """Test that approval doesn't create duplicate invoices"""
+        # Submit application
+        result = submit_application(self.application_data)
+        member_name = result["member_id"]
+        
+        # Approve application
+        frappe.set_user("Administrator")
+        approval_result = approve_membership_application(member_name)
+        
+        self.assertTrue(approval_result["success"])
+        
+        # Count invoices for this member
+        member = frappe.get_doc("Member", member_name)
+        if member.customer:
+            invoices = frappe.get_all("Sales Invoice", filters={"customer": member.customer})
+            self.assertEqual(len(invoices), 1, "Should only have one invoice after approval")
+        
+        print(f"✅ No duplicate invoices created for {member_name}")
+    
+    def test_volunteer_application_processing(self):
+        """Test that volunteer applications are properly processed"""
+        # Submit application with volunteer interest
+        volunteer_data = self.application_data.copy()
+        volunteer_data["interested_in_volunteering"] = 1
+        volunteer_data["volunteer_availability"] = "Weekly"
+        volunteer_data["volunteer_interests"] = ["Event Planning", "Technical Support"]
+        volunteer_data["volunteer_skills"] = "Event coordination, Public speaking, IT support"
+        volunteer_data["email"] = f"volunteer_{self.test_email}"
+        
+        result = submit_application(volunteer_data)
+        
+        # Verify submission successful
+        self.assertTrue(result["success"])
+        member = frappe.get_doc("Member", result["member_id"])
+        
+        # Verify volunteer data was stored
+        self.assertEqual(member.interested_in_volunteering, 1)
+        self.assertEqual(member.volunteer_availability, "Weekly")
+        self.assertTrue(member.volunteer_skills)
+        
+        print(f"✅ Volunteer application data properly stored for {member.name}")
+        
+        # Clean up
+        if member.customer:
+            frappe.delete_doc("Customer", member.customer, force=True)
+        frappe.delete_doc("Member", member.name, force=True)
+    
+    def test_volunteer_record_creation_after_payment(self):
+        """Test that volunteer record is created after payment completion"""
+        # Submit application with volunteer interest
+        volunteer_data = self.application_data.copy()
+        volunteer_data["interested_in_volunteering"] = 1
+        volunteer_data["volunteer_availability"] = "Monthly"
+        volunteer_data["volunteer_interests"] = ["Community Outreach"]
+        volunteer_data["volunteer_skills"] = "Community engagement, Communication"
+        volunteer_data["email"] = f"volpay_{self.test_email}"
+        
+        # Submit and approve application
+        result = submit_application(volunteer_data)
+        member_name = result["member_id"]
+        
+        frappe.set_user("Administrator")
+        approve_membership_application(member_name)
+        
+        # Process payment to complete the workflow
+        payment_result = process_application_payment(
+            member_name,
+            payment_method="Bank Transfer",
+            payment_reference="TEST-VOL-001"
+        )
+        
+        self.assertTrue(payment_result["success"])
+        
+        # Verify volunteer record was created
+        volunteer_exists = frappe.db.exists("Volunteer", {"member": member_name})
+        self.assertTrue(volunteer_exists, "Volunteer record should be created after payment")
+        
+        if volunteer_exists:
+            volunteer = frappe.get_doc("Volunteer", {"member": member_name})
+            self.assertEqual(volunteer.volunteer_name, frappe.get_doc("Member", member_name).full_name)
+            self.assertTrue(volunteer.status in ["New", "Active"])
+            
+            print(f"✅ Volunteer record created: {volunteer.name} for member {member_name}")
+        
+        # Clean up
+        member = frappe.get_doc("Member", member_name)
+        if volunteer_exists:
+            frappe.delete_doc("Volunteer", volunteer.name, force=True)
+        if member.customer:
+            frappe.delete_doc("Customer", member.customer, force=True)
+        # Delete membership
+        memberships = frappe.get_all("Membership", filters={"member": member_name})
+        for membership in memberships:
+            frappe.delete_doc("Membership", membership.name, force=True)
+        frappe.delete_doc("Member", member_name, force=True)
+    
+    def test_non_volunteer_application(self):
+        """Test that non-volunteer applications don't create volunteer records"""
+        # Submit application without volunteer interest
+        non_volunteer_data = self.application_data.copy()
+        non_volunteer_data["interested_in_volunteering"] = 0
+        non_volunteer_data["email"] = f"nonvol_{self.test_email}"
+        
+        # Submit, approve and complete payment
+        result = submit_application(non_volunteer_data)
+        member_name = result["member_id"]
+        
+        frappe.set_user("Administrator")
+        approve_membership_application(member_name)
+        
+        payment_result = process_application_payment(
+            member_name,
+            payment_method="Bank Transfer",
+            payment_reference="TEST-NONVOL-001"
+        )
+        
+        self.assertTrue(payment_result["success"])
+        
+        # Verify NO volunteer record was created
+        volunteer_exists = frappe.db.exists("Volunteer", {"member": member_name})
+        self.assertFalse(volunteer_exists, "No volunteer record should be created for non-volunteer members")
+        
+        print(f"✅ No volunteer record created for non-volunteer member {member_name}")
+        
+        # Clean up
+        member = frappe.get_doc("Member", member_name)
+        if member.customer:
+            frappe.delete_doc("Customer", member.customer, force=True)
+        # Delete membership
+        memberships = frappe.get_all("Membership", filters={"member": member_name})
+        for membership in memberships:
+            frappe.delete_doc("Membership", membership.name, force=True)
+        frappe.delete_doc("Member", member_name, force=True)
+    
+    def test_volunteer_interest_areas_validation(self):
+        """Test that volunteer interest areas are properly validated"""
+        # Submit application with valid volunteer interests
+        valid_volunteer_data = self.application_data.copy()
+        valid_volunteer_data["interested_in_volunteering"] = 1
+        valid_volunteer_data["volunteer_interests"] = ["Event Planning", "Technical Support"]
+        valid_volunteer_data["email"] = f"validvol_{self.test_email}"
+        
+        result = submit_application(valid_volunteer_data)
+        self.assertTrue(result["success"])
+        
+        member = frappe.get_doc("Member", result["member_id"])
+        # Should store the interests properly
+        self.assertTrue(member.interested_in_volunteering)
+        
+        print(f"✅ Valid volunteer interests processed for {member.name}")
         
         # Clean up
         if member.customer:

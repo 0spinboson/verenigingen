@@ -148,29 +148,6 @@ class TerminationMixin:
             if hasattr(self, 'pending_termination_request'):
                 self.pending_termination_request = None
         
-        # Check for appeals if terminated
-        if executed_termination:
-            appeals = frappe.get_all(
-                "Termination Appeals Process",
-                filters={
-                    "member": self.name,
-                    "appeal_status": ["not in", ["Withdrawn", "Dismissed"]]
-                },
-                fields=["name", "appeal_status", "decision_outcome"],
-                order_by="appeal_date desc",
-                limit=1
-            )
-            
-            if appeals:
-                appeal = appeals[0]
-                if hasattr(self, 'appeal_status'):
-                    self.appeal_status = appeal.appeal_status
-                
-                if hasattr(self, 'appeal_reference'):
-                    self.appeal_reference = appeal.name
-                
-                if appeal.decision_outcome == "Upheld" and hasattr(self, 'termination_status'):
-                    self.termination_status = "Termination Reversed"
         
         # Update color/badge field for visual indication
         if hasattr(self, 'membership_badge_color'):
@@ -178,6 +155,8 @@ class TerminationMixin:
                 self.membership_badge_color = "#dc3545"  # Red for terminated
             elif pending_termination:
                 self.membership_badge_color = "#ffc107"  # Yellow for pending
+            elif self.status == "Suspended":
+                self.membership_badge_color = "#fd7e14"  # Orange for suspended
             else:
                 active_membership = frappe.db.exists("Membership", {
                     "member": self.name,
@@ -188,3 +167,26 @@ class TerminationMixin:
                     self.membership_badge_color = "#28a745"  # Green for active
                 else:
                     self.membership_badge_color = "#6c757d"  # Gray for inactive
+    
+    def get_suspension_summary(self):
+        """Get summary of suspension status and impact"""
+        from verenigingen.utils.termination_integration import get_member_suspension_status
+        return get_member_suspension_status(self.name)
+    
+    def suspend_member(self, reason, suspend_user=True, suspend_teams=True):
+        """Suspend this member with given reason"""
+        from verenigingen.utils.termination_integration import suspend_member_safe
+        return suspend_member_safe(
+            member_name=self.name,
+            suspension_reason=reason,
+            suspend_user=suspend_user,
+            suspend_teams=suspend_teams
+        )
+    
+    def unsuspend_member(self, reason):
+        """Unsuspend this member with given reason"""
+        from verenigingen.utils.termination_integration import unsuspend_member_safe
+        return unsuspend_member_safe(
+            member_name=self.name,
+            unsuspension_reason=reason
+        )

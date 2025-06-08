@@ -598,14 +598,17 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
                     
                     for plan in subscription.plans:
                         plan_doc = frappe.get_doc("Subscription Plan", plan.plan)
+                        # Get price from subscription plan, multiply by quantity
+                        plan_price = plan_doc.cost * plan.qty
                         plan_details.append({
                             "plan_name": plan_doc.plan_name,
-                            "price": plan.price,
+                            "price": plan_price,
+                            "quantity": plan.qty,
                             "billing_interval": plan_doc.billing_interval,
                             "billing_interval_count": plan_doc.billing_interval_count,
                             "currency": plan_doc.currency
                         })
-                        total_amount += plan.price
+                        total_amount += plan_price
                     
                     subscription_details.append({
                         "name": subscription.name,
@@ -1023,3 +1026,37 @@ def get_current_subscription_details(member):
     except Exception as e:
         frappe.log_error(f"Error getting subscription details for member {member}: {str(e)}")
         return {"error": str(e)}
+
+@frappe.whitelist()
+def get_linked_donations(member):
+    """
+    Find linked donor record for a member to view donations
+    """
+    if not member:
+        return {"success": False, "message": "No member specified"}
+        
+    # First try to find a donor with the same email as the member
+    member_doc = frappe.get_doc("Member", member)
+    if member_doc.email:
+        donors = frappe.get_all(
+            "Donor",
+            filters={"donor_email": member_doc.email},
+            fields=["name"]
+        )
+        
+        if donors:
+            return {"success": True, "donor": donors[0].name}
+            
+    # Then try to find by name
+    if member_doc.full_name:
+        donors = frappe.get_all(
+            "Donor",
+            filters={"donor_name": ["like", f"%{member_doc.full_name}%"]},
+            fields=["name"]
+        )
+        
+        if donors:
+            return {"success": True, "donor": donors[0].name}
+    
+    # No donor found
+    return {"success": False, "message": "No donor record found for this member"}

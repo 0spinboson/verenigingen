@@ -237,7 +237,7 @@ def get_application_reviewers(member):
     reviewers = []
     
     # 1. Chapter board members (if chapter assigned)
-    chapter = member.selected_chapter or member.suggested_chapter
+    chapter = getattr(member, 'selected_chapter', None) or getattr(member, 'suggested_chapter', None) or member.primary_chapter
     if chapter:
         try:
             chapter_doc = frappe.get_doc("Chapter", chapter)
@@ -347,7 +347,7 @@ def check_overdue_applications():
             "application_status": "Pending",
             "application_date": ["<", two_weeks_ago]
         },
-        fields=["name", "full_name", "application_date", "suggested_chapter"]
+        fields=["name", "full_name", "application_date", "primary_chapter"]
     )
     
     if overdue:

@@ -59,14 +59,6 @@ def run_pre_setup_diagnostics():
                 print(f"   ❌ Membership Termination Request.{field} - MISSING")
                 all_good = False
                 
-    # Check appeals process fields
-    if frappe.db.exists("DocType", "Termination Appeals Process"):
-        meta = frappe.get_meta("Termination Appeals Process")
-        if meta.has_field("appeal_status"):
-            print(f"   ✅ Termination Appeals Process.appeal_status")
-        else:
-            print(f"   ❌ Termination Appeals Process.appeal_status - MISSING")
-            all_good = False
     
     # 4. Test workflow creation capability
     print("\n4. WORKFLOW CREATION TEST")

@@ -160,6 +160,71 @@ def reject_membership_application(member_name, reason, process_refund=False):
         "refund_processed": refund_processed
     }
 
+@frappe.whitelist()
+def get_user_chapter_access():
+    """Get user's chapter access for filtering applications"""
+    user = frappe.session.user
+    
+    # Admin roles see all chapters
+    admin_roles = ["System Manager", "Association Manager", "Membership Manager"]
+    if any(role in frappe.get_roles(user) for role in admin_roles):
+        return {
+            "restrict_to_chapters": False,
+            "chapters": [],
+            "is_admin": True
+        }
+    
+    # Get user's member record
+    user_member = frappe.db.get_value("Member", {"user": user}, "name")
+    if not user_member:
+        return {
+            "restrict_to_chapters": True,
+            "chapters": [],
+            "is_admin": False,
+            "message": "User is not a member"
+        }
+    
+    # Get chapters where user has board access with membership permissions
+    user_chapters = []
+    volunteer_records = frappe.get_all("Volunteer", filters={"member": user_member}, fields=["name"])
+    
+    for volunteer_record in volunteer_records:
+        board_positions = frappe.get_all(
+            "Chapter Board Member",
+            filters={
+                "volunteer": volunteer_record.name,
+                "is_active": 1
+            },
+            fields=["parent", "chapter_role"]
+        )
+        
+        for position in board_positions:
+            # Check if the role has membership permissions
+            try:
+                role_doc = frappe.get_doc("Chapter Role", position.chapter_role)
+                if role_doc.permissions_level in ["Admin", "Membership"]:
+                    if position.parent not in user_chapters:
+                        user_chapters.append(position.parent)
+            except Exception:
+                continue
+    
+    # Check national chapter access
+    national_access = False
+    try:
+        settings = frappe.get_single("Verenigingen Settings")
+        if hasattr(settings, 'national_chapter') and settings.national_chapter:
+            if settings.national_chapter in user_chapters:
+                national_access = True
+    except Exception:
+        pass
+    
+    return {
+        "restrict_to_chapters": len(user_chapters) > 0 and not national_access,
+        "chapters": user_chapters,
+        "is_admin": False,
+        "has_national_access": national_access
+    }
+
 def has_approval_permission(member):
     """Check if current user can approve/reject applications"""
     user = frappe.session.user
@@ -173,7 +238,7 @@ def has_approval_permission(member):
         return True
     
     # Check if user is a board member of the member's chapter
-    chapter = member.primary_chapter or member.suggested_chapter
+    chapter = member.primary_chapter or getattr(member, 'suggested_chapter', None)
     if chapter:
         # Get user's member record
         user_member = frappe.db.get_value("Member", {"user": user}, "name")
@@ -332,7 +397,7 @@ def get_pending_applications(chapter=None, days_overdue=None):
         filters=filters,
         fields=[
             "name", "application_id", "full_name", "email", "contact_number",
-            "application_date", "primary_chapter", "suggested_chapter",
+            "application_date", "primary_chapter",
             "selected_membership_type", "application_source",
             "interested_in_volunteering", "age"
         ],
@@ -613,6 +678,7 @@ def check_member_iban_data(member_name):
     except Exception as e:
         return {"error": str(e)}
 
+
 @frappe.whitelist()
 def send_overdue_notifications():
     """Send notifications for overdue applications (> 2 weeks)"""
@@ -627,7 +693,7 @@ def send_overdue_notifications():
             "application_status": "Pending",
             "application_date": ["<", two_weeks_ago]
         },
-        fields=["name", "full_name", "application_date", "primary_chapter", "suggested_chapter"]
+        fields=["name", "full_name", "application_date", "primary_chapter"]
     )
     
     if not overdue:
@@ -638,7 +704,7 @@ def send_overdue_notifications():
     no_chapter = []
     
     for app in overdue:
-        chapter = app.primary_chapter or app.suggested_chapter
+        chapter = app.primary_chapter
         if chapter:
             if chapter not in by_chapter:
                 by_chapter[chapter] = []

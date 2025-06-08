@@ -25,6 +25,8 @@
   "payment_details_section",
   "last_payment_date",
   "unpaid_amount",
+  "column_break_payment",
+  "membership_fee",
   "mandate_section",
   "sepa_mandate",
   "mandate_reference",
@@ -175,6 +177,13 @@
   {
    "fieldname": "column_break_payment",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "membership_fee",
+   "fieldtype": "Currency",
+   "label": "Membership Fee",
+   "read_only": 1,
+   "description": "Current membership fee amount"
   },
   {
    "fieldname": "mandate_section",

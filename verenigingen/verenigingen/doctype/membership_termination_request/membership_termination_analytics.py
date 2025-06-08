@@ -448,15 +448,8 @@ def get_early_warning_system():
         'last_updated': now()
     }
     
-    # Check for overdue appeals
-    overdue_appeals = frappe.get_all(
-        "Termination Appeals Process",
-        filters={
-            "appeal_status": ["in", ["Under Review", "Pending Decision"]],
-            "review_deadline": ["<", today()]
-        },
-        fields=["name", "member_name", "review_deadline"]
-    )
+    # Appeals system has been removed
+    overdue_appeals = []
     
     if len(overdue_appeals) > 0:
         warnings['critical'].append({
@@ -589,13 +582,8 @@ def generate_executive_summary():
         fields=["termination_type", "status", "request_date", "execution_date"]
     )
     
-    appeals = frappe.get_all(
-        "Termination Appeals Process",
-        filters={
-            "appeal_date": ["between", [start_date, end_date]]
-        },
-        fields=["appeal_status", "decision_outcome"]
-    )
+    # Appeals system has been removed
+    appeals = []
     
     summary = {
         'period': f"{start_date.strftime('%B %Y')} - {end_date.strftime('%B %Y')}",

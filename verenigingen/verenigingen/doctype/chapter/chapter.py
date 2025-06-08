@@ -593,50 +593,81 @@ def get_chapters_by_postal_code(postal_code):
     return matching_chapters
 
 @frappe.whitelist()
-def suggest_chapter_for_member(member_name, postal_code=None, state=None, city=None):
+def suggest_chapters_for_member(member, postal_code=None, state=None, city=None):
     """Suggest appropriate chapters for a member based on location data"""
     if not is_chapter_management_enabled():
-        return {"all_chapters": [], "disabled": True}
-        
-    result = {
-        "matches_by_postal": [],
-        "matches_by_region": [],
-        "matches_by_city": [],
-        "all_chapters": []
-    }
+        return []
     
-    result["all_chapters"] = frappe.get_all(
-        "Chapter",
-        filters={"published": 1},
-        fields=["name", "region", "postal_codes", "introduction"]
-    )
-    
-    if not (postal_code or state or city):
-        return result
+    # If no explicit location data provided, try to get it from member's address
+    if not postal_code and not state and not city:
+        member_doc = frappe.get_doc("Member", member)
+        if member_doc.primary_address:
+            try:
+                address_doc = frappe.get_doc("Address", member_doc.primary_address)
+                postal_code = address_doc.pincode
+                state = address_doc.state
+                city = address_doc.city
+            except Exception as e:
+                frappe.log_error(f"Error fetching address for member {member}: {str(e)}")
         
+        # Fallback to member's direct postal code field
+        if not postal_code and hasattr(member_doc, 'pincode'):
+            postal_code = member_doc.pincode
+    
+    # Return format expected by JavaScript (list of chapter suggestions)
+    matching_chapters = []
+    
     if postal_code:
-        result["matches_by_postal"] = get_chapters_by_postal_code(postal_code)
-        if result["matches_by_postal"]:
-            return result
+        chapters_by_postal = get_chapters_by_postal_code(postal_code)
+        for chapter in chapters_by_postal:
+            matching_chapters.append({
+                "name": chapter.get("name"),
+                "city": chapter.get("region", ""),
+                "state": chapter.get("region", ""),
+                "match_score": 90,  # High score for postal code match
+                "distance": "Unknown"  # Could be calculated if needed
+            })
     
-    if state:
-        for chapter in result["all_chapters"]:
-            if chapter.get("region") and (
-                state.lower() in chapter.get("region").lower() or
-                chapter.get("region").lower() in state.lower()
-            ):
-                result["matches_by_region"].append(chapter)
+    # If no postal code matches, try region/city matching
+    if not matching_chapters:
+        all_chapters = frappe.get_all(
+            "Chapter",
+            filters={"published": 1},
+            fields=["name", "region", "postal_codes", "introduction"]
+        )
+        
+        for chapter in all_chapters:
+            score = 0
+            if state and chapter.get("region"):
+                if state.lower() in chapter.get("region").lower():
+                    score += 40
+                elif chapter.get("region").lower() in state.lower():
+                    score += 30
+            
+            if city and chapter.get("region"):
+                if city.lower() in chapter.get("region").lower():
+                    score += 35
+                elif city.lower() in chapter.get("name").lower():
+                    score += 45
+            
+            if score > 0:
+                matching_chapters.append({
+                    "name": chapter.get("name"),
+                    "city": chapter.get("region", ""),
+                    "state": chapter.get("region", ""),
+                    "match_score": score,
+                    "distance": "Unknown"
+                })
     
-    if city:
-        for chapter in result["all_chapters"]:
-            if (
-                city.lower() in chapter.get("name").lower() or
-                (chapter.get("region") and city.lower() in chapter.get("region").lower())
-            ):
-                if chapter not in result["matches_by_region"]:
-                    result["matches_by_city"].append(chapter)
+    # Sort by match score descending
+    matching_chapters.sort(key=lambda x: x.get("match_score", 0), reverse=True)
     
-    return result
+    return matching_chapters
+
+@frappe.whitelist()
+def suggest_chapter_for_member(member_name, postal_code=None, state=None, city=None):
+    """Legacy function - calls the new suggest_chapters_for_member"""
+    return suggest_chapters_for_member(member_name, postal_code, state, city)
 
 def is_chapter_management_enabled():
     """Check if chapter management is enabled in settings"""
