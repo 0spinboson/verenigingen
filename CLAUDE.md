@@ -146,6 +146,20 @@ The application uses Frappe's document event system extensively:
 - Form validation and enhancement utilities
 - Dashboard implementations for management views
 
+## Reporting System
+
+### Member Application Reports
+- **Pending Membership Applications**: Role-based filtering for applications older than X days
+- **Application review workflow**: Board member access controls by chapter assignment
+- **URL parameter support**: `?preset=overdue` and `?preset=aging` for filtered views
+
+### Financial Reports  
+- **Overdue Member Payments**: Comprehensive overdue payment tracking with ERPNext integration
+- **Payment reminder system**: Automated email reminders with customizable templates
+- **Role-based chapter filtering**: Board members see only their chapter's payment issues
+- **Bulk payment actions**: Suspend memberships, create payment plans, apply late fees
+- **Export functionality**: CSV export for external collection agencies
+
 ## Key Configuration Files
 
 - `hooks.py` - Frappe app configuration and event bindings

@@ -211,6 +211,48 @@
   {
    "hidden": 0,
    "is_query_report": 0,
+   "label": "Payments & Finance",
+   "link_count": 4,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Overdue Member Payments",
+   "link_count": 0,
+   "link_to": "Overdue Member Payments",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Critical Overdue (60+ days)",
+   "link_count": 0,
+   "link_to": "Overdue Member Payments?preset=critical",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Urgent Overdue (30+ days)",
+   "link_count": 0,
+   "link_to": "Overdue Member Payments?preset=urgent",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
    "label": "Chapters",
    "link_count": 2,
    "link_type": "DocType",
@@ -296,6 +338,22 @@
    "label": "Aging Applications",
    "link_to": "Pending Membership Applications?preset=aging",
    "report_ref_doctype": "Member",
+   "type": "Report"
+  },
+  {
+   "color": "Red",
+   "icon": "money",
+   "label": "Overdue Payments",
+   "link_to": "Overdue Member Payments",
+   "report_ref_doctype": "Sales Invoice",
+   "type": "Report"
+  },
+  {
+   "color": "Purple",
+   "icon": "alert-triangle",
+   "label": "Critical Payments",
+   "link_to": "Overdue Member Payments?preset=critical",
+   "report_ref_doctype": "Sales Invoice",
    "type": "Report"
   }
  ],
