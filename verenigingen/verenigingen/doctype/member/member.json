@@ -98,7 +98,7 @@
   "donation_interest",
   "volunteer_data_tab",
   "chapter_and_volunteer_activity_section",
-  "primary_chapter",
+  "current_chapter_display",
   "chapter_assigned_date",
   "chapter_assigned_by",
   "previous_chapter",
@@ -276,10 +276,11 @@
    "label": "Member Details"
   },
   {
-   "fieldname": "primary_chapter",
-   "fieldtype": "Link",
-   "label": "Primary Chapter",
-   "options": "Chapter"
+   "fieldname": "current_chapter_display",
+   "fieldtype": "HTML",
+   "label": "Current Chapter(s)",
+   "read_only": 1,
+   "description": "Displays member's current chapter membership(s) based on Chapter Member relationships"
   },
   {
    "fieldname": "chapter_assigned_date",

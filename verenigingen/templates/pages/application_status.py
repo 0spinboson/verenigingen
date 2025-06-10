@@ -22,7 +22,23 @@ def get_context(context):
     if member_id:
         member = frappe.get_doc("Member", member_id)
         context.member = member
+        context.member_chapters = get_member_chapters(member_id)
     else:
         context.member = None
+        context.member_chapters = []
     
     return context
+
+
+def get_member_chapters(member_name):
+    """Get list of chapters a member belongs to"""
+    try:
+        chapters = frappe.get_all(
+            "Chapter Member",
+            filters={"member": member_name, "enabled": 1},
+            fields=["parent"],
+            order_by="chapter_join_date desc"
+        )
+        return [ch.parent for ch in chapters]
+    except Exception:
+        return []

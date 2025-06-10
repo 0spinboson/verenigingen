@@ -118,7 +118,7 @@ function email_to_coordinators(report) {
     let chapter_data = {};
     
     report.data.forEach(row => {
-        let chapter = row.primary_chapter || "Unassigned";
+        let chapter = row.current_chapter || "Unassigned";
         if (!chapter_data[chapter]) {
             chapter_data[chapter] = [];
         }

@@ -24,6 +24,9 @@ def get_context(context):
     
     context.member = frappe.get_doc("Member", member)
     
+    # Get member chapters
+    context.member_chapters = get_member_chapters(member)
+    
     # Get active membership
     membership = frappe.db.get_value(
         "Membership",
@@ -119,3 +122,17 @@ def get_member_activity(member_name):
     
     # Limit to 5 most recent
     return activities[:5]
+
+
+def get_member_chapters(member_name):
+    """Get list of chapters a member belongs to"""
+    try:
+        chapters = frappe.get_all(
+            "Chapter Member",
+            filters={"member": member_name, "enabled": 1},
+            fields=["parent"],
+            order_by="chapter_join_date desc"
+        )
+        return [ch.parent for ch in chapters]
+    except Exception:
+        return []

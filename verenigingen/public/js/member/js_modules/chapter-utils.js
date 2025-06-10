@@ -172,7 +172,7 @@ function assign_chapter_to_member(frm, chapter_name) {
         },
         callback: function(r) {
             if (r.message && r.message.success) {
-                frm.set_value('primary_chapter', chapter_name);
+                frm.set_value('current_chapter_display', chapter_name);
                 frm.save();
                 frappe.show_alert({
                     message: __('Chapter assigned successfully'),

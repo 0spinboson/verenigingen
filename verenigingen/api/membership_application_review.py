@@ -49,8 +49,8 @@ def approve_membership_application(member_name, membership_type=None, chapter=No
         frappe.throw(_("Please select a membership type"))
     
     # Update chapter if provided
-    if chapter and chapter != member.primary_chapter:
-        member.primary_chapter = chapter
+    if chapter and chapter != member.current_chapter_display:
+        member.current_chapter_display = chapter
     
     # Update member status
     member.application_status = "Approved"  # Application is approved
@@ -267,7 +267,7 @@ def has_approval_permission(member):
         return True
     
     # Check if user is a board member of the member's chapter
-    chapter = member.primary_chapter or getattr(member, 'suggested_chapter', None)
+    chapter = member.current_chapter_display or getattr(member, 'suggested_chapter', None)
     if chapter:
         # Get user's member record
         user_member = frappe.db.get_value("Member", {"user": user}, "name")
@@ -388,7 +388,7 @@ def get_pending_applications(chapter=None, days_overdue=None):
     
     # Filter by chapter if specified
     if chapter:
-        filters["primary_chapter"] = chapter
+        filters["current_chapter_display"] = chapter
     
     # Filter by overdue if specified
     if days_overdue:
@@ -411,12 +411,12 @@ def get_pending_applications(chapter=None, days_overdue=None):
             
             if board_chapters:
                 chapter_list = [ch.name for ch in board_chapters]
-                if "primary_chapter" in filters:
+                if "current_chapter_display" in filters:
                     # Ensure requested chapter is in allowed list
-                    if filters["primary_chapter"] not in chapter_list:
+                    if filters["current_chapter_display"] not in chapter_list:
                         return []
                 else:
-                    filters["primary_chapter"] = ["in", chapter_list]
+                    filters["current_chapter_display"] = ["in", chapter_list]
             else:
                 return []  # No board memberships
     
@@ -426,7 +426,7 @@ def get_pending_applications(chapter=None, days_overdue=None):
         filters=filters,
         fields=[
             "name", "application_id", "full_name", "email", "contact_number",
-            "application_date", "primary_chapter",
+            "application_date", "current_chapter_display",
             "selected_membership_type", "application_source",
             "interested_in_volunteering", "age"
         ],
@@ -663,11 +663,11 @@ def get_application_stats():
     
     # Applications by chapter
     chapter_counts = frappe.db.sql("""
-        SELECT primary_chapter, COUNT(*) as count
+        SELECT current_chapter_display, COUNT(*) as count
         FROM `tabMember`
         WHERE application_status = 'Pending'
-        AND primary_chapter IS NOT NULL
-        GROUP BY primary_chapter
+        AND current_chapter_display IS NOT NULL
+        GROUP BY current_chapter_display
         ORDER BY count DESC
         LIMIT 10
     """, as_dict=True)
@@ -970,7 +970,7 @@ def send_overdue_notifications():
             "application_status": "Pending",
             "application_date": ["<", two_weeks_ago]
         },
-        fields=["name", "full_name", "application_date", "primary_chapter"]
+        fields=["name", "full_name", "application_date", "current_chapter_display"]
     )
     
     if not overdue:
@@ -981,7 +981,7 @@ def send_overdue_notifications():
     no_chapter = []
     
     for app in overdue:
-        chapter = app.primary_chapter
+        chapter = app.current_chapter_display
         if chapter:
             if chapter not in by_chapter:
                 by_chapter[chapter] = []
@@ -1033,7 +1033,7 @@ def notify_chapter_of_overdue_applications(chapter_name, applications):
             
             <p>Please review these applications as soon as possible.</p>
             
-            <p><a href="{frappe.utils.get_url()}/app/member?application_status=Pending&primary_chapter={chapter_name}">
+            <p><a href="{frappe.utils.get_url()}/app/member?application_status=Pending&current_chapter_display={chapter_name}">
             View All Pending Applications</a></p>
             """,
             now=True
@@ -1073,7 +1073,7 @@ def notify_managers_of_overdue_applications(applications):
                 
                 <p>Please review and assign these applications to appropriate chapters.</p>
                 
-                <p><a href="{frappe.utils.get_url()}/app/member?application_status=Pending&primary_chapter=">
+                <p><a href="{frappe.utils.get_url()}/app/member?application_status=Pending&current_chapter_display=">
                 View Unassigned Applications</a></p>
                 """,
                 now=True

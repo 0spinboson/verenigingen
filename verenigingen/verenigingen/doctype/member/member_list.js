@@ -6,7 +6,7 @@ frappe.listview_settings['Member'] = {
     // ==================== LIST VIEW CONFIGURATION ====================
     
     // Add fields needed for new member tracking
-    add_fields: ["status", "primary_chapter", "chapter_assigned_date", "creation", "application_id", "application_status"],
+    add_fields: ["status", "chapter_assigned_date", "creation", "application_id", "application_status"],
     
     // Auto refresh when data changes
     refresh: function(listview) {
@@ -394,9 +394,13 @@ function add_new_member_filter_buttons(listview) {
                 ]);
                 break;
             case 'no-chapter':
-                listview.filter_area.add([
-                    ["Member", "primary_chapter", "is", "not set"]
-                ]);
+                // Filter for members without chapters - this will need to be handled differently
+                // since we now use Chapter Member child table
+                frappe.msgprint({
+                    title: __('Filter Info'),
+                    message: __('To see members without chapters, please use the "Members Without Chapter" report.'),
+                    indicator: 'blue'
+                });
                 break;
             case 'clear':
                 // Clear all filters

@@ -32,12 +32,14 @@
                             {% if member.application_id %}
                             <p class="text-muted mb-1">{{ _("Application ID") }}: {{ member.application_id }}</p>
                             {% endif %}
-                            {% if member.primary_chapter %}
+                            {% if member_chapters %}
                             <p class="mb-1">
-                                <strong>{{ _("Chapter") }}:</strong> 
-                                <a href="/{{ frappe.db.get_value('Chapter', member.primary_chapter, 'route') }}">
-                                    {{ member.primary_chapter }}
-                                </a>
+                                <strong>{{ _("Chapter(s)") }}:</strong>
+                                {% for chapter in member_chapters %}
+                                    <a href="/{{ frappe.db.get_value('Chapter', chapter, 'route') }}">
+                                        {{ chapter }}
+                                    </a>{% if not loop.last %}, {% endif %}
+                                {% endfor %}
                             </p>
                             {% endif %}
                             

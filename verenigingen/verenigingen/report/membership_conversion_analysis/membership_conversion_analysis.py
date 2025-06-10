@@ -106,7 +106,6 @@ def get_data(filters):
             m.review_date,
             m.payment_date,
             m.payment_amount,
-            m.primary_chapter,
             m.application_source,
             CASE 
                 WHEN %(group_by)s = 'Week' THEN CONCAT(YEAR(m.application_date), '-W', WEEK(m.application_date))
@@ -163,7 +162,8 @@ def get_data(filters):
             pd["processing_days"].append(days)
         
         # Track by chapter
-        chapter = app.primary_chapter or "Unassigned"
+        member_chapters = get_member_chapters(app.name)
+        chapter = member_chapters[0] if member_chapters else "Unassigned"
         pd["chapters"][chapter] = pd["chapters"].get(chapter, 0) + 1
         
         # Track by source
@@ -301,3 +301,17 @@ def get_conversion_funnel_chart(filters):
             "height": 20
         }
     }
+
+
+def get_member_chapters(member_name):
+    """Get list of chapters a member belongs to"""
+    try:
+        chapters = frappe.get_all(
+            "Chapter Member",
+            filters={"member": member_name, "enabled": 1},
+            fields=["parent"],
+            order_by="chapter_join_date desc"
+        )
+        return [ch.parent for ch in chapters]
+    except Exception:
+        return []

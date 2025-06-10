@@ -6,6 +6,21 @@ from frappe.utils import today, add_days, getdate, now_datetime
 from frappe.tests.utils import FrappeTestCase
 
 
+def get_member_primary_chapter(member_name):
+    """Helper function to get member's primary chapter from Chapter Member table"""
+    try:
+        chapters = frappe.get_all(
+            "Chapter Member",
+            filters={"member": member_name, "enabled": 1},
+            fields=["parent"],
+            order_by="chapter_join_date desc",
+            limit=1
+        )
+        return chapters[0].parent if chapters else None
+    except Exception:
+        return None
+
+
 class TestChapterEdgeCases(FrappeTestCase):
     """Comprehensive edge case tests for Chapter doctype"""
     
@@ -475,11 +490,19 @@ class TestChapterEdgeCases(FrappeTestCase):
             "last_name": f"Member {self.test_id}",
             "email": f"chapter.member.{self.test_id.lower()}@example.com",
             "contact_number": "+31612345679",
-            "payment_method": "Bank Transfer",
-            "primary_chapter": chapter_name
+            "payment_method": "Bank Transfer"
         })
         member_with_chapter.insert(ignore_permissions=True)
         self.docs_to_cleanup.append(("Member", member_with_chapter.name))
+        
+        # Add member to chapter via Chapter Member table
+        chapter.append("members", {
+            "member": member_with_chapter.name,
+            "member_name": member_with_chapter.full_name,
+            "enabled": 1,
+            "chapter_join_date": today()
+        })
+        chapter.save(ignore_permissions=True)
         
         # Test deletion with dependencies
         try:
@@ -488,9 +511,10 @@ class TestChapterEdgeCases(FrappeTestCase):
         except Exception as e:
             print(f"✅ Chapter deletion properly prevented: {str(e)}")
         
-        # Clean up member first, then chapter should be deletable
-        member_with_chapter.primary_chapter = None
-        member_with_chapter.save(ignore_permissions=True)
+        # Clean up member from chapter roster first, then chapter should be deletable
+        chapter.reload()
+        chapter.members = []  # Remove all members from roster
+        chapter.save(ignore_permissions=True)
         
         try:
             frappe.delete_doc("Chapter", chapter_name, force=True)

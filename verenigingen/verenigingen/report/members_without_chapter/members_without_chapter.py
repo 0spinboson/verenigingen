@@ -91,10 +91,20 @@ def get_columns():
 def get_data(filters):
     """Get report data using Frappe ORM methods"""
     
+    # Get members who are not in any Chapter Member records
+    members_with_chapters = frappe.get_all(
+        "Chapter Member",
+        filters={"enabled": 1},
+        fields=["member"],
+        distinct=True
+    )
+    
+    excluded_members = [m.member for m in members_with_chapters]
+    
     # Base filters for members without chapter
-    member_filters = {
-        "primary_chapter": ["in", ["", None]]
-    }
+    member_filters = {}
+    if excluded_members:
+        member_filters["name"] = ["not in", excluded_members]
     
     # Apply additional filters
     if filters:

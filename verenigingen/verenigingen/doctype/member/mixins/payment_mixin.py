@@ -408,11 +408,29 @@ class PaymentMixin:
         if member_obj.permission_category == "Admin Only":
             return False
         
-        if member_obj.primary_chapter:
-            chapter = frappe.get_doc("Chapter", member_obj.primary_chapter)
-            return chapter.can_view_member_payments(self.name)
+        # Check if member belongs to any chapters
+        member_chapters = self.get_member_chapters()
+        if member_chapters:
+            # Check if any of the member's chapters allow viewing payments
+            for chapter_name in member_chapters:
+                chapter = frappe.get_doc("Chapter", chapter_name)
+                if chapter.can_view_member_payments(self.name):
+                    return True
         
         return False
+    
+    def get_member_chapters(self):
+        """Get list of chapters this member belongs to"""
+        try:
+            chapters = frappe.get_all(
+                "Chapter Member",
+                filters={"member": self.name, "enabled": 1},
+                fields=["parent"],
+                order_by="chapter_join_date desc"
+            )
+            return [ch.parent for ch in chapters]
+        except Exception:
+            return []
         
     def _is_chapter_management_enabled(self):
         """Check if chapter management is enabled"""

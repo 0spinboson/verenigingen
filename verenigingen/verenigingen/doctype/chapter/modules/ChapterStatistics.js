@@ -67,23 +67,22 @@ export class ChapterStatistics {
     }
     
     async getBasicStatistics() {
-        // Get member counts
-        const totalMembers = await this.api.getCount('Member', {
-            primary_chapter: this.frm.doc.name
-        });
+        // Get member counts from Chapter Member table
+        const chapterMemberIds = await this.getChapterMemberIds();
+        const totalMembers = chapterMemberIds.length;
         
         const activeMembers = await this.api.getCount('Member', {
-            primary_chapter: this.frm.doc.name,
+            name: ['in', chapterMemberIds],
             status: 'Active'
         });
         
         // Get board member count
         const boardMemberCount = this.frm.doc.board_members?.filter(m => m.is_active).length || 0;
         
-        // Get recent members (last 30 days)
+        // Get recent members (last 30 days) - need to query Chapter Members added recently
         const thirtyDaysAgo = frappe.datetime.add_days(frappe.datetime.nowdate(), -30);
         const recentMembers = await this.api.getCount('Member', {
-            primary_chapter: this.frm.doc.name,
+            name: ['in', chapterMemberIds],
             creation: ['>=', thirtyDaysAgo]
         });
         
@@ -632,7 +631,7 @@ export class ChapterStatistics {
                     'count(name) as new_members'
                 ],
                 filters: {
-                    primary_chapter: this.frm.doc.name,
+                    name: ['in', await this.getChapterMemberIds()],
                     creation: ['between', [startDate, endDate]]
                 },
                 group_by: 'month',
@@ -838,10 +837,11 @@ export class ChapterStatistics {
     async getRecentActivities(startDate, endDate) {
         const activities = [];
         
-        // Get new members
+        // Get new members from Chapter Member table
+        const chapterMemberIds = await this.getChapterMemberIds();
         const newMembers = await this.api.getList('Member', {
             filters: {
-                primary_chapter: this.frm.doc.name,
+                name: ['in', chapterMemberIds],
                 creation: ['between', [startDate, endDate]]
             },
             fields: ['name', 'full_name', 'creation'],

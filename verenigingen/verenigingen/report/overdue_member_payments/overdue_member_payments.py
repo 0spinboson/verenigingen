@@ -179,7 +179,8 @@ def get_data(filters):
         
         # Apply chapter filtering
         if user_chapters is not None:  # None means see all
-            if member_info.get("primary_chapter") not in user_chapters:
+            member_chapters = get_member_chapters(member_info.get("name"))
+            if not any(ch in user_chapters for ch in member_chapters):
                 continue
         
         # Apply membership type filter
@@ -189,7 +190,8 @@ def get_data(filters):
         
         # Apply chapter filter
         if filters and filters.get("chapter"):
-            if member_info.get("primary_chapter") != filters.get("chapter"):
+            member_chapters = get_member_chapters(member_info.get("name"))
+            if filters.get("chapter") not in member_chapters:
                 continue
         
         # Calculate days overdue
@@ -198,12 +200,16 @@ def get_data(filters):
         # Get last payment date
         last_payment_date = get_last_payment_date(customer)
         
+        # Get member's primary chapter for display
+        member_chapters = get_member_chapters(member_info.get("name"))
+        primary_chapter = member_chapters[0] if member_chapters else None
+        
         # Build row data
         row = {
             "member_name": member_info.get("name"),
             "member_full_name": member_info.get("full_name"),
             "member_email": member_info.get("email"),
-            "chapter": member_info.get("primary_chapter"),
+            "chapter": primary_chapter,
             "overdue_count": agg_data["overdue_count"],
             "total_overdue": flt(agg_data["total_overdue"], 2),
             "oldest_invoice_date": agg_data["oldest_invoice_date"],
@@ -265,7 +271,7 @@ def get_member_info_by_customer(customer):
         member = frappe.get_value(
             "Member",
             {"customer": customer},
-            ["name", "full_name", "email", "primary_chapter"],
+            ["name", "full_name", "email"],
             as_dict=True
         )
         
@@ -447,3 +453,17 @@ def get_chart_data(data):
         "type": "bar",
         "colors": ["#ff6b6b"]
     }
+
+
+def get_member_chapters(member_name):
+    """Get list of chapters a member belongs to"""
+    try:
+        chapters = frappe.get_all(
+            "Chapter Member",
+            filters={"member": member_name, "enabled": 1},
+            fields=["parent"],
+            order_by="chapter_join_date desc"
+        )
+        return [ch.parent for ch in chapters]
+    except Exception:
+        return []

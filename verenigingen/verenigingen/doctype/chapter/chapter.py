@@ -682,10 +682,15 @@ def assign_member_to_chapter(member, chapter, note=None):
     if not member or not chapter:
         frappe.throw(_("Member and Chapter are required"))
         
-    frappe.db.set_value("Member", member, "primary_chapter", chapter)
-    
     chapter_doc = frappe.get_doc("Chapter", chapter)
     added = chapter_doc.add_member(member)
+    
+    # Update chapter tracking fields on member
+    frappe.db.set_value("Member", member, {
+        "chapter_change_reason": note or f"Assigned to {chapter}",
+        "chapter_assigned_date": frappe.utils.now(),
+        "chapter_assigned_by": frappe.session.user
+    })
     
     if note:
         frappe.get_doc({
@@ -713,9 +718,13 @@ def join_chapter(member_name, chapter_name, introduction=None, website_url=None)
     chapter = frappe.get_doc("Chapter", chapter_name)
     result = chapter.member_manager.add_member(member_name, introduction, website_url)
     
-    if not member.primary_chapter:
-        member.primary_chapter = chapter_name
-        member.save(ignore_permissions=True)
+    # Update chapter tracking fields if member was successfully added
+    if result.get('success'):
+        frappe.db.set_value("Member", member_name, {
+            "chapter_change_reason": "Joined via member portal",
+            "chapter_assigned_date": frappe.utils.now(),
+            "chapter_assigned_by": frappe.session.user
+        })
     
     return {"success": result.get('success', False), "added": result.get('action') == 'added'}
 
@@ -734,8 +743,12 @@ def leave_chapter(member_name, chapter_name, leave_reason=None):
     chapter = frappe.get_doc("Chapter", chapter_name)
     result = chapter.member_manager.remove_member(member_name, leave_reason)
     
-    if member.primary_chapter == chapter_name:
-        member.primary_chapter = None
-        member.save(ignore_permissions=True)
+    # Update chapter tracking fields if member was successfully removed
+    if result.get('success'):
+        frappe.db.set_value("Member", member_name, {
+            "chapter_change_reason": f"Left chapter: {leave_reason or 'No reason provided'}",
+            "chapter_assigned_date": frappe.utils.now(),
+            "chapter_assigned_by": frappe.session.user
+        })
     
     return {"success": result.get('success', False), "removed": result.get('action') in ['removed', 'disabled']}

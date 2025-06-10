@@ -140,8 +140,11 @@ function show_board_memberships(frm) {
                 html += '</ul></div>';
                 
                 // Insert after a suitable field, or create a dedicated section
-                if (!$('.board-memberships').length && frm.fields_dict.primary_chapter) {
-                    $(frm.fields_dict.primary_chapter.wrapper).after(html);
+                if (!$('.board-memberships').length && frm.fields_dict.current_chapter_display) {
+                    $(frm.fields_dict.current_chapter_display.wrapper).after(html);
+                } else if (!$('.board-memberships').length) {
+                    // Fallback: add to end of form if no suitable field found
+                    $(frm.wrapper).find('.form-layout').append(html);
                 }
             }
         }

@@ -87,7 +87,7 @@ def submit_membership_application(data):
             "application_status": "Pending",
             "application_date": now_datetime(),
             "suggested_chapter": suggested_chapter,
-            "primary_chapter": suggested_chapter,  # Tentatively assign
+            "current_chapter_display": suggested_chapter,  # Tentatively assign
             "notes": data.get("motivation", "")  # Why they want to join
         })
         

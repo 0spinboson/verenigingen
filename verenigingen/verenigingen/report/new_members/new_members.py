@@ -122,7 +122,7 @@ def get_data(filters):
         "Member",
         filters=member_filters,
         fields=[
-            "name", "full_name", "email", "primary_chapter", "status", "creation",
+            "name", "full_name", "email", "status", "creation",
             "chapter_assigned_date", "chapter_assigned_by", "previous_chapter"
         ],
         order_by="creation desc"

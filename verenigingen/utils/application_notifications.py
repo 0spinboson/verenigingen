@@ -70,7 +70,7 @@ def notify_reviewers_of_new_application(member, application_id):
             </tr>
             <tr>
                 <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>Chapter:</strong></td>
-                <td style="padding: 8px; border: 1px solid #dee2e6;">{member.primary_chapter or 'Not assigned'}</td>
+                <td style="padding: 8px; border: 1px solid #dee2e6;">{get_member_primary_chapter(member.name) or 'Not assigned'}</td>
             </tr>
             <tr>
                 <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>Applied On:</strong></td>
@@ -196,7 +196,7 @@ def send_payment_confirmation_email(member, invoice):
                 <li><strong>Member ID:</strong> {member.name}</li>
                 <li><strong>Membership Type:</strong> {member.selected_membership_type}</li>
                 <li><strong>Start Date:</strong> {frappe.format_date(today())}</li>
-                <li><strong>Chapter:</strong> {member.primary_chapter or 'To be assigned'}</li>
+                <li><strong>Chapter:</strong> {get_member_primary_chapter(member.name) or 'To be assigned'}</li>
             </ul>
         </div>
         
@@ -237,7 +237,7 @@ def get_application_reviewers(member):
     reviewers = []
     
     # 1. Chapter board members (if chapter assigned)
-    chapter = getattr(member, 'selected_chapter', None) or getattr(member, 'suggested_chapter', None) or member.primary_chapter
+    chapter = getattr(member, 'selected_chapter', None) or getattr(member, 'suggested_chapter', None) or get_member_primary_chapter(member.name)
     if chapter:
         try:
             chapter_doc = frappe.get_doc("Chapter", chapter)
@@ -347,7 +347,7 @@ def check_overdue_applications():
             "application_status": "Pending",
             "application_date": ["<", two_weeks_ago]
         },
-        fields=["name", "full_name", "application_date", "primary_chapter"]
+        fields=["name", "full_name", "application_date"]
     )
     
     if overdue:
@@ -399,3 +399,18 @@ def send_simple_notification(data, member_id):
         )
     except Exception as e:
         frappe.log_error(f"Error sending simple notification: {str(e)}", "Notification Error")
+
+
+def get_member_primary_chapter(member_name):
+    """Get member's primary chapter (first in Chapter Member list)"""
+    try:
+        chapters = frappe.get_all(
+            "Chapter Member",
+            filters={"member": member_name, "enabled": 1},
+            fields=["parent"],
+            order_by="chapter_join_date desc",
+            limit=1
+        )
+        return chapters[0].parent if chapters else None
+    except Exception:
+        return None

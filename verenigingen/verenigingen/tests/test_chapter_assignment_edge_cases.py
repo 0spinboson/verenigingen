@@ -4,6 +4,21 @@ from frappe.utils import today, now_datetime
 from verenigingen.api.member_management import assign_member_to_chapter, add_member_to_chapter_roster
 
 
+def get_member_primary_chapter(member_name):
+    """Helper function to get member's primary chapter from Chapter Member table"""
+    try:
+        chapters = frappe.get_all(
+            "Chapter Member",
+            filters={"member": member_name, "enabled": 1},
+            fields=["parent"],
+            order_by="chapter_join_date desc",
+            limit=1
+        )
+        return chapters[0].parent if chapters else None
+    except Exception:
+        return None
+
+
 class TestChapterAssignmentEdgeCases(unittest.TestCase):
     """Test edge cases for chapter assignment functionality"""
     
@@ -140,7 +155,8 @@ class TestChapterAssignmentEdgeCases(unittest.TestCase):
         
         # Member should not have any chapter assigned
         member = frappe.get_doc("Member", self.test_member_name)
-        self.assertFalse(member.primary_chapter, "Member should not have chapter assigned")
+        primary_chapter = get_member_primary_chapter(member.name)
+        self.assertFalse(primary_chapter, "Member should not have chapter assigned")
         
         print("✅ Non-existent chapter handled correctly")
     
@@ -166,7 +182,8 @@ class TestChapterAssignmentEdgeCases(unittest.TestCase):
         
         # Verify assignment
         member = frappe.get_doc("Member", self.test_member_name)
-        self.assertEqual(member.primary_chapter, "Unpublished Test Chapter",
+        primary_chapter = get_member_primary_chapter(member.name)
+        self.assertEqual(primary_chapter, "Unpublished Test Chapter",
                         "Member should be assigned to unpublished chapter")
         
         print("✅ Unpublished chapter assignment works")
@@ -301,7 +318,8 @@ class TestChapterAssignmentEdgeCases(unittest.TestCase):
         
         # Final state should be consistent
         member = frappe.get_doc("Member", self.test_member_name)
-        self.assertTrue(member.primary_chapter, "Member should have a chapter assigned")
+        primary_chapter = get_member_primary_chapter(member.name)
+        self.assertTrue(primary_chapter, "Member should have a chapter assigned")
         
         print(f"✅ Concurrent assignments handled: {len(successful_results)}/{len(results)} succeeded")
     

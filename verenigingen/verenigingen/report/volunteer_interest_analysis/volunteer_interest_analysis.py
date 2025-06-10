@@ -98,8 +98,7 @@ def get_data(filters):
     
     # Apply filters
     if filters:
-        if filters.get("chapter"):
-            conditions.append("m.primary_chapter = %(chapter)s")
+        # Chapter filtering will be done post-query
         
         if filters.get("availability"):
             conditions.append("m.volunteer_availability = %(availability)s")
@@ -121,7 +120,6 @@ def get_data(filters):
             m.name,
             m.full_name,
             m.email,
-            m.primary_chapter,
             m.member_since,
             m.volunteer_availability,
             m.volunteer_experience_level,
@@ -134,7 +132,16 @@ def get_data(filters):
     """, filters, as_dict=True)
     
     # Get interest areas and skills for each member
+    processed_data = []
     for row in data:
+        # Get member chapters
+        member_chapters = get_member_chapters(row.name)
+        row["chapter"] = member_chapters[0] if member_chapters else "Unassigned"
+        
+        # Apply chapter filter if specified
+        if filters and filters.get("chapter"):
+            if filters.get("chapter") not in member_chapters:
+                continue  # Skip this row
         # Get interest areas
         interests = frappe.get_all(
             "Member Volunteer Interest",
@@ -186,8 +193,11 @@ def get_data(filters):
         else:
             row["total_hours"] = 0
             row["volunteer_status"] = "No Record"
+        
+        # Add processed row to results
+        processed_data.append(row)
     
-    return data
+    return processed_data
 
 def get_volunteer_summary(data):
     """Get summary statistics"""
@@ -292,3 +302,17 @@ def get_interest_distribution_chart(data):
         "colors": ["#7cd6fd"],
         "height": 300
     }
+
+
+def get_member_chapters(member_name):
+    """Get list of chapters a member belongs to"""
+    try:
+        chapters = frappe.get_all(
+            "Chapter Member",
+            filters={"member": member_name, "enabled": 1},
+            fields=["parent"],
+            order_by="chapter_join_date desc"
+        )
+        return [ch.parent for ch in chapters]
+    except Exception:
+        return []

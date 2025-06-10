@@ -36,42 +36,42 @@ def assign_member_to_chapter(member_name, chapter_name):
                 "error": "You don't have permission to assign members to this chapter"
             }
         
-        # Get current chapter to check if change is needed
-        old_chapter = frappe.db.get_value("Member", member_name, "primary_chapter")
+        # Check if member is already assigned to this chapter
+        existing_assignment = frappe.db.exists("Chapter Member", {
+            "parent": chapter_name,
+            "member": member_name,
+            "enabled": 1
+        })
         
-        # Skip if already assigned to this chapter
-        if old_chapter == chapter_name:
+        if existing_assignment:
             return {
                 "success": True,
                 "message": f"Member {member_name} is already assigned to {chapter_name}",
-                "old_chapter": old_chapter,
                 "new_chapter": chapter_name
             }
         
-        # Use direct database update to avoid document modification conflicts
+        # Update tracking fields on member record
         frappe.db.set_value("Member", member_name, {
-            "primary_chapter": chapter_name,
             "chapter_change_reason": "Assigned via admin interface",
             "chapter_assigned_date": frappe.utils.now(),
             "chapter_assigned_by": frappe.session.user
         })
         
         # Add member to chapter's member roster
-        add_member_to_chapter_roster(member_name, chapter_name, old_chapter)
+        add_member_to_chapter_roster(member_name, chapter_name)
         
         # Commit the transaction
         frappe.db.commit()
         
         # Log the change
         frappe.log_error(
-            f"Member {member_name} chapter assignment changed from '{old_chapter}' to '{chapter_name}' by {frappe.session.user}",
+            f"Member {member_name} assigned to chapter '{chapter_name}' by {frappe.session.user}",
             "Member Chapter Assignment"
         )
         
         return {
             "success": True,
             "message": f"Member {member_name} has been assigned to {chapter_name}",
-            "old_chapter": old_chapter,
             "new_chapter": chapter_name
         }
         
@@ -159,12 +159,24 @@ def get_members_without_chapter():
                 "error": "You don't have permission to view this data"
             }
         
+        # Get members who are not in any Chapter Member records
+        members_with_chapters = frappe.get_all(
+            "Chapter Member",
+            filters={"enabled": 1},
+            fields=["member"],
+            distinct=True
+        )
+        
+        excluded_members = [m.member for m in members_with_chapters]
+        
         # Get members without chapter
+        member_filters = {}
+        if excluded_members:
+            member_filters["name"] = ["not in", excluded_members]
+            
         members = frappe.get_all(
             "Member",
-            filters={
-                "primary_chapter": ["in", ["", None]]
-            },
+            filters=member_filters,
             fields=[
                 "name", "full_name", "email", "city", "postal_code", 
                 "country", "status", "creation"
@@ -273,19 +285,9 @@ def bulk_assign_members_to_chapters(assignments):
             "error": f"Failed to process bulk assignments: {str(e)}"
         }
 
-def add_member_to_chapter_roster(member_name, new_chapter, old_chapter=None):
-    """Add member to chapter's member roster and remove from old chapter if needed"""
+def add_member_to_chapter_roster(member_name, new_chapter):
+    """Add member to chapter's member roster"""
     try:
-        # Remove from old chapter roster if exists
-        if old_chapter and old_chapter != new_chapter:
-            old_chapter_doc = frappe.get_doc("Chapter", old_chapter)
-            # Find and remove member from old chapter
-            for i, member_row in enumerate(old_chapter_doc.members):
-                if member_row.member == member_name:
-                    old_chapter_doc.members.pop(i)
-                    break
-            old_chapter_doc.save()
-        
         # Add to new chapter roster
         if new_chapter:
             # Check if member already exists in roster
@@ -303,12 +305,18 @@ def add_member_to_chapter_roster(member_name, new_chapter, old_chapter=None):
                 new_chapter_doc.append("members", {
                     "member": member_name,
                     "member_name": member_full_name,
+                    "chapter_join_date": frappe.utils.today(),
                     "enabled": 1
                 })
                 new_chapter_doc.save()
             else:
-                # Member already exists, just ensure they're enabled
-                frappe.db.set_value("Chapter Member", existing_member, "enabled", 1)
+                # Member already exists, just ensure they're enabled and set join date if missing
+                existing_data = frappe.db.get_value("Chapter Member", existing_member, 
+                                                  ["enabled", "chapter_join_date"], as_dict=True)
+                updates = {"enabled": 1}
+                if not existing_data.chapter_join_date:
+                    updates["chapter_join_date"] = frappe.utils.today()
+                frappe.db.set_value("Chapter Member", existing_member, updates)
         
     except Exception as e:
         frappe.log_error(f"Error updating chapter roster: {str(e)}", "Chapter Roster Update Error")

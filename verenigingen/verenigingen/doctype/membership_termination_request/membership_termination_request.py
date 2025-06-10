@@ -366,10 +366,17 @@ class MembershipTerminationRequest(Document):
             expulsion_entry.documentation = self.disciplinary_documentation
             expulsion_entry.status = "Active"
             
-            # Get member's primary chapter if available
-            member_doc = frappe.get_doc("Member", self.member)
-            if hasattr(member_doc, 'primary_chapter') and member_doc.primary_chapter:
-                expulsion_entry.chapter_involved = member_doc.primary_chapter
+            # Get member's primary chapter from Chapter Member table
+            member_chapters = frappe.get_all(
+                "Chapter Member",
+                filters={"member": self.member, "enabled": 1},
+                fields=["parent"],
+                order_by="chapter_join_date desc",
+                limit=1,
+                ignore_permissions=True
+            )
+            if member_chapters:
+                expulsion_entry.chapter_involved = member_chapters[0].parent
             
             expulsion_entry.flags.ignore_permissions = True
             expulsion_entry.insert()

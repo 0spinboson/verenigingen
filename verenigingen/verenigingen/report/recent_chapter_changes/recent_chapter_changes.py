@@ -104,7 +104,8 @@ def get_data(filters):
     # Apply additional filters
     if filters:
         if filters.get("current_chapter"):
-            member_filters["primary_chapter"] = filters.get("current_chapter")
+            # For current chapter filtering, we'll filter the results after getting member chapters
+            pass
         
         if filters.get("previous_chapter"):
             member_filters["previous_chapter"] = filters.get("previous_chapter")
@@ -130,7 +131,7 @@ def get_data(filters):
         "Member",
         filters=member_filters,
         fields=[
-            "name", "full_name", "email", "primary_chapter", "previous_chapter",
+            "name", "full_name", "email", "previous_chapter",
             "chapter_assigned_date", "chapter_assigned_by", "chapter_change_reason"
         ],
         order_by="chapter_assigned_date desc"
@@ -144,10 +145,19 @@ def get_data(filters):
     
     data = []
     for member in recent_changes:
+        # Get member's current chapters
+        current_chapters = get_member_chapters(member.name)
+        primary_chapter = current_chapters[0] if current_chapters else None
+        
+        # Apply current chapter filter if specified
+        if filters and filters.get("current_chapter"):
+            if filters.get("current_chapter") not in current_chapters:
+                continue
+        
         # Apply user access filtering
         if user_chapters is not None:  # None means see all
             # Check if user can see this member's current or previous chapter
-            can_see_current = not member.primary_chapter or member.primary_chapter in user_chapters
+            can_see_current = not primary_chapter or primary_chapter in user_chapters
             can_see_previous = not member.previous_chapter or member.previous_chapter in user_chapters
             
             # If user has national access, they can see all
@@ -170,7 +180,7 @@ def get_data(filters):
         days_ago = (getdate(today()) - getdate(change_date)).days
         
         # Determine change type
-        change_type = get_change_type(member.previous_chapter, member.primary_chapter)
+        change_type = get_change_type(member.previous_chapter, primary_chapter)
         
         # Build row data
         row = {
@@ -178,7 +188,7 @@ def get_data(filters):
             "member_full_name": member.full_name,
             "member_email": member.email,
             "previous_chapter": member.previous_chapter or _("Unassigned"),
-            "current_chapter": member.primary_chapter or _("Unassigned"),
+            "current_chapter": primary_chapter or _("Unassigned"),
             "chapter_assigned_date": member.chapter_assigned_date,
             "chapter_assigned_by": member.chapter_assigned_by,
             "chapter_change_reason": member.chapter_change_reason,
@@ -356,3 +366,17 @@ def get_chart_data(data):
         "type": "donut",
         "colors": ["#28a745", "#007bff", "#dc3545", "#6c757d"]
     }
+
+
+def get_member_chapters(member_name):
+    """Get list of chapters a member belongs to"""
+    try:
+        chapters = frappe.get_all(
+            "Chapter Member",
+            filters={"member": member_name, "enabled": 1},
+            fields=["parent"],
+            order_by="chapter_join_date desc"
+        )
+        return [ch.parent for ch in chapters]
+    except Exception:
+        return []

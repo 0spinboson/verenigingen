@@ -29,13 +29,11 @@ doctype_js = {
     "Membership Type": "public/js/membership_type.js",
     "Direct Debit Batch": "public/js/direct_debit_batch.js",
     "Membership Termination Request": "public/js/membership_termination_request.js",
-    "Expulsion Report Entry": "public/js/expulsion_report_entry.js"
 }
 
 # doctype_list_js = {
 #     "Membership Termination Request": "public/js/membership_termination_request_list.js",
 #     "Termination Appeals Process": "public/js/termination_appeals_process_list.js",
-#     "Expulsion Report Entry": "public/js/expulsion_report_entry_list.js"
 # }
 
 # Document Events
@@ -74,6 +72,12 @@ doc_events = {
     # Termination system events
     "Membership Termination Request": {
         "validate": "verenigingen.validations.validate_termination_request",
+        "on_update_after_submit": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.handle_status_change",
+    },
+    "Expulsion Report Entry": {
+        "validate": "verenigingen.verenigingen.doctype.expulsion_report_entry.expulsion_report_entry.validate",
+        "after_insert": "verenigingen.verenigingen.doctype.expulsion_report_entry.expulsion_report_entry.notify_governance_team",
+        "before_save": "verenigingen.verenigingen.doctype.expulsion_report_entry.expulsion_report_entry.update_status_based_on_appeals",
     },
     "Member": {
         "before_save": "verenigingen.verenigingen.doctype.member.member_utils.update_termination_status_display",
@@ -92,6 +96,14 @@ scheduler_events = {
         "verenigingen.subscription_handler.process_all_subscriptions",
         "verenigingen.verenigingen.doctype.membership.scheduler.notify_about_orphaned_records",
         "verenigingen.api.membership_application_review.send_overdue_notifications",
+        
+        # Termination system maintenance
+        "verenigingen.utils.termination_utils.process_overdue_termination_requests",
+        "verenigingen.utils.termination_utils.audit_termination_compliance",
+    ],
+    "weekly": [
+        # Termination reports and reviews
+        "verenigingen.utils.termination_utils.generate_weekly_termination_report",
     ]
 }
 
@@ -116,6 +128,7 @@ permission_query_conditions = {
     "Member": "verenigingen.permissions.get_member_permission_query",
     "Membership": "verenigingen.permissions.get_membership_permission_query",
     "Chapter": "verenigingen.verenigingen.doctype.chapter.chapter.get_chapter_permission_query_conditions",
+    "Chapter Member": "verenigingen.permissions.get_chapter_member_permission_query",
     "Membership Termination Request": "verenigingen.permissions.get_termination_permission_query"
 }
 
@@ -126,8 +139,13 @@ has_permission = {
 
 # Workflow Action Handlers
 # -------------------------
-# Note: Workflow handlers removed as they were pointing to non-existent files
-workflow_action_handlers = {}
+workflow_action_handlers = {
+    "Membership Termination Workflow": {
+        "Approve": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.on_workflow_action",
+        "Execute": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.on_workflow_action",
+        "Reject": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.on_workflow_action"
+    }
+}
 
 # Fixtures
 # --------
@@ -220,6 +238,27 @@ fixtures = [
 # override_whitelisted_methods = {
 #	"frappe.desk.query_report.export_query": "verenigingen.verenigingen.report.termination_audit_report.termination_audit_report.export_audit_report"
 # }
+
+# Whitelisted API Methods
+# ----------------------
+# These methods are automatically whitelisted due to @frappe.whitelist() decorators
+# Listed here for documentation purposes:
+#
+# Termination API:
+# - verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_termination_impact_preview
+# - verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.execute_safe_member_termination  
+# - verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_member_termination_status
+# - verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_member_termination_history
+#
+# Permission API:
+# - verenigingen.permissions.can_terminate_member_api
+# - verenigingen.permissions.can_access_termination_functions_api
+#
+# Expulsion Report API:
+# - verenigingen.verenigingen.doctype.expulsion_report_entry.expulsion_report_entry.get_expulsion_statistics
+# - verenigingen.verenigingen.doctype.expulsion_report_entry.expulsion_report_entry.generate_expulsion_governance_report
+# - verenigingen.verenigingen.doctype.expulsion_report_entry.expulsion_report_entry.reverse_expulsion_entry
+# - verenigingen.verenigingen.doctype.expulsion_report_entry.expulsion_report_entry.get_member_expulsion_history
 
 # Each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,

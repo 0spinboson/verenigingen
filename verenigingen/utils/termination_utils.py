@@ -370,3 +370,118 @@ def get_termination_statistics():
         
     except Exception as e:
         return {"error": str(e)}
+
+def audit_termination_compliance():
+    """
+    Daily audit of termination compliance and data integrity
+    """
+    try:
+        audit_results = {
+            "orphaned_records": 0,
+            "stale_requests": 0,
+            "compliance_issues": [],
+            "data_integrity_issues": []
+        }
+        
+        # Check for orphaned termination requests (member doesn't exist)
+        orphaned_requests = frappe.db.sql("""
+            SELECT mtr.name, mtr.member_name
+            FROM `tabMembership Termination Request` mtr
+            LEFT JOIN `tabMember` m ON mtr.member_name = m.name
+            WHERE m.name IS NULL
+        """, as_dict=True)
+        
+        audit_results["orphaned_records"] = len(orphaned_requests)
+        
+        if orphaned_requests:
+            for request in orphaned_requests:
+                audit_results["data_integrity_issues"].append(
+                    f"Termination request {request.name} references non-existent member {request.member_name}"
+                )
+        
+        # Check for stale requests (approved but not executed after 30 days)
+        stale_requests = frappe.db.sql("""
+            SELECT name, member_name, request_date, status
+            FROM `tabMembership Termination Request`
+            WHERE status = 'Approved'
+            AND request_date < %s
+        """, [add_days(today(), -30)], as_dict=True)
+        
+        audit_results["stale_requests"] = len(stale_requests)
+        
+        if stale_requests:
+            for request in stale_requests:
+                audit_results["compliance_issues"].append(
+                    f"Request {request.name} has been approved but not executed for over 30 days"
+                )
+        
+        # Check for members with multiple active termination requests
+        duplicate_requests = frappe.db.sql("""
+            SELECT member_name, COUNT(*) as count
+            FROM `tabMembership Termination Request`
+            WHERE status IN ('Draft', 'Pending', 'Approved')
+            GROUP BY member_name
+            HAVING COUNT(*) > 1
+        """, as_dict=True)
+        
+        if duplicate_requests:
+            for dup in duplicate_requests:
+                audit_results["compliance_issues"].append(
+                    f"Member {dup.member_name} has {dup.count} active termination requests"
+                )
+        
+        # Log significant issues
+        total_issues = len(audit_results["compliance_issues"]) + len(audit_results["data_integrity_issues"])
+        
+        if total_issues > 0:
+            frappe.logger().warning(f"Termination compliance audit found {total_issues} issues")
+            
+            # If critical issues, notify administrators
+            if audit_results["orphaned_records"] > 0 or audit_results["stale_requests"] > 5:
+                administrators = frappe.get_all("User", 
+                    filters={"role_profile_name": ["like", "%System Manager%"]},
+                    fields=["email"]
+                )
+                
+                if administrators:
+                    admin_emails = [admin.email for admin in administrators if admin.email]
+                    
+                    if admin_emails:
+                        email_content = f"""
+                        <h3>Termination Compliance Alert</h3>
+                        <p>The daily audit has identified compliance issues that require attention:</p>
+                        
+                        <h4>Summary</h4>
+                        <ul>
+                            <li>Orphaned Records: {audit_results['orphaned_records']}</li>
+                            <li>Stale Requests: {audit_results['stale_requests']}</li>
+                            <li>Total Issues: {total_issues}</li>
+                        </ul>
+                        """
+                        
+                        if audit_results["compliance_issues"]:
+                            email_content += "<h4>Compliance Issues</h4><ul>"
+                            for issue in audit_results["compliance_issues"][:10]:  # Limit to first 10
+                                email_content += f"<li>{issue}</li>"
+                            email_content += "</ul>"
+                        
+                        if audit_results["data_integrity_issues"]:
+                            email_content += "<h4>Data Integrity Issues</h4><ul>"
+                            for issue in audit_results["data_integrity_issues"][:10]:  # Limit to first 10
+                                email_content += f"<li>{issue}</li>"
+                            email_content += "</ul>"
+                        
+                        frappe.sendmail(
+                            recipients=admin_emails,
+                            subject="Termination Compliance Issues Detected",
+                            message=email_content
+                        )
+        else:
+            frappe.logger().info("Termination compliance audit completed - no issues found")
+        
+        return audit_results
+        
+    except Exception as e:
+        frappe.log_error(f"Error in termination compliance audit: {str(e)}", 
+                        "Termination Compliance Audit Error")
+        return {"error": str(e)}

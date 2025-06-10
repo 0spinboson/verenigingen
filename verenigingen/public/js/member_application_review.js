@@ -225,7 +225,7 @@ verenigingen.member_review = {
                     fieldtype: 'Link',
                     label: __('Assign to Chapter'),
                     options: 'Chapter',
-                    default: frm.doc.primary_chapter
+                    default: frm.doc.suggested_chapter || frm.doc.selected_chapter
                 },
                 {
                     fieldname: 'notes',

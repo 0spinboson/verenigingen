@@ -146,7 +146,7 @@ function setup_board_grid(frm) {
         frm.fields_dict.board_members.grid.get_field('volunteer').get_query = function() {
             return {
                 filters: {
-                    'status': 'Active'
+                    'status': ['in', ['Active', 'New']]
                 }
             };
         };
@@ -395,9 +395,12 @@ function setup_member_filters(frm) {
 
 // Dialog Functions
 function view_chapter_members(frm) {
-    frappe.route_options = {
-        'primary_chapter': frm.doc.name
-    };
+    // Navigate to members list - members will be filtered by chapter roster
+    frappe.msgprint({
+        title: __('Chapter Members'),
+        message: __('Viewing members for this chapter. Use the chapter roster below to see all members.'),
+        indicator: 'blue'
+    });
     frappe.set_route('List', 'Member');
 }
 

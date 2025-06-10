@@ -70,8 +70,12 @@
                             <div class="alert alert-success">
                                 <h5><i class="fa fa-check-circle"></i> {{ _("Active Member") }}</h5>
                                 <p>{{ _("Congratulations! You are now an active member.") }}</p>
-                                {% if member.primary_chapter %}
-                                <p>{{ _("Chapter") }}: {{ member.primary_chapter }}</p>
+                                {% if member_chapters %}
+                                <p>{{ _("Chapter(s)") }}: 
+                                    {% for chapter in member_chapters %}
+                                        {{ chapter }}{% if not loop.last %}, {% endif %}
+                                    {% endfor %}
+                                </p>
                                 {% endif %}
                                 <a href="/members/{{ member.name }}" class="btn btn-success">{{ _("Go to Member Portal") }}</a>
                             </div>

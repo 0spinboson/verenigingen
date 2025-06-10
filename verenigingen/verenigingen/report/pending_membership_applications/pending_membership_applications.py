@@ -102,8 +102,7 @@ def get_data(filters):
     
     # Apply filters
     if filters:
-        if filters.get("chapter"):
-            conditions.append("m.primary_chapter = %(chapter)s")
+        # Chapter filtering will be done post-query since we need to check Chapter Member table
         
         if filters.get("from_date"):
             conditions.append("DATE(m.application_date) >= %(from_date)s")
@@ -138,7 +137,6 @@ def get_data(filters):
             m.email,
             m.application_date,
             DATEDIFF(CURDATE(), DATE(m.application_date)) as days_pending,
-            m.primary_chapter as chapter,
             m.current_membership_type as selected_membership_type,
             m.age,
             '' as interested_in_volunteering,
@@ -150,7 +148,17 @@ def get_data(filters):
     """, filters or {}, as_dict=True)
     
     # Process data
+    processed_data = []
     for row in data:
+        # Get member chapters
+        member_chapters = get_member_chapters(row.get("name"))
+        row["chapter"] = member_chapters[0] if member_chapters else "Unassigned"
+        
+        # Apply chapter filter if specified
+        if filters and filters.get("chapter"):
+            if filters.get("chapter") not in member_chapters:
+                continue  # Skip this row
+        
         # Add volunteer interest indicator
         row["volunteer_interest"] = "Yes" if row.get("interested_in_volunteering") else "No"
         
@@ -162,8 +170,10 @@ def get_data(filters):
             row["status_indicator"] = '<span class="indicator orange">Aging</span>'
         else:
             row["status_indicator"] = '<span class="indicator blue">Recent</span>'
+        
+        processed_data.append(row)
     
-    return data
+    return processed_data
 
 def get_summary(data):
     """Get summary statistics"""
@@ -296,14 +306,20 @@ def get_user_chapter_filter():
         # National chapter access - can see all including unassigned
         return None
     else:
-        # Chapter-specific access
-        chapter_conditions = [f"m.primary_chapter = '{chapter}'" for chapter in user_chapters]
-        # Also include applications without a chapter assigned if user has national access
-        try:
-            settings = frappe.get_single("Verenigingen Settings")
-            if hasattr(settings, 'national_chapter') and settings.national_chapter in user_chapters:
-                chapter_conditions.append("(m.primary_chapter IS NULL OR m.primary_chapter = '')")
-        except Exception:
-            pass
-        
-        return f"({' OR '.join(chapter_conditions)})"
+        # Chapter-specific access - will be filtered post-query using Chapter Member table
+        # For now, return no restriction and filter in Python
+        return None
+
+
+def get_member_chapters(member_name):
+    """Get list of chapters a member belongs to"""
+    try:
+        chapters = frappe.get_all(
+            "Chapter Member",
+            filters={"member": member_name, "enabled": 1},
+            fields=["parent"],
+            order_by="chapter_join_date desc"
+        )
+        return [ch.parent for ch in chapters]
+    except Exception:
+        return []

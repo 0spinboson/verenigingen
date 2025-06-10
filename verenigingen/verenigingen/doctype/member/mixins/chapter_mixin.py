@@ -6,36 +6,10 @@ class ChapterMixin:
     """Mixin for chapter-related functionality"""
     
     def handle_chapter_assignment(self):
-        """Handle automatic chapter assignment when primary_chapter changes"""
-        if self.has_value_changed('primary_chapter'):
-            old_chapter = self.get_doc_before_save().primary_chapter if self.get_doc_before_save() else None
-            new_chapter = self.primary_chapter
-            
-            frappe.logger().info(f"Member {self.name} chapter changing from {old_chapter} to {new_chapter}")
-            
-            # Update tracking fields
-            self.update_chapter_tracking_fields(old_chapter, new_chapter)
-            
-            # Handle chapter member list updates
-            if old_chapter:
-                try:
-                    old_chapter_doc = frappe.get_doc("Chapter", old_chapter)
-                    old_chapter_doc.remove_member(self.name, "Changed to different chapter")
-                    frappe.logger().info(f"Removed {self.name} from old chapter {old_chapter}")
-                except Exception as e:
-                    frappe.logger().error(f"Error removing member from old chapter: {str(e)}")
-            
-            if new_chapter:
-                try:
-                    new_chapter_doc = frappe.get_doc("Chapter", new_chapter)
-                    added = new_chapter_doc.add_member(self.name)
-                    frappe.logger().info(f"Added {self.name} to new chapter {new_chapter}, result: {added}")
-                except Exception as e:
-                    frappe.logger().error(f"Error adding member to new chapter: {str(e)}")
-        
-        # For new members, set initial chapter assignment tracking
-        elif self.is_new() and self.primary_chapter:
-            self.update_chapter_tracking_fields(None, self.primary_chapter)
+        """Handle chapter assignment changes - now managed through Chapter Member child table"""
+        # This method is now simplified since chapter assignment is managed 
+        # through the Chapter Member child table instead of primary_chapter field
+        pass
     
     def update_chapter_tracking_fields(self, old_chapter, new_chapter):
         """Update chapter tracking fields when chapter changes"""
@@ -58,31 +32,28 @@ class ChapterMixin:
                     self.chapter_change_reason = f"Initial assignment to {new_chapter}"
     
     def get_chapters(self):
-        """Get all chapters this member belongs to"""
+        """Get all chapters this member belongs to based on Chapter Member child table"""
         if not self._is_chapter_management_enabled():
             return []
             
         chapters = []
         
-        if self.primary_chapter:
-            chapters.append({
-                "chapter": self.primary_chapter,
-                "is_primary": 1
-            })
-        
+        # Get chapters from Chapter Member child table
         member_chapters = frappe.get_all(
             "Chapter Member", 
-            filters={"user": self.user, "enabled": 1},
-            fields=["parent as chapter"]
+            filters={"member": self.name, "enabled": 1},
+            fields=["parent as chapter", "chapter_join_date"],
+            order_by="chapter_join_date desc"
         )
         
-        for mc in member_chapters:
-            if mc.chapter != self.primary_chapter:
-                chapters.append({
-                    "chapter": mc.chapter,
-                    "is_primary": 0
-                })
+        for i, mc in enumerate(member_chapters):
+            chapters.append({
+                "chapter": mc.chapter,
+                "is_primary": i == 0,  # First (most recent) is primary
+                "chapter_join_date": mc.chapter_join_date
+            })
         
+        # Add board member chapters if not already included
         board_chapters = frappe.get_all(
             "Chapter Board Member",
             filters={"member": self.name, "is_active": 1},

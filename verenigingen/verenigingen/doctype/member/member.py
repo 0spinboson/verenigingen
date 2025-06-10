@@ -30,7 +30,9 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             elif self.is_application_member() and not self.application_id:
                 self.application_id = self.generate_application_id()
         
-        self.handle_chapter_assignment()
+        # Update current chapter display
+        self.update_current_chapter_display()
+        
         if hasattr(self, 'reset_counter_to') and self.reset_counter_to:
             self.reset_counter_to = None
         
@@ -41,6 +43,12 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         """Execute before inserting new document"""
         # Member ID generation is now handled in before_save based on application status
         pass
+    
+    def onload(self):
+        """Execute when document is loaded"""
+        # Update chapter display when form loads
+        if not self.get("__islocal"):
+            self.update_current_chapter_display()
 
     def is_application_member(self):
         """Check if this member was created through the application process"""
@@ -919,6 +927,86 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             frappe.log_error(f"Error creating membership item: {str(e)}")
             return None
 
+    def update_current_chapter_display(self):
+        """Update the current chapter display field based on Chapter Member relationships"""
+        try:
+            chapters = self.get_current_chapters()
+            
+            if not chapters:
+                # Use the custom field until the main field is fixed
+                field_name = 'current_chapter_display_temp' if hasattr(self, 'current_chapter_display_temp') else 'current_chapter_display'
+                setattr(self, field_name, '<p style="color: #888;"><em>No chapter assignment</em></p>')
+                return
+            
+            html_parts = []
+            html_parts.append('<div class="member-chapters">')
+            
+            for chapter in chapters:
+                chapter_info = frappe.get_value("Chapter", chapter['chapter'], ['region'], as_dict=True)
+                chapter_display = chapter['chapter']
+                if chapter_info and chapter_info.region:
+                    chapter_display += f" ({chapter_info.region})"
+                
+                status_badges = []
+                if chapter.get('is_primary'):
+                    status_badges.append('<span class="badge badge-success">Primary</span>')
+                if chapter.get('is_board'):
+                    status_badges.append('<span class="badge badge-info">Board Member</span>')
+                if chapter.get('chapter_join_date'):
+                    status_badges.append(f'<span class="badge badge-light">Joined: {chapter["chapter_join_date"]}</span>')
+                
+                badges_html = ' '.join(status_badges) if status_badges else ''
+                
+                html_parts.append(f'''
+                    <div class="chapter-item" style="margin-bottom: 8px; padding: 8px; border-left: 3px solid #007bff; background-color: #f8f9fa;">
+                        <strong>{chapter_display}</strong>
+                        {f'<br>{badges_html}' if badges_html else ''}
+                    </div>
+                ''')
+            
+            html_parts.append('</div>')
+            # Use the custom field until the main field is fixed
+            field_name = 'current_chapter_display_temp' if hasattr(self, 'current_chapter_display_temp') else 'current_chapter_display'
+            setattr(self, field_name, ''.join(html_parts))
+            
+        except Exception as e:
+            frappe.log_error(f"Error updating chapter display: {str(e)}", "Member Chapter Display")
+            self.current_chapter_display = '<p style="color: #dc3545;">Error loading chapter information</p>'
+
+    def get_current_chapters(self):
+        """Get current chapter memberships from Chapter Member child table"""
+        if not self.name:
+            return []
+        
+        try:
+            # Get chapters where this member is listed in the Chapter Member child table
+            # Use ignore_permissions since this is called within member doc context
+            chapter_members = frappe.get_all(
+                "Chapter Member",
+                filters={
+                    "member": self.name,
+                    "enabled": 1
+                },
+                fields=["parent", "chapter_join_date"],
+                order_by="chapter_join_date desc",
+                ignore_permissions=True
+            )
+            
+            chapters = []
+            for cm in chapter_members:
+                chapters.append({
+                    "chapter": cm.parent,
+                    "chapter_join_date": cm.chapter_join_date,
+                    "is_primary": len(chapters) == 0,  # First one is primary
+                    "is_board": self.is_board_member(cm.parent)
+                })
+            
+            return chapters
+            
+        except Exception as e:
+            frappe.log_error(f"Error getting current chapters: {str(e)}", "Member Chapter Query")
+            return []
+
 
 # Module-level functions for static calls
 @frappe.whitelist()
@@ -939,6 +1027,86 @@ def get_active_sepa_mandate(member, iban=None):
     member_doc = frappe.get_doc("Member", member)
     mandate = member_doc.get_default_sepa_mandate()
     return mandate.as_dict() if mandate else None
+
+@frappe.whitelist()
+def get_member_current_chapters(member_name):
+    """Get current chapters for a member - safe for client calls"""
+    if not member_name:
+        return []
+    
+    try:
+        # Check if user has permission to access this member
+        member_doc = frappe.get_doc("Member", member_name)
+        return member_doc.get_current_chapters()
+        
+    except frappe.PermissionError:
+        # If no permission to member, return empty list
+        return []
+    except Exception as e:
+        frappe.log_error(f"Error getting member chapters: {str(e)}", "Member Chapters API")
+        return []
+
+@frappe.whitelist()
+def get_member_chapter_names(member_name):
+    """Get simple list of chapter names for a member"""
+    if not member_name:
+        return []
+    
+    try:
+        chapters = get_member_current_chapters(member_name)
+        return [ch.get("chapter") for ch in chapters if ch.get("chapter")]
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting member chapter names: {str(e)}", "Member Chapters API")
+        return []
+
+@frappe.whitelist()
+def get_member_chapter_display_html(member_name):
+    """Get formatted HTML for member's chapter information"""
+    if not member_name:
+        return ""
+    
+    try:
+        member_doc = frappe.get_doc("Member", member_name)
+        chapters = member_doc.get_current_chapters()
+        
+        if not chapters:
+            return '<p style="color: #888;"><em>No chapter assignment</em></p>'
+        
+        html_parts = []
+        html_parts.append('<div class="member-chapters" style="margin: 10px 0;">')
+        
+        for chapter in chapters:
+            chapter_info = frappe.get_value("Chapter", chapter['chapter'], ['region'], as_dict=True)
+            chapter_display = chapter['chapter']
+            if chapter_info and chapter_info.region:
+                chapter_display += f" ({chapter_info.region})"
+            
+            status_badges = []
+            # Removed the Primary badge as requested
+            if chapter.get('is_board'):
+                status_badges.append('<span class="badge badge-info" style="margin-right: 5px;">Board Member</span>')
+            if chapter.get('chapter_join_date'):
+                status_badges.append(f'<span class="badge badge-light" style="margin-right: 5px;">Joined: {chapter["chapter_join_date"]}</span>')
+            
+            badges_html = ''.join(status_badges)
+            
+            # Make chapter name clickable to open the chapter
+            chapter_link = f'<a href="/app/chapter/{chapter["chapter"]}" target="_blank" style="color: #007bff; text-decoration: none; font-weight: bold;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">{chapter_display}</a>'
+            
+            html_parts.append(f'''
+                <div class="chapter-item" style="margin-bottom: 8px; padding: 10px; border-left: 3px solid #007bff; background-color: #f8f9fa; border-radius: 4px;">
+                    {chapter_link}
+                    {f'<br><div style="margin-top: 5px;">{badges_html}</div>' if badges_html else ''}
+                </div>
+            ''')
+        
+        html_parts.append('</div>')
+        return ''.join(html_parts)
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting member chapter display: {str(e)}", "Member Chapter Display API")
+        return '<p style="color: #dc3545;">Error loading chapter information</p>'
 
 def handle_fee_override_after_save(doc, method=None):
     """Hook function to handle fee override changes after save"""

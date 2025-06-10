@@ -157,8 +157,16 @@ frappe.ui.form.on('Member', {
     
     refresh: function(frm) {
         console.log('Member form refresh - initializing');
+        
+        // Prevent multiple initializations
+        if (frm._member_form_initialized) {
+            console.log('Member form already initialized, skipping');
+            return;
+        }
+        
         // Initialize member form (utilities loaded at top level)
         verenigingen.member_form.initialize_member_form(frm);
+        frm._member_form_initialized = true;
     },
     
     onload: function(frm) {
@@ -194,7 +202,7 @@ frappe.ui.form.on('Member', {
     
     pincode: function(frm) {
         // Auto-suggest chapter when postal code changes
-        if (frm.doc.pincode && !frm.doc.primary_chapter && window.ChapterUtils) {
+        if (frm.doc.pincode && window.ChapterUtils) {
             setTimeout(() => {
                 ChapterUtils.suggest_chapter_from_address(frm);
             }, 1000);
@@ -284,11 +292,24 @@ function add_chapter_buttons(frm) {
         method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
         callback: function(r) {
             if (r.message) {
-                if (frm.doc.primary_chapter) {
-                    frm.add_custom_button(__('View Chapter'), function() {
-                        frappe.set_route('Form', 'Chapter', frm.doc.primary_chapter);
-                    }, __('View'));
-                }
+                // Get member's current chapters and add view button if they have any
+                get_member_current_chapters(frm.doc.name).then((chapters) => {
+                    if (chapters.length > 0) {
+                        if (chapters.length === 1) {
+                            frm.add_custom_button(__('View Chapter'), function() {
+                                frappe.set_route('Form', 'Chapter', chapters[0]);
+                            }, __('View'));
+                        } else {
+                            // Multiple chapters - add dropdown
+                            const chapter_dropdown = frm.add_custom_button(__('View Chapters'), function() {}, __('View'));
+                            chapters.forEach(chapter => {
+                                frm.add_custom_button(chapter, function() {
+                                    frappe.set_route('Form', 'Chapter', chapter);
+                                }, __('View'), chapter_dropdown);
+                            });
+                        }
+                    }
+                });
                 
                 frm.add_custom_button(__('Change Chapter'), function() {
                     if (window.ChapterUtils) {
@@ -312,11 +333,13 @@ function add_chapter_buttons(frm) {
         error: function(r) {
             // If API call fails, still add basic chapter button if chapter exists
             console.log('Error checking chapter management, adding basic chapter button');
-            if (frm.doc.primary_chapter) {
-                frm.add_custom_button(__('View Chapter'), function() {
-                    frappe.set_route('Form', 'Chapter', frm.doc.primary_chapter);
-                }, __('View'));
-            }
+            get_member_current_chapters(frm.doc.name).then((chapters) => {
+                if (chapters.length > 0) {
+                    frm.add_custom_button(__('View Chapter'), function() {
+                        frappe.set_route('Form', 'Chapter', chapters[0]);
+                    }, __('View'));
+                }
+            });
         }
     });
 }
@@ -465,20 +488,26 @@ function add_termination_buttons(frm) {
 }
 
 function add_chapter_suggestion_UI(frm) {
-    if (!frm.doc.__islocal && !frm.doc.primary_chapter && !$('.chapter-suggestion-container').length) {
-        var $container = $('<div class="chapter-suggestion-container alert alert-info mt-2"></div>');
-        $container.html(`
-            <p>${__("This member doesn't have a chapter assigned yet.")}</p>
-            <button class="btn btn-sm btn-primary suggest-chapter-btn">
-                ${__("Find a Chapter")}
-            </button>
-        `);
-        
-        $(frm.fields_dict.primary_chapter.wrapper).append($container);
-        
-        $('.suggest-chapter-btn').on('click', function() {
-            if (window.ChapterUtils) {
-                ChapterUtils.suggest_chapter_for_member(frm);
+    if (!frm.doc.__islocal && !$('.chapter-suggestion-container').length) {
+        // Check if member has any chapters assigned
+        get_member_current_chapters(frm.doc.name).then((chapters) => {
+            if (chapters.length === 0) {
+                var $container = $('<div class="chapter-suggestion-container alert alert-info mt-2"></div>');
+                $container.html(`
+                    <p>${__("This member doesn't have a chapter assigned yet.")}</p>
+                    <button class="btn btn-sm btn-primary suggest-chapter-btn">
+                        ${__("Find a Chapter")}
+                    </button>
+                `);
+                
+                // Append to the current chapter display field wrapper
+                $(frm.fields_dict.current_chapter_display.wrapper).append($container);
+                
+                $('.suggest-chapter-btn').on('click', function() {
+                    if (window.ChapterUtils) {
+                        ChapterUtils.suggest_chapter_for_member(frm);
+                    }
+                });
             }
         });
     }
@@ -531,6 +560,14 @@ verenigingen.member_form = {
             UIUtils.add_custom_css();
             UIUtils.setup_payment_history_grid(frm);
             UIUtils.setup_member_id_display(frm);
+        }
+        
+        // Update chapter display if member exists
+        if (frm.doc.name && !frm.doc.__islocal) {
+            console.log('Calling refresh_chapter_display for member:', frm.doc.name);
+            this.refresh_chapter_display(frm);
+        } else {
+            console.log('Not calling refresh_chapter_display - doc name:', frm.doc.name, 'islocal:', frm.doc.__islocal);
         }
         
         // Show application review interface for pending applications
@@ -586,7 +623,75 @@ verenigingen.member_form = {
         // Add termination buttons
         add_termination_buttons(frm);
         
+        // Add debug button to manually show chapter info
+        if (frm.doc.name && !frm.doc.__islocal) {
+            frm.add_custom_button(__('Show Chapter Info'), function() {
+                verenigingen.member_form.refresh_chapter_display(frm);
+            }, __('Debug'));
+        }
+        
         console.log('All member form buttons setup complete');
+    },
+    
+    refresh_chapter_display: function(frm) {
+        // Refresh the chapter display information
+        console.log('refresh_chapter_display called for:', frm.doc.name);
+        if (!frm.doc.name || frm.doc.__islocal) {
+            console.log('Skipping chapter display - no name or local doc');
+            return;
+        }
+        
+        frappe.call({
+            method: 'verenigingen.verenigingen.doctype.member.member.get_member_chapter_display_html',
+            args: {
+                member_name: frm.doc.name
+            },
+            callback: function(r) {
+                if (r.message) {
+                    console.log('Chapter display HTML received:', r.message);
+                    
+                    // Try multiple insertion strategies
+                    let chapter_html = `
+                        <div class="member-chapter-info" style="margin: 15px 0; padding: 15px; background: #f8f9fa; border-radius: 6px; border: 1px solid #dee2e6;">
+                            <h5 style="margin-bottom: 10px; color: #495057;">
+                                <i class="fa fa-map-marker" style="margin-right: 8px;"></i>
+                                Chapter Membership
+                            </h5>
+                            <div class="chapter-content">
+                                ${r.message}
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Remove existing display first
+                    $('.member-chapter-info').remove();
+                    
+                    // Strategy 1: Insert after chapter_assigned_date field
+                    if (frm.fields_dict.chapter_assigned_date) {
+                        $(frm.fields_dict.chapter_assigned_date.wrapper).after(chapter_html);
+                        console.log('Inserted chapter info after chapter_assigned_date field');
+                    }
+                    // Strategy 2: Insert after chapter_assigned_by field  
+                    else if (frm.fields_dict.chapter_assigned_by) {
+                        $(frm.fields_dict.chapter_assigned_by.wrapper).after(chapter_html);
+                        console.log('Inserted chapter info after chapter_assigned_by field');
+                    }
+                    // Strategy 3: Insert after member details section
+                    else if (frm.fields_dict.member_details_section) {
+                        $(frm.fields_dict.member_details_section.wrapper).after(chapter_html);
+                        console.log('Inserted chapter info after member_details_section');
+                    }
+                    // Strategy 4: Insert at the top of the form
+                    else {
+                        $(frm.wrapper).find('.form-layout').first().prepend(chapter_html);
+                        console.log('Inserted chapter info at top of form');
+                    }
+                }
+            },
+            error: function(r) {
+                console.log('Error refreshing chapter display:', r);
+            }
+        });
     },
     
     setup_application_review: function(frm) {
@@ -704,5 +809,37 @@ verenigingen.member_form = {
         add_termination_buttons(frm);
     }
 };
+
+// ==================== HELPER FUNCTIONS ====================
+
+function get_member_current_chapters(member_name) {
+    // Get list of chapters a member belongs to using safe server method
+    return new Promise((resolve, reject) => {
+        if (!member_name) {
+            resolve([]);
+            return;
+        }
+        
+        frappe.call({
+            method: 'verenigingen.verenigingen.doctype.member.member.get_member_current_chapters',
+            args: {
+                member_name: member_name
+            },
+            callback: function(r) {
+                if (r.message) {
+                    // Extract chapter names from the returned chapter objects
+                    const chapters = r.message.map(ch => ch.chapter || ch.parent).filter(ch => ch);
+                    resolve(chapters);
+                } else {
+                    resolve([]);
+                }
+            },
+            error: function(r) {
+                console.error('Error getting member chapters:', r);
+                resolve([]);
+            }
+        });
+    });
+}
 
 console.log("Member form scripts and review functionality loaded");

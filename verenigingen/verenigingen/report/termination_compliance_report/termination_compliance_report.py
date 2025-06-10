@@ -92,7 +92,14 @@ def get_data(filters):
         values["termination_type"] = filters["termination_type"]
         
     if filters.get("chapter"):
-        conditions.append("m.primary_chapter = %(chapter)s")
+        conditions.append("""
+            EXISTS (
+                SELECT 1 FROM `tabChapter Member` cm 
+                WHERE cm.member = m.name 
+                AND cm.parent = %(chapter)s 
+                AND cm.enabled = 1
+            )
+        """)
         values["chapter"] = filters["chapter"]
 
     where_clause = ""
@@ -111,7 +118,14 @@ def get_data(filters):
             mtr.disciplinary_documentation,
             mtr.approved_by,
             mtr.approval_date,
-            m.primary_chapter
+            (
+                SELECT cm.parent 
+                FROM `tabChapter Member` cm 
+                WHERE cm.member = m.name 
+                AND cm.enabled = 1 
+                ORDER BY cm.chapter_join_date DESC 
+                LIMIT 1
+            ) as primary_chapter
         FROM `tabMembership Termination Request` mtr
         LEFT JOIN `tabMember` m ON mtr.member = m.name
         {where_clause}

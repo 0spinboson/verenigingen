@@ -37,9 +37,17 @@ class ExpulsionReportEntry(Document):
     def set_chapter_from_member(self):
         """Auto-set chapter from member's primary chapter if not provided"""
         if not self.chapter_involved and self.member_id:
-            member_chapter = frappe.db.get_value("Member", self.member_id, "primary_chapter")
-            if member_chapter:
-                self.chapter_involved = member_chapter
+            # Get primary chapter from Chapter Member table
+            member_chapters = frappe.get_all(
+                "Chapter Member",
+                filters={"member": self.member_id, "enabled": 1},
+                fields=["parent"],
+                order_by="chapter_join_date desc",
+                limit=1,
+                ignore_permissions=True
+            )
+            if member_chapters:
+                self.chapter_involved = member_chapters[0].parent
                 
     def update_status_based_on_appeals(self):
         """Update status based on any active appeals"""

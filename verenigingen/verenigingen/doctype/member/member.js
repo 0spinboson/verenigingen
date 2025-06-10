@@ -107,7 +107,7 @@ frappe.ui.form.on('Member', {
     
     pincode: function(frm) {
         // Simple notification when postal code changes
-        if (frm.doc.pincode && !frm.doc.primary_chapter) {
+        if (frm.doc.pincode && !frm.doc.current_chapter_display) {
             frappe.show_alert({
                 message: __('Postal code updated. You may want to assign a chapter based on this location.'),
                 indicator: 'blue'
@@ -169,23 +169,23 @@ function add_chapter_buttons(frm) {
         method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
         callback: function(r) {
             if (r.message) {
-                if (frm.doc.primary_chapter) {
+                if (frm.doc.current_chapter_display) {
                     frm.add_custom_button(__('View Chapter'), function() {
-                        frappe.set_route('Form', 'Chapter', frm.doc.primary_chapter);
+                        frappe.set_route('Form', 'Chapter', frm.doc.current_chapter_display);
                     }, __('View'));
                 }
                 
                 frm.add_custom_button(__('Assign Chapter'), function() {
-                    frm.set_value('primary_chapter', '');
-                    frm.refresh_field('primary_chapter');
+                    frm.set_value('current_chapter_display', '');
+                    frm.refresh_field('current_chapter_display');
                 }, __('Actions'));
                 
                 // Add simple chapter suggestion when no chapter is assigned
                 add_simple_chapter_suggestion(frm);
                 
                 // Add visual indicator for chapter membership
-                if (frm.doc.primary_chapter && !frm.doc.__unsaved) {
-                    frm.dashboard.add_indicator(__("Member of {0}", [frm.doc.primary_chapter]), "blue");
+                if (frm.doc.current_chapter_display && !frm.doc.__unsaved) {
+                    frm.dashboard.add_indicator(__("Member of {0}", [frm.doc.current_chapter_display]), "blue");
                 }
                 
                 // Add debug button for postal code matching (development only)
@@ -316,14 +316,14 @@ function add_termination_buttons(frm) {
 }
 
 function add_simple_chapter_suggestion(frm) {
-    if (!frm.doc.__islocal && !frm.doc.primary_chapter && !$('.chapter-suggestion-container').length) {
+    if (!frm.doc.__islocal && !frm.doc.current_chapter_display && !$('.chapter-suggestion-container').length) {
         var $container = $('<div class="chapter-suggestion-container alert alert-info mt-2"></div>');
         $container.html(`
             <p><i class="fa fa-info-circle"></i> ${__("This member doesn't have a chapter assigned yet.")}</p>
             <p class="mb-0"><small class="text-muted">${__("Use the Chapter field above to assign this member to a chapter.")}</small></p>
         `);
         
-        $(frm.fields_dict.primary_chapter.wrapper).append($container);
+        $(frm.fields_dict.current_chapter_display.wrapper).append($container);
     }
 }
 

@@ -10,6 +10,22 @@ from verenigingen.utils.application_payments import process_application_payment
 from verenigingen.utils.application_notifications import check_overdue_applications
 from verenigingen.api.member_management import assign_member_to_chapter, add_member_to_chapter_roster
 
+
+def get_member_primary_chapter(member_name):
+    """Helper function to get member's primary chapter from Chapter Member table"""
+    try:
+        chapters = frappe.get_all(
+            "Chapter Member",
+            filters={"member": member_name, "enabled": 1},
+            fields=["parent"],
+            order_by="chapter_join_date desc",
+            limit=1
+        )
+        return chapters[0].parent if chapters else None
+    except Exception:
+        return None
+
+
 class TestMembershipApplication(unittest.TestCase):
     """Test membership application workflow"""
     
@@ -1856,10 +1872,11 @@ class TestChapterSelection(unittest.TestCase):
         
         # Verify chapter was assigned to member
         member = frappe.get_doc("Member", result["member_id"])
-        self.assertEqual(member.primary_chapter, "Test Chapter Utrecht", 
+        primary_chapter = get_member_primary_chapter(member.name)
+        self.assertEqual(primary_chapter, "Test Chapter Utrecht", 
                         "Selected chapter should be assigned to member")
         
-        print(f"✅ Chapter selection works: {member.primary_chapter}")
+        print(f"✅ Chapter selection works: {primary_chapter}")
     
     def test_application_without_chapter_selection(self):
         """Test application submission without chapter selection (optional field)"""
@@ -1873,7 +1890,8 @@ class TestChapterSelection(unittest.TestCase):
         
         # Verify member was created without chapter
         member = frappe.get_doc("Member", result["member_id"])
-        self.assertFalse(member.primary_chapter, "Member should have no chapter assigned")
+        primary_chapter = get_member_primary_chapter(member.name)
+        self.assertFalse(primary_chapter, "Member should have no chapter assigned")
         
         print("✅ Application without chapter selection works")
     
@@ -1889,7 +1907,8 @@ class TestChapterSelection(unittest.TestCase):
         if result["success"]:
             member = frappe.get_doc("Member", result["member_id"])
             # Invalid chapter should not be assigned
-            self.assertNotEqual(member.primary_chapter, "Non-Existent Chapter", 
+            primary_chapter = get_member_primary_chapter(member.name)
+            self.assertNotEqual(primary_chapter, "Non-Existent Chapter", 
                                "Invalid chapter should not be assigned")
         else:
             # If it fails, should have appropriate error message
@@ -1910,7 +1929,8 @@ class TestChapterSelection(unittest.TestCase):
         self.assertTrue(result["success"], "Application should succeed")
         
         member = frappe.get_doc("Member", result["member_id"])
-        self.assertNotEqual(member.primary_chapter, "Unpublished Chapter",
+        primary_chapter = get_member_primary_chapter(member.name)
+        self.assertNotEqual(primary_chapter, "Unpublished Chapter",
                            "Unpublished chapter should not be assigned")
         
         print("✅ Unpublished chapter selection handled correctly")
@@ -1992,15 +2012,18 @@ class TestChapterSelection(unittest.TestCase):
         member_name = result["member_id"]
         
         member = frappe.get_doc("Member", member_name)
-        self.assertFalse(member.primary_chapter, "Member should start without chapter")
+        primary_chapter = get_member_primary_chapter(member.name)
+        self.assertFalse(primary_chapter, "Member should start without chapter")
         
         # Test direct chapter assignment (simulating the simplified form)
-        member.primary_chapter = "Test Chapter Utrecht"
+        # Assign member to chapter via Chapter Member table
+        add_member_to_chapter_roster(member.name, "Test Chapter Utrecht")
         member.save()
         
         # Verify assignment worked
         member.reload()
-        self.assertEqual(member.primary_chapter, "Test Chapter Utrecht",
+        primary_chapter = get_member_primary_chapter(member.name)
+        self.assertEqual(primary_chapter, "Test Chapter Utrecht",
                         "Direct chapter assignment should work")
         
         print("✅ Simplified chapter assignment works")
@@ -2021,7 +2044,8 @@ class TestChapterSelection(unittest.TestCase):
         member = frappe.get_doc("Member", result["member_id"])
         
         # Verify both chapter and custom amount were processed
-        self.assertEqual(member.primary_chapter, "Test Chapter Rotterdam",
+        primary_chapter = get_member_primary_chapter(member.name)
+        self.assertEqual(primary_chapter, "Test Chapter Rotterdam",
                         "Chapter should be assigned")
         self.assertEqual(member.membership_fee_override, 75.0,
                         "Custom amount should be set")
@@ -2039,7 +2063,8 @@ class TestChapterSelection(unittest.TestCase):
         
         # Verify initial assignment
         member = frappe.get_doc("Member", member_name)
-        self.assertEqual(member.primary_chapter, "Test Chapter Amsterdam")
+        primary_chapter = get_member_primary_chapter(member.name)
+        self.assertEqual(primary_chapter, "Test Chapter Amsterdam")
         
         # Approve the application
         frappe.set_user("Administrator")
@@ -2049,7 +2074,8 @@ class TestChapterSelection(unittest.TestCase):
         
         # Verify chapter is preserved after approval
         member.reload()
-        self.assertEqual(member.primary_chapter, "Test Chapter Amsterdam",
+        primary_chapter = get_member_primary_chapter(member.name)
+        self.assertEqual(primary_chapter, "Test Chapter Amsterdam",
                         "Chapter should persist through approval")
         
         print("✅ Chapter data persists through approval flow")
@@ -2087,7 +2113,8 @@ class TestChapterSelection(unittest.TestCase):
         result = submit_application(**application_data)
         member = frappe.get_doc("Member", result["member_id"])
         
-        self.assertEqual(member.primary_chapter, additional_chapter_name,
+        primary_chapter = get_member_primary_chapter(member.name)
+        self.assertEqual(primary_chapter, additional_chapter_name,
                         "Should be able to select specific chapter even in same region")
         
         print(f"✅ Multiple chapters in same region handled correctly")
@@ -2109,7 +2136,8 @@ class TestChapterSelection(unittest.TestCase):
         self.assertTrue(result["success"], "Application with empty chapter string should succeed")
         
         member = frappe.get_doc("Member", result["member_id"])
-        self.assertFalse(member.primary_chapter, "Empty chapter string should result in no chapter")
+        primary_chapter = get_member_primary_chapter(member.name)
+        self.assertFalse(primary_chapter, "Empty chapter string should result in no chapter")
         
         print("✅ Empty chapter string handled correctly")
     
@@ -2125,7 +2153,7 @@ class TestChapterSelection(unittest.TestCase):
         
         member = frappe.get_doc("Member", result["member_id"])
         # Should either be empty or trimmed, but not contain whitespace
-        chapter = member.primary_chapter or ""
+        chapter = get_member_primary_chapter(member.name) or ""
         self.assertEqual(chapter.strip(), chapter, "Chapter should not have leading/trailing whitespace")
         
         print("✅ Whitespace chapter value handled correctly")
@@ -2147,7 +2175,8 @@ class TestChapterSelection(unittest.TestCase):
             self.fail(f"Valid chapter should save without error: {str(e)}")
         
         # Test that the chapter field accepts None/empty values (since it's optional)
-        member.primary_chapter = None
+        # Remove member from all chapters by disabling Chapter Member records
+        frappe.db.set_value("Chapter Member", {"member": member.name}, "enabled", 0)
         try:
             member.save()
             print("✅ Empty chapter saves correctly")
@@ -2219,7 +2248,8 @@ class TestChapterSelection(unittest.TestCase):
         self.assertTrue(result["success"], "Should handle international chapter names")
         
         member = frappe.get_doc("Member", result["member_id"])
-        self.assertEqual(member.primary_chapter, intl_chapter_name,
+        primary_chapter = get_member_primary_chapter(member.name)
+        self.assertEqual(primary_chapter, intl_chapter_name,
                         "International chapter name should be preserved")
         
         print(f"✅ International chapter names handled: {intl_chapter_name}")

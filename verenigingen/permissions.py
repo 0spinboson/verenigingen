@@ -98,8 +98,16 @@ def can_view_financial_info(doctype, name=None, user=None):
         return True
         
     # Check if viewer is a board member with financial permissions
-    if target_member.primary_chapter:
-        chapter = frappe.get_doc("Chapter", target_member.primary_chapter)
+    target_member_chapters = frappe.get_all(
+        "Chapter Member",
+        filters={"member": target_member.name, "enabled": 1},
+        fields=["parent"],
+        order_by="chapter_join_date desc",
+        limit=1,
+        ignore_permissions=True
+    )
+    if target_member_chapters:
+        chapter = frappe.get_doc("Chapter", target_member_chapters[0].parent)
         return chapter.can_view_member_payments(viewer_member)
         
     # Not permitted
@@ -131,8 +139,16 @@ def check_member_payment_access(member_name, user=None):
     if not viewer_member:
         return False
         
-    if member.primary_chapter:
-        chapter = frappe.get_doc("Chapter", member.primary_chapter)
+    # Get member's primary chapter from Chapter Member table
+    member_chapters = frappe.get_all(
+        "Chapter Member",
+        filters={"member": member.name, "enabled": 1},
+        fields=["parent"],
+        order_by="chapter_join_date desc",
+        limit=1
+    )
+    if member_chapters:
+        chapter = frappe.get_doc("Chapter", member_chapters[0].parent)
         return chapter.can_view_member_payments(viewer_member)
         
     return False
@@ -163,11 +179,19 @@ def can_terminate_member(member_name, user=None):
         return False
     
     # Check if user is a board member of the member's chapter
-    if member_doc.primary_chapter:
+    member_chapters = frappe.get_all(
+        "Chapter Member",
+        filters={"member": member_doc.name, "enabled": 1},
+        fields=["parent"],
+        order_by="chapter_join_date desc",
+        limit=1,
+        ignore_permissions=True
+    )
+    if member_chapters:
         try:
-            chapter_doc = frappe.get_doc("Chapter", member_doc.primary_chapter)
+            chapter_doc = frappe.get_doc("Chapter", member_chapters[0].parent)
             if chapter_doc.user_has_board_access(requesting_member):
-                frappe.logger().debug(f"User {user} has board access in member's chapter {member_doc.primary_chapter}")
+                frappe.logger().debug(f"User {user} has board access in member's chapter {member_chapters[0].parent}")
                 return True
         except Exception as e:
             frappe.logger().error(f"Error checking chapter board access: {str(e)}")
@@ -220,6 +244,50 @@ def can_access_termination_functions(user=None):
     
     return False
 
+def get_chapter_member_permission_query(user):
+    """Permission query for Chapter Member doctype"""
+    if not user:
+        user = frappe.session.user
+        
+    # Admin roles get full access
+    admin_roles = ["System Manager", "Membership Manager", "Verenigingen Manager"]
+    if any(role in frappe.get_roles(user) for role in admin_roles):
+        return ""
+    
+    # Allow users to see Chapter Member records for:
+    # 1. Their own member record
+    # 2. Chapters where they have board access
+    requesting_member = frappe.db.get_value("Member", {"user": user}, "name")
+    if not requesting_member:
+        return "1=0"  # No access if not a member
+    
+    # Get chapters where user has board access
+    user_chapters = []
+    volunteer_records = frappe.get_all("Volunteer", filters={"member": requesting_member}, fields=["name"])
+    
+    for volunteer_record in volunteer_records:
+        board_positions = frappe.get_all(
+            "Chapter Board Member",
+            filters={
+                "volunteer": volunteer_record.name,
+                "is_active": 1
+            },
+            fields=["parent"]
+        )
+        
+        for position in board_positions:
+            if position.parent not in user_chapters:
+                user_chapters.append(position.parent)
+    
+    # Build permission filter
+    conditions = [f"`tabChapter Member`.member = '{requesting_member}'"]  # Own records
+    
+    if user_chapters:
+        chapter_conditions = " OR ".join([f"`tabChapter Member`.parent = '{chapter}'" for chapter in user_chapters])
+        conditions.append(f"({chapter_conditions})")  # Board access chapters
+    
+    return f"({' OR '.join(conditions)})"
+
 def get_termination_permission_query(user):
     """Permission query for Membership Termination Request doctype"""
     if not user:
@@ -266,5 +334,11 @@ def get_termination_permission_query(user):
         return "1=0"  # No access if not on any board
     
     # Return filter to only show termination requests for members in their chapters
-    chapter_filter = " OR ".join([f"`tabMember`.primary_chapter = '{chapter}'" for chapter in user_chapters])
-    return f"EXISTS (SELECT 1 FROM `tabMember` WHERE `tabMember`.name = `tabMembership Termination Request`.member AND ({chapter_filter}))"
+    chapter_filter = " OR ".join([f"cm.parent = '{chapter}'" for chapter in user_chapters])
+    return f"""EXISTS (
+        SELECT 1 FROM `tabMember` m
+        JOIN `tabChapter Member` cm ON cm.member = m.name 
+        WHERE m.name = `tabMembership Termination Request`.member 
+        AND cm.enabled = 1 
+        AND ({chapter_filter})
+    )"""

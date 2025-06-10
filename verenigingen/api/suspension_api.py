@@ -125,9 +125,9 @@ def _can_suspend_member_fallback(member_name):
         return False
     
     # Check if user is a board member of the member's chapter
-    if member_doc.primary_chapter:
+    if member_doc.current_chapter_display:
         try:
-            chapter_doc = frappe.get_doc("Chapter", member_doc.primary_chapter)
+            chapter_doc = frappe.get_doc("Chapter", member_doc.current_chapter_display)
             # Simple check - if the function exists on the chapter
             if hasattr(chapter_doc, 'user_has_board_access'):
                 return chapter_doc.user_has_board_access(requesting_member)

@@ -105,27 +105,20 @@ export class ChapterUI {
     updateMembersSummary() {
         if (!this.frm.doc.name) return;
         
-        frappe.call({
-            method: 'frappe.client.get_count',
-            args: {
-                doctype: 'Member',
-                filters: { 'primary_chapter': this.frm.doc.name }
-            },
-            callback: (r) => {
-                if (r.message !== undefined) {
-                    const $header = this.frm.fields_dict.chapter_members?.$wrapper.find('.form-section-heading');
-                    if ($header.length) {
-                        const summary = ` <span class="text-muted">(${r.message} members)</span>`;
-                        
-                        if ($header.find('.member-count').length) {
-                            $header.find('.member-count').html(summary);
-                        } else {
-                            $header.append(`<span class="member-count">${summary}</span>`);
-                        }
-                    }
-                }
+        // Count members from Chapter Member child table instead
+        const enabledMembers = this.frm.doc.members?.filter(m => m.enabled) || [];
+        const memberCount = enabledMembers.length;
+        
+        const $header = this.frm.fields_dict.chapter_members?.$wrapper.find('.form-section-heading');
+        if ($header.length) {
+            const summary = ` <span class="text-muted">(${memberCount} members)</span>`;
+            
+            if ($header.find('.member-count').length) {
+                $header.find('.member-count').html(summary);
+            } else {
+                $header.append(`<span class="member-count">${summary}</span>`);
             }
-        });
+        }
     }
     
     updatePostalCodePreview() {
