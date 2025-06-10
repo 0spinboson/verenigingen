@@ -53,6 +53,9 @@ frappe.ui.form.on('Member', {
         // Add fee management functionality
         add_fee_management_buttons(frm);
         
+        // Add member ID management buttons
+        add_member_id_buttons(frm);
+        
         // Check SEPA mandate status
         if (frm.doc.payment_method === 'Direct Debit' && frm.doc.iban) {
             SepaUtils.check_sepa_mandate_status(frm);
@@ -103,11 +106,12 @@ frappe.ui.form.on('Member', {
     },
     
     pincode: function(frm) {
-        // Auto-suggest chapter when postal code changes
+        // Simple notification when postal code changes
         if (frm.doc.pincode && !frm.doc.primary_chapter) {
-            setTimeout(() => {
-                ChapterUtils.suggest_chapter_from_address(frm);
-            }, 1000);
+            frappe.show_alert({
+                message: __('Postal code updated. You may want to assign a chapter based on this location.'),
+                indicator: 'blue'
+            }, 3);
         }
     }
 });
@@ -171,12 +175,13 @@ function add_chapter_buttons(frm) {
                     }, __('View'));
                 }
                 
-                frm.add_custom_button(__('Change Chapter'), function() {
-                    ChapterUtils.suggest_chapter_for_member(frm);
+                frm.add_custom_button(__('Assign Chapter'), function() {
+                    frm.set_value('primary_chapter', '');
+                    frm.refresh_field('primary_chapter');
                 }, __('Actions'));
                 
-                // Add chapter suggestion UI when no chapter is assigned
-                add_chapter_suggestion_UI(frm);
+                // Add simple chapter suggestion when no chapter is assigned
+                add_simple_chapter_suggestion(frm);
                 
                 // Add visual indicator for chapter membership
                 if (frm.doc.primary_chapter && !frm.doc.__unsaved) {
@@ -310,21 +315,15 @@ function add_termination_buttons(frm) {
     });
 }
 
-function add_chapter_suggestion_UI(frm) {
+function add_simple_chapter_suggestion(frm) {
     if (!frm.doc.__islocal && !frm.doc.primary_chapter && !$('.chapter-suggestion-container').length) {
         var $container = $('<div class="chapter-suggestion-container alert alert-info mt-2"></div>');
         $container.html(`
-            <p>${__("This member doesn't have a chapter assigned yet.")}</p>
-            <button class="btn btn-sm btn-primary suggest-chapter-btn">
-                ${__("Find a Chapter")}
-            </button>
+            <p><i class="fa fa-info-circle"></i> ${__("This member doesn't have a chapter assigned yet.")}</p>
+            <p class="mb-0"><small class="text-muted">${__("Use the Chapter field above to assign this member to a chapter.")}</small></p>
         `);
         
         $(frm.fields_dict.primary_chapter.wrapper).append($container);
-        
-        $('.suggest-chapter-btn').on('click', function() {
-            ChapterUtils.suggest_chapter_for_member(frm);
-        });
     }
 }
 
@@ -358,6 +357,100 @@ function setup_organization_user_creation(frm) {
     });
 }
 
+
+function add_member_id_buttons(frm) {
+    // Check if user has permission to manage member IDs
+    const user_roles = frappe.user_roles || [];
+    const can_manage_member_ids = user_roles.includes('System Manager') || user_roles.includes('Membership Manager');
+    
+    if (!can_manage_member_ids) {
+        return; // User doesn't have permission
+    }
+    
+    // Add "Assign Member ID" button if member doesn't have one
+    if (!frm.doc.member_id) {
+        frm.add_custom_button(__('Assign Member ID'), function() {
+            frappe.confirm(
+                __('Are you sure you want to assign a member ID to {0}?', [frm.doc.full_name]),
+                function() {
+                    frm.call({
+                        method: 'assign_member_id',
+                        doc: frm.doc,
+                        callback: function(r) {
+                            if (r.message && r.message.success) {
+                                frm.reload_doc();
+                                frappe.show_alert({
+                                    message: r.message.message,
+                                    indicator: 'green'
+                                }, 5);
+                            } else if (r.message && r.message.message) {
+                                frappe.msgprint(r.message.message);
+                            }
+                        }
+                    });
+                }
+            );
+        }, __('Member ID'));
+    }
+    
+    // Add "View Member ID Statistics" button for System Managers
+    if (user_roles.includes('System Manager')) {
+        frm.add_custom_button(__('Member ID Statistics'), function() {
+            show_member_id_statistics_dialog();
+        }, __('Member ID'));
+        
+        frm.add_custom_button(__('Preview Next ID'), function() {
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.member.member_id_manager.get_next_member_id_preview',
+                callback: function(r) {
+                    if (r.message) {
+                        frappe.msgprint(__('Next member ID that will be assigned: {0}', [r.message.next_id]));
+                    }
+                }
+            });
+        }, __('Member ID'));
+    }
+}
+
+function show_member_id_statistics_dialog() {
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.member.member_id_manager.get_member_id_statistics',
+        callback: function(r) {
+            if (r.message) {
+                const stats = r.message;
+                let html = `
+                    <div class="member-id-stats">
+                        <h4>Member ID Statistics</h4>
+                        <table class="table table-bordered">
+                            <tr><td><strong>Next ID to be assigned:</strong></td><td>${stats.next_id}</td></tr>
+                            <tr><td><strong>Current counter value:</strong></td><td>${stats.current_counter}</td></tr>
+                            <tr><td><strong>Highest assigned ID:</strong></td><td>${stats.highest_assigned}</td></tr>
+                            <tr><td><strong>Total members with numeric IDs:</strong></td><td>${stats.total_with_numeric_ids}</td></tr>
+                            <tr><td><strong>Gap count:</strong></td><td>${stats.gap_count}</td></tr>
+                `;
+                
+                if (stats.gaps && stats.gaps.length > 0) {
+                    html += `<tr><td><strong>Available gaps (first 10):</strong></td><td>${stats.gaps.join(', ')}</td></tr>`;
+                }
+                
+                html += `</table></div>`;
+                
+                const dialog = new frappe.ui.Dialog({
+                    title: __('Member ID Statistics'),
+                    size: 'large',
+                    fields: [
+                        {
+                            fieldtype: 'HTML',
+                            options: html
+                        }
+                    ]
+                });
+                
+                dialog.show();
+            }
+        }
+    });
+}
 
 function add_fee_management_buttons(frm) {
     if (frm.doc.docstatus === 1) {

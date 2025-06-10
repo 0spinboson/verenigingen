@@ -375,3 +375,83 @@ def apply_late_fees(member_name, payment_info):
     # Placeholder for late fee application
     frappe.logger().info(f"Late fees applied to {member_name}")
     return True
+
+def get_or_create_customer(member):
+    """Get or create customer record for member - delegates to application_payments module"""
+    from verenigingen.utils.application_payments import create_customer_for_member
+    
+    if member.customer:
+        return frappe.get_doc("Customer", member.customer)
+    else:
+        customer = create_customer_for_member(member)
+        member.db_set("customer", customer.name)
+        return customer
+
+def create_application_invoice(member, membership):
+    """Create invoice for membership application - delegates to application_payments module"""
+    from verenigingen.utils.application_payments import create_membership_invoice_with_amount
+    
+    membership_type = frappe.get_doc("Membership Type", membership.membership_type)
+    
+    # Determine amount to use
+    amount = membership_type.amount
+    if hasattr(membership, 'uses_custom_amount') and membership.uses_custom_amount and hasattr(membership, 'custom_amount'):
+        amount = membership.custom_amount
+    
+    return create_membership_invoice_with_amount(member, membership, amount)
+
+def process_application_refund(member_name, reason):
+    """Process refund for application payment"""
+    try:
+        member = frappe.get_doc("Member", member_name)
+        
+        # Find the application invoice
+        invoice_name = getattr(member, 'application_invoice', None)
+        if not invoice_name:
+            frappe.logger().warning(f"No application invoice found for member {member_name}")
+            return {"success": False, "message": "No application invoice found"}
+        
+        # Check if invoice exists and is paid
+        invoice = frappe.get_doc("Sales Invoice", invoice_name)
+        if invoice.outstanding_amount > 0:
+            frappe.logger().warning(f"Invoice {invoice_name} is not fully paid, no refund needed")
+            return {"success": False, "message": "Invoice is not fully paid"}
+        
+        # Create refund payment entry
+        refund_entry = frappe.get_doc({
+            "doctype": "Payment Entry",
+            "payment_type": "Pay",
+            "party_type": "Customer", 
+            "party": member.customer,
+            "paid_amount": invoice.grand_total,
+            "received_amount": invoice.grand_total,
+            "reference_no": f"REFUND-{invoice.name}",
+            "reference_date": today(),
+            "mode_of_payment": "Bank Transfer",  # Default refund method
+            "remarks": f"Refund for application rejection: {reason}",
+            "references": [{
+                "reference_doctype": "Sales Invoice",
+                "reference_name": invoice.name,
+                "allocated_amount": -invoice.grand_total  # Negative for refund
+            }]
+        })
+        
+        refund_entry.insert(ignore_permissions=True)
+        refund_entry.submit()
+        
+        # Log the refund
+        member.add_comment("Info", f"Refund processed: {invoice.grand_total} - Reason: {reason}")
+        
+        return {
+            "success": True,
+            "message": "Refund processed successfully",
+            "refund_amount": invoice.grand_total,
+            "payment_entry": refund_entry.name
+        }
+        
+    except Exception as e:
+        frappe.logger().error(f"Failed to process refund for {member_name}: {str(e)}")
+        return {
+            "success": False,
+            "message": f"Refund processing failed: {str(e)}"
+        }

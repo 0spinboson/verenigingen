@@ -41,7 +41,7 @@ class TestTerminationSystem(unittest.TestCase):
     @classmethod
     def setup_test_roles(cls):
         """Create test roles if they don't exist"""
-        required_roles = ["Association Manager", "Test User Role"]
+        required_roles = ["Verenigingen Manager", "Test User Role"]
         
         for role_name in required_roles:
             if not frappe.db.exists("Role", role_name):
@@ -63,7 +63,7 @@ class TestTerminationSystem(unittest.TestCase):
         """Create test users for different roles"""
         cls.test_users = {}
         
-        # Association Manager user
+        # Verenigingen Manager user
         email = "test_assoc_manager@example.com"
         if not frappe.db.exists("User", email):
             try:
@@ -74,7 +74,7 @@ class TestTerminationSystem(unittest.TestCase):
                     "last_name": "Manager", 
                     "send_welcome_email": 0,
                     "roles": [
-                        {"role": "Association Manager"},
+                        {"role": "Verenigingen Manager"},
                         {"role": "System Manager"}  # For testing purposes
                     ]
                 })

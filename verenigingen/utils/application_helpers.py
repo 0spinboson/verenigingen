@@ -61,20 +61,18 @@ def get_form_data():
             frappe.log_error(f"Error getting countries: {str(e)}")
             pass  # Use fallback countries
 
-        # Get chapters - with error handling
+        # Get chapters - always load for application form
         chapters = []
         try:
-            settings_enabled = frappe.db.get_single_value("Verenigingen Settings", "enable_chapter_management")
-            if settings_enabled:
-                chapters = frappe.get_all(
-                    "Chapter",
-                    filters={"published": 1},
-                    fields=["name", "region"],
-                    order_by="name"
-                )
+            chapters = frappe.get_all(
+                "Chapter",
+                filters={"published": 1},
+                fields=["name", "region"],
+                order_by="name"
+            )
         except Exception as e:
             frappe.log_error(f"Error getting chapters: {str(e)}")
-            pass  # Chapter management not enabled or error
+            pass  # Chapter loading failed
 
         # Get volunteer areas - with error handling
         volunteer_areas = []
@@ -186,6 +184,11 @@ def create_member_from_application(data, application_id, address=None):
         "bank_account_name": data.get("bank_account_name", "")
     })
     
+    # Store volunteer skills data as a temporary attribute for volunteer record creation
+    volunteer_skills = data.get("volunteer_skills", [])
+    if volunteer_skills:
+        member.volunteer_skills = volunteer_skills
+    
     # Handle custom membership amount using new fee override fields
     if data.get("membership_amount") or data.get("uses_custom_amount"):
         try:
@@ -275,6 +278,54 @@ def create_volunteer_record(member):
             "available": 1,
             "date_joined": today()
         })
+        
+        # Add volunteer skills if provided
+        volunteer_skills = getattr(member, 'volunteer_skills', None)
+        if volunteer_skills and isinstance(volunteer_skills, (list, str)):
+            # Parse skills if it's a JSON string
+            if isinstance(volunteer_skills, str):
+                try:
+                    import json
+                    volunteer_skills = json.loads(volunteer_skills)
+                except:
+                    volunteer_skills = []
+            
+            # Add each skill to the volunteer record
+            for skill_data in volunteer_skills:
+                if isinstance(skill_data, dict) and skill_data.get('skill_name'):
+                    # Map the application skill level to doctype proficiency level
+                    proficiency_mapping = {
+                        'Beginner': '1 - Beginner',
+                        'Intermediate': '3 - Intermediate', 
+                        'Advanced': '4 - Advanced',
+                        'Expert': '5 - Expert'
+                    }
+                    
+                    proficiency = proficiency_mapping.get(skill_data.get('skill_level', ''), '3 - Intermediate')
+                    
+                    # Try to categorize the skill
+                    skill_name = skill_data.get('skill_name', '').lower()
+                    skill_category = 'Other'  # Default
+                    
+                    if any(word in skill_name for word in ['programming', 'coding', 'website', 'tech', 'it', 'computer']):
+                        skill_category = 'Technical'
+                    elif any(word in skill_name for word in ['event', 'planning', 'organize']):
+                        skill_category = 'Event Planning'
+                    elif any(word in skill_name for word in ['communicate', 'writing', 'speaking', 'presentation']):
+                        skill_category = 'Communication'
+                    elif any(word in skill_name for word in ['lead', 'manage', 'supervise']):
+                        skill_category = 'Leadership'
+                    elif any(word in skill_name for word in ['accounting', 'finance', 'budget']):
+                        skill_category = 'Financial'
+                    elif any(word in skill_name for word in ['admin', 'organization', 'coordination']):
+                        skill_category = 'Organizational'
+                    
+                    volunteer.append('skills_and_qualifications', {
+                        'volunteer_skill': skill_data.get('skill_name'),
+                        'skill_category': skill_category,
+                        'proficiency_level': proficiency
+                    })
+        
         volunteer.insert(ignore_permissions=True)
         return volunteer
     except Exception as e:

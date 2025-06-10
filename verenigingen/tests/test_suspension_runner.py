@@ -2,6 +2,9 @@
 """
 Comprehensive test runner for suspension system
 Run with: bench execute verenigingen.test_suspension_runner.run_all_suspension_tests
+
+Updated: Includes tests for new import error handling and fallback mechanisms
+in the can_suspend_member API function.
 """
 
 import frappe
@@ -24,6 +27,7 @@ def run_all_suspension_tests():
         test_modules = [
             'verenigingen.tests.test_suspension_integration',
             'verenigingen.tests.test_suspension_api', 
+            'verenigingen.tests.test_suspension_api_import_fallback',
             'verenigingen.tests.test_suspension_permissions',
             'verenigingen.tests.test_suspension_member_mixin'
         ]

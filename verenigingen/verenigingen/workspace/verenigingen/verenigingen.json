@@ -57,7 +57,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Memberships",
-   "link_count": 3,
+   "link_count": 5,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -159,7 +159,7 @@
    "hidden": 0,
    "is_query_report": 0,
    "label": "Volunteers",
-   "link_count": 2,
+   "link_count": 6,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -173,6 +173,39 @@
    "link_to": "Volunteer",
    "link_type": "DocType",
    "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Volunteer Activity",
+   "link_count": 0,
+   "link_to": "Volunteer Activity",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Volunteer Interest Category",
+   "link_count": 0,
+   "link_to": "Volunteer Interest Category",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Volunteer Interest Analysis",
+   "link_count": 0,
+   "link_to": "Volunteer Interest Analysis",
+   "link_type": "Report",
+   "onboard": 0,
    "type": "Link"
   },
   {
@@ -209,13 +242,90 @@
    "type": "Link"
   },
   {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Members Without Chapter",
+   "link_count": 0,
+   "link_to": "Members Without Chapter",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "New Members",
+   "link_count": 0,
+   "link_to": "New Members",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Recent Chapter Changes",
+   "link_count": 0,
+   "link_to": "Recent Chapter Changes",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Expiring Memberships",
+   "link_count": 0,
+   "link_to": "Expiring Memberships",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Membership Conversion Analysis",
+   "link_count": 0,
+   "link_to": "Membership Conversion Analysis",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
    "hidden": 0,
    "is_query_report": 0,
    "label": "Payments & Finance",
-   "link_count": 4,
+   "link_count": 7,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "SEPA Mandate",
+   "link_count": 0,
+   "link_to": "SEPA Mandate",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Direct Debit Batch",
+   "link_count": 0,
+   "link_to": "Direct Debit Batch",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   },
   {
    "dependencies": "",
@@ -279,9 +389,124 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Governance & Compliance",
+   "link_count": 4,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Expulsion Report Entry",
+   "link_count": 0,
+   "link_to": "Expulsion Report Entry",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Governance Compliance Report",
+   "link_count": 0,
+   "link_to": "Governance Compliance Report",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Expulsion Governance Report",
+   "link_count": 0,
+   "link_to": "Expulsion Governance Report",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Termination Compliance Report",
+   "link_count": 0,
+   "link_to": "Termination Compliance Report",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Termination Management",
+   "link_count": 2,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Membership Termination Request",
+   "link_count": 0,
+   "link_to": "Membership Termination Request",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Termination Audit Report",
+   "link_count": 0,
+   "link_to": "Termination Audit Report",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Additional Reports",
+   "link_count": 2,
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Orphaned Subscriptions Report",
+   "link_count": 0,
+   "link_to": "Orphaned Subscriptions Report",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Dutch BTW Return",
+   "link_count": 0,
+   "link_to": "Dutch BTW Return",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2025-06-06 16:45:57.782027",
+ "modified": "2025-06-10 06:50:00.000000",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Verenigingen",
@@ -354,6 +579,60 @@
    "label": "Critical Payments",
    "link_to": "Overdue Member Payments?preset=critical",
    "report_ref_doctype": "Sales Invoice",
+   "type": "Report"
+  },
+  {
+   "color": "Orange",
+   "icon": "users",
+   "label": "Unassigned Members",
+   "link_to": "Members Without Chapter",
+   "report_ref_doctype": "Member",
+   "type": "Report"
+  },
+  {
+   "color": "Green",
+   "icon": "user-plus",
+   "label": "New Members",
+   "link_to": "New Members",
+   "report_ref_doctype": "Member",
+   "type": "Report"
+  },
+  {
+   "color": "Blue",
+   "icon": "shuffle",
+   "label": "Chapter Changes",
+   "link_to": "Recent Chapter Changes",
+   "report_ref_doctype": "Member",
+   "type": "Report"
+  },
+  {
+   "color": "Yellow",
+   "icon": "calendar",
+   "label": "Expiring Memberships",
+   "link_to": "Expiring Memberships",
+   "report_ref_doctype": "Membership",
+   "type": "Report"
+  },
+  {
+   "color": "Purple",
+   "icon": "users",
+   "label": "Volunteers",
+   "link_to": "Volunteer",
+   "type": "DocType"
+  },
+  {
+   "color": "Green",
+   "icon": "activity",
+   "label": "Volunteer Activities",
+   "link_to": "Volunteer Activity",
+   "type": "DocType"
+  },
+  {
+   "color": "Red",
+   "icon": "alert-triangle",
+   "label": "Governance Report",
+   "link_to": "Governance Compliance Report",
+   "report_ref_doctype": "Chapter Board Member",
    "type": "Report"
   }
  ],

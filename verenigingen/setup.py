@@ -123,12 +123,33 @@ def get_custom_fields():
     
     return custom_fields
 
+def validate_app_dependencies():
+    """Validate that required apps are installed"""
+    required_apps = ["erpnext", "payments"]
+    missing_apps = []
+    
+    for app in required_apps:
+        if not frappe.db.exists("Installed Applications", {"app_name": app}):
+            missing_apps.append(app)
+    
+    if missing_apps:
+        frappe.throw(
+            f"Missing required apps: {', '.join(missing_apps)}. "
+            f"Please install these apps before installing verenigingen.",
+            title="Missing Dependencies"
+        )
+    
+    print(f"✅ All required apps are installed: {', '.join(required_apps)}")
+
 def execute_after_install():
     """
     Function executed after the app is installed
     Sets up necessary configurations for the Verenigingen app
     """
     try:
+        # Validate dependencies
+        validate_app_dependencies()
+        
         # Execute the setup function from this file
         setup_verenigingen()
         
@@ -321,7 +342,7 @@ def setup_termination_roles_and_permissions():
         # Create required roles
         required_roles = [
             {
-                "role_name": "Association Manager",
+                "role_name": "Verenigingen Manager",
                 "desk_access": 1,
                 "is_custom": 1
             }
@@ -386,7 +407,7 @@ def check_termination_system_status():
         status["workflows_exist"] = workflow_count > 0
         
         # Check roles
-        status["roles_exist"] = frappe.db.exists("Role", "Association Manager")
+        status["roles_exist"] = frappe.db.exists("Role", "Verenigingen Manager")
         
         return {"success": True, "status": status}
         
@@ -422,10 +443,10 @@ def run_termination_diagnostics():
     print("\n2. ROLE CHECK")
     print("-" * 12)
     
-    if frappe.db.exists("Role", "Association Manager"):
-        print("   ✅ Association Manager")
+    if frappe.db.exists("Role", "Verenigingen Manager"):
+        print("   ✅ Verenigingen Manager")
     else:
-        print("   ❌ Association Manager - MISSING")
+        print("   ❌ Verenigingen Manager - MISSING")
         all_good = False
     
     # 3. Check workflows

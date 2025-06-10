@@ -591,7 +591,7 @@ verenigingen.member_form = {
     
     setup_application_review: function(frm) {
         // Check user permissions
-        if (!frappe.user.has_role(['Association Manager', 'Membership Manager'])) {
+        if (!frappe.user.has_role(['Verenigingen Manager', 'Membership Manager'])) {
             return;
         }
         

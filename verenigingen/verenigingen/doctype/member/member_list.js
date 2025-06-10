@@ -5,12 +5,18 @@ frappe.listview_settings['Member'] = {
     
     // ==================== LIST VIEW CONFIGURATION ====================
     
+    // Add fields needed for new member tracking
+    add_fields: ["status", "primary_chapter", "chapter_assigned_date", "creation", "application_id", "application_status"],
+    
     // Auto refresh when data changes
     refresh: function(listview) {
         // Force refresh of list view data to show updated statuses
         if (listview && listview.refresh) {
             listview.refresh();
         }
+        
+        // Add quick filter buttons for new members
+        add_new_member_filter_buttons(listview);
     },
     
     // ==================== STATUS INDICATORS ====================
@@ -18,6 +24,29 @@ frappe.listview_settings['Member'] = {
     get_indicator: function(doc) {
         // Check if this is an application-created member
         const is_application_member = !!doc.application_id;
+        
+        // Check if member is new (created within last 30 days)
+        const thirtyDaysAgo = frappe.datetime.add_days(frappe.datetime.nowdate(), -30);
+        const sevenDaysAgo = frappe.datetime.add_days(frappe.datetime.nowdate(), -7);
+        const creationDate = doc.creation ? doc.creation.split(' ')[0] : null;
+        
+        // Check for recent chapter changes
+        let hasRecentChapterChange = false;
+        if (doc.chapter_assigned_date) {
+            const assignDate = doc.chapter_assigned_date.split(' ')[0];
+            hasRecentChapterChange = assignDate >= thirtyDaysAgo;
+        }
+        
+        // Priority indicators for new members and chapter changes
+        if (doc.status === 'Active') {
+            if (creationDate && creationDate >= sevenDaysAgo) {
+                return ['green', 'Very New Member (≤7 days)', "status,=,Active|creation,>=," + sevenDaysAgo];
+            } else if (creationDate && creationDate >= thirtyDaysAgo) {
+                return ['blue', 'New Member (≤30 days)', "status,=,Active|creation,>=," + thirtyDaysAgo];
+            } else if (hasRecentChapterChange) {
+                return ['orange', 'Recent Chapter Change', "chapter_assigned_date,>=," + thirtyDaysAgo];
+            }
+        }
         
         // Primary status based on member status field
         const status_indicators = {
@@ -207,7 +236,7 @@ frappe.listview_settings['Member'] = {
         });
         
         // Add fix for backend members showing as pending
-        if (frappe.user.has_role(['System Manager', 'Association Manager'])) {
+        if (frappe.user.has_role(['System Manager', 'Verenigingen Manager'])) {
             listview.page.add_menu_item(__('Fix Backend Member Status'), function() {
                 frappe.confirm(
                     __('This will fix backend-created members that are incorrectly showing as "Pending". Continue?'),
@@ -297,5 +326,102 @@ function add_status_filter_buttons(listview) {
             
             listview.refresh();
         });
+    });
+}
+
+function add_new_member_filter_buttons(listview) {
+    // Only add buttons once
+    if (listview.$new_member_filters_added) {
+        return;
+    }
+    listview.$new_member_filters_added = true;
+    
+    // Add quick filter buttons for new members
+    const thirtyDaysAgo = frappe.datetime.add_days(frappe.datetime.nowdate(), -30);
+    const sevenDaysAgo = frappe.datetime.add_days(frappe.datetime.nowdate(), -7);
+    
+    // Create filter button container
+    const $filter_buttons = $(`
+        <div class="new-member-filters" style="margin-bottom: 15px; padding: 10px; background: #f8f9fa; border-radius: 6px;">
+            <div class="row">
+                <div class="col-md-12">
+                    <label style="font-weight: bold; margin-right: 15px; color: #495057;">Quick Filters:</label>
+                    <button class="btn btn-sm btn-success" data-filter="new-7" style="margin-right: 8px;">
+                        <i class="fa fa-star"></i> Very New (7d)
+                    </button>
+                    <button class="btn btn-sm btn-primary" data-filter="new-30" style="margin-right: 8px;">
+                        <i class="fa fa-user-plus"></i> New (30d)
+                    </button>
+                    <button class="btn btn-sm btn-info" data-filter="chapter-changes" style="margin-right: 8px;">
+                        <i class="fa fa-exchange"></i> Chapter Changes
+                    </button>
+                    <button class="btn btn-sm btn-warning" data-filter="no-chapter" style="margin-right: 8px;">
+                        <i class="fa fa-question-circle"></i> No Chapter
+                    </button>
+                    <button class="btn btn-sm btn-secondary" data-filter="clear">
+                        <i class="fa fa-times"></i> Clear
+                    </button>
+                </div>
+            </div>
+        </div>
+    `);
+    
+    // Insert after the filter area
+    listview.$frappe_list.find('.filter-area').after($filter_buttons);
+    
+    // Bind click events
+    $filter_buttons.on('click', 'button', function() {
+        const filter = $(this).data('filter');
+        
+        listview.filter_area.clear();
+        
+        switch(filter) {
+            case 'new-7':
+                listview.filter_area.add([
+                    ["Member", "status", "=", "Active"],
+                    ["Member", "creation", ">=", sevenDaysAgo]
+                ]);
+                break;
+            case 'new-30':
+                listview.filter_area.add([
+                    ["Member", "status", "=", "Active"],
+                    ["Member", "creation", ">=", thirtyDaysAgo]
+                ]);
+                break;
+            case 'chapter-changes':
+                listview.filter_area.add([
+                    ["Member", "chapter_assigned_date", ">=", thirtyDaysAgo]
+                ]);
+                break;
+            case 'no-chapter':
+                listview.filter_area.add([
+                    ["Member", "primary_chapter", "is", "not set"]
+                ]);
+                break;
+            case 'clear':
+                // Clear all filters
+                break;
+        }
+        
+        // Highlight active button
+        $filter_buttons.find('button').removeClass('btn-outline-secondary');
+        if (filter !== 'clear') {
+            $(this).addClass('btn-outline-secondary');
+        }
+        
+        listview.refresh();
+    });
+    
+    // Add menu items for reports
+    listview.page.add_menu_item(__("📊 New Members Report"), function() {
+        frappe.set_route("query-report", "New Members");
+    });
+    
+    listview.page.add_menu_item(__("📊 Recent Chapter Changes Report"), function() {
+        frappe.set_route("query-report", "Recent Chapter Changes");
+    });
+    
+    listview.page.add_menu_item(__("📊 Members Without Chapter Report"), function() {
+        frappe.set_route("query-report", "Members Without Chapter");
     });
 }

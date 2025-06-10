@@ -99,6 +99,10 @@
   "volunteer_data_tab",
   "chapter_and_volunteer_activity_section",
   "primary_chapter",
+  "chapter_assigned_date",
+  "chapter_assigned_by",
+  "previous_chapter",
+  "chapter_change_reason",
   "volunteer_details_section",
   "volunteer_details_html"
  ],
@@ -276,6 +280,35 @@
    "fieldtype": "Link",
    "label": "Primary Chapter",
    "options": "Chapter"
+  },
+  {
+   "fieldname": "chapter_assigned_date",
+   "fieldtype": "Datetime",
+   "label": "Chapter Assigned Date",
+   "read_only": 1,
+   "description": "Date when member was assigned to current chapter"
+  },
+  {
+   "fieldname": "chapter_assigned_by",
+   "fieldtype": "Link",
+   "label": "Chapter Assigned By",
+   "options": "User",
+   "read_only": 1,
+   "description": "User who assigned member to current chapter"
+  },
+  {
+   "fieldname": "previous_chapter",
+   "fieldtype": "Link",
+   "label": "Previous Chapter",
+   "options": "Chapter",
+   "read_only": 1,
+   "description": "Member's previous chapter before current assignment"
+  },
+  {
+   "fieldname": "chapter_change_reason",
+   "fieldtype": "Small Text",
+   "label": "Chapter Change Reason",
+   "description": "Reason for chapter assignment/change"
   },
   {
    "default": "Board Only",
@@ -731,7 +764,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Association Manager",
+   "role": "Verenigingen Manager",
    "share": 1,
    "write": 1
   }

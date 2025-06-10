@@ -155,7 +155,7 @@ This implementation enhances the existing membership termination system with mis
 3. Use existing termination dialog
 4. System now handles team/user deactivation automatically
 
-### For System/Association Managers
+### For System/Verenigingen Managers
 - Full access to all termination functions
 - Can terminate any member
 - Can use both direct actions and workflow system

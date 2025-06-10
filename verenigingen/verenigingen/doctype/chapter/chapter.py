@@ -438,9 +438,9 @@ def validate_chapter_access(doc, method=None):
         
         if doc.name == settings.national_board_chapter:
             user_roles = frappe.get_roles()
-            if ("Association Manager" in user_roles and 
+            if ("Verenigingen Manager" in user_roles and 
                 "System Manager" not in user_roles):
-                frappe.throw(_("Association Managers cannot edit the National Board chapter. Please contact an administrator."))
+                frappe.throw(_("Verenigingen Managers cannot edit the National Board chapter. Please contact an administrator."))
                 
     except Exception as e:
         frappe.log_error(f"Error validating chapter access for {doc.name}: {str(e)}")
@@ -461,7 +461,7 @@ def get_chapter_permission_query_conditions(user=None):
         if not user:
             user = frappe.session.user
             
-        if "System Manager" in frappe.get_roles(user) or "Association Manager" in frappe.get_roles(user):
+        if "System Manager" in frappe.get_roles(user) or "Verenigingen Manager" in frappe.get_roles(user):
             return ""
             
         # Get chapters where user is a board member using Query Builder

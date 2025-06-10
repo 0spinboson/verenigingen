@@ -228,7 +228,7 @@ def get_user_chapter_filter():
     user = frappe.session.user
     
     # System managers and Association/Membership managers see all
-    admin_roles = ["System Manager", "Association Manager", "Membership Manager"]
+    admin_roles = ["System Manager", "Verenigingen Manager", "Membership Manager"]
     if any(role in frappe.get_roles(user) for role in admin_roles):
         return None  # No filter - see all
     

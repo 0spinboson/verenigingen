@@ -89,8 +89,52 @@ def can_suspend_member(member_name):
     """
     Check if current user can suspend/unsuspend a member
     """
-    from verenigingen.permissions import can_terminate_member
-    return can_terminate_member(member_name)
+    # Import the function using frappe's import system to handle any import issues
+    try:
+        # Use frappe.get_attr to import the function
+        can_terminate_member = frappe.get_attr("verenigingen.permissions.can_terminate_member")
+        # For suspension, we use the same permission logic as termination
+        # since suspension is essentially a temporary termination
+        return can_terminate_member(member_name)
+    except Exception as e:
+        frappe.log_error(f"Import error in can_suspend_member: {e}", "Suspension API Import Error")
+        # Fallback to basic permission check
+        return _can_suspend_member_fallback(member_name)
+
+def _can_suspend_member_fallback(member_name):
+    """
+    Fallback permission check for suspension if import fails
+    """
+    user = frappe.session.user
+    
+    # System managers and Association managers always can
+    admin_roles = ["System Manager", "Verenigingen Manager"]
+    user_roles = frappe.get_roles(user)
+    if any(role in user_roles for role in admin_roles):
+        return True
+    
+    # Get the member being suspended
+    try:
+        member_doc = frappe.get_doc("Member", member_name)
+    except Exception:
+        return False
+    
+    # Get the user making the request as a member
+    requesting_member = frappe.db.get_value("Member", {"user": user}, "name")
+    if not requesting_member:
+        return False
+    
+    # Check if user is a board member of the member's chapter
+    if member_doc.primary_chapter:
+        try:
+            chapter_doc = frappe.get_doc("Chapter", member_doc.primary_chapter)
+            # Simple check - if the function exists on the chapter
+            if hasattr(chapter_doc, 'user_has_board_access'):
+                return chapter_doc.user_has_board_access(requesting_member)
+        except Exception:
+            pass
+    
+    return False
 
 @frappe.whitelist()
 def get_suspension_preview(member_name):

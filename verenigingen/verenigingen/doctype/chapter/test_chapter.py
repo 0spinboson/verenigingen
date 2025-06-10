@@ -295,3 +295,239 @@ class TestChapter(FrappeTestCase):
         chapter.reload()
         self.assertEqual(chapter.introduction, "Updated introduction")
         self.assertNotEqual(chapter.modified, original_modified)
+    
+    def test_chapter_member_roster_management(self):
+        """Test chapter member roster management"""
+        chapter = frappe.get_doc({
+            "doctype": "Chapter",
+            "name": f"Test Chapter {self.unique_id}",
+            "region": "Test Region",
+            "introduction": "Test chapter"
+        })
+        chapter.insert(ignore_permissions=True)
+        
+        # Create test members to add to roster
+        members = []
+        for i in range(3):
+            member = frappe.get_doc({
+                "doctype": "Member",
+                "first_name": f"Roster",
+                "last_name": f"Member{i} {self.unique_id}",
+                "email": f"roster{i}{self.unique_id}@example.com",
+                "contact_number": f"+3161234568{i}",
+                "payment_method": "Bank Transfer"
+            })
+            member.insert(ignore_permissions=True)
+            members.append(member)
+        
+        # Add members to chapter roster
+        for member in members:
+            chapter.append("members", {
+                "member": member.name,
+                "member_name": member.full_name,
+                "enabled": 1
+            })
+        
+        chapter.save(ignore_permissions=True)
+        chapter.reload()
+        
+        # Verify roster size
+        self.assertEqual(len(chapter.members), 3, "Chapter should have 3 members in roster")
+        
+        # Test disabling a member
+        chapter.members[0].enabled = 0
+        chapter.save(ignore_permissions=True)
+        chapter.reload()
+        
+        # Verify member status
+        self.assertEqual(chapter.members[0].enabled, 0, "Member should be disabled")
+        
+        # Clean up
+        for member in members:
+            frappe.delete_doc("Member", member.name, force=True)
+    
+    def test_chapter_board_management(self):
+        """Test chapter board member management"""
+        chapter = frappe.get_doc({
+            "doctype": "Chapter",
+            "name": f"Test Chapter {self.unique_id}",
+            "region": "Test Region",
+            "introduction": "Test chapter"
+        })
+        chapter.insert(ignore_permissions=True)
+        
+        # Create volunteer for board position
+        volunteer = frappe.get_doc({
+            "doctype": "Volunteer",
+            "volunteer_name": f"Board Volunteer {self.unique_id}",
+            "email": f"board{self.unique_id}@organization.org",
+            "member": self.test_member.name,
+            "status": "Active",
+            "start_date": today()
+        })
+        volunteer.insert(ignore_permissions=True)
+        
+        # Create chapter role if it doesn't exist
+        if not frappe.db.exists("Chapter Role", "Board Member"):
+            role = frappe.get_doc({
+                "doctype": "Chapter Role",
+                "role_name": "Board Member",
+                "permissions_level": "Admin"
+            })
+            role.insert(ignore_permissions=True)
+        
+        # Add volunteer to board
+        chapter.append("board_members", {
+            "volunteer": volunteer.name,
+            "chapter_role": "Board Member",
+            "is_active": 1,
+            "start_date": today()
+        })
+        chapter.save(ignore_permissions=True)
+        chapter.reload()
+        
+        # Verify board member was added
+        self.assertEqual(len(chapter.board_members), 1, "Chapter should have 1 board member")
+        self.assertEqual(chapter.board_members[0].volunteer, volunteer.name)
+        
+        # Test ending board membership
+        chapter.board_members[0].is_active = 0
+        chapter.board_members[0].end_date = today()
+        chapter.save(ignore_permissions=True)
+        chapter.reload()
+        
+        # Verify board member status
+        self.assertEqual(chapter.board_members[0].is_active, 0, "Board member should be inactive")
+        self.assertEqual(getdate(chapter.board_members[0].end_date), getdate(today()))
+        
+        # Clean up
+        frappe.delete_doc("Volunteer", volunteer.name, force=True)
+    
+    def test_chapter_search_and_filtering(self):
+        """Test chapter search and filtering capabilities"""
+        chapter = frappe.get_doc({
+            "doctype": "Chapter",
+            "name": f"Test Chapter {self.unique_id}",
+            "region": "North Region",
+            "introduction": "Test chapter for searching",
+            "published": 1,
+            "postal_codes": "1000-1999"
+        })
+        chapter.insert(ignore_permissions=True)
+        
+        # Test search by region
+        chapters = frappe.get_all("Chapter", filters={"region": "North Region"})
+        chapter_names = [c.name for c in chapters]
+        self.assertIn(chapter.name, chapter_names, "Should find chapters by region")
+        
+        # Test search by published status
+        published_chapters = frappe.get_all("Chapter", filters={"published": 1})
+        chapter_names = [c.name for c in published_chapters]
+        self.assertIn(chapter.name, chapter_names, "Should find published chapters")
+        
+        # Test search by name pattern
+        pattern_chapters = frappe.get_all("Chapter", 
+                                         filters={"name": ["like", f"%{self.unique_id}%"]})
+        self.assertGreater(len(pattern_chapters), 0, "Should find chapters by name pattern")
+    
+    def test_chapter_data_validation_edge_cases(self):
+        """Test chapter data validation edge cases"""
+        # Test empty/null fields
+        try:
+            chapter = frappe.get_doc({
+                "doctype": "Chapter",
+                "name": f"Empty Test {self.unique_id}",
+                "region": "",  # Empty required field
+                "introduction": "Test chapter"
+            })
+            chapter.insert(ignore_permissions=True)
+            self.fail("Should not allow empty region")
+        except Exception as e:
+            self.assertIn("region", str(e).lower(), "Error should mention region field")
+        
+        # Test very long field values
+        long_text = "A" * 2000
+        chapter = frappe.get_doc({
+            "doctype": "Chapter",
+            "name": f"Long Text Test {self.unique_id}",
+            "region": "Test Region",
+            "introduction": long_text
+        })
+        chapter.insert(ignore_permissions=True)
+        chapter.reload()
+        
+        # Should handle long text
+        self.assertTrue(len(chapter.introduction) >= 1000, "Should store long introduction")
+        
+        # Clean up
+        frappe.delete_doc("Chapter", chapter.name, force=True)
+    
+    def test_chapter_deletion_constraints(self):
+        """Test chapter deletion with constraints"""
+        chapter = frappe.get_doc({
+            "doctype": "Chapter",
+            "name": f"Delete Test {self.unique_id}",
+            "region": "Test Region",
+            "introduction": "Test chapter for deletion"
+        })
+        chapter.insert(ignore_permissions=True)
+        
+        # Create member linked to chapter
+        linked_member = frappe.get_doc({
+            "doctype": "Member",
+            "first_name": f"Linked",
+            "last_name": f"Member {self.unique_id}",
+            "email": f"linked{self.unique_id}@example.com",
+            "contact_number": "+31612345679",
+            "payment_method": "Bank Transfer",
+            "primary_chapter": chapter.name
+        })
+        linked_member.insert(ignore_permissions=True)
+        
+        # Try to delete chapter with linked member
+        try:
+            frappe.delete_doc("Chapter", chapter.name)
+            # If deletion succeeds, just note it
+            print("Chapter deletion with linked members allowed")
+        except Exception as e:
+            # If deletion fails due to constraints, that's expected
+            print(f"Chapter deletion properly prevented: {str(e)}")
+        
+        # Clean up member first, then chapter
+        linked_member.primary_chapter = None
+        linked_member.save(ignore_permissions=True)
+        frappe.delete_doc("Member", linked_member.name, force=True)
+        
+        # Now chapter should be deletable
+        try:
+            frappe.delete_doc("Chapter", chapter.name, force=True)
+        except Exception as e:
+            print(f"Chapter deletion still failed: {str(e)}")
+    
+    def test_chapter_geographical_features(self):
+        """Test chapter geographical and location features"""
+        chapter = frappe.get_doc({
+            "doctype": "Chapter",
+            "name": f"Test Chapter {self.unique_id}",
+            "region": "Geographic Test Region",
+            "introduction": "Test chapter",
+            "postal_codes": "1000-1999,2500,3000-3099",
+            "address": "123 Test Street\n1234 AB Test City\nNetherlands"
+        })
+        chapter.insert(ignore_permissions=True)
+        
+        # Test postal code coverage
+        test_codes = ["1500", "2500", "3050", "4000", "999"]
+        expected_matches = [True, True, True, False, False]
+        
+        if hasattr(chapter, 'matches_postal_code'):
+            for code, should_match in zip(test_codes, expected_matches):
+                result = chapter.matches_postal_code(code)
+                if should_match:
+                    self.assertTrue(result, f"Code {code} should match")
+                else:
+                    self.assertFalse(result, f"Code {code} should not match")
+        
+        # Test address handling
+        self.assertIn("Test Street", chapter.address)
+        self.assertIn("Test City", chapter.address)

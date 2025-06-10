@@ -27,13 +27,14 @@ class TestSuspensionAPI(unittest.TestCase):
         self.test_suspension_reason = "API test suspension"
         self.test_unsuspension_reason = "API test unsuspension"
     
-    @patch('verenigingen.permissions.can_terminate_member')
+    @patch('frappe.get_attr')
     @patch('verenigingen.utils.termination_integration.suspend_member_safe')
     @patch('frappe.msgprint')
-    def test_suspend_member_api_success(self, mock_msgprint, mock_suspend_safe, mock_can_terminate):
+    def test_suspend_member_api_success(self, mock_msgprint, mock_suspend_safe, mock_get_attr):
         """Test successful suspension via API"""
         
-        # Mock permission check
+        # Mock the imported permission function
+        mock_can_terminate = mock_get_attr.return_value
         mock_can_terminate.return_value = True
         
         # Mock successful suspension
@@ -50,7 +51,8 @@ class TestSuspensionAPI(unittest.TestCase):
             suspend_teams=True
         )
         
-        # Verify permission check
+        # Verify permission import and check
+        mock_get_attr.assert_called_with("verenigingen.permissions.can_terminate_member")
         mock_can_terminate.assert_called_once_with(self.test_member_name)
         
         # Verify suspension call
@@ -70,12 +72,13 @@ class TestSuspensionAPI(unittest.TestCase):
         # Verify return value
         self.assertTrue(result["success"])
     
-    @patch('verenigingen.permissions.can_terminate_member')
+    @patch('frappe.get_attr')
     @patch('frappe.throw')
-    def test_suspend_member_api_no_permission(self, mock_throw, mock_can_terminate):
+    def test_suspend_member_api_no_permission(self, mock_throw, mock_get_attr):
         """Test suspension API with no permission"""
         
-        # Mock permission denial
+        # Mock the imported permission function to deny permission
+        mock_can_terminate = mock_get_attr.return_value
         mock_can_terminate.return_value = False
         
         # Make mock throw act like real frappe.throw by raising an exception
@@ -90,13 +93,14 @@ class TestSuspensionAPI(unittest.TestCase):
         args = mock_throw.call_args[0]
         self.assertIn("don't have permission", args[0])
     
-    @patch('verenigingen.permissions.can_terminate_member')
+    @patch('frappe.get_attr')
     @patch('verenigingen.utils.termination_integration.suspend_member_safe')
     @patch('frappe.throw')
-    def test_suspend_member_api_failure(self, mock_throw, mock_suspend_safe, mock_can_terminate):
+    def test_suspend_member_api_failure(self, mock_throw, mock_suspend_safe, mock_get_attr):
         """Test suspension API failure handling"""
         
-        # Mock permission check
+        # Mock the imported permission function to allow permission
+        mock_can_terminate = mock_get_attr.return_value
         mock_can_terminate.return_value = True
         
         # Mock suspension failure
@@ -114,13 +118,14 @@ class TestSuspensionAPI(unittest.TestCase):
         self.assertIn("Failed to suspend member", args[0])
         self.assertIn("Database error", args[0])
     
-    @patch('verenigingen.permissions.can_terminate_member')
+    @patch('frappe.get_attr')
     @patch('verenigingen.utils.termination_integration.unsuspend_member_safe')
     @patch('frappe.msgprint')
-    def test_unsuspend_member_api_success(self, mock_msgprint, mock_unsuspend_safe, mock_can_terminate):
+    def test_unsuspend_member_api_success(self, mock_msgprint, mock_unsuspend_safe, mock_get_attr):
         """Test successful unsuspension via API"""
         
-        # Mock permission check
+        # Mock the imported permission function to allow permission
+        mock_can_terminate = mock_get_attr.return_value
         mock_can_terminate.return_value = True
         
         # Mock successful unsuspension
@@ -132,7 +137,8 @@ class TestSuspensionAPI(unittest.TestCase):
         # Call API
         result = unsuspend_member(self.test_member_name, self.test_unsuspension_reason)
         
-        # Verify permission check
+        # Verify permission import and check
+        mock_get_attr.assert_called_with("verenigingen.permissions.can_terminate_member")
         mock_can_terminate.assert_called_once_with(self.test_member_name)
         
         # Verify unsuspension call
@@ -172,21 +178,138 @@ class TestSuspensionAPI(unittest.TestCase):
         # Verify return value
         self.assertEqual(result, expected_status)
     
-    @patch('verenigingen.permissions.can_terminate_member')
-    def test_can_suspend_member_api(self, mock_can_terminate):
-        """Test can suspend member API"""
+    @patch('frappe.get_attr')
+    def test_can_suspend_member_api_success(self, mock_get_attr):
+        """Test can suspend member API with successful import"""
         
-        # Mock permission check
+        # Mock the imported function
+        mock_can_terminate = mock_get_attr.return_value
         mock_can_terminate.return_value = True
         
         # Call API
         result = can_suspend_member(self.test_member_name)
         
-        # Verify call
+        # Verify frappe.get_attr was called with correct path
+        mock_get_attr.assert_called_once_with("verenigingen.permissions.can_terminate_member")
+        
+        # Verify the imported function was called
         mock_can_terminate.assert_called_once_with(self.test_member_name)
         
         # Verify return value
         self.assertTrue(result)
+    
+    @patch('frappe.get_attr')
+    @patch('frappe.log_error')
+    @patch('verenigingen.api.suspension_api._can_suspend_member_fallback')
+    def test_can_suspend_member_api_import_fallback(self, mock_fallback, mock_log_error, mock_get_attr):
+        """Test can suspend member API with import error fallback"""
+        
+        # Mock import error
+        mock_get_attr.side_effect = ImportError("Module not found")
+        
+        # Mock fallback function
+        mock_fallback.return_value = True
+        
+        # Call API
+        result = can_suspend_member(self.test_member_name)
+        
+        # Verify error was logged
+        mock_log_error.assert_called_once()
+        
+        # Verify fallback was called
+        mock_fallback.assert_called_once_with(self.test_member_name)
+        
+        # Verify return value from fallback
+        self.assertTrue(result)
+    
+    @patch('frappe.get_roles')
+    @patch('frappe.session')
+    def test_can_suspend_member_fallback_admin(self, mock_session, mock_get_roles):
+        """Test fallback permission check for admin users"""
+        
+        # Import the fallback function directly
+        from verenigingen.api.suspension_api import _can_suspend_member_fallback
+        
+        # Mock session user
+        mock_session.user = "admin@example.com"
+        
+        # Mock admin roles
+        mock_get_roles.return_value = ["System Manager", "User"]
+        
+        # Call fallback function
+        result = _can_suspend_member_fallback(self.test_member_name)
+        
+        # Verify admin access granted
+        self.assertTrue(result)
+        mock_get_roles.assert_called_once_with("admin@example.com")
+    
+    @patch('frappe.get_roles')
+    @patch('frappe.session')
+    @patch('frappe.get_doc')
+    @patch('frappe.db.get_value')
+    def test_can_suspend_member_fallback_board_member(self, mock_get_value, mock_get_doc, mock_session, mock_get_roles):
+        """Test fallback permission check for board members"""
+        
+        # Import the fallback function directly
+        from verenigingen.api.suspension_api import _can_suspend_member_fallback
+        
+        # Mock session user
+        mock_session.user = "board@example.com"
+        
+        # Mock non-admin roles
+        mock_get_roles.return_value = ["User"]
+        
+        # Mock requesting member lookup
+        mock_get_value.return_value = "REQUESTING-MEMBER-001"
+        
+        # Mock target member
+        mock_member = MagicMock()
+        mock_member.primary_chapter = "TEST-CHAPTER"
+        
+        # Mock chapter with board access
+        mock_chapter = MagicMock()
+        mock_chapter.user_has_board_access.return_value = True
+        
+        # Configure get_doc to return appropriate objects
+        def get_doc_side_effect(doctype, name):
+            if doctype == "Member":
+                return mock_member
+            elif doctype == "Chapter":
+                return mock_chapter
+            return MagicMock()
+        
+        mock_get_doc.side_effect = get_doc_side_effect
+        
+        # Call fallback function
+        result = _can_suspend_member_fallback(self.test_member_name)
+        
+        # Verify board member access granted
+        self.assertTrue(result)
+        mock_chapter.user_has_board_access.assert_called_once_with("REQUESTING-MEMBER-001")
+    
+    @patch('frappe.get_roles')
+    @patch('frappe.session')
+    @patch('frappe.db.get_value')
+    def test_can_suspend_member_fallback_no_access(self, mock_get_value, mock_session, mock_get_roles):
+        """Test fallback permission check denies access for regular users"""
+        
+        # Import the fallback function directly
+        from verenigingen.api.suspension_api import _can_suspend_member_fallback
+        
+        # Mock session user
+        mock_session.user = "user@example.com"
+        
+        # Mock non-admin roles
+        mock_get_roles.return_value = ["User"]
+        
+        # Mock no requesting member found
+        mock_get_value.return_value = None
+        
+        # Call fallback function
+        result = _can_suspend_member_fallback(self.test_member_name)
+        
+        # Verify access denied
+        self.assertFalse(result)
     
     @patch('frappe.get_doc')
     @patch('frappe.db.get_value')
@@ -249,13 +372,14 @@ class TestSuspensionAPI(unittest.TestCase):
         self.assertEqual(result["error"], "Database error")
         self.assertFalse(result["can_suspend"])
     
-    @patch('verenigingen.permissions.can_terminate_member')
+    @patch('frappe.get_attr')
     @patch('verenigingen.utils.termination_integration.suspend_member_safe')
     @patch('frappe.msgprint')
-    def test_bulk_suspend_members_success(self, mock_msgprint, mock_suspend_safe, mock_can_terminate):
+    def test_bulk_suspend_members_success(self, mock_msgprint, mock_suspend_safe, mock_get_attr):
         """Test bulk suspend members API success"""
         
-        # Mock permission checks
+        # Mock the imported permission function to allow permission
+        mock_can_terminate = mock_get_attr.return_value
         mock_can_terminate.return_value = True
         
         # Mock successful suspensions
@@ -290,12 +414,13 @@ class TestSuspensionAPI(unittest.TestCase):
         args = mock_msgprint.call_args[0]
         self.assertIn("2 successful, 0 failed", args[0])
     
-    @patch('verenigingen.permissions.can_terminate_member')
+    @patch('frappe.get_attr')
     @patch('frappe.msgprint')
-    def test_bulk_suspend_members_no_permission(self, mock_msgprint, mock_can_terminate):
+    def test_bulk_suspend_members_no_permission(self, mock_msgprint, mock_get_attr):
         """Test bulk suspend members with no permission"""
         
-        # Mock permission denial
+        # Mock the imported permission function to deny permission
+        mock_can_terminate = mock_get_attr.return_value
         mock_can_terminate.return_value = False
         
         # Prepare member list
@@ -321,13 +446,14 @@ class TestSuspensionAPI(unittest.TestCase):
         args = mock_msgprint.call_args[0]
         self.assertIn("No members were suspended", args[0])
     
-    @patch('verenigingen.permissions.can_terminate_member')
+    @patch('frappe.get_attr')
     @patch('verenigingen.utils.termination_integration.suspend_member_safe')
     @patch('frappe.msgprint')
-    def test_bulk_suspend_members_mixed_results(self, mock_msgprint, mock_suspend_safe, mock_can_terminate):
+    def test_bulk_suspend_members_mixed_results(self, mock_msgprint, mock_suspend_safe, mock_get_attr):
         """Test bulk suspend members with mixed success/failure"""
         
-        # Mock permission checks - first succeeds, second fails
+        # Mock the imported permission function - first succeeds, second fails
+        mock_can_terminate = mock_get_attr.return_value
         mock_can_terminate.side_effect = [True, False]
         
         # Mock successful suspension for first member

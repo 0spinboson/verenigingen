@@ -7,15 +7,16 @@ class ChapterMixin:
     
     def handle_chapter_assignment(self):
         """Handle automatic chapter assignment when primary_chapter changes"""
-        if not self.primary_chapter or self.is_new():
-            return
-            
         if self.has_value_changed('primary_chapter'):
             old_chapter = self.get_doc_before_save().primary_chapter if self.get_doc_before_save() else None
             new_chapter = self.primary_chapter
             
             frappe.logger().info(f"Member {self.name} chapter changing from {old_chapter} to {new_chapter}")
             
+            # Update tracking fields
+            self.update_chapter_tracking_fields(old_chapter, new_chapter)
+            
+            # Handle chapter member list updates
             if old_chapter:
                 try:
                     old_chapter_doc = frappe.get_doc("Chapter", old_chapter)
@@ -31,6 +32,30 @@ class ChapterMixin:
                     frappe.logger().info(f"Added {self.name} to new chapter {new_chapter}, result: {added}")
                 except Exception as e:
                     frappe.logger().error(f"Error adding member to new chapter: {str(e)}")
+        
+        # For new members, set initial chapter assignment tracking
+        elif self.is_new() and self.primary_chapter:
+            self.update_chapter_tracking_fields(None, self.primary_chapter)
+    
+    def update_chapter_tracking_fields(self, old_chapter, new_chapter):
+        """Update chapter tracking fields when chapter changes"""
+        from frappe.utils import now
+        
+        # Set previous chapter
+        if old_chapter:
+            self.previous_chapter = old_chapter
+        
+        # Set assignment tracking fields
+        if new_chapter:
+            self.chapter_assigned_date = now()
+            self.chapter_assigned_by = frappe.session.user
+            
+            # Set a default reason if not provided
+            if not self.chapter_change_reason:
+                if old_chapter:
+                    self.chapter_change_reason = f"Changed from {old_chapter} to {new_chapter}"
+                else:
+                    self.chapter_change_reason = f"Initial assignment to {new_chapter}"
     
     def get_chapters(self):
         """Get all chapters this member belongs to"""

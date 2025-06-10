@@ -104,7 +104,7 @@ function display_chapter_suggestions(chapters, frm, dialog) {
                 <div class="card-body">
                     <h6 class="card-title">${chapter.name}</h6>
                     <p class="card-text">
-                        <strong>${__('Location')}:</strong> ${chapter.city || chapter.state || 'Unknown'}<br>
+                        <strong>${__('Location')}:</strong> ${chapter.region || 'Unknown'}<br>
                         <strong>${__('Match Score')}:</strong> ${chapter.match_score || 'N/A'}%<br>
                         <strong>${__('Distance')}:</strong> ${chapter.distance || 'Unknown'}
                     </p>

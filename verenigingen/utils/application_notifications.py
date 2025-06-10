@@ -249,13 +249,13 @@ def get_application_reviewers(member):
         except Exception as e:
             frappe.log_error(f"Error getting chapter reviewers: {str(e)}")
     
-    # 2. Association Managers
+    # 2. Verenigingen Managers
     try:
         managers = frappe.db.sql("""
             SELECT u.email
             FROM `tabUser` u
             JOIN `tabHas Role` r ON r.parent = u.name
-            WHERE r.role = 'Association Manager'
+            WHERE r.role = 'Verenigingen Manager'
             AND u.enabled = 1
         """, as_dict=True)
         

@@ -501,3 +501,165 @@ class TestVolunteer(VereningingenTestCase):
         if hasattr(volunteer, 'languages_spoken') and volunteer.languages_spoken:
             for lang in languages:
                 self.assertIn(lang, volunteer.languages_spoken)
+    
+    def test_volunteer_data_integrity(self):
+        """Test volunteer data integrity and consistency"""
+        volunteer = self.create_test_volunteer()
+        
+        # Test email uniqueness constraint
+        with self.assertRaises(Exception):
+            duplicate_volunteer = frappe.get_doc({
+                "doctype": "Volunteer",
+                "volunteer_name": f"Duplicate Test {random.randint(1000, 9999)}",
+                "email": volunteer.email,  # Same email
+                "member": self.test_member.name,
+                "status": "Active",
+                "start_date": today()
+            })
+            duplicate_volunteer.insert(ignore_permissions=True)
+    
+    def test_volunteer_aggregated_assignments(self):
+        """Test volunteer aggregated assignments functionality"""
+        volunteer = self.create_test_volunteer()
+        
+        # Create multiple types of assignments
+        activity = self.create_test_activity(volunteer)
+        
+        # Add manual assignment history entry
+        volunteer.append("assignment_history", {
+            "assignment_type": "Committee",
+            "reference_doctype": "Committee",
+            "reference_name": "TEST-COMMITTEE",
+            "role": "Committee Member",
+            "start_date": today(),
+            "status": "Active",
+            "estimated_hours": 10
+        })
+        volunteer.save(ignore_permissions=True)
+        volunteer.reload()
+        
+        # Test aggregated assignments if method exists
+        if hasattr(volunteer, 'get_aggregated_assignments'):
+            assignments = volunteer.get_aggregated_assignments()
+            self.assertIsInstance(assignments, list, "Should return list of assignments")
+            
+            # Should include both activity and manual assignment
+            assignment_types = [a.get('assignment_type') for a in assignments]
+            self.assertIn("Project", assignment_types, "Should include activity assignment")
+    
+    def test_volunteer_workflow_edge_cases(self):
+        """Test volunteer workflow and state management edge cases"""
+        volunteer = self.create_test_volunteer(status="New")
+        
+        # Test status auto-update when adding activities
+        activity = self.create_test_activity(volunteer)
+        
+        # Manually trigger status update if method exists
+        if hasattr(volunteer, 'update_status'):
+            volunteer.update_status()
+            volunteer.reload()
+            # Status might change to Active when assignments exist
+        
+        # Test status consistency across assignments
+        for status in ["Active", "Inactive", "On Leave"]:
+            volunteer.status = status
+            volunteer.save(ignore_permissions=True)
+            volunteer.reload()
+            self.assertEqual(volunteer.status, status, f"Status should be {status}")
+    
+    def test_volunteer_bulk_operations(self):
+        """Test bulk operations on volunteer data"""
+        volunteers = []
+        
+        # Create multiple volunteers for bulk testing
+        for i in range(5):
+            member = self.create_test_member()
+            self._docs_to_delete.append(("Member", member.name))
+            
+            volunteer = frappe.get_doc({
+                "doctype": "Volunteer",
+                "volunteer_name": f"Bulk Test Volunteer {i}",
+                "email": f"bulk.test{i}.{random.randint(1000, 9999)}@example.org",
+                "member": member.name,
+                "status": "Active",
+                "start_date": today()
+            })
+            volunteer.insert(ignore_permissions=True)
+            volunteers.append(volunteer)
+            self._docs_to_delete.append(("Volunteer", volunteer.name))
+        
+        # Test bulk status update
+        for volunteer in volunteers:
+            volunteer.status = "Inactive"
+            volunteer.save(ignore_permissions=True)
+        
+        # Verify bulk update
+        for volunteer in volunteers:
+            volunteer.reload()
+            self.assertEqual(volunteer.status, "Inactive", "Bulk status update should work")
+    
+    def test_volunteer_activity_lifecycle(self):
+        """Test complete volunteer activity lifecycle"""
+        volunteer = self.create_test_volunteer()
+        
+        # Create activity
+        activity = self.create_test_activity(volunteer)
+        self.assertEqual(activity.status, "Active", "Activity should start as Active")
+        
+        # Update activity
+        activity.description = "Updated activity description"
+        activity.estimated_hours = 50
+        activity.save(ignore_permissions=True)
+        activity.reload()
+        self.assertEqual(activity.description, "Updated activity description")
+        
+        # Pause activity
+        activity.status = "Paused"
+        activity.save(ignore_permissions=True)
+        activity.reload()
+        self.assertEqual(activity.status, "Paused")
+        
+        # Resume activity
+        activity.status = "Active"
+        activity.save(ignore_permissions=True)
+        activity.reload()
+        self.assertEqual(activity.status, "Active")
+        
+        # Complete activity
+        activity.status = "Completed"
+        activity.end_date = today()
+        activity.actual_hours = 45
+        activity.save(ignore_permissions=True)
+        activity.reload()
+        self.assertEqual(activity.status, "Completed")
+        self.assertEqual(getdate(activity.end_date), getdate(today()))
+    
+    def test_volunteer_search_and_filtering(self):
+        """Test volunteer search and filtering capabilities"""
+        volunteer = self.create_test_volunteer()
+        
+        # Add distinguishing characteristics
+        volunteer.append("skills_and_qualifications", {
+            "skill_category": "Technical",
+            "volunteer_skill": "Unique Search Skill",
+            "proficiency_level": "4 - Advanced"
+        })
+        volunteer.commitment_level = "Weekly"
+        volunteer.experience_level = "Experienced"
+        volunteer.save(ignore_permissions=True)
+        
+        # Test basic search by name
+        volunteers = frappe.get_all("Volunteer", 
+                                   filters={"volunteer_name": ["like", f"%{self.test_id}%"]})
+        self.assertGreater(len(volunteers), 0, "Should find volunteers by name pattern")
+        
+        # Test search by status
+        active_volunteers = frappe.get_all("Volunteer", 
+                                          filters={"status": "Active"})
+        self.assertGreater(len(active_volunteers), 0, "Should find active volunteers")
+        
+        # Test search by commitment level
+        weekly_volunteers = frappe.get_all("Volunteer", 
+                                          filters={"commitment_level": "Weekly"})
+        volunteer_names = [v.name for v in weekly_volunteers]
+        self.assertIn(volunteer.name, volunteer_names, "Should find volunteers by commitment level")

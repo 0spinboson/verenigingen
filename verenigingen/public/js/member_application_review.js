@@ -45,7 +45,7 @@ frappe.ui.form.on('Member', {
 verenigingen.member_review = {
     setup_review_section: function(frm) {
         // Check user permissions
-        if (!frappe.user.has_role(['Association Manager', 'Membership Manager']) && 
+        if (!frappe.user.has_role(['Verenigingen Manager', 'Membership Manager']) && 
             !this.is_chapter_reviewer(frm)) {
             return;
         }

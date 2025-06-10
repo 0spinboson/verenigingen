@@ -11,6 +11,9 @@ app_color = "blue"
 app_email = "foppe@veganisme.org"
 app_license = "AGPL-3"
 
+# Required apps - Frappe will ensure these are installed before this app
+required_apps = ["erpnext", "payments"]
+
 # Includes in <head>
 # ------------------
 on_app_init = ["verenigingen.subscription_override.setup_subscription_override"]
@@ -177,7 +180,7 @@ fixtures = [
         "doctype": "Role",
         "filters": [
             ["name", "in", [
-                "Association Manager",
+                "Verenigingen Manager",
                 "Governance Auditor",
                 "Chapter Board Member",
                 "Member Portal User"

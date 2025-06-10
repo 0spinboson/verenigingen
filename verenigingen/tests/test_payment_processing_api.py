@@ -7,7 +7,9 @@ from verenigingen.api.payment_processing import (
     export_overdue_payments,
     execute_bulk_payment_action,
     send_payment_reminder_email,
-    generate_payment_reminder_html
+    generate_payment_reminder_html,
+    create_application_invoice,
+    get_or_create_customer
 )
 
 class TestPaymentProcessingAPI(unittest.TestCase):
@@ -390,6 +392,96 @@ class TestPaymentProcessingEmailTemplates(unittest.TestCase):
         self.assertIn('URGENT', subjects['Urgent Notice'])
         self.assertIn('FINAL NOTICE', subjects['Final Notice'])
         self.assertIn('Payment Reminder', subjects['Unknown'])  # Fallback
+
+    def test_create_application_invoice_function_exists(self):
+        """Test that create_application_invoice function is importable and callable"""
+        # This test verifies the import error fix
+        
+        # Function should be callable
+        self.assertTrue(callable(create_application_invoice))
+        
+        # Function should have proper docstring
+        self.assertIn('application', create_application_invoice.__doc__.lower())
+        
+        print("✅ create_application_invoice function imported successfully")
+
+    def test_get_or_create_customer_function_exists(self):
+        """Test that get_or_create_customer function is importable and callable"""
+        # This test verifies the import error fix
+        
+        # Function should be callable
+        self.assertTrue(callable(get_or_create_customer))
+        
+        # Function should have proper docstring
+        self.assertIn('customer', get_or_create_customer.__doc__.lower())
+        
+        print("✅ get_or_create_customer function imported successfully")
+
+    @patch('verenigingen.utils.application_payments.create_membership_invoice_with_amount')
+    def test_create_application_invoice_delegates_correctly(self, mock_create_invoice):
+        """Test that create_application_invoice properly delegates to application_payments module"""
+        from unittest.mock import MagicMock
+        
+        # Mock return value
+        mock_invoice = MagicMock()
+        mock_create_invoice.return_value = mock_invoice
+        
+        # Mock inputs
+        mock_member = MagicMock()
+        mock_membership = MagicMock()
+        mock_membership.membership_type = "Test Type"
+        mock_membership.uses_custom_amount = True
+        mock_membership.custom_amount = 75.0
+        
+        # Mock membership type
+        with patch('frappe.get_doc') as mock_get_doc:
+            mock_membership_type = MagicMock()
+            mock_membership_type.amount = 50.0
+            mock_get_doc.return_value = mock_membership_type
+            
+            # Call function
+            result = create_application_invoice(mock_member, mock_membership)
+            
+            # Verify delegation
+            mock_create_invoice.assert_called_once_with(mock_member, mock_membership, 75.0)
+            self.assertEqual(result, mock_invoice)
+            
+        print("✅ create_application_invoice delegates correctly to application_payments module")
+
+    @patch('verenigingen.utils.application_payments.create_customer_for_member')
+    def test_get_or_create_customer_delegates_correctly(self, mock_create_customer):
+        """Test that get_or_create_customer properly delegates to application_payments module"""
+        from unittest.mock import MagicMock
+        
+        # Test case 1: Member already has customer
+        mock_member = MagicMock()
+        mock_member.customer = "CUST-001"
+        
+        with patch('frappe.get_doc') as mock_get_doc:
+            mock_customer = MagicMock()
+            mock_get_doc.return_value = mock_customer
+            
+            result = get_or_create_customer(mock_member)
+            
+            # Should return existing customer
+            mock_get_doc.assert_called_once_with("Customer", "CUST-001")
+            self.assertEqual(result, mock_customer)
+            mock_create_customer.assert_not_called()
+        
+        # Test case 2: Member doesn't have customer
+        mock_member.customer = None
+        mock_new_customer = MagicMock()
+        mock_new_customer.name = "CUST-002"
+        mock_create_customer.return_value = mock_new_customer
+        
+        result = get_or_create_customer(mock_member)
+        
+        # Should create new customer and update member
+        mock_create_customer.assert_called_once_with(mock_member)
+        mock_member.db_set.assert_called_once_with("customer", "CUST-002")
+        self.assertEqual(result, mock_new_customer)
+        
+        print("✅ get_or_create_customer delegates correctly to application_payments module")
 
 if __name__ == '__main__':
     unittest.main()

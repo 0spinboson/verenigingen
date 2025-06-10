@@ -231,23 +231,37 @@ class MembershipApplication {
             }
         }
         
-        // Load chapters if available
+        // Load chapters - always try to load chapters
         const chapters = data.chapters || this.state.get('chapters');
-        if (chapters && chapters.length > 0) {
-            const select = $('#selected_chapter');
-            if (select.length && select.children().length <= 1) {
-                select.empty().append('<option value="">Select a chapter...</option>');
-                
-                chapters.forEach(chapter => {
-                    const displayText = chapter.region ? `${chapter.name} - ${chapter.region}` : chapter.name;
-                    select.append(`<option value="${chapter.name}">${displayText}</option>`);
-                });
-                
-                // Show chapter selection section if chapters are available
-                if (chapters.length > 0) {
-                    $('#chapter-selection').show();
+        const select = $('#selected_chapter');
+        
+        if (select.length) {
+            // Always populate chapter dropdown if chapters exist
+            if (chapters && chapters.length > 0) {
+                // Only rebuild if not already populated
+                if (select.children().length <= 1) {
+                    select.empty().append('<option value="">Select a chapter...</option>');
+                    
+                    chapters.forEach(chapter => {
+                        let displayText = chapter.name;
+                        let locationInfo = [];
+                        
+                        if (chapter.region) locationInfo.push(chapter.region);
+                        
+                        if (locationInfo.length > 0) {
+                            displayText += ` (${locationInfo.join(', ')})`;
+                        }
+                        
+                        select.append(`<option value="${chapter.name}">${displayText}</option>`);
+                    });
                 }
+            } else {
+                // No chapters available - show message
+                select.empty().append('<option value="">No chapters available</option>');
             }
+            
+            // Chapter selection is always visible in the HTML now
+            // No need to show/hide
         }
         
         // Load membership types
@@ -613,7 +627,10 @@ class MembershipApplication {
             confirm_accuracy: $('#confirm_accuracy').is(':checked'),
             
             // Collect volunteer interests
-            volunteer_interests: this.getSelectedVolunteerInterests()
+            volunteer_interests: this.getSelectedVolunteerInterests(),
+            
+            // Collect volunteer skills
+            volunteer_skills: this.getVolunteerSkills()
         };
     }
     
@@ -623,6 +640,22 @@ class MembershipApplication {
             interests.push($(this).val());
         });
         return interests;
+    }
+    
+    getVolunteerSkills() {
+        const skills = [];
+        $('.skill-row').each(function() {
+            const skillName = $(this).find('input[name="skill_name[]"]').val();
+            const skillLevel = $(this).find('select[name="skill_level[]"]').val();
+            
+            if (skillName && skillName.trim() && skillLevel) {
+                skills.push({
+                    skill_name: skillName.trim(),
+                    skill_level: skillLevel
+                });
+            }
+        });
+        return skills;
     }
     
     // Legacy method for compatibility
@@ -1041,6 +1074,55 @@ class MembershipApplication {
         $('#interested_in_volunteering').off('change').on('change', function() {
             $('#volunteer-details').toggle($(this).is(':checked'));
         });
+        
+        // Set up volunteer skill add button
+        this.setupVolunteerSkills();
+    }
+    
+    setupVolunteerSkills() {
+        // Add event handler for the add skill button
+        $(document).off('click', '.add-skill').on('click', '.add-skill', (e) => {
+            e.preventDefault();
+            this.addSkillRow();
+        });
+        
+        // Add event handler for remove skill buttons
+        $(document).off('click', '.remove-skill').on('click', '.remove-skill', (e) => {
+            e.preventDefault();
+            $(e.target).closest('.skill-row').remove();
+        });
+    }
+    
+    addSkillRow() {
+        const skillContainer = $('.skill-row').parent();
+        const newSkillRow = `
+            <div class="skill-row" style="margin-bottom: 10px;">
+                <div class="row">
+                    <div class="col-md-6">
+                        <input type="text" class="form-control" name="skill_name[]" 
+                               placeholder="${frappe._('Skill name (e.g. Event Planning, IT Support)')}" />
+                    </div>
+                    <div class="col-md-4">
+                        <select class="form-control" name="skill_level[]">
+                            <option value="">${frappe._("Level")}</option>
+                            <option value="Beginner">${frappe._("Beginner")}</option>
+                            <option value="Intermediate">${frappe._("Intermediate")}</option>
+                            <option value="Advanced">${frappe._("Advanced")}</option>
+                            <option value="Expert">${frappe._("Expert")}</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-sm btn-danger remove-skill">−</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Find the existing skill rows and add after the last one
+        const lastSkillRow = $('.skill-row').last();
+        lastSkillRow.after(newSkillRow);
+        
+        console.log('Added new skill row');
     }
     
     setupPaymentStep() {

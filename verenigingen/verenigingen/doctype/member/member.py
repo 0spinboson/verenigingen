@@ -27,8 +27,8 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         if not self.member_id:
             if self.should_have_member_id():
                 self.member_id = self.generate_member_id()
-            elif self.is_application_member() and not self.applicant_id:
-                self.applicant_id = self.generate_applicant_id()
+            elif self.is_application_member() and not self.application_id:
+                self.application_id = self.generate_application_id()
         
         self.handle_chapter_assignment()
         if hasattr(self, 'reset_counter_to') and self.reset_counter_to:
@@ -55,7 +55,7 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         # Application members only get member ID when approved
         return getattr(self, 'application_status', '') == 'Approved'
     
-    def generate_applicant_id(self):
+    def generate_application_id(self):
         """Generate a unique applicant ID for applications"""
         if frappe.session.user == "Guest":
             return None
@@ -995,12 +995,12 @@ def get_current_subscription_details(member):
                     plan_doc = frappe.get_doc("Subscription Plan", plan.plan)
                     plan_details.append({
                         "plan_name": plan_doc.plan_name,
-                        "price": plan.price,
+                        "price": plan_doc.cost,
                         "billing_interval": plan_doc.billing_interval,
                         "billing_interval_count": plan_doc.billing_interval_count,
                         "currency": plan_doc.currency
                     })
-                    total_amount += plan.price
+                    total_amount += plan_doc.cost
                 
                 subscription_details.append({
                     "name": subscription.name,
@@ -1060,3 +1060,58 @@ def get_linked_donations(member):
     
     # No donor found
     return {"success": False, "message": "No donor record found for this member"}
+
+@frappe.whitelist()
+def assign_member_id(member_name):
+    """
+    Manually assign a member ID to a member who doesn't have one yet.
+    This can be used for approved applications or existing members without IDs.
+    """
+    if not frappe.has_permission("Member", "write"):
+        frappe.throw(_("Insufficient permissions to assign member ID"))
+    
+    # Only allow System Manager and Membership Manager roles to manually assign member IDs
+    allowed_roles = ["System Manager", "Membership Manager"]
+    user_roles = frappe.get_roles(frappe.session.user)
+    if not any(role in user_roles for role in allowed_roles):
+        frappe.throw(_("Only System Managers and Membership Managers can manually assign member IDs"))
+    
+    try:
+        member = frappe.get_doc("Member", member_name)
+        
+        # Check if member already has an ID
+        if member.member_id:
+            return {
+                "success": False,
+                "message": _("Member already has ID: {0}").format(member.member_id)
+            }
+        
+        # For application members, they should be approved first
+        if member.is_application_member() and not member.should_have_member_id():
+            return {
+                "success": False,
+                "message": _("Application member must be approved before assigning member ID. Current status: {0}").format(member.application_status)
+            }
+        
+        # Generate and assign member ID
+        from verenigingen.verenigingen.doctype.member.member_id_manager import MemberIDManager
+        next_id = MemberIDManager.get_next_member_id()
+        member.member_id = str(next_id)
+        
+        # Save the member
+        member.save()
+        
+        frappe.msgprint(_("Member ID {0} assigned successfully to {1}").format(next_id, member.full_name))
+        
+        return {
+            "success": True,
+            "member_id": str(next_id),
+            "message": _("Member ID {0} assigned successfully").format(next_id)
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error assigning member ID to {member_name}: {str(e)}")
+        return {
+            "success": False,
+            "message": _("Error assigning member ID: {0}").format(str(e))
+        }

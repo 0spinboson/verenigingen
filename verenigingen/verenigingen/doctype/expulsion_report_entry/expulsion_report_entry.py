@@ -59,10 +59,10 @@ class ExpulsionReportEntry(Document):
                 
     def notify_governance_team(self):
         """Send notification to governance team about new expulsion entry"""
-        # Get governance team emails (Association Managers)
+        # Get governance team emails (Verenigingen Managers)
         governance_users = frappe.get_all(
             "Has Role",
-            filters={"role": "Association Manager"},
+            filters={"role": "Verenigingen Manager"},
             fields=["parent"]
         )
         
@@ -156,7 +156,7 @@ class ExpulsionReportEntry(Document):
         # Get governance team emails
         governance_users = frappe.get_all(
             "Has Role",
-            filters={"role": "Association Manager"},
+            filters={"role": "Verenigingen Manager"},
             fields=["parent"]
         )
         

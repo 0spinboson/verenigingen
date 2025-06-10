@@ -11,7 +11,7 @@ def get_pending_applications(chapter=None):
     }
     
     # If user is a chapter board member, filter by their chapter
-    if not frappe.user.has_role(['Association Manager', 'Membership Manager']):
+    if not frappe.user.has_role(['Verenigingen Manager', 'Membership Manager']):
         # Get chapters where user is a board member
         member = frappe.db.get_value("Member", {"user": frappe.session.user}, "name")
         if member:

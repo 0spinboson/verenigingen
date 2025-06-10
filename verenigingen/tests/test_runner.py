@@ -72,11 +72,11 @@ def run_quick_smoke_tests():
     total_tests += 1
     print("2. Testing required roles...")
     try:
-        if frappe.db.exists("Role", "Association Manager"):
-            print("   ✅ Association Manager role exists")
+        if frappe.db.exists("Role", "Verenigingen Manager"):
+            print("   ✅ Verenigingen Manager role exists")
             tests_passed += 1
         else:
-            print("   ❌ Association Manager role missing")
+            print("   ❌ Verenigingen Manager role missing")
     except Exception as e:
         print(f"   ❌ Error checking roles: {str(e)}")
     

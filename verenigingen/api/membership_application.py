@@ -335,7 +335,7 @@ def submit_application(**kwargs):
             "success": True,
             "message": "Application submitted successfully! You will receive an email with your application ID.",
             "application_id": application_id,
-            "applicant_id": getattr(member, 'applicant_id', None),
+            "applicant_id": getattr(member, 'application_id', None),
             "member_record": member.name,
             "status": "pending_review"
         }
@@ -387,7 +387,7 @@ def approve_membership_application(member_name, notes=None):
             "success": True,
             "message": f"Application approved! Member ID {member.member_id} assigned and invoice {invoice.name} generated",
             "member_id": member.member_id,
-            "applicant_id": getattr(member, 'applicant_id', None),
+            "applicant_id": getattr(member, 'application_id', None),
             "invoice": invoice.name
         }
         

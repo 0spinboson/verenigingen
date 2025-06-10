@@ -20,7 +20,7 @@ def has_member_permission(doc, user=None, permission_type=None):
     frappe.logger().debug(f"Checking Member permissions for user {user} with roles {frappe.get_roles(user)}")
     
     # Admin roles always have access
-    admin_roles = ["System Manager", "Membership Manager", "Association Manager"]
+    admin_roles = ["System Manager", "Membership Manager", "Verenigingen Manager"]
     if any(role in frappe.get_roles(user) for role in admin_roles):
         frappe.logger().debug(f"User {user} has admin role, granting access")
         return True
@@ -39,7 +39,7 @@ def has_membership_permission(doc, user=None, permission_type=None):
     frappe.logger().debug(f"Checking Membership permissions for user {user} with roles {frappe.get_roles(user)}")
     
     # Admin roles always have access
-    admin_roles = ["System Manager", "Membership Manager", "Association Manager"]
+    admin_roles = ["System Manager", "Membership Manager", "Verenigingen Manager"]
     if any(role in frappe.get_roles(user) for role in admin_roles):
         frappe.logger().debug(f"User {user} has admin role, granting access")
         return True
@@ -54,7 +54,7 @@ def get_member_permission_query(user):
     if not user:
         user = frappe.session.user
 
-    admin_roles = ["System Manager", "Membership Manager", "Association Manager"]
+    admin_roles = ["System Manager", "Membership Manager", "Verenigingen Manager"]
     if any(role in frappe.get_roles(user) for role in admin_roles):
         frappe.logger().debug(f"User {user} has admin role, granting full access")
         return ""
@@ -143,7 +143,7 @@ def can_terminate_member(member_name, user=None):
         user = frappe.session.user
         
     # System managers and Association managers always can
-    admin_roles = ["System Manager", "Association Manager"]
+    admin_roles = ["System Manager", "Verenigingen Manager"]
     user_roles = frappe.get_roles(user)
     if any(role in user_roles for role in admin_roles):
         frappe.logger().debug(f"User {user} has admin role, granting termination access")
@@ -192,7 +192,7 @@ def can_access_termination_functions(user=None):
         user = frappe.session.user
         
     # System managers and Association managers always can
-    admin_roles = ["System Manager", "Association Manager"]
+    admin_roles = ["System Manager", "Verenigingen Manager"]
     user_roles = frappe.get_roles(user)
     if any(role in user_roles for role in admin_roles):
         return True
@@ -226,7 +226,7 @@ def get_termination_permission_query(user):
         user = frappe.session.user
 
     # Admin roles get full access
-    admin_roles = ["System Manager", "Association Manager"]
+    admin_roles = ["System Manager", "Verenigingen Manager"]
     if any(role in frappe.get_roles(user) for role in admin_roles):
         return ""
     

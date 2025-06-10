@@ -53,7 +53,7 @@ def approve_membership_application(member_name, membership_type=None, chapter=No
         member.primary_chapter = chapter
     
     # Update member status
-    member.application_status = "Active"  # Application is approved and active
+    member.application_status = "Approved"  # Application is approved
     member.status = "Active"  # Member is now active (not waiting for payment)
     member.member_since = today()  # Set member since date when approved
     member.reviewed_by = frappe.session.user
@@ -89,15 +89,21 @@ def approve_membership_application(member_name, membership_type=None, chapter=No
             membership.custom_amount = custom_amount_data.get("membership_amount")
     
     membership.insert()
-    membership.submit()  # Submit the membership to activate it
     
     # Get membership type details
     membership_type_doc = frappe.get_doc("Membership Type", membership_type)
     
-    # Create invoice
+    # Create invoice BEFORE submitting membership to prevent duplicate invoices
     from verenigingen.api.payment_processing import create_application_invoice, get_or_create_customer
     customer = get_or_create_customer(member)
     invoice = create_application_invoice(member, membership)
+    
+    # Now submit the membership - the subscription creation will detect the existing invoice
+    membership.submit()  # Submit the membership to activate it
+    
+    # Activate volunteer record if member is interested in volunteering
+    if member.interested_in_volunteering:
+        activate_volunteer_record(member)
     
     # Send approval email with payment link
     send_approval_notification(member, invoice, membership_type_doc)
@@ -108,6 +114,29 @@ def approve_membership_application(member_name, membership_type=None, chapter=No
         "invoice": invoice.name,
         "amount": membership_type_doc.amount
     }
+
+def activate_volunteer_record(member):
+    """Activate volunteer record when membership application is approved"""
+    try:
+        # Find existing volunteer record for this member
+        volunteer_name = frappe.db.get_value("Volunteer", {"member": member.name}, "name")
+        
+        if volunteer_name:
+            # Update existing volunteer record
+            volunteer = frappe.get_doc("Volunteer", volunteer_name)
+            volunteer.status = "Active"
+            volunteer.save()
+            frappe.logger().info(f"Activated volunteer record {volunteer_name} for member {member.name}")
+        else:
+            # Create volunteer record if it doesn't exist (fallback)
+            from verenigingen.utils.application_helpers import create_volunteer_record
+            volunteer = create_volunteer_record(member)
+            if volunteer:
+                volunteer.status = "Active"
+                volunteer.save()
+                frappe.logger().info(f"Created and activated volunteer record {volunteer.name} for member {member.name}")
+    except Exception as e:
+        frappe.log_error(f"Error activating volunteer record for member {member.name}: {str(e)}")
 
 @frappe.whitelist()
 def reject_membership_application(member_name, reason, process_refund=False):
@@ -166,7 +195,7 @@ def get_user_chapter_access():
     user = frappe.session.user
     
     # Admin roles see all chapters
-    admin_roles = ["System Manager", "Association Manager", "Membership Manager"]
+    admin_roles = ["System Manager", "Verenigingen Manager", "Membership Manager"]
     if any(role in frappe.get_roles(user) for role in admin_roles):
         return {
             "restrict_to_chapters": False,
@@ -234,7 +263,7 @@ def has_approval_permission(member):
         return True
     
     # Association/Membership managers have permission
-    if any(role in frappe.get_roles(user) for role in ["Association Manager", "Membership Manager"]):
+    if any(role in frappe.get_roles(user) for role in ["Verenigingen Manager", "Membership Manager"]):
         return True
     
     # Check if user is a board member of the member's chapter
@@ -368,7 +397,7 @@ def get_pending_applications(chapter=None, days_overdue=None):
     
     # Check user permissions
     user = frappe.session.user
-    if not any(role in frappe.get_roles(user) for role in ["System Manager", "Association Manager", "Membership Manager"]):
+    if not any(role in frappe.get_roles(user) for role in ["System Manager", "Verenigingen Manager", "Membership Manager"]):
         # Regular users can only see applications for their chapter
         user_member = frappe.db.get_value("Member", {"user": user}, "name")
         if user_member:
@@ -595,7 +624,7 @@ def fix_backend_member_statuses():
 def get_application_stats():
     """Get statistics for membership applications"""
     # Check permissions
-    if not any(role in frappe.get_roles() for role in ["System Manager", "Association Manager", "Membership Manager"]):
+    if not any(role in frappe.get_roles() for role in ["System Manager", "Verenigingen Manager", "Membership Manager"]):
         frappe.throw(_("Insufficient permissions"))
     
     stats = {}
@@ -677,6 +706,254 @@ def check_member_iban_data(member_name):
         
     except Exception as e:
         return {"error": str(e)}
+
+
+@frappe.whitelist()
+def debug_custom_amount_flow(member_name):
+    """Debug the custom amount flow for a specific member"""
+    try:
+        member = frappe.get_doc("Member", member_name)
+        
+        result = {
+            "member_name": member_name,
+            "full_name": member.full_name,
+            "has_notes": bool(getattr(member, 'notes', None)),
+            "notes": getattr(member, 'notes', ''),
+            "custom_amount_data": None,
+            "error": None
+        }
+        
+        # Test custom amount extraction
+        from verenigingen.utils.application_helpers import get_member_custom_amount_data
+        custom_data = get_member_custom_amount_data(member)
+        
+        result["custom_amount_data"] = custom_data
+        
+        if custom_data:
+            result["uses_custom_amount"] = custom_data.get("uses_custom_amount")
+            result["membership_amount"] = custom_data.get("membership_amount")
+        
+        # Check existing memberships
+        memberships = frappe.get_all(
+            "Membership",
+            filters={"member": member_name},
+            fields=["name", "uses_custom_amount", "custom_amount", "subscription"]
+        )
+        
+        result["memberships"] = memberships
+        
+        # Check subscriptions if any
+        for membership in memberships:
+            if membership.subscription:
+                subscription = frappe.get_doc("Subscription", membership.subscription)
+                membership["subscription_details"] = {
+                    "name": subscription.name,
+                    "plans": []
+                }
+                
+                for plan in subscription.plans:
+                    membership["subscription_details"]["plans"].append({
+                        "plan": plan.plan,
+                        "cost": getattr(plan, 'cost', getattr(plan, 'price', 0)),
+                        "qty": plan.qty
+                    })
+        
+        return result
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "member_name": member_name
+        }
+
+
+@frappe.whitelist()
+def debug_membership_subscription(membership_name):
+    """Debug a specific membership and its subscription"""
+    try:
+        membership = frappe.get_doc("Membership", membership_name)
+        
+        result = {
+            "membership_name": membership_name,
+            "uses_custom_amount": membership.uses_custom_amount,
+            "custom_amount": membership.custom_amount,
+            "billing_amount": membership.get_billing_amount(),
+            "subscription": membership.subscription,
+            "subscription_details": None
+        }
+        
+        if membership.subscription:
+            subscription = frappe.get_doc("Subscription", membership.subscription)
+            result["subscription_details"] = {
+                "name": subscription.name,
+                "status": subscription.status,
+                "plans": []
+            }
+            
+            for plan in subscription.plans:
+                plan_data = {
+                    "plan": plan.plan,
+                    "qty": plan.qty,
+                    "all_fields": {}
+                }
+                
+                # Get all fields from the plan object
+                for attr in dir(plan):
+                    if not attr.startswith('_') and not callable(getattr(plan, attr)):
+                        try:
+                            value = getattr(plan, attr)
+                            if value is not None:
+                                plan_data["all_fields"][attr] = value
+                        except:
+                            pass
+                
+                result["subscription_details"]["plans"].append(plan_data)
+        
+        return result
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "membership_name": membership_name
+        }
+
+
+@frappe.whitelist()
+def debug_subscription_plan(plan_name):
+    """Debug a subscription plan"""
+    try:
+        plan = frappe.get_doc("Subscription Plan", plan_name)
+        
+        result = {
+            "plan_name": plan_name,
+            "all_fields": {}
+        }
+        
+        # Get all fields from the plan object
+        for attr in dir(plan):
+            if not attr.startswith('_') and not callable(getattr(plan, attr)):
+                try:
+                    value = getattr(plan, attr)
+                    if value is not None and not isinstance(value, dict):
+                        result["all_fields"][attr] = value
+                except:
+                    pass
+        
+        return result
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "plan_name": plan_name
+        }
+
+
+@frappe.whitelist()
+def test_fix_custom_amount_subscription(membership_name):
+    """Test fix for custom amount subscription issue"""
+    try:
+        membership = frappe.get_doc("Membership", membership_name)
+        
+        result = {
+            "membership_name": membership_name,
+            "current_billing_amount": membership.get_billing_amount(),
+            "uses_custom_amount": membership.uses_custom_amount,
+            "custom_amount": membership.custom_amount,
+            "subscription": membership.subscription,
+            "before_fix": {},
+            "after_fix": {}
+        }
+        
+        # Get current subscription state
+        if membership.subscription:
+            subscription = frappe.get_doc("Subscription", membership.subscription)
+            result["before_fix"] = {
+                "subscription_name": subscription.name,
+                "plans": []
+            }
+            
+            for plan in subscription.plans:
+                plan_doc = frappe.get_doc("Subscription Plan", plan.plan)
+                result["before_fix"]["plans"].append({
+                    "plan_name": plan.plan,
+                    "plan_cost": plan_doc.cost
+                })
+        
+        # Test the fix
+        if membership.uses_custom_amount and membership.custom_amount:
+            # Get or create the correct subscription plan
+            correct_plan = membership.get_subscription_plan_for_amount(membership.custom_amount)
+            result["correct_plan_name"] = correct_plan
+            
+            # Apply the fix by updating the subscription
+            if membership.subscription:
+                subscription = frappe.get_doc("Subscription", membership.subscription)
+                
+                # If subscription is submitted, we need to cancel and recreate it
+                if subscription.docstatus == 1:
+                    subscription.cancel()
+                    result["old_subscription_cancelled"] = True
+                    
+                    # Create new subscription with correct plan
+                    new_subscription = membership.create_subscription_from_membership()
+                    result["new_subscription_created"] = new_subscription.name
+                    
+                    # Update membership to point to new subscription
+                    membership.subscription = new_subscription.name
+                    membership.save(ignore_permissions=True)
+                else:
+                    # Update the plan for draft subscription
+                    for plan_row in subscription.plans:
+                        plan_row.plan = correct_plan
+                    
+                    subscription.save(ignore_permissions=True)
+                
+                # Get updated state
+                subscription.reload()
+                result["after_fix"] = {
+                    "subscription_name": subscription.name,
+                    "plans": []
+                }
+                
+                for plan in subscription.plans:
+                    plan_doc = frappe.get_doc("Subscription Plan", plan.plan)
+                    result["after_fix"]["plans"].append({
+                        "plan_name": plan.plan,
+                        "plan_cost": plan_doc.cost
+                    })
+                
+                result["fix_applied"] = True
+        
+        return result
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "membership_name": membership_name
+        }
+
+
+@frappe.whitelist()
+def check_subscription_invoice(invoice_name):
+    """Check subscription invoice details"""
+    try:
+        invoice = frappe.get_doc("Sales Invoice", invoice_name)
+        
+        return {
+            "invoice_name": invoice_name,
+            "status": invoice.status,
+            "grand_total": invoice.grand_total,
+            "outstanding_amount": invoice.outstanding_amount,
+            "docstatus": invoice.docstatus,
+            "subscription": invoice.subscription,
+            "posting_date": invoice.posting_date
+        }
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "invoice_name": invoice_name
+        }
 
 
 @frappe.whitelist()
@@ -767,7 +1044,7 @@ def notify_managers_of_overdue_applications(applications):
     # Get all association managers
     managers = frappe.get_all(
         "Has Role",
-        filters={"role": "Association Manager"},
+        filters={"role": "Verenigingen Manager"},
         pluck="parent"
     )
     

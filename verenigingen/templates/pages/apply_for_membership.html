@@ -146,9 +146,9 @@
                     <h3>{{ _("Membership Selection") }}</h3>
                 </div>
                 <div class="card-body">
-                    <!-- Chapter Selection (if enabled) -->
-                    <div id="chapter-selection" style="display: none;">
-                        <h5>{{ _("Chapter Selection") }}</h5>
+                    <!-- Chapter Selection (always visible) -->
+                    <div id="chapter-selection">
+                        <h5>{{ _("Chapter Selection") }} <small class="text-muted">({{ _("Optional") }})</small></h5>
                         <div class="row mb-4">
                             <div class="col-md-12">
                                 <div id="suggested-chapter" class="alert alert-info" style="display: none;">
@@ -158,12 +158,12 @@
                                     </button>
                                 </div>
                                 
-                                <label for="selected_chapter">{{ _("Select Chapter") }}</label>
+                                <label for="selected_chapter">{{ _("Which chapter would you like to join?") }}</label>
                                 <select class="form-control" id="selected_chapter" name="selected_chapter">
                                     <option value="">{{ _("Select a chapter...") }}</option>
                                 </select>
                                 <small class="form-text text-muted">
-                                    {{ _("Leave blank to be assigned automatically based on your location") }}
+                                    {{ _("Choose the chapter you'd like to be part of. Leave blank to be assigned automatically based on your location.") }}
                                 </small>
                             </div>
                         </div>
@@ -872,6 +872,7 @@ function initializeFallbackApplication() {
             
             // Membership
             selected_membership_type: $('#membership_type').val() || $('input[name="membership_type"]:checked').val(),
+            selected_chapter: $('#selected_chapter').val(),
             
             // Volunteer
             interested_in_volunteering: $('#interested_in_volunteering').is(':checked'),
@@ -967,6 +968,20 @@ function initializeFallbackApplication() {
                         });
                     }
                     
+                    // Populate chapters if available and enabled
+                    if (r.message.chapters && r.message.chapters.length > 0) {
+                        const $chapter = $('#selected_chapter');
+                        $chapter.empty().append('<option value="">Select a chapter...</option>');
+                        r.message.chapters.forEach(chapter => {
+                            $chapter.append(`<option value="${chapter.name}">${chapter.name}${chapter.region ? ' - ' + chapter.region : ''}</option>`);
+                        });
+                        $('#chapter-selection').show();
+                        console.log('Chapter selection enabled with', r.message.chapters.length, 'chapters');
+                    } else {
+                        $('#chapter-selection').hide();
+                        console.log('Chapter selection disabled - no chapters available');
+                    }
+                    
                     // Populate membership types
                     if (r.message.membership_types) {
                         const $container = $('#membership-types');
@@ -997,6 +1012,52 @@ function initializeFallbackApplication() {
             },
             error: function(r) {
                 console.error('Failed to load form data:', r);
+            }
+        });
+        
+        // Add postal code change handler for chapter suggestions
+        $('#postal_code').on('blur', function() {
+            const postalCode = $(this).val();
+            const country = $('#country').val() || 'Netherlands';
+            
+            if (postalCode && $('#chapter-selection').is(':visible')) {
+                suggestChapterFromPostalCode(postalCode, country);
+            }
+        });
+        
+        // Handle accept suggestion button
+        $('#accept-suggestion').on('click', function() {
+            const suggestedChapter = $('#suggested-chapter-name').text();
+            if (suggestedChapter) {
+                $('#selected_chapter').val(suggestedChapter);
+                $('#suggested-chapter').hide();
+            }
+        });
+    }
+    
+    function suggestChapterFromPostalCode(postalCode, country) {
+        console.log('Suggesting chapter for postal code:', postalCode);
+        
+        frappe.call({
+            method: 'verenigingen.api.membership_application.validate_postal_code',
+            args: {
+                postal_code: postalCode,
+                country: country
+            },
+            callback: function(r) {
+                console.log('Postal code validation result:', r.message);
+                
+                if (r.message && r.message.suggested_chapters && r.message.suggested_chapters.length > 0) {
+                    const suggestedChapter = r.message.suggested_chapters[0];
+                    $('#suggested-chapter-name').text(suggestedChapter.name || suggestedChapter);
+                    $('#suggested-chapter').show();
+                } else {
+                    $('#suggested-chapter').hide();
+                }
+            },
+            error: function(r) {
+                console.error('Error validating postal code:', r);
+                $('#suggested-chapter').hide();
             }
         });
     }

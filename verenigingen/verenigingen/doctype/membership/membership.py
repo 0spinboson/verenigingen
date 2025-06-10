@@ -394,15 +394,28 @@ class Membership(Document):
         # Check if there's already an application invoice for this membership
         has_application_invoice = False
         if member.customer:
+            # First check for invoices specifically linked to this membership
             existing_invoice = frappe.db.exists(
                 "Sales Invoice",
                 {
                     "customer": member.customer,
-                    "status": ["in", ["Draft", "Submitted", "Unpaid", "Paid", "Partly Paid"]],
-                    "posting_date": [">=", self.start_date],
+                    "membership": self.name,
                     "docstatus": ["!=", 2]  # Not cancelled
                 }
             )
+            
+            # If no direct link, check for recent invoices for this customer
+            if not existing_invoice:
+                existing_invoice = frappe.db.exists(
+                    "Sales Invoice",
+                    {
+                        "customer": member.customer,
+                        "status": ["in", ["Draft", "Submitted", "Unpaid", "Paid", "Partly Paid"]],
+                        "posting_date": [">=", self.start_date],
+                        "docstatus": ["!=", 2]  # Not cancelled
+                    }
+                )
+            
             if existing_invoice:
                 has_application_invoice = True
                 frappe.log_error(
@@ -475,11 +488,13 @@ class Membership(Document):
             # Get the effective amount for this membership
             effective_amount = self.get_billing_amount()
             
-            # Add the subscription plan with the correct amount
+            # Get or create the appropriate subscription plan
+            subscription_plan_to_use = self.get_subscription_plan_for_amount(effective_amount)
+            
+            # Add the subscription plan
             subscription.append("plans", {
-                "plan": self.subscription_plan,
-                "qty": 1,
-                "cost": effective_amount  # Override the plan's default cost
+                "plan": subscription_plan_to_use,
+                "qty": 1
             })
             
             # Insert and submit
@@ -547,6 +562,42 @@ class Membership(Document):
             else:
                 return 0
     
+    def get_subscription_plan_for_amount(self, amount):
+        """Get or create a subscription plan for the specified amount"""
+        # If using standard amount, use the original subscription plan
+        if not self.uses_custom_amount or not self.custom_amount:
+            return self.subscription_plan
+        
+        # For custom amounts, get/create a custom subscription plan
+        original_plan = frappe.get_doc("Subscription Plan", self.subscription_plan)
+        
+        # Create a unique plan name for this amount
+        custom_plan_name = f"{original_plan.plan_name} - €{amount:.2f}"
+        
+        # Check if custom plan already exists
+        existing_plan = frappe.db.exists("Subscription Plan", {"plan_name": custom_plan_name})
+        if existing_plan:
+            return existing_plan
+        
+        # Create new custom subscription plan
+        custom_plan = frappe.get_doc({
+            "doctype": "Subscription Plan",
+            "plan_name": custom_plan_name,
+            "item": original_plan.item,
+            "currency": original_plan.currency,
+            "price_determination": "Fixed Rate",
+            "cost": amount,
+            "billing_interval": original_plan.billing_interval,
+            "billing_interval_count": original_plan.billing_interval_count,
+            "payment_gateway": original_plan.payment_gateway,
+            "cost_center": original_plan.cost_center
+        })
+        
+        custom_plan.insert(ignore_permissions=True)
+        frappe.log_error(f"Created custom subscription plan {custom_plan_name} with cost {amount} for membership {self.name}")
+        
+        return custom_plan.name
+    
     def update_subscription_amount(self):
         """Update the subscription plan amount when membership amount changes"""
         
@@ -560,22 +611,24 @@ class Membership(Document):
             # Calculate the new amount to use
             new_amount = self.get_billing_amount()
             
-            # Update subscription plan amounts
+            # Get the appropriate subscription plan for the new amount
+            new_subscription_plan = self.get_subscription_plan_for_amount(new_amount)
+            
+            # Check if we need to update the subscription plan
             updated = False
             for plan_row in subscription.plans:
-                # Update the amount in the subscription plan row
-                if plan_row.cost != new_amount:
-                    old_amount = plan_row.cost
-                    plan_row.cost = new_amount
+                if plan_row.plan != new_subscription_plan:
+                    old_plan = plan_row.plan
+                    plan_row.plan = new_subscription_plan
                     updated = True
                     
                     frappe.logger().info(
-                        f"Updated subscription {subscription.name} plan amount from {old_amount} to {new_amount} "
-                        f"for membership {self.name}"
+                        f"Updated subscription {subscription.name} plan from {old_plan} to {new_subscription_plan} "
+                        f"for membership {self.name} with amount {new_amount}"
                     )
             
             if updated:
-                # Save the subscription with updated amounts
+                # Save the subscription with updated plan
                 subscription.save(ignore_permissions=True)
                 
                 # Cancel any pending unpaid invoices and regenerate them with new amounts
@@ -583,7 +636,7 @@ class Membership(Document):
                 
                 # Show message to user
                 frappe.msgprint(
-                    _("Subscription amount updated to {0}. Future invoices will use the new amount.").format(
+                    _("Subscription updated to use plan for amount {0}. Future invoices will use the new amount.").format(
                         frappe.format_value(new_amount, {"fieldtype": "Currency"})
                     ),
                     indicator="green"

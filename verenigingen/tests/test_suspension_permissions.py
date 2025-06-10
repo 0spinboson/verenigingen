@@ -40,10 +40,10 @@ class TestSuspensionPermissions(unittest.TestCase):
     
     @patch('verenigingen.permissions.frappe.get_roles')
     def test_can_terminate_member_association_manager(self, mock_get_roles):
-        """Test Association Manager can terminate any member"""
+        """Test Verenigingen Manager can terminate any member"""
         
         # Mock user roles
-        mock_get_roles.return_value = ["Association Manager", "User"]
+        mock_get_roles.return_value = ["Verenigingen Manager", "User"]
         
         # Test permission
         result = can_terminate_member(self.test_member_name, self.test_user)
