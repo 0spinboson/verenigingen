@@ -27,6 +27,8 @@ def setup_test_environment():
             "description": "Standard membership for testing"
         })
         membership_type.insert(ignore_permissions=True)
+        # Create subscription plan for the membership type
+        membership_type.create_subscription_plan()
         print("✅ Created test membership type")
     else:
         print("✅ Test membership type exists")

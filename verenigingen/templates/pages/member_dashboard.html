@@ -131,6 +131,14 @@
                                 <i class="fa fa-heart"></i> {{ _("Volunteer Opportunities") }}
                             </a>
                             {% endif %}
+                            {% if volunteer %}
+                            <a href="/volunteer/dashboard" class="list-group-item list-group-item-action">
+                                <i class="fa fa-tachometer-alt"></i> {{ _("Volunteer Dashboard") }}
+                            </a>
+                            <a href="/volunteer/expenses" class="list-group-item list-group-item-action">
+                                <i class="fa fa-receipt"></i> {{ _("Submit Expenses") }}
+                            </a>
+                            {% endif %}
                             <a href="/member-directory" class="list-group-item list-group-item-action">
                                 <i class="fa fa-users"></i> {{ _("Member Directory") }}
                             </a>

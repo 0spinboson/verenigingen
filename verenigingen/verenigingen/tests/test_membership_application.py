@@ -42,6 +42,8 @@ class TestMembershipApplication(unittest.TestCase):
                 "subscription_period": "Annual"
             })
             membership_type.insert()
+            # Create subscription plan for the membership type
+            membership_type.create_subscription_plan()
         
         # Create test chapter
         if not frappe.db.exists("Chapter", "Test Chapter"):
@@ -174,6 +176,18 @@ class TestMembershipApplication(unittest.TestCase):
         membership = frappe.get_doc("Membership", {"member": member_name})
         self.assertEqual(membership.status, "Pending")  # Pending payment
         self.assertEqual(membership.membership_type, "Test Membership")
+        
+        # Verify subscription created
+        self.assertIsNotNone(membership.subscription, "Subscription should be created for approved membership")
+        subscription = frappe.get_doc("Subscription", membership.subscription)
+        self.assertEqual(subscription.status, "Active", "Subscription should be active")
+        self.assertTrue(len(subscription.plans) > 0, "Subscription should have at least one plan")
+        
+        # Verify subscription plan is properly linked
+        subscription_plan_name = subscription.plans[0].plan
+        self.assertIsNotNone(subscription_plan_name, "Subscription should have a plan assigned")
+        subscription_plan = frappe.get_doc("Subscription Plan", subscription_plan_name)
+        self.assertEqual(float(subscription_plan.cost), 100.0, "Subscription plan cost should match membership type amount")
     
     def test_reject_application(self):
         """Test application rejection"""
@@ -1751,6 +1765,8 @@ class TestChapterSelection(unittest.TestCase):
                 "subscription_period": "Annual"
             })
             membership_type.insert()
+            # Create subscription plan for the membership type
+            membership_type.create_subscription_plan()
         
         # Create test chapters with different configurations
         test_chapters = [

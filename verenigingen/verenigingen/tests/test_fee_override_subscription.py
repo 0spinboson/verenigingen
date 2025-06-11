@@ -39,6 +39,8 @@ class TestFeeOverrideSubscription(unittest.TestCase):
             "billing_frequency": "Monthly"
         })
         self.membership_type.insert(ignore_permissions=True)
+        # Create subscription plan for the membership type
+        self.membership_type.create_subscription_plan()
         
     def tearDown(self):
         """Clean up test data"""

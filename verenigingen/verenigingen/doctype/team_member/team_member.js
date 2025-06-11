@@ -2,41 +2,12 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on('Team Member', {
-    member: function(frm, cdt, cdn) {
-        var row = locals[cdt][cdn];
-        if (row.member) {
-            // Fetch member details
-            frappe.db.get_doc("Member", row.member).then(doc => {
-                frappe.model.set_value(cdt, cdn, 'member_name', doc.full_name);
-                
-                // Check if member has a volunteer record
-                frappe.db.get_value("Volunteer", {"member": row.member}, ["name", "volunteer_name"], function(r) {
-                    if (r && r.name) {
-                        // Member has a volunteer record, auto-link it
-                        frappe.model.set_value(cdt, cdn, 'volunteer', r.name);
-                        frappe.model.set_value(cdt, cdn, 'volunteer_name', r.volunteer_name);
-                    }
-                });
-            });
-        }
-    },
-    
     volunteer: function(frm, cdt, cdn) {
         var row = locals[cdt][cdn];
         if (row.volunteer) {
             // Fetch volunteer details
             frappe.db.get_doc("Volunteer", row.volunteer).then(doc => {
                 frappe.model.set_value(cdt, cdn, 'volunteer_name', doc.volunteer_name);
-                
-                // If there's a linked member, also set that
-                if (doc.member && !row.member) {
-                    frappe.model.set_value(cdt, cdn, 'member', doc.member);
-                    frappe.db.get_value("Member", doc.member, "full_name", function(r) {
-                        if (r && r.full_name) {
-                            frappe.model.set_value(cdt, cdn, 'member_name', r.full_name);
-                        }
-                    });
-                }
             });
         }
     },

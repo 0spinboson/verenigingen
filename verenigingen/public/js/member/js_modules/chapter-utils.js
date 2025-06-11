@@ -55,8 +55,8 @@ function suggest_chapter_for_member(frm) {
 
 function toggle_search_fields(dialog) {
     const method = dialog.get_value('search_method');
-    dialog.fields_dict.postal_code.wrapper.toggle(method === 'By Postal Code');
-    dialog.fields_dict.chapter.wrapper.toggle(method === 'Manual Selection');
+    dialog.fields_dict.postal_code.$wrapper.toggle(method === 'By Postal Code');
+    dialog.fields_dict.chapter.$wrapper.toggle(method === 'Manual Selection');
 }
 
 function search_chapters_for_member(frm, values, dialog) {
@@ -82,7 +82,7 @@ function search_chapters_for_member(frm, values, dialog) {
             if (r.message && r.message.length > 0) {
                 display_chapter_suggestions(r.message, frm, dialog);
             } else {
-                dialog.fields_dict.search_results.wrapper.html(
+                dialog.fields_dict.search_results.$wrapper.html(
                     '<div class="alert alert-info">' + 
                     __('No matching chapters found. Try a different search method.') + 
                     '</div>'
@@ -118,10 +118,10 @@ function display_chapter_suggestions(chapters, frm, dialog) {
     
     html += '</div>';
     
-    dialog.fields_dict.search_results.wrapper.html(html);
+    dialog.fields_dict.search_results.$wrapper.html(html);
     
     // Add click handlers for assign buttons
-    dialog.fields_dict.search_results.wrapper.find('.assign-chapter').on('click', function() {
+    dialog.fields_dict.search_results.$wrapper.find('.assign-chapter').on('click', function() {
         const chapter_name = $(this).data('chapter');
         assign_chapter_to_member(frm, chapter_name);
         dialog.hide();
@@ -172,8 +172,8 @@ function assign_chapter_to_member(frm, chapter_name) {
         },
         callback: function(r) {
             if (r.message && r.message.success) {
-                frm.set_value('current_chapter_display', chapter_name);
-                frm.save();
+                // Refresh the form to get the updated values instead of saving
+                frm.reload_doc();
                 frappe.show_alert({
                     message: __('Chapter assigned successfully'),
                     indicator: 'green'

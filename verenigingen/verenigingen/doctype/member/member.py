@@ -161,9 +161,10 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             })
             membership.insert()
             
-            # Generate invoice
+            # Generate invoice with member's custom fee if applicable
             from verenigingen.utils.application_payments import create_membership_invoice
-            invoice = create_membership_invoice(self, membership, membership_type)
+            current_fee = self.get_current_membership_fee()
+            invoice = create_membership_invoice(self, membership, membership_type, current_fee["amount"])
             
             # Update member with invoice reference
             self.application_invoice = invoice.name

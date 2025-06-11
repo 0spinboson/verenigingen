@@ -79,14 +79,20 @@ def approve_membership_application(member_name, membership_type=None, chapter=No
         "auto_renew": 1
     })
     
-    # Handle custom amount if member selected one during application
+    # Handle custom amount if member selected one during application or has fee override
     from verenigingen.utils.application_helpers import get_member_custom_amount_data
     custom_amount_data = get_member_custom_amount_data(member)
     
+    # Check for custom amount from application data
     if custom_amount_data and custom_amount_data.get("uses_custom_amount"):
         membership.uses_custom_amount = 1
         if custom_amount_data.get("membership_amount"):
             membership.custom_amount = custom_amount_data.get("membership_amount")
+    
+    # Also check for direct fee override on member
+    elif hasattr(member, 'membership_fee_override') and member.membership_fee_override:
+        membership.uses_custom_amount = 1
+        membership.custom_amount = member.membership_fee_override
     
     membership.insert()
     
@@ -102,7 +108,7 @@ def approve_membership_application(member_name, membership_type=None, chapter=No
     membership.submit()  # Submit the membership to activate it
     
     # Activate volunteer record if member is interested in volunteering
-    if member.interested_in_volunteering:
+    if hasattr(member, 'interested_in_volunteering') and member.interested_in_volunteering:
         activate_volunteer_record(member)
     
     # Send approval email with payment link

@@ -685,12 +685,12 @@ def assign_member_to_chapter(member, chapter, note=None):
     chapter_doc = frappe.get_doc("Chapter", chapter)
     added = chapter_doc.add_member(member)
     
-    # Update chapter tracking fields on member
-    frappe.db.set_value("Member", member, {
-        "chapter_change_reason": note or f"Assigned to {chapter}",
-        "chapter_assigned_date": frappe.utils.now(),
-        "chapter_assigned_by": frappe.session.user
-    })
+    # Update chapter tracking fields on member using document instead of direct DB update
+    member_doc = frappe.get_doc("Member", member)
+    member_doc.chapter_change_reason = note or f"Assigned to {chapter}"
+    member_doc.chapter_assigned_date = frappe.utils.now()
+    member_doc.chapter_assigned_by = frappe.session.user
+    member_doc.save(ignore_permissions=True)
     
     if note:
         frappe.get_doc({
