@@ -1,0 +1,30 @@
+repos:
+  - repo: local
+    hooks:
+      - id: smoke-tests
+        name: Run smoke tests before commit
+        entry: python verenigingen/tests/test_runner.py smoke
+        language: system
+        pass_filenames: false
+        always_run: true
+        
+      - id: security-tests  
+        name: Run security regression tests
+        entry: python run_volunteer_portal_tests.py --suite security
+        language: system
+        pass_filenames: false
+        files: \.(py|js)$
+        
+      - id: core-functionality-tests
+        name: Run core functionality tests on Python changes
+        entry: python run_volunteer_portal_tests.py --suite core
+        language: system
+        pass_filenames: false
+        files: \.py$
+        
+      - id: integration-tests-critical
+        name: Run critical integration tests
+        entry: bash -c 'bench run-tests --app verenigingen --module verenigingen.tests.test_termination_system && bench run-tests --app verenigingen --module verenigingen.tests.test_volunteer_portal_working'
+        language: system
+        pass_filenames: false
+        files: (termination|volunteer|member|team).*\.py$

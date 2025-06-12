@@ -56,6 +56,227 @@ def get_user_volunteer_record():
     
     return None
 
+@frappe.whitelist()
+def debug_volunteer_access():
+    """Debug function to help administrators troubleshoot volunteer access issues"""
+    if not frappe.has_permission("Volunteer", "read"):
+        frappe.throw(_("Insufficient permissions to debug volunteer access"))
+    
+    user_email = frappe.session.user
+    result = {
+        "user_email": user_email,
+        "timestamp": frappe.utils.now()
+    }
+    
+    # Check Member record
+    member = frappe.db.get_value("Member", {"email": user_email}, ["name", "first_name", "last_name"], as_dict=True)
+    result["member"] = member
+    
+    if member:
+        # Check for linked Volunteer
+        volunteer = frappe.db.get_value("Volunteer", {"member": member.name}, ["name", "volunteer_name", "status"], as_dict=True)
+        result["volunteer_via_member"] = volunteer
+    
+    # Check direct Volunteer record
+    volunteer_direct = frappe.db.get_value("Volunteer", {"email": user_email}, ["name", "volunteer_name", "member", "status"], as_dict=True)
+    result["volunteer_direct"] = volunteer_direct
+    
+    return result
+
+@frappe.whitelist()
+def check_workspace_status():
+    """Check workspace status in database vs file"""
+    if not frappe.has_permission("Workspace", "read"):
+        frappe.throw(_("Insufficient permissions to check workspace status"))
+    
+    result = {}
+    
+    # Check if workspace exists in database
+    db_workspace = frappe.db.sql("""
+        SELECT name, public, is_hidden, modified, modified_by, for_user 
+        FROM `tabWorkspace` 
+        WHERE name = 'Verenigingen'
+    """, as_dict=True)
+    
+    result["db_workspace"] = db_workspace[0] if db_workspace else None
+    
+    # Get workspace links from database
+    db_links = frappe.db.sql("""
+        SELECT link_to, label, hidden, link_type, type
+        FROM `tabWorkspace Link`
+        WHERE parent = 'Verenigingen'
+        ORDER BY idx
+    """, as_dict=True)
+    
+    result["db_links_count"] = len(db_links)
+    result["db_links"] = db_links
+    
+    return result
+
+@frappe.whitelist()  
+def update_workspace_links():
+    """Update workspace with comprehensive links"""
+    if not frappe.has_permission("Workspace", "write"):
+        frappe.throw(_("Insufficient permissions to update workspace"))
+    
+    try:
+        # Always create a fresh workspace
+        # Delete if exists
+        if frappe.db.exists("Workspace", "Verenigingen"):
+            frappe.db.delete("Workspace", "Verenigingen")
+            frappe.db.delete("Workspace Link", {"parent": "Verenigingen"})
+        
+        # Create new workspace with proper content structure
+        workspace = frappe.get_doc({
+            "doctype": "Workspace",
+            "name": "Verenigingen",
+            "title": "Verenigingen", 
+            "label": "Verenigingen",
+            "icon": "non-profit",
+            "module": "Verenigingen",
+            "public": 1,
+            "is_hidden": 0,
+            "content": """[
+                {"id":"NFcjh9I8BH","type":"header","data":{"text":"<span class=\\"h4\\"><b>Members/Memberships</b></span>","col":12}},
+                {"id":"oIk2CrSoAH","type":"card","data":{"card_name":"Memberships","col":4}},
+                {"id":"sxzInK1PHL","type":"shortcut","data":{"shortcut_name":"Member","col":3}},
+                {"id":"q6OM4R0OUa","type":"shortcut","data":{"shortcut_name":"Membership","col":3}},
+                {"id":"zGoLYG0xRM","type":"spacer","data":{"col":12}},
+                {"id":"jMy1CTqEJS","type":"header","data":{"text":"<span class=\\"h4\\"><b>Volunteering</b></span>","col":12}},
+                {"id":"2vHgUjgQcL","type":"card","data":{"card_name":"Volunteers","col":4}},
+                {"id":"zGoLYG0xRM2","type":"spacer","data":{"col":12}},
+                {"id":"jMy1CTqEJS2","type":"header","data":{"text":"<span class=\\"h4\\"><b>Chapters/Teams</b></span>","col":12}},
+                {"id":"S8Mi0T41U7","type":"card","data":{"card_name":"Chapters","col":4}},
+                {"id":"XXEhdaTHF_","type":"card","data":{"card_name":"Teams and Commissions","col":4}},
+                {"id":"zGoLYG0xRM3","type":"spacer","data":{"col":12}},
+                {"id":"jMy1CTqEJS3","type":"header","data":{"text":"<span class=\\"h4\\"><b>Financial</b></span>","col":12}},
+                {"id":"ZvroSYo9F3","type":"card","data":{"card_name":"Donations","col":4}},
+                {"id":"PaymentCard","type":"card","data":{"card_name":"Payment Processing","col":4}},
+                {"id":"zGoLYG0xRM4","type":"spacer","data":{"col":12}},
+                {"id":"jMy1CTqEJS4","type":"header","data":{"text":"<span class=\\"h4\\"><b>Reports</b></span>","col":12}},
+                {"id":"ReportsCard","type":"card","data":{"card_name":"Reports","col":8}},
+                {"id":"zGoLYG0xRM5","type":"spacer","data":{"col":12}},
+                {"id":"SettingsHeader","type":"header","data":{"text":"<span class=\\"h4\\"><b>Settings</b></span>","col":12}},
+                {"id":"RKkllDSemd","type":"card","data":{"card_name":"Module Settings","col":4}}
+            ]""",
+            "links": [],
+            "shortcuts": [
+                {"label": "Member", "link_to": "Member", "type": "DocType", "color": "Grey"},
+                {"label": "Membership", "link_to": "Membership", "type": "DocType", "color": "Grey"},
+                {"label": "Chapter", "link_to": "Chapter", "type": "DocType", "color": "Grey"},
+                {"label": "Users by Team", "link_to": "Users by Team", "type": "Report", "color": "Grey", "report_ref_doctype": "Team"}
+            ]
+        })
+        
+        # Add comprehensive links - Card Break entries must come BEFORE their respective links
+        links_data = [
+            # Memberships section - Card Break first, then links
+            {"label": "Memberships", "link_count": 5, "link_type": "DocType", "type": "Card Break"},
+            {"label": "Member", "link_to": "Member", "link_type": "DocType", "type": "Link", "onboard": 1},
+            {"label": "Membership", "link_to": "Membership", "link_type": "DocType", "type": "Link", "onboard": 1},
+            {"label": "Membership Type", "link_to": "Membership Type", "link_type": "DocType", "type": "Link"},
+            {"label": "Membership Amendment Request", "link_to": "Membership Amendment Request", "link_type": "DocType", "type": "Link"},
+            {"label": "Membership Termination Request", "link_to": "Membership Termination Request", "link_type": "DocType", "type": "Link"},
+            
+            # Volunteers section - Card Break first, then links
+            {"label": "Volunteers", "link_count": 5, "link_type": "DocType", "type": "Card Break"},
+            {"label": "Volunteer", "link_to": "Volunteer", "link_type": "DocType", "type": "Link", "onboard": 1},
+            {"label": "Volunteer Expense", "link_to": "Volunteer Expense", "link_type": "DocType", "type": "Link"},
+            {"label": "Volunteer Activity", "link_to": "Volunteer Activity", "link_type": "DocType", "type": "Link"},
+            {"label": "Expense Category", "link_to": "Expense Category", "link_type": "DocType", "type": "Link"},
+            {"label": "Expense Approval Dashboard", "link_to": "Expense Approval Dashboard", "link_type": "DocType", "type": "Link"},
+            
+            # Chapters section - Card Break first, then links
+            {"label": "Chapters", "link_count": 2, "link_type": "DocType", "type": "Card Break"},
+            {"label": "Chapter", "link_to": "Chapter", "link_type": "DocType", "type": "Link", "onboard": 1},
+            {"label": "Chapter Role", "link_to": "Chapter Role", "link_type": "DocType", "type": "Link"},
+            
+            # Teams section - Card Break first, then links
+            {"label": "Teams and Commissions", "link_count": 1, "link_type": "DocType", "type": "Card Break"},
+            {"label": "Team", "link_to": "Team", "link_type": "DocType", "type": "Link"},
+            
+            # Donations section - Card Break first, then links
+            {"label": "Donations", "link_count": 3, "link_type": "DocType", "type": "Card Break"},
+            {"label": "Donor", "link_to": "Donor", "link_type": "DocType", "type": "Link"},
+            {"label": "Donation", "link_to": "Donation", "link_type": "DocType", "type": "Link"},
+            {"label": "Donation Type", "link_to": "Donation Type", "link_type": "DocType", "type": "Link"},
+            
+            # Payment Processing section - Card Break first, then links
+            {"label": "Payment Processing", "link_count": 2, "link_type": "DocType", "type": "Card Break"},
+            {"label": "SEPA Mandate", "link_to": "SEPA Mandate", "link_type": "DocType", "type": "Link"},
+            {"label": "Direct Debit Batch", "link_to": "Direct Debit Batch", "link_type": "DocType", "type": "Link"},
+            
+            # Reports section - Card Break first, then links
+            {"label": "Reports", "link_count": 9, "link_type": "Report", "type": "Card Break"},
+            {"label": "Expiring Memberships", "link_to": "Expiring Memberships", "link_type": "Report", "type": "Link", "is_query_report": 1},
+            {"label": "New Members", "link_to": "New Members", "link_type": "Report", "type": "Link", "is_query_report": 1},
+            {"label": "Members Without Chapter", "link_to": "Members Without Chapter", "link_type": "Report", "type": "Link", "is_query_report": 1},
+            {"label": "Overdue Member Payments", "link_to": "Overdue Member Payments", "link_type": "Report", "type": "Link", "is_query_report": 1},
+            {"label": "Orphaned Subscriptions Report", "link_to": "Orphaned Subscriptions Report", "link_type": "Report", "type": "Link", "is_query_report": 1},
+            {"label": "Chapter Expense Report", "link_to": "Chapter Expense Report", "link_type": "Report", "type": "Link", "is_query_report": 1},
+            {"label": "Governance Compliance Report", "link_to": "Governance Compliance Report", "link_type": "Report", "type": "Link", "is_query_report": 1},
+            {"label": "Termination Compliance Report", "link_to": "Termination Compliance Report", "link_type": "Report", "type": "Link", "is_query_report": 1},
+            {"label": "Users by Team", "link_to": "Users by Team", "link_type": "Report", "type": "Link", "is_query_report": 1},
+            
+            # Settings section - Card Break first, then links
+            {"label": "Module Settings", "link_count": 1, "link_type": "DocType", "type": "Card Break"},
+            {"label": "Verenigingen Settings", "link_to": "Verenigingen Settings", "link_type": "DocType", "type": "Link"}
+        ]
+        
+        # Add links to workspace
+        for link_data in links_data:
+            workspace.append("links", link_data)
+        
+        # Save workspace
+        workspace.insert()
+        
+        return {
+            "success": True,
+            "message": f"Workspace updated successfully. Now has {len(workspace.links)} links.",
+            "links_count": len(workspace.links)
+        }
+        
+    except Exception as e:
+        frappe.db.rollback()
+        import traceback
+        return {
+            "success": False, 
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@frappe.whitelist()
+def create_volunteer_for_member(member_name):
+    """Create a volunteer record for an existing member (admin function)"""
+    if not frappe.has_permission("Volunteer", "create"):
+        frappe.throw(_("Insufficient permissions to create volunteer records"))
+    
+    # Get member details
+    member = frappe.get_doc("Member", member_name)
+    
+    # Check if volunteer already exists
+    existing_volunteer = frappe.db.get_value("Volunteer", {"member": member_name}, "name")
+    if existing_volunteer:
+        frappe.throw(_("Volunteer record already exists for member {0}: {1}").format(member_name, existing_volunteer))
+    
+    # Create volunteer record
+    volunteer = frappe.get_doc({
+        "doctype": "Volunteer",
+        "volunteer_name": f"{member.first_name} {member.last_name}",
+        "email": member.email,
+        "member": member.name,
+        "status": "Active",
+        "start_date": frappe.utils.today()
+    })
+    
+    volunteer.insert()
+    
+    return {
+        "success": True,
+        "volunteer_name": volunteer.name,
+        "message": _("Volunteer record created successfully for {0}").format(member.full_name)
+    }
+
 def get_volunteer_organizations(volunteer_name):
     """Get chapters and teams the volunteer belongs to"""
     organizations = {"chapters": [], "teams": []}
@@ -194,7 +415,16 @@ def submit_expense(expense_data):
         # Get current user's volunteer record
         volunteer = get_user_volunteer_record()
         if not volunteer:
-            frappe.throw(_("No volunteer record found for your account"))
+            # Provide more helpful error message with debugging info
+            user_email = frappe.session.user
+            member = frappe.db.get_value("Member", {"email": user_email}, "name")
+            
+            if member:
+                error_msg = _("No volunteer record found for your account. You have a member record ({0}) but no linked volunteer record. Please contact your chapter administrator to create a volunteer profile.").format(member)
+            else:
+                error_msg = _("No volunteer record found for your account. Your email ({0}) is not associated with any member or volunteer record. Please contact your chapter administrator.").format(user_email)
+            
+            frappe.throw(error_msg)
         
         # Validate required fields
         required_fields = ["description", "amount", "expense_date", "organization_type"]

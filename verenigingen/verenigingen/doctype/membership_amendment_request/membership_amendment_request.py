@@ -272,8 +272,118 @@ class MembershipAmendmentRequest(Document):
             impact_class = "text-success" if difference > 0 else "text-danger" if difference < 0 else "text-muted"
             impact_text = "increase" if difference > 0 else "decrease" if difference < 0 else "no change"
             
-            # Calculate annual impact
-            annual_difference = difference * 12  # Assuming monthly billing
+            # Get billing interval information from subscription
+            billing_interval_display = "per month"  # Better default than "per period"
+            annual_multiplier = 12  # Default fallback for monthly
+            
+            # Always try to get the most accurate data from the subscription first
+            # The stored current_billing_interval might be outdated or in a different format
+            if membership.subscription:
+                try:
+                    subscription = frappe.get_doc("Subscription", membership.subscription)
+                    
+                    # Get billing interval from subscription plans
+                    if hasattr(subscription, 'plans') and subscription.plans:
+                        # Get the first plan (typically there's only one)
+                        plan_detail = subscription.plans[0]
+                        plan_name = plan_detail.plan if hasattr(plan_detail, 'plan') else None
+                        
+                        if plan_name:
+                            # Get the subscription plan document
+                            plan = frappe.get_doc("Subscription Plan", plan_name)
+                            
+                            count = getattr(plan, 'billing_interval_count', 1) or 1
+                            interval = getattr(plan, 'billing_interval', 'Month').lower()
+                            
+                            # Create proper display text
+                            if count == 1:
+                                billing_interval_display = f"per {interval}"
+                            else:
+                                billing_interval_display = f"per {count} {interval}s"
+                            
+                            # Calculate annual multiplier based on billing interval
+                            # For months: if billing every 12 months, that's 1 time per year
+                            # For months: if billing every 1 month, that's 12 times per year  
+                            if interval == "month":
+                                annual_multiplier = 12.0 / count
+                            elif interval == "year":
+                                annual_multiplier = 1.0 / count
+                            elif interval == "week":
+                                annual_multiplier = 52.0 / count
+                            elif interval == "day":
+                                annual_multiplier = 365.0 / count
+                            else:
+                                annual_multiplier = 12.0 / count  # Default to monthly calculation
+                    
+                except Exception as e:
+                    frappe.log_error(f"Error getting billing interval for subscription {membership.subscription}: {str(e)}")
+                    # If subscription fails, try the stored value as fallback
+                    if self.current_billing_interval and self.current_billing_interval != "Unknown":
+                        try:
+                            # Parse stored billing interval (e.g., "1 Month(s)", "3 Month(s)", "1 Year(s)")
+                            import re
+                            match = re.match(r'(\d+)\s*([a-zA-Z]+)', self.current_billing_interval)
+                            if match:
+                                count = int(match.group(1))
+                                interval = match.group(2).lower().rstrip('s()')  # Remove trailing 's' and '()'
+                                
+                                # Create display text
+                                if count == 1:
+                                    billing_interval_display = f"per {interval}"
+                                else:
+                                    billing_interval_display = f"per {count} {interval}s"
+                                
+                                # Calculate annual multiplier
+                                # For months: if billing every 12 months, that's 1 time per year
+                                # For months: if billing every 1 month, that's 12 times per year
+                                if interval == "month":
+                                    annual_multiplier = 12.0 / count
+                                elif interval == "year":
+                                    annual_multiplier = 1.0 / count
+                                elif interval == "week":
+                                    annual_multiplier = 52.0 / count
+                                elif interval == "day":
+                                    annual_multiplier = 365.0 / count
+                                else:
+                                    annual_multiplier = 12.0 / count  # Default to monthly
+                            else:
+                                # Fallback parsing for different formats
+                                interval_lower = self.current_billing_interval.lower()
+                                if "month" in interval_lower:
+                                    billing_interval_display = "per month"
+                                    annual_multiplier = 12.0
+                                elif "year" in interval_lower:
+                                    billing_interval_display = "per year"
+                                    annual_multiplier = 1.0
+                                elif "week" in interval_lower:
+                                    billing_interval_display = "per week"
+                                    annual_multiplier = 52.0
+                                else:
+                                    billing_interval_display = f"per {self.current_billing_interval.lower()}"
+                                    annual_multiplier = 12.0  # Default fallback
+                        except Exception as e:
+                            frappe.log_error(f"Error parsing stored billing interval '{self.current_billing_interval}': {str(e)}")
+            
+            # If no subscription or all parsing failed, keep defaults
+            # (billing_interval_display = "per month", annual_multiplier = 12)
+            
+            # Calculate annual impact based on proper billing interval
+            # Use round() to avoid floating point precision issues in HTML
+            annual_difference = round(difference * annual_multiplier, 2)
+            
+            # Format currency values safely
+            current_amount_formatted = frappe.format_value(current_amount, 'Currency')
+            new_amount_formatted = frappe.format_value(new_amount, 'Currency')
+            difference_formatted = frappe.format_value(abs(difference), 'Currency')
+            annual_difference_formatted = frappe.format_value(annual_difference, 'Currency')
+            
+            # Format effective date safely
+            effective_date_str = frappe.utils.formatdate(self.effective_date) if self.effective_date else 'Not set'
+            
+            # Clean billing interval for display
+            billing_display_clean = billing_interval_display.replace('per ', '').title()
+            
+            # Debug info removed - issue resolved
             
             html = f"""
             <div class="amendment-impact">
@@ -282,24 +392,25 @@ class MembershipAmendmentRequest(Document):
                 <div class="row">
                     <div class="col-md-6">
                         <h6>Current</h6>
-                        <p><strong>{frappe.format_value(current_amount, 'Currency')}</strong> per month</p>
+                        <p><strong>{current_amount_formatted}</strong> {billing_interval_display}</p>
                     </div>
                     <div class="col-md-6">
                         <h6>After Amendment</h6>
-                        <p><strong>{frappe.format_value(new_amount, 'Currency')}</strong> per month</p>
+                        <p><strong>{new_amount_formatted}</strong> {billing_interval_display}</p>
                     </div>
                 </div>
                 
                 <div class="alert alert-info">
                     <h6 class="{impact_class}">
-                        {frappe.format_value(abs(difference), 'Currency')} {impact_text} 
+                        {difference_formatted} {impact_text} 
                         ({percentage_change:+.1f}%)
                     </h6>
-                    <p>Annual impact: <strong class="{impact_class}">{frappe.format_value(annual_difference, 'Currency')}</strong></p>
+                    <p>Annual impact: <strong class="{impact_class}">{annual_difference_formatted}</strong></p>
                 </div>
                 
                 <div class="small text-muted">
-                    <p><strong>Effective Date:</strong> {frappe.utils.formatdate(self.effective_date) if self.effective_date else 'Not set'}</p>
+                    <p><strong>Effective Date:</strong> {effective_date_str}</p>
+                    <p><strong>Billing Interval:</strong> {billing_display_clean}</p>
                     <p><strong>Next Billing:</strong> New amount will apply from the next billing period</p>
                 </div>
             </div>

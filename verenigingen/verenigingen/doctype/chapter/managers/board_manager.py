@@ -875,39 +875,18 @@ class BoardManager(BaseManager):
 
     def add_volunteer_assignment_history(self, volunteer_id: str, role: str, start_date: str):
         """Add active assignment to volunteer history when joining board"""
-        try:
-            volunteer = frappe.get_doc("Volunteer", volunteer_id)
-
-            # Check if this exact assignment already exists as active
-            # Allow multiple stints by checking all fields including start_date
-            for assignment in volunteer.assignment_history or []:
-                if (assignment.reference_doctype == "Chapter" and 
-                    assignment.reference_name == self.chapter_name and
-                    assignment.role == role and
-                    assignment.status == "Active" and
-                    str(assignment.start_date) == str(start_date)):
-                    self.log_action(
-                        "Assignment already exists in history",
-                        {
-                            "volunteer": volunteer_id,
-                            "role": role,
-                            "start_date": start_date
-                        }
-                    )
-                    return  # This exact assignment already exists
-
-            # Add new active assignment (allow multiple separate stints)
-            volunteer.append("assignment_history", {
-                "assignment_type": "Board Position",
-                "reference_doctype": "Chapter",
-                "reference_name": self.chapter_name,
-                "role": role,
-                "start_date": start_date,
-                "status": "Active"
-            })
-
-            volunteer.save(ignore_permissions=True)
-
+        from verenigingen.utils.assignment_history_manager import AssignmentHistoryManager
+        
+        success = AssignmentHistoryManager.add_assignment_history(
+            volunteer_id=volunteer_id,
+            assignment_type="Board Position",
+            reference_doctype="Chapter",
+            reference_name=self.chapter_name,
+            role=role,
+            start_date=start_date
+        )
+        
+        if success:
             self.log_action(
                 "Added volunteer assignment history",
                 {
@@ -916,14 +895,12 @@ class BoardManager(BaseManager):
                     "start_date": start_date
                 }
             )
-
-        except Exception as e:
+        else:
             self.log_action(
                 "Error adding volunteer assignment history",
                 {
                     "volunteer": volunteer_id,
-                    "role": role,
-                    "error": str(e)
+                    "role": role
                 },
                 "error"
             )
@@ -931,91 +908,34 @@ class BoardManager(BaseManager):
     def update_volunteer_assignment_history(self, volunteer_id: str, role: str, 
                                            start_date: str, end_date: str):
         """Update volunteer assignment history when removing from board"""
-        try:
-            volunteer = frappe.get_doc("Volunteer", volunteer_id)
-
-            # Look for the specific assignment that matches all criteria
-            # This ensures we update the correct stint for volunteers with multiple terms
-            target_assignment = None
-            for assignment in volunteer.assignment_history or []:
-                if (assignment.reference_doctype == "Chapter" and 
-                    assignment.reference_name == self.chapter_name and
-                    assignment.role == role and
-                    str(assignment.start_date) == str(start_date) and
-                    assignment.status == "Active"):
-                    target_assignment = assignment
-                    break
-
-            if target_assignment:
-                # Update the specific assignment to completed
-                target_assignment.end_date = end_date
-                target_assignment.status = "Completed"
-                
-                self.log_action(
-                    "Updated specific assignment history",
-                    {
-                        "volunteer": volunteer_id,
-                        "role": role,
-                        "start_date": start_date,
-                        "end_date": end_date
-                    }
-                )
-            else:
-                # If we can't find the exact assignment, look for any active one
-                # This is a fallback for data inconsistencies
-                fallback_assignment = None
-                for assignment in volunteer.assignment_history or []:
-                    if (assignment.reference_doctype == "Chapter" and 
-                        assignment.reference_name == self.chapter_name and
-                        assignment.role == role and
-                        assignment.status == "Active"):
-                        fallback_assignment = assignment
-                        break
-
-                if fallback_assignment:
-                    fallback_assignment.end_date = end_date
-                    fallback_assignment.status = "Completed"
-                    
-                    self.log_action(
-                        "Updated fallback assignment history",
-                        {
-                            "volunteer": volunteer_id,
-                            "role": role,
-                            "original_start": fallback_assignment.start_date,
-                            "end_date": end_date
-                        }
-                    )
-                else:
-                    # Create a new completed assignment if nothing exists
-                    volunteer.append("assignment_history", {
-                        "assignment_type": "Board Position",
-                        "reference_doctype": "Chapter",
-                        "reference_name": self.chapter_name,
-                        "role": role,
-                        "start_date": start_date,
-                        "end_date": end_date,
-                        "status": "Completed"
-                    })
-                    
-                    self.log_action(
-                        "Created new completed assignment history",
-                        {
-                            "volunteer": volunteer_id,
-                            "role": role,
-                            "start_date": start_date,
-                            "end_date": end_date
-                        }
-                    )
-
-            volunteer.save(ignore_permissions=True)
-
-        except Exception as e:
+        from verenigingen.utils.assignment_history_manager import AssignmentHistoryManager
+        
+        success = AssignmentHistoryManager.complete_assignment_history(
+            volunteer_id=volunteer_id,
+            assignment_type="Board Position",
+            reference_doctype="Chapter",
+            reference_name=self.chapter_name,
+            role=role,
+            start_date=start_date,
+            end_date=end_date
+        )
+        
+        if success:
+            self.log_action(
+                "Updated volunteer assignment history",
+                {
+                    "volunteer": volunteer_id,
+                    "role": role,
+                    "start_date": start_date,
+                    "end_date": end_date
+                }
+            )
+        else:
             self.log_action(
                 "Error updating volunteer assignment history",
                 {
                     "volunteer": volunteer_id,
-                    "role": role,
-                    "error": str(e)
+                    "role": role
                 },
                 "error"
             )

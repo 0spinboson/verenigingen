@@ -381,10 +381,12 @@ class TestTeam(unittest.TestCase):
             "status": "Active"
         })
         
-        # Add only member without volunteer
+        # Add member with linked volunteer  
         team.append("team_members", {
             "member": self.test_members[0].name,
             "member_name": self.test_members[0].full_name,
+            "volunteer": self.test_volunteers[0].name,
+            "volunteer_name": self.test_volunteers[0].volunteer_name,
             "role_type": "Team Leader",
             "role": "Working Group Lead",
             "from_date": today(),

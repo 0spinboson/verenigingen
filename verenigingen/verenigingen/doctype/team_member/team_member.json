@@ -30,7 +30,7 @@
    "fetch_from": "volunteer.volunteer_name",
    "fieldname": "volunteer_name",
    "fieldtype": "Data",
-   "in_list_view": 1,
+   "in_list_view": 0,
    "label": "Volunteer Name",
    "read_only": 1
   },
@@ -48,7 +48,7 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Role",
-   "reqd": 1
+   "reqd": 0
   },
   {
    "fieldname": "column_break_5",
@@ -57,6 +57,7 @@
   {
    "fieldname": "from_date",
    "fieldtype": "Date",
+   "in_list_view": 1,
    "label": "From Date",
    "reqd": 1
   },
