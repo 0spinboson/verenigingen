@@ -34,7 +34,7 @@ def get_data(filters):
 			year = getdate().year
 
 	return frappe.db.sql("""
-		select ms.membership_type, ms.name, m.name, m.member_name, m.email, ms.expiry_date
+		select ms.membership_type, ms.name, m.name, m.full_name, m.email, ms.expiry_date
 		from `tabMember` m
 		inner join (
 			select 

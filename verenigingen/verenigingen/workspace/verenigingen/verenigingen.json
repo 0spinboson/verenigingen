@@ -1,14 +1,15 @@
 {
  "charts": [],
- "content": "[\n                {\"id\":\"NFcjh9I8BH\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Members/Memberships</b></span>\",\"col\":12}},\n                {\"id\":\"oIk2CrSoAH\",\"type\":\"card\",\"data\":{\"card_name\":\"Memberships\",\"col\":4}},\n                {\"id\":\"sxzInK1PHL\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Member\",\"col\":3}},\n                {\"id\":\"q6OM4R0OUa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Membership\",\"col\":3}},\n                {\"id\":\"zGoLYG0xRM\",\"type\":\"spacer\",\"data\":{\"col\":12}},\n                {\"id\":\"jMy1CTqEJS\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Volunteering</b></span>\",\"col\":12}},\n                {\"id\":\"2vHgUjgQcL\",\"type\":\"card\",\"data\":{\"card_name\":\"Volunteers\",\"col\":4}},\n                {\"id\":\"zGoLYG0xRM2\",\"type\":\"spacer\",\"data\":{\"col\":12}},\n                {\"id\":\"jMy1CTqEJS2\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Chapters/Teams</b></span>\",\"col\":12}},\n                {\"id\":\"S8Mi0T41U7\",\"type\":\"card\",\"data\":{\"card_name\":\"Chapters\",\"col\":4}},\n                {\"id\":\"XXEhdaTHF_\",\"type\":\"card\",\"data\":{\"card_name\":\"Teams and Commissions\",\"col\":4}},\n                {\"id\":\"zGoLYG0xRM3\",\"type\":\"spacer\",\"data\":{\"col\":12}},\n                {\"id\":\"jMy1CTqEJS3\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Financial</b></span>\",\"col\":12}},\n                {\"id\":\"ZvroSYo9F3\",\"type\":\"card\",\"data\":{\"card_name\":\"Donations\",\"col\":4}},\n                {\"id\":\"PaymentCard\",\"type\":\"card\",\"data\":{\"card_name\":\"Payment Processing\",\"col\":4}},\n                {\"id\":\"zGoLYG0xRM4\",\"type\":\"spacer\",\"data\":{\"col\":12}},\n                {\"id\":\"jMy1CTqEJS4\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Reports</b></span>\",\"col\":12}},\n                {\"id\":\"ReportsCard\",\"type\":\"card\",\"data\":{\"card_name\":\"Reports\",\"col\":8}},\n                {\"id\":\"zGoLYG0xRM5\",\"type\":\"spacer\",\"data\":{\"col\":12}},\n                {\"id\":\"SettingsHeader\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Settings</b></span>\",\"col\":12}},\n                {\"id\":\"RKkllDSemd\",\"type\":\"card\",\"data\":{\"card_name\":\"Module Settings\",\"col\":4}}\n            ]",
+ "content": "[{\"id\":\"NFcjh9I8BH\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Members/Memberships</b></span>\",\"col\":12}},{\"id\":\"oIk2CrSoAH\",\"type\":\"card\",\"data\":{\"card_name\":\"Memberships\",\"col\":4}},{\"id\":\"sxzInK1PHL\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Member\",\"col\":3}},{\"id\":\"q6OM4R0OUa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Membership\",\"col\":3}},{\"id\":\"zGoLYG0xRM\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"jMy1CTqEJS\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Volunteering</b></span>\",\"col\":12}},{\"id\":\"2vHgUjgQcL\",\"type\":\"card\",\"data\":{\"card_name\":\"Volunteers\",\"col\":4}},{\"id\":\"zGoLYG0xRM2\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"jMy1CTqEJS2\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Chapters/Teams</b></span>\",\"col\":12}},{\"id\":\"S8Mi0T41U7\",\"type\":\"card\",\"data\":{\"card_name\":\"Chapters\",\"col\":4}},{\"id\":\"XXEhdaTHF_\",\"type\":\"card\",\"data\":{\"card_name\":\"Teams and Commissions\",\"col\":4}},{\"id\":\"zGoLYG0xRM3\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"jMy1CTqEJS3\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Financial</b></span>\",\"col\":12}},{\"id\":\"ZvroSYo9F3\",\"type\":\"card\",\"data\":{\"card_name\":\"Donations\",\"col\":4}},{\"id\":\"PaymentCard\",\"type\":\"card\",\"data\":{\"card_name\":\"Payment Processing\",\"col\":4}},{\"id\":\"zGoLYG0xRM4\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"jMy1CTqEJS4\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Reports</b></span>\",\"col\":12}},{\"id\":\"ReportsCard\",\"type\":\"card\",\"data\":{\"card_name\":\"Reports\",\"col\":8}},{\"id\":\"zGoLYG0xRM5\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"SettingsHeader\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Settings</b></span>\",\"col\":12}},{\"id\":\"RKkllDSemd\",\"type\":\"card\",\"data\":{\"card_name\":\"Module Settings\",\"col\":4}}]",
  "creation": "2025-06-12 13:27:58.459386",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
+ "for_user": "",
  "hide_custom": 0,
  "icon": "non-profit",
  "idx": 0,
- "indicator_color": "green",
+ "indicator_color": "",
  "is_hidden": 0,
  "label": "Verenigingen",
  "links": [
@@ -365,12 +366,13 @@
    "type": "Link"
   }
  ],
- "modified": "2025-06-12 13:27:58.459386",
+ "modified": "2025-06-12 15:29:58.295686",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Verenigingen",
  "number_cards": [],
  "owner": "Administrator",
+ "parent_page": "Home",
  "public": 1,
  "quick_lists": [],
  "roles": [],
@@ -386,53 +388,9 @@
   {
    "color": "Grey",
    "doc_view": "",
-   "label": "Member",
-   "link_to": "Member",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "",
    "label": "Membership",
    "link_to": "Membership",
    "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "",
-   "label": "Membership",
-   "link_to": "Membership",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "",
-   "label": "Chapter",
-   "link_to": "Chapter",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "",
-   "label": "Chapter",
-   "link_to": "Chapter",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "",
-   "label": "Users by Team",
-   "link_to": "Users by Team",
-   "report_ref_doctype": "Team",
-   "type": "Report"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "",
-   "label": "Users by Team",
-   "link_to": "Users by Team",
-   "report_ref_doctype": "Team",
-   "type": "Report"
   }
  ],
  "title": "Verenigingen"
