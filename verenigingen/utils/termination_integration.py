@@ -44,14 +44,52 @@ def cancel_membership_safe(membership_name, cancellation_date=None, cancellation
 def cancel_subscription_safe(subscription_name):
     """
     Cancel subscription safely without modifying ERPNext core
+    Handles edge cases with docstatus and data integrity issues
     """
     try:
         subscription = frappe.get_doc("Subscription", subscription_name)
-        if subscription.status != "Cancelled":
-            subscription.flags.ignore_permissions = True
-            subscription.cancel_subscription()  # Uses ERPNext's existing method
-            frappe.logger().info(f"Cancelled subscription {subscription_name}")
-        return True
+        
+        # Check if already cancelled
+        if subscription.status == "Cancelled":
+            frappe.logger().info(f"Subscription {subscription_name} already cancelled")
+            return True
+        
+        # Handle edge case: docstatus=2 but status=Active (data inconsistency)
+        if subscription.docstatus == 2:
+            frappe.logger().warning(f"Subscription {subscription_name} has docstatus=2 but status={subscription.status}, updating status")
+            # Direct update to fix inconsistency
+            frappe.db.set_value("Subscription", subscription_name, "status", "Cancelled")
+            frappe.db.commit()
+            return True
+        
+        # Normal cancellation process
+        subscription.flags.ignore_permissions = True
+        subscription.flags.ignore_validate_update_after_submit = True
+        
+        try:
+            # Try ERPNext's standard cancellation method
+            subscription.cancel_subscription()
+            frappe.logger().info(f"Cancelled subscription {subscription_name} using standard method")
+            return True
+            
+        except Exception as cancel_error:
+            frappe.logger().warning(f"Standard cancellation failed for {subscription_name}: {str(cancel_error)}")
+            
+            # Fallback: manual status update (safer approach)
+            try:
+                # Update status directly through database to avoid validation issues
+                frappe.db.set_value("Subscription", subscription_name, {
+                    "status": "Cancelled",
+                    "end_date": frappe.utils.today()
+                })
+                frappe.db.commit()
+                frappe.logger().info(f"Cancelled subscription {subscription_name} using fallback method")
+                return True
+                
+            except Exception as fallback_error:
+                frappe.logger().error(f"Fallback cancellation also failed for {subscription_name}: {str(fallback_error)}")
+                return False
+        
     except Exception as e:
         frappe.logger().error(f"Failed to cancel subscription {subscription_name}: {str(e)}")
         return False

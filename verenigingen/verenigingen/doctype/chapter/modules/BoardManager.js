@@ -569,7 +569,7 @@ export class BoardManager {
             
             if (result?.success) {
                 this.ui.showAlert(
-                    __'{0} board members processed successfully', [result.processed]),
+                    __('{0} board members processed successfully', [result.processed]),
                     'green'
                 );
                 
@@ -672,7 +672,7 @@ export class BoardManager {
             
             if (result?.success) {
                 this.ui.showAlert(
-                    __'{0} board members {1} successfully', 
+                    __('{0} board members {1} successfully', 
                     [result.processed, action === 'remove' ? 'removed' : 'deactivated']),
                     'green'
                 );

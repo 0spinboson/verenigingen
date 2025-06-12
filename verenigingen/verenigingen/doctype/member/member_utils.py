@@ -656,27 +656,23 @@ def create_and_link_mandate_enhanced(member, mandate_id, iban, bic=None, account
         "sepa_mandate": mandate.name
     })
     
-    frappe.db.sql("""
-        UPDATE `tabMember SEPA Mandate Link`
-        SET is_current = 0
-        WHERE parent = %s
-    """, (member,))
+    # Update member document with new mandate link using ORM
+    member_doc = frappe.get_doc("Member", member)
     
-    frappe.db.sql("""
-        INSERT INTO `tabMember SEPA Mandate Link`
-        (name, parent, parentfield, parenttype, sepa_mandate, is_current, mandate_reference, status, valid_from)
-        VALUES (%s, %s, 'sepa_mandates', 'Member', %s, 1, %s, %s, %s)
-    """, (
-        frappe.generate_hash(), 
-        member, 
-        mandate.name, 
-        mandate.mandate_id, 
-        'Active', 
-        mandate.sign_date
-    ))
+    # Set all existing mandate links as inactive
+    for mandate_link in member_doc.sepa_mandates:
+        mandate_link.is_current = 0
     
-    frappe.db.commit()
-    frappe.clear_document_cache("Member", member)
+    # Add new mandate link
+    member_doc.append("sepa_mandates", {
+        "sepa_mandate": mandate.name,
+        "is_current": 1,
+        "mandate_reference": mandate.mandate_id,
+        "status": "Active",
+        "valid_from": mandate.sign_date
+    })
+    
+    member_doc.save(ignore_permissions=True)
     
     frappe.logger().debug(f"Created and linked mandate {mandate.name} with ID {mandate_id}")
     
@@ -852,20 +848,23 @@ def create_and_link_mandate(member, iban, bic=None, account_holder_name=None,
         "sepa_mandate": mandate.name
     })
     
-    frappe.db.sql("""
-        UPDATE `tabMember SEPA Mandate Link`
-        SET is_current = 0
-        WHERE parent = %s
-    """, (member,))
+    # Update member document with new mandate link using ORM
+    member_doc = frappe.get_doc("Member", member)
     
-    frappe.db.sql("""
-        INSERT INTO `tabMember SEPA Mandate Link`
-        (name, parent, parentfield, parenttype, sepa_mandate, is_current, mandate_reference, status, valid_from)
-        VALUES (%s, %s, 'sepa_mandates', 'Member', %s, 1, %s, %s, %s)
-    """, (frappe.generate_hash(), member, mandate.name, mandate.mandate_id, 'Active', mandate.sign_date))
+    # Set all existing mandate links as inactive
+    for mandate_link in member_doc.sepa_mandates:
+        mandate_link.is_current = 0
     
-    frappe.db.commit()
-    frappe.clear_document_cache("Member", member)
+    # Add new mandate link
+    member_doc.append("sepa_mandates", {
+        "sepa_mandate": mandate.name,
+        "is_current": 1,
+        "mandate_reference": mandate.mandate_id,
+        "status": "Active",
+        "valid_from": mandate.sign_date
+    })
+    
+    member_doc.save(ignore_permissions=True)
     
     return mandate.name
 

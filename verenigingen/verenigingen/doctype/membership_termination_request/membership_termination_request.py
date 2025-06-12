@@ -7,9 +7,17 @@ from frappe.utils import getdate, today, now, add_days, date_diff
 
 class MembershipTerminationRequest(Document):
     def validate(self):
+        self.set_defaults()
         self.set_approval_requirements()
         self.validate_permissions()
         self.validate_dates()
+    
+    def set_defaults(self):
+        """Set default values"""
+        if not self.requested_by:
+            self.requested_by = frappe.session.user
+        if not self.request_date:
+            self.request_date = today()
     
     def before_save(self):
         self.add_audit_entry("Document Updated", f"Status: {self.status}")
@@ -348,6 +356,126 @@ class MembershipTerminationRequest(Document):
             self.approved_by = frappe.session.user
         if not self.approval_date:
             self.approval_date = now()
+    
+    @frappe.whitelist()
+    def submit_for_approval(self):
+        """Submit the termination request for approval"""
+        if self.status != "Draft":
+            frappe.throw(_("Only draft requests can be submitted for approval"))
+        
+        # Validate required fields
+        if not self.termination_reason:
+            frappe.throw(_("Termination reason is required"))
+        
+        # Check disciplinary documentation requirement
+        disciplinary_types = ['Policy Violation', 'Disciplinary Action', 'Expulsion']
+        if self.termination_type in disciplinary_types and not self.disciplinary_documentation:
+            frappe.throw(_("Documentation is required for disciplinary actions"))
+        
+        # Set approval requirements
+        self.set_approval_requirements()
+        
+        # Update status
+        if self.requires_secondary_approval:
+            self.status = "Pending"
+            if not self.secondary_approver:
+                frappe.throw(_("Secondary approver is required for this termination type"))
+        else:
+            # For simple terminations, can go directly to approved
+            self.status = "Approved" 
+            self.approved_by = frappe.session.user
+            self.approved_date = now()
+        
+        # Set default termination date if not provided
+        if not self.termination_date:
+            grace_period_types = ['Voluntary', 'Non-payment', 'Deceased']
+            if self.termination_type in grace_period_types:
+                self.termination_date = add_days(today(), 30)  # 30-day grace period
+                self.grace_period_end = self.termination_date
+            else:
+                self.termination_date = today()  # Immediate for disciplinary
+        
+        # Save the document
+        self.save()
+        
+        # Add audit entry
+        self.add_audit_entry("Submitted for Approval", f"Status changed to {self.status}")
+        
+        # Send notifications if needed
+        if self.status == "Pending" and self.secondary_approver:
+            self.send_approval_notification()
+        
+        frappe.msgprint(_("Termination request submitted for approval"))
+        
+        return {"status": self.status, "message": "Request submitted successfully"}
+    
+    def send_approval_notification(self):
+        """Send notification to approver"""
+        try:
+            if self.secondary_approver:
+                # Could implement email notification here
+                frappe.logger().info(f"Approval notification should be sent to {self.secondary_approver}")
+        except Exception as e:
+            frappe.logger().error(f"Failed to send approval notification: {str(e)}")
+    
+    @frappe.whitelist()
+    def approve_request(self, decision, notes=""):
+        """Approve or reject the termination request"""
+        if self.status not in ["Pending", "Draft"]:
+            frappe.throw(_("Only pending or draft requests can be approved/rejected"))
+        
+        if decision == "approved":
+            self.status = "Approved"
+            self.approved_by = frappe.session.user
+            self.approved_date = now()
+            self.approver_notes = notes
+            
+            # Set default termination date if not provided
+            if not self.termination_date:
+                grace_period_types = ['Voluntary', 'Non-payment', 'Deceased']
+                if self.termination_type in grace_period_types:
+                    self.termination_date = add_days(today(), 30)  # 30-day grace period
+                    self.grace_period_end = self.termination_date
+                else:
+                    self.termination_date = today()  # Immediate for disciplinary
+            
+            self.add_audit_entry("Request Approved", f"Approved by {frappe.session.user}")
+            frappe.msgprint(_("Termination request approved"))
+            
+        elif decision == "rejected":
+            self.status = "Rejected"
+            self.approved_by = frappe.session.user
+            self.approval_date = now()
+            self.approver_notes = notes
+            
+            self.add_audit_entry("Request Rejected", f"Rejected by {frappe.session.user}: {notes}")
+            frappe.msgprint(_("Termination request rejected"))
+        
+        else:
+            frappe.throw(_("Invalid decision. Must be 'approved' or 'rejected'"))
+        
+        # Save the document
+        self.save()
+        
+        return {"status": self.status, "message": f"Request {decision} successfully"}
+    
+    @frappe.whitelist()
+    def execute_termination(self):
+        """Execute the termination request"""
+        if self.status != "Approved":
+            frappe.throw(_("Only approved requests can be executed"))
+        
+        # Update status to executed
+        self.status = "Executed"
+        
+        # Call the internal execution method
+        success = self.execute_termination_internal()
+        
+        if success:
+            frappe.msgprint(_("Termination executed successfully"))
+            return {"status": self.status, "message": "Termination executed successfully"}
+        else:
+            frappe.throw(_("Failed to execute termination"))
     
     def add_to_expulsion_report(self):
         """Add disciplinary termination to expulsion report"""

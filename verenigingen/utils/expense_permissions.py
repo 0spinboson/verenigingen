@@ -151,11 +151,11 @@ class ExpensePermissionManager:
         conditions.append(f"`tabVolunteer Expense`.volunteer = '{user_volunteer}'")
         
         # Can see expenses from chapters where user is board member
-        user_chapters = frappe.db.sql("""
-            SELECT DISTINCT parent 
-            FROM `tabChapter Board Member` 
-            WHERE volunteer = %s AND is_active = 1
-        """, user_volunteer, pluck=True)
+        user_chapters = frappe.get_all("Chapter Board Member",
+            filters={"volunteer": user_volunteer, "is_active": 1},
+            pluck="parent",
+            distinct=True
+        )
         
         if user_chapters:
             chapter_list = "', '".join(user_chapters)

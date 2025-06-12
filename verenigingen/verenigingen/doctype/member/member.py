@@ -190,6 +190,7 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         self.validate_member_id_change()
         self.handle_fee_override_changes()
         self.sync_status_fields()
+        
     
     def set_application_status_defaults(self):
         """Set appropriate defaults for application_status based on member type"""
@@ -473,7 +474,7 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         return get_linked_donations(self.name)
     
     def handle_fee_override_changes(self):
-        """Handle changes to membership fee override"""
+        """Handle changes to membership fee override using amendment system"""
         # Skip fee override change tracking for new member applications
         # Applications should set initial fee amounts without triggering change tracking
         if not self.name or self.is_new():
@@ -525,16 +526,39 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             if not self.fee_override_reason:
                 frappe.throw(_("Please provide a reason for the fee override"))
         
-        # Record the change in history (will be added in after_save)
-        self._pending_fee_change = {
-            "old_amount": old_amount,
-            "new_amount": new_amount,
-            "reason": self.fee_override_reason or "No reason provided",
-            "change_date": now(),
-            "changed_by": frappe.session.user
-        }
+        # Create amendment request immediately instead of relying on after_save hook
+        frappe.logger().info(f"Creating amendment request immediately for member {self.name}")
         
-        frappe.logger().info(f"Set pending fee change for existing member {self.name}: {self._pending_fee_change}")
+        try:
+            from verenigingen.verenigingen.doctype.membership_amendment_request.membership_amendment_request import create_fee_change_amendment
+            
+            amendment = create_fee_change_amendment(
+                member_name=self.name,
+                new_amount=new_amount,
+                reason=self.fee_override_reason or "No reason provided"
+            )
+            
+            frappe.logger().info(f"Successfully created amendment request {amendment.name} for member {self.name}")
+            
+            # Store amendment reference for UI display
+            self._amendment_id = amendment.name
+            
+            # Note: Fee change history will be recorded via the after_save hook to avoid recursive saves
+            
+        except Exception as e:
+            frappe.logger().error(f"Error creating amendment request for member {self.name}: {str(e)}")
+            import traceback
+            frappe.logger().error(f"Full traceback: {traceback.format_exc()}")
+            
+            # Fall back to the pending amendment approach
+            self._pending_amendment = {
+                "old_amount": old_amount,
+                "new_amount": new_amount,
+                "reason": self.fee_override_reason or "No reason provided",
+                "change_date": now(),
+                "changed_by": frappe.session.user
+            }
+            frappe.logger().info(f"Set pending amendment as fallback for member {self.name}: {self._pending_amendment}")
     
     
     def record_fee_change(self, change_data):
@@ -545,9 +569,9 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             "new_amount": change_data["new_amount"],
             "reason": change_data["reason"],
             "changed_by": change_data["changed_by"],
-            "subscription_action": "Pending subscription update"
+            "subscription_action": change_data.get("subscription_action", "Pending subscription update")
         })
-        self.save(ignore_permissions=True)
+        # Note: Don't save here to avoid recursive save during validation
     
     @frappe.whitelist()
     def get_current_membership_fee(self):
@@ -570,6 +594,45 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             }
         
         return {"amount": 0, "source": "none"}
+    
+    @frappe.whitelist()
+    def get_display_membership_fee(self):
+        """Get membership fee for display with amendment status"""
+        current_fee = self.get_current_membership_fee()
+        
+        # Check for pending amendments
+        pending_amendments = frappe.get_all(
+            "Membership Amendment Request",
+            filters={
+                "member": self.name,
+                "status": ["in", ["Draft", "Pending Approval", "Approved"]],
+                "amendment_type": "Fee Change"
+            },
+            fields=["name", "status", "requested_amount", "effective_date", "reason"],
+            order_by="creation desc",
+            limit=1
+        )
+        
+        if pending_amendments:
+            amendment = pending_amendments[0]
+            return {
+                "current_amount": current_fee["amount"],
+                "display_amount": amendment["requested_amount"],
+                "status": f"Pending - Effective {frappe.format_date(amendment['effective_date']) if amendment['effective_date'] else 'TBD'}",
+                "amendment_status": amendment["status"],
+                "amendment_id": amendment["name"],
+                "reason": amendment["reason"],
+                "source": "amendment_pending"
+            }
+        
+        # No pending amendments, return current fee
+        return {
+            "current_amount": current_fee["amount"],
+            "display_amount": current_fee["amount"],
+            "status": "Current",
+            "source": current_fee["source"],
+            "reason": current_fee.get("reason")
+        }
     
     @frappe.whitelist()
     def get_current_subscription_details(self):
@@ -1110,19 +1173,60 @@ def get_member_chapter_display_html(member_name):
         return '<p style="color: #dc3545;">Error loading chapter information</p>'
 
 def handle_fee_override_after_save(doc, method=None):
-    """Hook function to handle fee override changes after save"""
-    if hasattr(doc, '_pending_fee_change'):
+    """Hook function to handle fee override changes after save using amendment system"""
+    frappe.logger().info(f"handle_fee_override_after_save called for member {doc.name}, method={method}")
+    
+    # Handle any remaining _pending_amendment that wasn't processed during validation
+    if hasattr(doc, '_pending_amendment'):
         try:
-            frappe.logger().info(f"Processing pending fee change for member {doc.name}")
-            doc.record_fee_change(doc._pending_fee_change)
+            frappe.logger().info(f"Processing remaining pending amendment for member {doc.name}")
+            
+            # Create amendment request
+            from verenigingen.verenigingen.doctype.membership_amendment_request.membership_amendment_request import create_fee_change_amendment
+            
+            amendment = create_fee_change_amendment(
+                member_name=doc.name,
+                new_amount=doc._pending_amendment["new_amount"],
+                reason=doc._pending_amendment["reason"]
+            )
+            
+            # Record the change in history for audit trail (without saving again)
+            doc.append("fee_change_history", {
+                "change_date": doc._pending_amendment["change_date"],
+                "old_amount": doc._pending_amendment["old_amount"],
+                "new_amount": doc._pending_amendment["new_amount"],
+                "reason": doc._pending_amendment["reason"],
+                "changed_by": doc._pending_amendment["changed_by"],
+                "subscription_action": f"Amendment request created: {amendment.name}"
+            })
+            # Save the history separately to avoid recursion
+            frappe.db.sql("""
+                UPDATE `tabMember` 
+                SET fee_change_history = %s 
+                WHERE name = %s
+            """, (frappe.as_json(doc.fee_change_history), doc.name))
+            frappe.db.commit()
+            
+            delattr(doc, '_pending_amendment')
+            frappe.logger().info(f"Successfully created fallback amendment request {amendment.name} for member {doc.name}")
+            
+        except Exception as e:
+            frappe.logger().error(f"Error creating fallback amendment request for member {doc.name}: {str(e)}")
+            # Don't re-raise to avoid blocking the save operation
+    
+    # Legacy support: handle old _pending_fee_change if it exists
+    elif hasattr(doc, '_pending_fee_change'):
+        try:
+            frappe.logger().info(f"Processing legacy fee change for member {doc.name}")
+            # Record change without triggering another save
+            doc.append("fee_change_history", doc._pending_fee_change)
             doc.update_active_subscriptions()
             delattr(doc, '_pending_fee_change')
-            frappe.logger().info(f"Successfully processed fee override change for member {doc.name}")
+            frappe.logger().info(f"Successfully processed legacy fee override change for member {doc.name}")
         except Exception as e:
-            frappe.logger().error(f"Error processing fee override for member {doc.name}: {str(e)}")
-            # Don't re-raise to avoid blocking the save operation
+            frappe.logger().error(f"Error processing legacy fee override for member {doc.name}: {str(e)}")
     else:
-        frappe.logger().debug(f"No pending fee change found for member {doc.name}")
+        frappe.logger().debug(f"No pending fee change or amendment found for member {doc.name}")
 
 @frappe.whitelist()
 def get_current_subscription_details(member):

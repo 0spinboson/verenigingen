@@ -80,7 +80,6 @@
    "fieldtype": "Link",
    "label": "Requested By",
    "options": "User",
-   "default": "__current_user",
    "reqd": 1
   },
   {

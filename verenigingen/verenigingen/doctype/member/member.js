@@ -47,6 +47,9 @@ frappe.ui.form.on('Member', {
         // Display termination status
         display_termination_status(frm);
         
+        // Display amendment status
+        display_amendment_status(frm);
+        
         // Display suspension status
         display_suspension_status(frm);
         
@@ -1096,6 +1099,64 @@ function display_suspension_status(frm) {
                         );
                     }
                 }
+            }
+        }
+    });
+}
+
+function display_amendment_status(frm) {
+    if (!frm.doc.name) return;
+    
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.membership_amendment_request.membership_amendment_request.get_member_pending_amendments',
+        args: {
+            member_name: frm.doc.name
+        },
+        callback: function(r) {
+            if (r.message && r.message.length > 0) {
+                const amendments = r.message;
+                let amendment_html = '<div class="amendment-status" style="margin: 10px 0;">';
+                amendment_html += '<h6><i class="fa fa-edit"></i> Pending Fee Amendments</h6>';
+                
+                for (let amendment of amendments) {
+                    let status_color = 'orange';
+                    if (amendment.status === 'Approved') status_color = 'green';
+                    if (amendment.status === 'Rejected') status_color = 'red';
+                    
+                    amendment_html += `
+                        <div class="alert alert-info" style="padding: 8px; margin: 5px 0;">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <strong>${amendment.amendment_type}</strong>: ${frappe.format(amendment.requested_amount, {fieldtype: 'Currency'})}
+                                    <br><small>${amendment.reason}</small>
+                                </div>
+                                <div class="col-md-4 text-right">
+                                    <span class="badge badge-${status_color}">${amendment.status}</span>
+                                    <br><small>${frappe.datetime.str_to_user(amendment.effective_date)}</small>
+                                </div>
+                            </div>
+                            <a href="/app/membership-amendment-request/${amendment.name}" class="btn btn-xs btn-default" style="margin-top: 5px;">
+                                View Amendment
+                            </a>
+                        </div>
+                    `;
+                }
+                
+                amendment_html += '</div>';
+                
+                // Add to form layout
+                if (frm.fields_dict.amendment_status_html) {
+                    frm.fields_dict.amendment_status_html.$wrapper.html(amendment_html);
+                } else {
+                    // Create a temporary display area
+                    frm.dashboard.add_comment(amendment_html, 'blue');
+                }
+                
+                // Add dashboard indicator
+                frm.dashboard.add_indicator(
+                    __('Pending Amendments: {0}', [amendments.length]), 
+                    'orange'
+                );
             }
         }
     });

@@ -8,8 +8,8 @@ from .base_manager import BaseManager
 class BoardManager(BaseManager):
     """Manager for chapter board member operations"""
 
-    def init(self, chapter_doc):
-        super().init(chapter_doc)
+    def __init__(self, chapter_doc):
+        super().__init__(chapter_doc)
         self.volunteer_cache = {}
 
     def add_board_member(self, volunteer: str, role: str, from_date: str = None, 
@@ -64,7 +64,7 @@ class BoardManager(BaseManager):
             self.chapter_doc.save()
 
             # Add to volunteer assignment history
-            self.addvolunteer_assignment_history(volunteer, role, from_date)
+            self.add_volunteer_assignment_history(volunteer, role, from_date)
 
             # Create audit comment
             self.create_comment(
@@ -128,8 +128,8 @@ class BoardManager(BaseManager):
         try:
             # Find the active board membership
             board_member = self._find_active_board_member(volunteer)
-            if not boardmember:
-                frappe.throw(("Volunteer {0} is not an active board member").format(volunteer))
+            if not board_member:
+                frappe.throw(_("Volunteer {0} is not an active board member").format(volunteer))
 
             # Store data for history update
             board_member_data = {
@@ -152,7 +152,7 @@ class BoardManager(BaseManager):
             self.chapter_doc.save()
 
             # Update volunteer assignment history
-            self.updatevolunteer_assignment_history(
+            self.update_volunteer_assignment_history(
                 board_member_data['volunteer'],
                 board_member_data['chapter_role'],
                 board_member_data['from_date'],
@@ -222,8 +222,8 @@ class BoardManager(BaseManager):
         try:
             # Find current active role
             current_board_member = self._find_active_board_member(volunteer)
-            if not current_boardmember:
-                frappe.throw(("Volunteer {0} is not an active board member").format(volunteer))
+            if not current_board_member:
+                frappe.throw(_("Volunteer {0} is not an active board member").format(volunteer))
 
             current_role = current_board_member.chapter_role
             volunteer_name = current_board_member.volunteer_name
@@ -330,7 +330,7 @@ class BoardManager(BaseManager):
                             processed_count += 1
 
                             # Update volunteer assignment history
-                            self.updatevolunteer_assignment_history(
+                            self.update_volunteer_assignment_history(
                                 history_data['volunteer'],
                                 history_data['chapter_role'],
                                 history_data['from_date'],
@@ -440,7 +440,7 @@ class BoardManager(BaseManager):
                             processed_count += 1
 
                             # Update volunteer assignment history
-                            self.updatevolunteer_assignment_history(
+                            self.update_volunteer_assignment_history(
                                 board_member.volunteer,
                                 board_member.chapter_role,
                                 board_member.from_date,
@@ -682,7 +682,8 @@ class BoardManager(BaseManager):
         # Create lookup for old board members
         old_board_members = {bm.name: bm for bm in old_doc.board_members if bm.name}
 
-        # Check each current board member
+        # Check each current board member for deactivation
+        members_to_remove = []
         for board_member in self.chapter_doc.board_members or []:
             if not board_member.name:
                 continue
@@ -701,12 +702,30 @@ class BoardManager(BaseManager):
                     board_member.to_date = today()
 
                 # Update volunteer assignment history
-                self.updatevolunteer_assignment_history(
+                self.update_volunteer_assignment_history(
                     board_member.volunteer,
                     board_member.chapter_role,
                     board_member.from_date,
                     board_member.to_date
                 )
+
+                # Mark for removal from active board display
+                members_to_remove.append(board_member)
+
+        # Remove deactivated board members from the list
+        # This ensures they don't show up in the active board display
+        for member_to_remove in members_to_remove:
+            self.chapter_doc.board_members.remove(member_to_remove)
+            
+            self.log_action(
+                "Removed deactivated board member from display",
+                {
+                    "volunteer": member_to_remove.volunteer,
+                    "volunteer_name": member_to_remove.volunteer_name,
+                    "role": member_to_remove.chapter_role,
+                    "end_date": member_to_remove.to_date
+                }
+            )
 
     def handle_board_member_additions(self, old_doc):
         """
@@ -719,7 +738,7 @@ class BoardManager(BaseManager):
             # For new chapters, add all active board members to history
             for board_member in self.chapter_doc.board_members or []:
                 if board_member.is_active and board_member.volunteer:
-                    self.addvolunteer_assignment_history(
+                    self.add_volunteer_assignment_history(
                         board_member.volunteer,
                         board_member.chapter_role,
                         board_member.from_date
@@ -735,7 +754,7 @@ class BoardManager(BaseManager):
                 board_member.volunteer and 
                 board_member.volunteer not in old_board_member_volunteers):
 
-                self.addvolunteer_assignment_history(
+                self.add_volunteer_assignment_history(
                     board_member.volunteer,
                     board_member.chapter_role,
                     board_member.from_date
@@ -791,11 +810,11 @@ class BoardManager(BaseManager):
 
     # Private helper methods
 
-    def validateadd_board_memberinputs(self, volunteer: str, role: str):
+    def _validate_add_board_member_inputs(self, volunteer: str, role: str):
         """Validate inputs for adding board member"""
         # Check if volunteer exists
         if not frappe.db.exists("Volunteer", volunteer):
-            frappe.throw(("Volunteer {0} does not exist").format(volunteer))
+            frappe.throw(_("Volunteer {0} does not exist").format(volunteer))
 
         # Check if role exists
         if not frappe.db.exists("Chapter Role", role):
@@ -803,10 +822,10 @@ class BoardManager(BaseManager):
 
         # Check if role is active
         role_doc = frappe.get_doc("Chapter Role", role)
-        if not role_doc.isactive:
-            frappe.throw(("Chapter Role {0} is not active").format(role))
+        if not role_doc.is_active:
+            frappe.throw(_("Chapter Role {0} is not active").format(role))
 
-    def handleunique_role_assignment(self, role: str, from_date: str):
+    def _handle_unique_role_assignment(self, role: str, from_date: str):
         """Handle unique role constraints when assigning role"""
         try:
             role_doc = frappe.get_doc("Chapter Role", role)
@@ -828,7 +847,7 @@ class BoardManager(BaseManager):
         except frappe.DoesNotExistError:
             pass
 
-    def addto_chapter_members(self, member_id: str):
+    def _add_to_chapter_members(self, member_id: str):
         """Add board member to chapter members if not already there"""
         # Check if already a member
         for member in self.chapter_doc.members or []:
@@ -847,27 +866,37 @@ class BoardManager(BaseManager):
             "enabled": 1
         })
 
-    def findactive_board_member(self, volunteer: str):
+    def _find_active_board_member(self, volunteer: str):
         """Find active board member by volunteer ID"""
         for board_member in self.chapter_doc.board_members or []:
             if board_member.volunteer == volunteer and board_member.is_active:
                 return board_member
         return None
 
-    def addvolunteer_assignment_history(self, volunteer_id: str, role: str, start_date: str):
+    def add_volunteer_assignment_history(self, volunteer_id: str, role: str, start_date: str):
         """Add active assignment to volunteer history when joining board"""
         try:
             volunteer = frappe.get_doc("Volunteer", volunteer_id)
 
-            # Check if this assignment already exists as active
+            # Check if this exact assignment already exists as active
+            # Allow multiple stints by checking all fields including start_date
             for assignment in volunteer.assignment_history or []:
                 if (assignment.reference_doctype == "Chapter" and 
                     assignment.reference_name == self.chapter_name and
                     assignment.role == role and
-                    assignment.status == "Active"):
-                    return  # Already exists
+                    assignment.status == "Active" and
+                    str(assignment.start_date) == str(start_date)):
+                    self.log_action(
+                        "Assignment already exists in history",
+                        {
+                            "volunteer": volunteer_id,
+                            "role": role,
+                            "start_date": start_date
+                        }
+                    )
+                    return  # This exact assignment already exists
 
-            # Add new active assignment
+            # Add new active assignment (allow multiple separate stints)
             volunteer.append("assignment_history", {
                 "assignment_type": "Board Position",
                 "reference_doctype": "Chapter",
@@ -899,43 +928,65 @@ class BoardManager(BaseManager):
                 "error"
             )
 
-    def updatevolunteer_assignment_history(self, volunteer_id: str, role: str, 
+    def update_volunteer_assignment_history(self, volunteer_id: str, role: str, 
                                            start_date: str, end_date: str):
         """Update volunteer assignment history when removing from board"""
         try:
             volunteer = frappe.get_doc("Volunteer", volunteer_id)
 
-            # First, look for any active assignment for this chapter and role
-            existing_active_assignment = None
+            # Look for the specific assignment that matches all criteria
+            # This ensures we update the correct stint for volunteers with multiple terms
+            target_assignment = None
             for assignment in volunteer.assignment_history or []:
                 if (assignment.reference_doctype == "Chapter" and 
                     assignment.reference_name == self.chapter_name and
                     assignment.role == role and
+                    str(assignment.start_date) == str(start_date) and
                     assignment.status == "Active"):
-                    existing_active_assignment = assignment
+                    target_assignment = assignment
                     break
 
-            if existing_active_assignment:
-                # Update the active assignment to completed
-                existing_active_assignment.end_date = end_date
-                existing_active_assignment.status = "Completed"
+            if target_assignment:
+                # Update the specific assignment to completed
+                target_assignment.end_date = end_date
+                target_assignment.status = "Completed"
+                
+                self.log_action(
+                    "Updated specific assignment history",
+                    {
+                        "volunteer": volunteer_id,
+                        "role": role,
+                        "start_date": start_date,
+                        "end_date": end_date
+                    }
+                )
             else:
-                # Look for assignment by exact start date match (backup search)
-                existing_assignment_by_date = None
+                # If we can't find the exact assignment, look for any active one
+                # This is a fallback for data inconsistencies
+                fallback_assignment = None
                 for assignment in volunteer.assignment_history or []:
                     if (assignment.reference_doctype == "Chapter" and 
                         assignment.reference_name == self.chapter_name and
                         assignment.role == role and
-                        getdate(assignment.start_date) == getdate(start_date)):
-                        existing_assignment_by_date = assignment
+                        assignment.status == "Active"):
+                        fallback_assignment = assignment
                         break
 
-                if existing_assignment_by_date:
-                    # Update existing assignment
-                    existing_assignment_by_date.end_date = end_date
-                    existing_assignment_by_date.status = "Completed"
+                if fallback_assignment:
+                    fallback_assignment.end_date = end_date
+                    fallback_assignment.status = "Completed"
+                    
+                    self.log_action(
+                        "Updated fallback assignment history",
+                        {
+                            "volunteer": volunteer_id,
+                            "role": role,
+                            "original_start": fallback_assignment.start_date,
+                            "end_date": end_date
+                        }
+                    )
                 else:
-                    # No existing assignment found, create a new completed one
+                    # Create a new completed assignment if nothing exists
                     volunteer.append("assignment_history", {
                         "assignment_type": "Board Position",
                         "reference_doctype": "Chapter",
@@ -945,17 +996,18 @@ class BoardManager(BaseManager):
                         "end_date": end_date,
                         "status": "Completed"
                     })
+                    
+                    self.log_action(
+                        "Created new completed assignment history",
+                        {
+                            "volunteer": volunteer_id,
+                            "role": role,
+                            "start_date": start_date,
+                            "end_date": end_date
+                        }
+                    )
 
             volunteer.save(ignore_permissions=True)
-
-            self.log_action(
-                "Updated volunteer assignment history",
-                {
-                    "volunteer": volunteer_id,
-                    "role": role,
-                    "end_date": end_date
-                }
-            )
 
         except Exception as e:
             self.log_action(
@@ -968,7 +1020,7 @@ class BoardManager(BaseManager):
                 "error"
             )
 
-    def notifyboard_member_added(self, volunteer: str, role: str):
+    def _notify_board_member_added(self, volunteer: str, role: str):
         """Send notification when a volunteer is added to the board"""
         try:
             volunteer_doc = frappe.get_doc("Volunteer", volunteer)
@@ -1005,7 +1057,7 @@ class BoardManager(BaseManager):
                 "error"
             )
 
-    def notifyboard_member_removed(self, volunteer: str):
+    def _notify_board_member_removed(self, volunteer: str):
         """Send notification when a volunteer is removed from the board"""
         try:
             volunteer_doc = frappe.get_doc("Volunteer", volunteer)
@@ -1041,7 +1093,7 @@ class BoardManager(BaseManager):
                 "error"
             )
 
-    def notifyrole_transition(self, volunteer: str, old_role: str, new_role: str):
+    def _notify_role_transition(self, volunteer: str, old_role: str, new_role: str):
         """Send notification for role transition"""
         try:
             volunteer_doc = frappe.get_doc("Volunteer", volunteer)
@@ -1081,7 +1133,7 @@ class BoardManager(BaseManager):
                 "error"
             )
 
-    def ischair_role(self, role_name: str) -> bool:
+    def _is_chair_role(self, role_name: str) -> bool:
         """Check if a role is a chair role"""
         if not role_name:
             return False
@@ -1092,7 +1144,7 @@ class BoardManager(BaseManager):
         except frappe.DoesNotExistError:
             return False
 
-    def getrecent_board_changes(self, days: int = 30) -> List[Dict]:
+    def _get_recent_board_changes(self, days: int = 30) -> List[Dict]:
         """Get recent board changes"""
         cutoff_date = add_days(today(), -days)
         changes = []

@@ -100,6 +100,9 @@ scheduler_events = {
         "verenigingen.verenigingen.doctype.membership.scheduler.notify_about_orphaned_records",
         "verenigingen.api.membership_application_review.send_overdue_notifications",
         
+        # Amendment system processing
+        "verenigingen.verenigingen.doctype.membership_amendment_request.membership_amendment_request.process_pending_amendments",
+        
         # Termination system maintenance
         "verenigingen.utils.termination_utils.process_overdue_termination_requests",
         "verenigingen.utils.termination_utils.audit_termination_compliance",

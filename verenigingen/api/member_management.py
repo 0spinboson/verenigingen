@@ -50,12 +50,12 @@ def assign_member_to_chapter(member_name, chapter_name):
                 "new_chapter": chapter_name
             }
         
-        # Update tracking fields on member record
-        frappe.db.set_value("Member", member_name, {
-            "chapter_change_reason": "Assigned via admin interface",
-            "chapter_assigned_date": frappe.utils.now(),
-            "chapter_assigned_by": frappe.session.user
-        })
+        # Update tracking fields on member record using ORM
+        member_doc = frappe.get_doc("Member", member_name)
+        member_doc.chapter_change_reason = "Assigned via admin interface"
+        member_doc.chapter_assigned_date = frappe.utils.now()
+        member_doc.chapter_assigned_by = frappe.session.user
+        member_doc.save(ignore_permissions=True)
         
         # Add member to chapter's member roster
         add_member_to_chapter_roster(member_name, chapter_name)
