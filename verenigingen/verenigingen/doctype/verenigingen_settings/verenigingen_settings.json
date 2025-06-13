@@ -7,9 +7,11 @@
  "field_order": [
   "section_break_27",
   "member_id_start",
+  "last_member_id",
   "chapter_settings_section",
   "national_board_chapter",
   "organization_email_domain",
+  "member_contact_email",
   "financial_settings_section",
   "company_iban",
   "company_bic",
@@ -291,6 +293,13 @@
    "label": "Member ID Starting Number"
   },
   {
+   "fieldname": "last_member_id",
+   "fieldtype": "Int",
+   "label": "Last Assigned Member ID",
+   "description": "Automatically updated when new member IDs are assigned",
+   "read_only": 1
+  },
+  {
    "default": "0",
    "description": "When enabled, a 0% VAT/BTW tax rate will be used for contributions and donations",
    "fieldname": "tax_exempt_for_contributions",
@@ -314,6 +323,13 @@
    "fieldname": "organization_email_domain",
    "fieldtype": "Data",
    "label": "Organization Email Domain"
+  },
+  {
+   "description": "Email address for member support and contact (used in fee adjustment forms and member communications)",
+   "fieldname": "member_contact_email",
+   "fieldtype": "Data",
+   "label": "Member Contact Email",
+   "options": "Email"
   },
   {
    "fieldname": "termination_system_section",

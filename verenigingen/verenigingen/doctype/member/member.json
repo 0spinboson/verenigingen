@@ -73,6 +73,8 @@
   "review_notes",
   "termination_status_section",
   "termination_status_html",
+  "amendment_status_section",
+  "amendment_status_html",
   "erpnext_integration_section",
   "customer",
   "column_break_24",
@@ -347,9 +349,9 @@
   },
   {
    "fieldname": "pronouns",
-   "fieldtype": "Select",
+   "fieldtype": "Data",
    "label": "Pronouns",
-   "options": "She/her\nHe/him\nThey/them"
+   "description": "Preferred pronouns (e.g., She/her, He/him, They/them, or specify your own)"
   },
   {
    "fieldname": "birth_date",
@@ -396,6 +398,20 @@
    "fieldname": "termination_status_html",
    "fieldtype": "HTML",
    "label": "Termination Status",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.name",
+   "fieldname": "amendment_status_section",
+   "fieldtype": "Section Break",
+   "label": "Fee Amendment Status"
+  },
+  {
+   "description": "Shows pending membership fee amendment requests",
+   "fieldname": "amendment_status_html",
+   "fieldtype": "HTML",
+   "label": "Amendment Status",
    "read_only": 1
   },
   {
@@ -626,13 +642,15 @@
    "description": "Override the standard membership fee with a custom amount",
    "fieldname": "membership_fee_override",
    "fieldtype": "Currency",
-   "label": "Custom Membership Fee"
+   "label": "Custom Membership Fee",
+   "permlevel": 0
   },
   {
    "depends_on": "eval:doc.membership_fee_override",
    "fieldname": "fee_override_reason",
    "fieldtype": "Small Text",
-   "label": "Reason for Fee Override"
+   "label": "Reason for Fee Override",
+   "permlevel": 0
   },
   {
    "fieldname": "column_break_fee",
@@ -643,7 +661,8 @@
    "fieldname": "fee_override_date",
    "fieldtype": "Date",
    "label": "Override Date",
-   "read_only": 1
+   "read_only": 1,
+   "permlevel": 0
   },
   {
    "depends_on": "eval:doc.membership_fee_override",
@@ -651,7 +670,8 @@
    "fieldtype": "Link",
    "label": "Override Set By",
    "options": "User",
-   "read_only": 1
+   "read_only": 1,
+   "permlevel": 0
   },
   {
    "depends_on": "eval:doc.fee_change_history && doc.fee_change_history.length > 0",
@@ -709,15 +729,70 @@
    "link_fieldname": "member"
   },
   {
+   "group": "Memberships",
+   "link_doctype": "Contribution Amendment Request",
+   "link_fieldname": "member"
+  },
+  {
+   "group": "Memberships",
+   "link_doctype": "Membership Termination Request",
+   "link_fieldname": "member"
+  },
+  {
    "group": "Transactions",
    "link_doctype": "Payment Entry",
    "link_fieldname": "party",
    "table_fieldname": "references"
   },
   {
+   "group": "Financial",
+   "link_doctype": "Sales Invoice",
+   "link_fieldname": "customer"
+  },
+  {
+   "group": "Financial",
+   "link_doctype": "SEPA Mandate",
+   "link_fieldname": "member"
+  },
+  {
+   "group": "Financial",
+   "link_doctype": "Direct Debit Batch Entry",
+   "link_fieldname": "member"
+  },
+  {
    "group": "Volunteer",
    "link_doctype": "Volunteer",
    "link_fieldname": "member"
+  },
+  {
+   "group": "Volunteer",
+   "link_doctype": "Volunteer Activity",
+   "link_fieldname": "volunteer",
+   "custom_link_field": "member"
+  },
+  {
+   "group": "Volunteer",
+   "link_doctype": "Volunteer Assignment",
+   "link_fieldname": "volunteer",
+   "custom_link_field": "member"
+  },
+  {
+   "group": "Volunteer",
+   "link_doctype": "Volunteer Expense",
+   "link_fieldname": "volunteer",
+   "custom_link_field": "member"
+  },
+  {
+   "group": "Administration",
+   "link_doctype": "User",
+   "link_fieldname": "name",
+   "custom_link_field": "user"
+  },
+  {
+   "group": "Administration",
+   "link_doctype": "Customer",
+   "link_fieldname": "name",
+   "custom_link_field": "customer"
   }
  ],
  "modified": "2025-06-07 22:42:45.646332",
@@ -767,6 +842,24 @@
    "report": 1,
    "role": "Verenigingen Manager",
    "share": 1,
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Membership Manager",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Verenigingen Manager",
    "write": 1
   }
  ],

@@ -46,16 +46,21 @@ def get_context(context):
         context.volunteer = frappe.get_doc("Volunteer", volunteer)
         
         # Calculate volunteer hours this year
-        year_start = getdate(today()).replace(month=1, day=1)
-        volunteer_hours = frappe.db.sql("""
-            SELECT SUM(hours) as total_hours
-            FROM `tabVolunteer Assignment`
-            WHERE parent = %s
-            AND start_date >= %s
-            AND status = 'Completed'
-        """, (volunteer, year_start), as_dict=True)
-        
-        context.volunteer_hours = volunteer_hours[0].total_hours if volunteer_hours else 0
+        try:
+            year_start = getdate(today()).replace(month=1, day=1)
+            volunteer_hours = frappe.db.sql("""
+                SELECT SUM(actual_hours) as total_hours
+                FROM `tabVolunteer Assignment`
+                WHERE parent = %s
+                AND start_date >= %s
+                AND status = 'Completed'
+                AND actual_hours IS NOT NULL
+            """, (volunteer, year_start), as_dict=True)
+            
+            context.volunteer_hours = volunteer_hours[0].total_hours if volunteer_hours and volunteer_hours[0].total_hours else 0
+        except Exception as e:
+            frappe.log_error(f"Error calculating volunteer hours: {str(e)}")
+            context.volunteer_hours = 0
     else:
         context.volunteer = None
         context.volunteer_hours = 0
@@ -65,10 +70,12 @@ def get_context(context):
     
     # Add member portal links
     context.portal_links = [
-        {"title": _("Profile"), "route": "/my-account"},
-        {"title": _("Membership"), "route": "/membership/manage"},
-        {"title": _("Invoices"), "route": "/membership/invoices"},
-        {"title": _("Events"), "route": "/events"},
+        {"title": _("Member Portal"), "route": "/member_portal", "featured": True},
+        {"title": _("Personal Details"), "route": "/personal_details"},
+        {"title": _("Account Settings"), "route": "/my-account"},
+        {"title": _("Update Address"), "route": "/address_change"},
+        {"title": _("Bank Details"), "route": "/bank_details"},
+        {"title": _("Adjust Fee"), "route": "/membership_fee_adjustment"},
     ]
     
     return context

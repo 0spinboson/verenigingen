@@ -87,15 +87,15 @@ def get_volunteer_profile(volunteer_name):
     # Get interests
     profile["interests"] = frappe.get_all("Volunteer Interest Area",
         filters={"parent": volunteer_name},
-        fields=["interest_category", "interest_area"],
-        order_by="interest_category"
+        fields=["interest_area"],
+        order_by="interest_area"
     )
     
     # Get skills
     profile["skills"] = frappe.get_all("Volunteer Skill",
         filters={"parent": volunteer_name},
-        fields=["skill_name", "proficiency_level"],
-        order_by="skill_name"
+        fields=["skill_category", "volunteer_skill", "proficiency_level"],
+        order_by="skill_category, volunteer_skill"
     )
     
     return profile
@@ -109,28 +109,32 @@ def get_volunteer_organizations(volunteer_name):
     if hasattr(volunteer_doc, 'member') and volunteer_doc.member:
         chapter_members = frappe.get_all("Chapter Member",
             filters={"member": volunteer_doc.member, "enabled": 1},
-            fields=["parent as chapter_name", "chapter_join_date"]
+            fields=["parent", "chapter_join_date"]
         )
         
         for cm in chapter_members:
-            chapter_info = frappe.db.get_value("Chapter", cm.chapter_name, 
-                ["name", "chapter_name", "city"], as_dict=True)
+            chapter_info = frappe.db.get_value("Chapter", cm.parent, 
+                ["name"], as_dict=True)
             if chapter_info:
+                # Add chapter_name field with same value as name for consistency
+                chapter_info["chapter_name"] = chapter_info["name"]
                 chapter_info["join_date"] = cm.chapter_join_date
                 organizations["chapters"].append(chapter_info)
     
     # Get teams where volunteer is active
     team_members = frappe.get_all("Team Member",
         filters={"volunteer": volunteer_name, "status": "Active"},
-        fields=["parent as team_name", "role_type", "joined_date"]
+        fields=["parent", "role_type", "from_date"]
     )
     
     for tm in team_members:
-        team_info = frappe.db.get_value("Team", tm.team_name,
-            ["name", "team_name", "description"], as_dict=True)
+        team_info = frappe.db.get_value("Team", tm.parent,
+            ["name"], as_dict=True)
         if team_info:
+            # Add team_name field with same value as name for consistency
+            team_info["team_name"] = team_info["name"]
             team_info["role"] = tm.role_type
-            team_info["joined_date"] = tm.joined_date
+            team_info["joined_date"] = tm.from_date
             organizations["teams"].append(team_info)
     
     return organizations
@@ -141,18 +145,18 @@ def get_recent_activities(volunteer_name):
     
     # Get recent assignments
     assignments = frappe.get_all("Volunteer Assignment",
-        filters={"volunteer": volunteer_name},
-        fields=["name", "assignment_date", "activity_type", "description", "status"],
-        order_by="assignment_date desc",
+        filters={"parent": volunteer_name},
+        fields=["name", "start_date", "assignment_type", "role", "status"],
+        order_by="start_date desc",
         limit=5
     )
     
     for assignment in assignments:
         activities.append({
             "type": "assignment",
-            "title": assignment.activity_type,
-            "description": assignment.description,
-            "date": assignment.assignment_date,
+            "title": assignment.assignment_type,
+            "description": assignment.role,
+            "date": assignment.start_date,
             "status": assignment.status,
             "icon": "fa-tasks"
         })
@@ -224,20 +228,20 @@ def get_upcoming_activities(volunteer_name):
     # Get future assignments
     future_assignments = frappe.get_all("Volunteer Assignment",
         filters={
-            "volunteer": volunteer_name,
-            "assignment_date": [">", today()],
-            "status": ["in", ["Assigned", "Confirmed"]]
+            "parent": volunteer_name,
+            "start_date": [">", today()],
+            "status": ["in", ["Active"]]
         },
-        fields=["name", "assignment_date", "activity_type", "description"],
-        order_by="assignment_date asc",
+        fields=["name", "start_date", "assignment_type", "role"],
+        order_by="start_date asc",
         limit=5
     )
     
     for assignment in future_assignments:
         upcoming.append({
-            "title": assignment.activity_type,
-            "description": assignment.description,
-            "date": assignment.assignment_date,
+            "title": assignment.assignment_type,
+            "description": assignment.role,
+            "date": assignment.start_date,
             "type": "assignment"
         })
     

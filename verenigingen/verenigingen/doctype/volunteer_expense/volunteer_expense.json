@@ -125,8 +125,8 @@
   {
    "fieldname": "organization_type",
    "fieldtype": "Select",
-   "label": "Organization Type",
-   "options": "Chapter\nTeam",
+   "label": "Team, Commission or Chapter",
+   "options": "Chapter\nTeam\nNational",
    "default": "Chapter",
    "reqd": 1
   },

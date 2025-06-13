@@ -8,7 +8,19 @@ from frappe.query_builder import DocType
 class Volunteer(Document):
     def onload(self):
         """Load address and contacts in `__onload`"""
-        load_address_and_contact(self)
+        # If this volunteer is linked to a member, load member's address and contact info
+        if self.member:
+            # Load address and contact from the linked member instead of volunteer
+            member_doc = frappe.get_doc("Member", self.member)
+            load_address_and_contact(member_doc)
+            # Copy the loaded address and contact info to volunteer
+            if hasattr(member_doc, '__onload'):
+                if not hasattr(self, '__onload'):
+                    self.set('__onload', frappe._dict())
+                self.get('__onload').update(member_doc.get('__onload'))
+        else:
+            # Fallback to volunteer's own address/contact if no member is linked
+            load_address_and_contact(self)
         
         # Load aggregated assignments
         self.load_aggregated_assignments()
@@ -50,6 +62,18 @@ class Volunteer(Document):
                 self.status = "Active"
             else:
                 self.status = "New"
+    
+    def get_contact_link_doctype(self):
+        """Override to link contacts to member if available"""
+        if self.member:
+            return "Member"
+        return "Volunteer"
+    
+    def get_contact_link_name(self):
+        """Override to link contacts to member if available"""
+        if self.member:
+            return self.member
+        return self.name
     
     @frappe.whitelist()
     def get_aggregated_assignments(self):
@@ -276,6 +300,7 @@ class Volunteer(Document):
             frappe.log_error(f"Error ending volunteer activity: {str(e)}")
             frappe.throw(_("An error occurred while ending the activity"))
     
+    @frappe.whitelist()
     def get_volunteer_history(self):
         """Get volunteer history in chronological order"""
         history = []
@@ -390,7 +415,7 @@ class Volunteer(Document):
 
 @frappe.whitelist()
 def create_volunteer_from_member(member_doc):
-    """Create or update volunteer record from member"""
+    """Create or update volunteer record from member and automatically create user account"""
     try:
         if not member_doc:
             return None
@@ -420,6 +445,13 @@ def create_volunteer_from_member(member_doc):
         # Generate organization email based on full name
         domain = frappe.db.get_single_value("Verenigingen Settings", "organization_email_domain") or "example.org"
         name_for_email = member_doc.full_name.replace(" ", ".").lower() if member_doc.full_name else ""
+        
+        # Remove Dutch particles and special characters for cleaner email
+        import re
+        name_for_email = re.sub(r'\b(van|de|der|den|het|het)\b', '', name_for_email)
+        name_for_email = re.sub(r'[^a-z\.]', '', name_for_email)
+        name_for_email = re.sub(r'\.+', '.', name_for_email).strip('.')
+        
         org_email = f"{name_for_email}@{domain}" if name_for_email else ""
         
         # Create new volunteer record
@@ -436,7 +468,20 @@ def create_volunteer_from_member(member_doc):
         
         volunteer.insert(ignore_permissions=True)
         
-        frappe.msgprint(_("Volunteer record created for {0}").format(member_doc.full_name))
+        # Create organization user account if org_email is valid
+        user_created = False
+        if org_email and org_email != "":
+            try:
+                user_created = create_organization_user_for_volunteer(volunteer, member_doc)
+            except Exception as e:
+                frappe.log_error(f"Error creating user account for volunteer {volunteer.name}: {str(e)}")
+                frappe.msgprint(_("Volunteer record created, but failed to create user account: {0}").format(str(e)))
+        
+        success_message = _("Volunteer record created for {0}").format(member_doc.full_name)
+        if user_created:
+            success_message += _(" and organization user account created")
+        
+        frappe.msgprint(success_message)
         return volunteer
         
     except frappe.DoesNotExistError:
@@ -479,6 +524,77 @@ def sync_chapter_board_members():
             updated_count += 1
     
     return {"updated_count": updated_count}
+
+def create_organization_user_for_volunteer(volunteer, member_doc):
+    """Create organization user account for volunteer"""
+    try:
+        org_email = volunteer.email
+        
+        if not org_email:
+            return False
+            
+        # Check if user already exists
+        if frappe.db.exists("User", org_email):
+            existing_user = frappe.get_doc("User", org_email)
+            
+            # Link existing user to volunteer if not already linked
+            if not volunteer.user:
+                volunteer.user = existing_user.name
+                volunteer.save(ignore_permissions=True)
+            
+            # Update member with organization user link
+            if not member_doc.user:
+                member_doc.user = existing_user.name
+                member_doc.save(ignore_permissions=True)
+                
+            frappe.msgprint(_("Linked existing user account {0} to volunteer").format(org_email))
+            return True
+        
+        # Create new user account
+        user = frappe.get_doc({
+            "doctype": "User",
+            "email": org_email,
+            "first_name": member_doc.first_name or "",
+            "last_name": member_doc.last_name or "",
+            "full_name": member_doc.full_name or "",
+            "send_welcome_email": 1,
+            "user_type": "System User",
+            "new_password": frappe.generate_hash(length=12)
+        })
+        
+        # Add volunteer-related roles
+        volunteer_roles = ["Verenigingen Volunteer", "Verenigingen Member"]
+        
+        for role in volunteer_roles:
+            if frappe.db.exists("Role", role):
+                user.append("roles", {"role": role})
+        
+        # Add default system roles for volunteers
+        default_roles = ["All"]
+        for role in default_roles:
+            if frappe.db.exists("Role", role):
+                user.append("roles", {"role": role})
+        
+        user.insert(ignore_permissions=True)
+        
+        # Link user to volunteer record
+        volunteer.user = user.name
+        volunteer.save(ignore_permissions=True)
+        
+        # Update member with organization user link (keep existing personal user if any)
+        if not member_doc.user:
+            member_doc.user = user.name
+            member_doc.save(ignore_permissions=True)
+        
+        frappe.logger().info(f"Created organization user {org_email} for volunteer {volunteer.name}")
+        return True
+        
+    except frappe.DuplicateEntryError:
+        frappe.msgprint(_("User account {0} already exists").format(org_email))
+        return False
+    except Exception as e:
+        frappe.log_error(f"Error creating organization user: {str(e)}")
+        raise e
 
 @frappe.whitelist()
 def create_from_member(member=None, member_name=None):

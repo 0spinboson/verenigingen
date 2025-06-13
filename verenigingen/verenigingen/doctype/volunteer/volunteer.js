@@ -4,7 +4,12 @@
 frappe.ui.form.on('Volunteer', {
     refresh: function(frm) {
         // Set up dynamic link for address and contact
-        frappe.dynamic_link = {doc: frm.doc, fieldname: 'name', doctype: 'Volunteer'};
+        // If volunteer is linked to a member, use member's address/contact
+        if (frm.doc.member) {
+            frappe.dynamic_link = {doc: {name: frm.doc.member, doctype: 'Member'}, fieldname: 'name', doctype: 'Member'};
+        } else {
+            frappe.dynamic_link = {doc: frm.doc, fieldname: 'name', doctype: 'Volunteer'};
+        }
         
         // Toggle address and contact display
         frm.toggle_display(['address_html', 'contact_html'], !frm.doc.__islocal);
@@ -66,6 +71,18 @@ frappe.ui.form.on('Volunteer', {
     },
     
     member: function(frm) {
+        // When member is changed, update the dynamic link for address/contact
+        if (frm.doc.member) {
+            frappe.dynamic_link = {doc: {name: frm.doc.member, doctype: 'Member'}, fieldname: 'name', doctype: 'Member'};
+        } else {
+            frappe.dynamic_link = {doc: frm.doc, fieldname: 'name', doctype: 'Volunteer'};
+        }
+        
+        // Refresh address and contact display
+        if (!frm.doc.__islocal) {
+            frappe.contacts.render_address_and_contact(frm);
+        }
+        
         // When member is selected, fetch relevant information
         if (frm.doc.member) {
             frappe.call({

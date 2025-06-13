@@ -26,9 +26,13 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         # Only generate member ID for approved members or non-application members
         if not self.member_id:
             if self.should_have_member_id():
+                frappe.logger().info(f"Generating member ID for {self.name} - application_status: {getattr(self, 'application_status', 'None')}, is_application: {self.is_application_member()}")
                 self.member_id = self.generate_member_id()
+                frappe.logger().info(f"Generated member ID: {self.member_id} for {self.name}")
             elif self.is_application_member() and not self.application_id:
                 self.application_id = self.generate_application_id()
+        else:
+            frappe.logger().debug(f"Member {self.name} already has member_id: {self.member_id}")
         
         # Update current chapter display
         self.update_current_chapter_display()
@@ -38,6 +42,34 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         
         # Set appropriate defaults for application_status
         self.set_application_status_defaults()
+    
+    def validate_fee_override_permissions(self):
+        """Validate that only authorized users can set fee overrides"""
+        # Skip validation for new documents or if no override is set
+        if self.is_new() or not self.membership_fee_override:
+            return
+        
+        # Check if fee override value has changed
+        if self.name:
+            old_amount = frappe.db.get_value("Member", self.name, "membership_fee_override")
+            if old_amount == self.membership_fee_override:
+                return  # No change, no validation needed
+        
+        # Check user permissions for fee override
+        user_roles = frappe.get_roles(frappe.session.user)
+        authorized_roles = ["System Manager", "Membership Manager", "Verenigingen Manager"]
+        
+        if not any(role in user_roles for role in authorized_roles):
+            frappe.throw(
+                _("You do not have permission to override membership fees. Only administrators can modify membership fees."),
+                frappe.PermissionError
+            )
+        
+        # Log the fee override action for audit purposes
+        frappe.logger().info(
+            f"Fee override set by {frappe.session.user} for member {self.name}: "
+            f"Amount: {self.membership_fee_override}, Reason: {self.fee_override_reason}"
+        )
 
     def before_insert(self):
         """Execute before inserting new document"""
@@ -116,6 +148,14 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             # Fallback to simple ID generation
             import time
             return str(int(time.time() * 1000))[-8:]
+    
+    def ensure_member_id(self):
+        """Ensure this member has a member ID if they should have one"""
+        if not self.member_id and self.should_have_member_id():
+            self.member_id = self.generate_member_id()
+            self.save()
+            return True
+        return False
             
     def approve_application(self):
         """Approve this application and assign member ID"""
@@ -475,6 +515,9 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
     
     def handle_fee_override_changes(self):
         """Handle changes to membership fee override using amendment system"""
+        # Check permissions for fee override changes
+        self.validate_fee_override_permissions()
+        
         # Skip fee override change tracking for new member applications
         # Applications should set initial fee amounts without triggering change tracking
         if not self.name or self.is_new():
@@ -530,7 +573,7 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         frappe.logger().info(f"Creating amendment request immediately for member {self.name}")
         
         try:
-            from verenigingen.verenigingen.doctype.membership_amendment_request.membership_amendment_request import create_fee_change_amendment
+            from verenigingen.verenigingen.doctype.contribution_amendment_request.contribution_amendment_request import create_fee_change_amendment
             
             amendment = create_fee_change_amendment(
                 member_name=self.name,
@@ -602,7 +645,7 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         
         # Check for pending amendments
         pending_amendments = frappe.get_all(
-            "Membership Amendment Request",
+            "Contribution Amendment Request",
             filters={
                 "member": self.name,
                 "status": ["in", ["Draft", "Pending Approval", "Approved"]],
@@ -1182,7 +1225,7 @@ def handle_fee_override_after_save(doc, method=None):
             frappe.logger().info(f"Processing remaining pending amendment for member {doc.name}")
             
             # Create amendment request
-            from verenigingen.verenigingen.doctype.membership_amendment_request.membership_amendment_request import create_fee_change_amendment
+            from verenigingen.verenigingen.doctype.contribution_amendment_request.contribution_amendment_request import create_fee_change_amendment
             
             amendment = create_fee_change_amendment(
                 member_name=doc.name,
@@ -1388,3 +1431,227 @@ def assign_member_id(member_name):
             "success": False,
             "message": _("Error assigning member ID: {0}").format(str(e))
         }
+
+@frappe.whitelist()
+def validate_mandate_creation(member, iban, mandate_id):
+    """Validate mandate creation parameters and check for existing mandates"""
+    try:
+        # Check if member exists
+        if not frappe.db.exists("Member", member):
+            return {"error": _("Member does not exist")}
+        
+        # Check if mandate ID already exists
+        existing_mandate = frappe.db.exists("SEPA Mandate", {"mandate_id": mandate_id})
+        if existing_mandate:
+            return {"error": _("Mandate ID {0} already exists").format(mandate_id)}
+        
+        # Check for existing active mandates for this member
+        existing_mandates = frappe.get_all(
+            "SEPA Mandate",
+            filters={
+                "member": member,
+                "status": "Active",
+                "is_active": 1
+            },
+            fields=["name", "mandate_id", "iban"]
+        )
+        
+        # Check if there's an existing mandate for the same IBAN
+        iban_mandate = None
+        for mandate in existing_mandates:
+            if mandate.iban == iban:
+                iban_mandate = mandate.mandate_id
+                break
+        
+        result = {"valid": True}
+        
+        if iban_mandate:
+            result["existing_mandate"] = iban_mandate
+            result["warning"] = _("An active mandate already exists for this IBAN: {0}").format(iban_mandate)
+        
+        return result
+        
+    except Exception as e:
+        frappe.log_error(f"Error validating mandate creation: {str(e)}")
+        return {"error": _("Error validating mandate: {0}").format(str(e))}
+
+@frappe.whitelist()
+def derive_bic_from_iban(iban):
+    """Derive BIC code from IBAN"""
+    try:
+        from verenigingen.verenigingen.doctype.direct_debit_batch.direct_debit_batch import get_bic_from_iban
+        bic = get_bic_from_iban(iban)
+        return {"bic": bic} if bic else {"bic": None}
+    except Exception as e:
+        frappe.log_error(f"Error deriving BIC from IBAN {iban}: {str(e)}")
+        return {"bic": None}
+
+@frappe.whitelist()
+def deactivate_old_sepa_mandates(member, new_iban):
+    """Deactivate old SEPA mandates when IBAN changes"""
+    try:
+        # Get all active mandates for this member
+        active_mandates = frappe.get_all(
+            "SEPA Mandate",
+            filters={
+                "member": member,
+                "status": "Active",
+                "is_active": 1
+            },
+            fields=["name", "iban", "mandate_id", "status"]
+        )
+        
+        deactivated_count = 0
+        deactivated_mandates = []
+        
+        for mandate_data in active_mandates:
+            # Only deactivate mandates with different IBAN
+            if mandate_data.iban != new_iban:
+                mandate = frappe.get_doc("SEPA Mandate", mandate_data.name)
+                
+                # Deactivate the mandate
+                mandate.status = "Cancelled"
+                mandate.is_active = 0
+                mandate.cancellation_date = today()
+                mandate.cancellation_reason = f"IBAN changed from {mandate.iban} to {new_iban}"
+                
+                mandate.save()
+                
+                deactivated_count += 1
+                deactivated_mandates.append({
+                    "mandate_id": mandate.mandate_id,
+                    "old_iban": mandate.iban
+                })
+                
+                frappe.logger().info(f"Deactivated SEPA mandate {mandate.mandate_id} for member {member} due to IBAN change")
+        
+        return {
+            "success": True,
+            "deactivated_count": deactivated_count,
+            "deactivated_mandates": deactivated_mandates
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error deactivating old SEPA mandates for member {member}: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
+def get_active_sepa_mandate(member, iban=None):
+    """Get active SEPA mandate for a member"""
+    try:
+        filters = {
+            "member": member,
+            "status": "Active",
+            "is_active": 1
+        }
+        
+        if iban:
+            filters["iban"] = iban
+        
+        mandates = frappe.get_all(
+            "SEPA Mandate",
+            filters=filters,
+            fields=["name", "mandate_id", "status", "iban", "account_holder_name"],
+            order_by="creation desc",
+            limit=1
+        )
+        
+        return mandates[0] if mandates else None
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting active SEPA mandate for member {member}: {str(e)}")
+        return None
+
+@frappe.whitelist()
+def assign_missing_member_ids():
+    """Assign member IDs to all members who should have them but don't"""
+    members_without_ids = frappe.get_all(
+        "Member",
+        filters={
+            "member_id": ["is", "not set"]
+        },
+        fields=["name", "application_status", "application_id", "full_name"]
+    )
+    
+    assigned_count = 0
+    for member_data in members_without_ids:
+        try:
+            member = frappe.get_doc("Member", member_data.name)
+            if member.should_have_member_id():
+                member.ensure_member_id()
+                assigned_count += 1
+                frappe.logger().info(f"Assigned member ID {member.member_id} to {member.full_name}")
+        except Exception as e:
+            frappe.logger().error(f"Failed to assign member ID to {member_data.name}: {str(e)}")
+    
+    return {
+        "total_checked": len(members_without_ids),
+        "assigned": assigned_count,
+        "message": f"Assigned member IDs to {assigned_count} out of {len(members_without_ids)} members"
+    }
+
+@frappe.whitelist()
+def create_and_link_mandate_enhanced(member, mandate_id, iban, bic="", account_holder_name="", 
+                                   mandate_type="Recurring", sign_date=None, used_for_memberships=1, 
+                                   used_for_donations=0, notes="", replace_existing=None):
+    """Create a new SEPA mandate and link it to the member"""
+    try:
+        if not sign_date:
+            sign_date = today()
+        
+        # Convert mandate type to internal format
+        type_mapping = {
+            "One-off": "OOFF",
+            "Recurring": "RCUR"
+        }
+        internal_type = type_mapping.get(mandate_type, "RCUR")
+        
+        # Create mandate
+        mandate = frappe.new_doc("SEPA Mandate")
+        mandate.mandate_id = mandate_id
+        mandate.member = member
+        mandate.iban = iban
+        mandate.bic = bic
+        mandate.account_holder_name = account_holder_name
+        mandate.mandate_type = internal_type
+        mandate.sign_date = sign_date
+        mandate.used_for_memberships = int(used_for_memberships)
+        mandate.used_for_donations = int(used_for_donations)
+        mandate.status = "Active"
+        mandate.is_active = 1
+        mandate.notes = notes
+        
+        mandate.insert()
+        
+        # Update member's SEPA mandates table
+        member_doc = frappe.get_doc("Member", member)
+        
+        # Mark existing mandates as non-current if replacing
+        if replace_existing:
+            for link in member_doc.sepa_mandates:
+                if link.mandate_reference == replace_existing:
+                    link.is_current = 0
+        
+        # Add new mandate link
+        member_doc.append("sepa_mandates", {
+            "sepa_mandate": mandate.name,
+            "mandate_reference": mandate_id,
+            "is_current": 1,
+            "status": "Active",
+            "valid_from": sign_date
+        })
+        
+        member_doc.save()
+        
+        return {
+            "success": True,
+            "mandate_name": mandate.name,
+            "mandate_id": mandate_id
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error creating SEPA mandate: {str(e)}")
+        frappe.throw(_("Error creating SEPA mandate: {0}").format(str(e)))

@@ -15,6 +15,12 @@ function generateMandateReference(memberDoc) {
 }
 
 function create_sepa_mandate_with_dialog(frm, message = null) {
+    // Prevent multiple mandate creation dialogs from being opened simultaneously
+    if (frm._sepa_mandate_dialog_open) {
+        console.log('SEPA mandate dialog already open, skipping');
+        return;
+    }
+    
     const suggestedReference = generateMandateReference(frm.doc);
     
     const confirmMessage = message || __('Would you like to create a new SEPA mandate for this bank account?');
@@ -22,9 +28,14 @@ function create_sepa_mandate_with_dialog(frm, message = null) {
     frappe.confirm(
         confirmMessage,
         function() {
+            frm._sepa_mandate_dialog_open = true;
             const d = new frappe.ui.Dialog({
                 title: __('Create SEPA Mandate'),
                 size: 'large',
+                onhide: function() {
+                    // Reset flag when dialog is closed
+                    frm._sepa_mandate_dialog_open = false;
+                },
                 fields: [
                     {
                         fieldname: 'mandate_id',
@@ -194,6 +205,10 @@ function create_mandate_with_values(frm, values, dialog) {
                             }, 5);
                         }
                         
+                        // Reset dialog flag and close dialog
+                        frm._sepa_mandate_dialog_open = false;
+                        dialog.hide();
+                        
                         // Wait a moment then reload the form
                         setTimeout(() => {
                             frm.reload_doc();
@@ -201,22 +216,35 @@ function create_mandate_with_values(frm, values, dialog) {
                     }
                 },
                 error: function(r) {
+                    // Reset flag on error too
+                    frm._sepa_mandate_dialog_open = false;
                     console.error('Error creating mandate:', r);
                 }
             });
-            dialog.hide();
         }
     });
 }
 
 function check_sepa_mandate_status(frm) {
-    if (!frm.doc.iban) return;
+    if (!frm.doc.iban) {
+        // Clear any existing SEPA buttons/indicators if no IBAN
+        clear_sepa_ui_elements(frm);
+        return;
+    }
     
-    // Prevent duplicate SEPA mandate displays
-    if (frm._sepa_check_done) return;
-    frm._sepa_check_done = true;
+    // Create a unique check key based on IBAN and payment method
+    const check_key = `${frm.doc.iban}-${frm.doc.payment_method || 'none'}`;
     
-    let currentMandate = null;
+    // Prevent duplicate checks for the same IBAN/payment method combination
+    if (frm._sepa_check_key === check_key) return;
+    frm._sepa_check_key = check_key;
+    
+    // Clear existing SEPA UI elements before checking
+    clear_sepa_ui_elements(frm);
+    
+    // Force a small delay to ensure cleanup is complete
+    setTimeout(function() {
+        let currentMandate = null;
     
     frappe.call({
         method: 'verenigingen.verenigingen.doctype.member.member.get_active_sepa_mandate',
@@ -225,44 +253,83 @@ function check_sepa_mandate_status(frm) {
             iban: frm.doc.iban
         },
         callback: function(r) {
-            console.log('SEPA mandate check response:', r);
+            // Only process if the response is for the current IBAN/payment method combination
+            const current_check_key = `${frm.doc.iban}-${frm.doc.payment_method || 'none'}`;
+            if (frm._sepa_check_key !== current_check_key) {
+                return; // Ignore stale responses
+            }
             
             if (r.message) {
                 currentMandate = r.message;
-                console.log('Current mandate found:', currentMandate);
                 
-                if (currentMandate.status === 'Active') {
-                    frm.dashboard.add_indicator(__("SEPA Mandate: {0}", [currentMandate.mandate_id]), "green");
-                } else if (currentMandate.status === 'Pending') {
-                    frm.dashboard.add_indicator(__("SEPA Mandate: {0} (Pending)", [currentMandate.mandate_id]), "orange");
-                } else {
-                    frm.dashboard.add_indicator(__("SEPA Mandate: {0} ({1})", [currentMandate.mandate_id, currentMandate.status]), "red");
-                }
+                // Add mandate indicator
+                const status_colors = {
+                    'Active': 'green',
+                    'Pending': 'orange',
+                    'Draft': 'orange'
+                };
+                const color = status_colors[currentMandate.status] || 'red';
+                const indicator_text = currentMandate.status === 'Active' 
+                    ? __("SEPA Mandate: {0}", [currentMandate.mandate_id])
+                    : __("SEPA Mandate: {0} ({1})", [currentMandate.mandate_id, currentMandate.status]);
                 
-                // Add view mandate button if one exists
+                frm.dashboard.add_indicator(indicator_text, color);
+                
+                // Add view mandate button
                 frm.add_custom_button(__('View SEPA Mandate'), function() {
                     frappe.set_route('Form', 'SEPA Mandate', currentMandate.name);
-                }, __('View'));
+                }, __('SEPA'));
                 
             } else {
-                console.log('No active mandate found for this IBAN');
-                
-                // Show mandate creation option if IBAN exists but no mandate
+                // No active mandate found
                 if (frm.doc.iban && frm.doc.payment_method === 'Direct Debit') {
                     frm.dashboard.add_indicator(__("No SEPA Mandate"), "red");
                     
                     frm.add_custom_button(__('Create SEPA Mandate'), function() {
                         create_sepa_mandate_with_dialog(frm, __('No active SEPA mandate found for this IBAN. Would you like to create one?'));
-                    }, __('Actions'));
+                    }, __('SEPA'));
                 }
             }
+        },
+        error: function(r) {
+            console.error('Error checking SEPA mandate status:', r);
+            // Don't show error to user, just fail silently
         }
     });
+    }, 100); // Small delay to ensure UI cleanup
+}
+
+function clear_sepa_ui_elements(frm) {
+    // Remove SEPA-related dashboard indicators
+    if (frm.dashboard && frm.dashboard.stats_area_row) {
+        $(frm.dashboard.stats_area_row).find('.indicator').filter(function() {
+            const text = $(this).text().toLowerCase();
+            return text.includes('sepa') || text.includes('mandate');
+        }).remove();
+    }
+    
+    // Remove SEPA-related custom buttons more thoroughly
+    if (frm.custom_buttons) {
+        // Remove the SEPA button group
+        if (frm.custom_buttons['SEPA']) {
+            Object.keys(frm.custom_buttons['SEPA']).forEach(function(button_name) {
+                frm.remove_custom_button(button_name, 'SEPA');
+            });
+            delete frm.custom_buttons['SEPA'];
+        }
+        
+        // Also remove any stray SEPA buttons
+        $('.btn-custom').filter(function() {
+            const label = $(this).attr('data-label') || $(this).text();
+            return label && (label.includes('SEPA') || label.includes('Mandate'));
+        }).remove();
+    }
 }
 
 // Export functions for use in member.js
 window.SepaUtils = {
     generateMandateReference,
     create_sepa_mandate_with_dialog,
-    check_sepa_mandate_status
+    check_sepa_mandate_status,
+    clear_sepa_ui_elements
 };

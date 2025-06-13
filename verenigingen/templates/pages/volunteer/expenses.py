@@ -36,6 +36,9 @@ def get_context(context):
     # Get maximum amounts for each approval level (for UI guidance)
     context.approval_thresholds = get_approval_thresholds()
     
+    # Get national chapter info from settings
+    context.national_chapter = get_national_chapter()
+    
     return context
 
 def get_user_volunteer_record():
@@ -175,7 +178,7 @@ def update_workspace_links():
             {"label": "Member", "link_to": "Member", "link_type": "DocType", "type": "Link", "onboard": 1},
             {"label": "Membership", "link_to": "Membership", "link_type": "DocType", "type": "Link", "onboard": 1},
             {"label": "Membership Type", "link_to": "Membership Type", "link_type": "DocType", "type": "Link"},
-            {"label": "Membership Amendment Request", "link_to": "Membership Amendment Request", "link_type": "DocType", "type": "Link"},
+            {"label": "Contribution Amendment Request", "link_to": "Contribution Amendment Request", "link_type": "DocType", "type": "Link"},
             {"label": "Membership Termination Request", "link_to": "Membership Termination Request", "link_type": "DocType", "type": "Link"},
             
             # Volunteers section - Card Break first, then links
@@ -291,25 +294,29 @@ def get_volunteer_organizations(volunteer_name):
         # Get chapters where this member is active
         chapter_members = frappe.get_all("Chapter Member",
             filters={"member": volunteer_doc.member, "enabled": 1},
-            fields=["parent as chapter_name"]
+            fields=["parent"]
         )
         
         for cm in chapter_members:
-            chapter_info = frappe.db.get_value("Chapter", cm.chapter_name, 
-                ["name", "chapter_name"], as_dict=True)
+            chapter_info = frappe.db.get_value("Chapter", cm.parent, 
+                ["name"], as_dict=True)
             if chapter_info:
+                # Add chapter_name field with same value as name for consistency
+                chapter_info["chapter_name"] = chapter_info["name"] 
                 organizations["chapters"].append(chapter_info)
     
     # Get teams where volunteer is active
     team_members = frappe.get_all("Team Member",
         filters={"volunteer": volunteer_name, "status": "Active"},
-        fields=["parent as team_name"]
+        fields=["parent"]
     )
     
     for tm in team_members:
-        team_info = frappe.db.get_value("Team", tm.team_name,
-            ["name", "team_name"], as_dict=True)
+        team_info = frappe.db.get_value("Team", tm.parent,
+            ["name"], as_dict=True)
         if team_info:
+            # Add team_name field with same value as name for consistency
+            team_info["team_name"] = team_info["name"]
             organizations["teams"].append(team_info)
     
     return organizations
@@ -397,6 +404,23 @@ def get_approval_thresholds():
         "admin_limit": float('inf')
     }
 
+def get_national_chapter():
+    """Get national chapter info from settings"""
+    try:
+        settings = frappe.get_single("Verenigingen Settings")
+        if settings.national_board_chapter:
+            chapter_info = frappe.db.get_value("Chapter", settings.national_board_chapter, 
+                ["name", "chapter_name"], as_dict=True)
+            if chapter_info:
+                return {
+                    "name": chapter_info.name,
+                    "chapter_name": chapter_info.chapter_name or chapter_info.name
+                }
+    except Exception as e:
+        frappe.log_error(f"Error getting national chapter: {str(e)}")
+    
+    return None
+
 def get_status_class(status):
     """Get CSS class for expense status"""
     status_classes = {
@@ -437,6 +461,23 @@ def submit_expense(expense_data):
             frappe.throw(_("Please select a chapter"))
         elif expense_data.get("organization_type") == "Team" and not expense_data.get("team"):
             frappe.throw(_("Please select a team"))
+        # National expenses don't require specific organization selection
+        
+        # Determine chapter/team based on organization type
+        chapter = None
+        team = None
+        
+        if expense_data.get("organization_type") == "Chapter":
+            chapter = expense_data.get("chapter")
+        elif expense_data.get("organization_type") == "Team":
+            team = expense_data.get("team")
+        elif expense_data.get("organization_type") == "National":
+            # Set to national chapter from settings
+            settings = frappe.get_single("Verenigingen Settings")
+            if settings.national_board_chapter:
+                chapter = settings.national_board_chapter
+            else:
+                frappe.throw(_("National chapter not configured in settings"))
         
         # Create expense document
         expense_doc = frappe.get_doc({
@@ -448,8 +489,8 @@ def submit_expense(expense_data):
             "expense_date": expense_data.get("expense_date"),
             "category": expense_data.get("category"),
             "organization_type": expense_data.get("organization_type"),
-            "chapter": expense_data.get("chapter") if expense_data.get("organization_type") == "Chapter" else None,
-            "team": expense_data.get("team") if expense_data.get("organization_type") == "Team" else None,
+            "chapter": chapter,
+            "team": team,
             "notes": expense_data.get("notes")
         })
         

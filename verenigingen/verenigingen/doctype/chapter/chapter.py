@@ -340,6 +340,12 @@ class Chapter(WebsiteGenerator):
             context.is_board_member = self.board_manager.is_board_member()
             context.board_role = self.board_manager.get_member_role()
             
+            # Add user role checks for template
+            context.is_system_manager = "System Manager" in frappe.get_roles()
+            
+            # Add permission checks for template
+            context.can_write_chapter = frappe.has_permission("Chapter", doc=self.name, ptype="write")
+            
             # Add chapter head member details with error handling
             if self.chapter_head:
                 try:

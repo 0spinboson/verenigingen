@@ -1,0 +1,534 @@
+{% extends "templates/web.html" %}
+
+{% block title %}{{ _("Member Portal") }}{% endblock %}
+
+{% block head_include %}
+<style>
+.member-portal {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 2rem;
+}
+
+.portal-header {
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
+.portal-header h1 {
+    color: #333;
+    margin-bottom: 0.5rem;
+}
+
+.portal-header p {
+    color: #666;
+    font-size: 1.1rem;
+}
+
+.member-info-card {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+    padding: 2rem;
+    border-radius: 12px;
+    margin-bottom: 3rem;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.member-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+
+.info-item {
+    text-align: center;
+}
+
+.info-item h4 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.1rem;
+    opacity: 0.9;
+}
+
+.info-item .value {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.portal-sections {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    margin-bottom: 3rem;
+}
+
+.portal-section {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.portal-section:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.section-header {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-bottom: 1px solid #eee;
+}
+
+.section-header h3 {
+    margin: 0;
+    color: #333;
+    display: flex;
+    align-items: center;
+}
+
+.section-header .icon {
+    margin-right: 0.75rem;
+    font-size: 1.5rem;
+    color: #007bff;
+}
+
+.section-content {
+    padding: 1.5rem;
+}
+
+.portal-links {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.portal-links li {
+    margin-bottom: 0.75rem;
+}
+
+.portal-link {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+    text-decoration: none;
+    color: #333;
+    transition: background-color 0.2s ease;
+}
+
+.portal-link:hover {
+    background: #e9ecef;
+    text-decoration: none;
+    color: #333;
+}
+
+.portal-link .link-icon {
+    margin-right: 0.75rem;
+    color: #007bff;
+    width: 20px;
+    text-align: center;
+}
+
+.portal-link .link-title {
+    font-weight: 500;
+    flex: 1;
+}
+
+.portal-link .link-description {
+    font-size: 0.875rem;
+    color: #666;
+    margin-top: 0.25rem;
+}
+
+.quick-actions {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.quick-actions h4 {
+    color: #856404;
+    margin-bottom: 1rem;
+}
+
+.action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    font-weight: 500;
+    transition: background-color 0.2s ease;
+}
+
+.btn-primary {
+    background-color: #007bff;
+    color: white;
+}
+
+.btn-primary:hover {
+    background-color: #0056b3;
+    color: white;
+    text-decoration: none;
+}
+
+.btn-secondary {
+    background-color: #6c757d;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background-color: #545b62;
+    color: white;
+    text-decoration: none;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.status-active {
+    background: #d4edda;
+    color: #155724;
+}
+
+.status-pending {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.status-inactive {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.recent-activity {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-top: 2rem;
+}
+
+.activity-item {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #eee;
+}
+
+.activity-item:last-child {
+    border-bottom: none;
+}
+
+.activity-icon {
+    margin-right: 1rem;
+    color: #007bff;
+    width: 24px;
+    text-align: center;
+}
+
+.activity-content {
+    flex: 1;
+}
+
+.activity-date {
+    font-size: 0.875rem;
+    color: #666;
+}
+
+@media (max-width: 768px) {
+    .member-portal {
+        padding: 1rem;
+    }
+    
+    .portal-sections {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .member-info-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .action-buttons {
+        flex-direction: column;
+    }
+}
+</style>
+{% endblock %}
+
+{% block page_content %}
+<div class="member-portal">
+    <div class="portal-header">
+        <h1>{{ _("Welcome to Your Member Portal") }}</h1>
+        <p>{{ _("Manage your membership, update your details, and access member services") }}</p>
+    </div>
+
+    {% if member %}
+    <div class="member-info-card">
+        <h2>{{ _("Hello, {0}!").format(member.first_name or member.full_name) }}</h2>
+        <div class="member-info-grid">
+            <div class="info-item">
+                <h4>{{ _("Member ID") }}</h4>
+                <div class="value">{{ member.member_id or _("Pending") }}</div>
+            </div>
+            <div class="info-item">
+                <h4>{{ _("Membership Status") }}</h4>
+                <div class="value">
+                    {% if membership %}
+                    <span class="status-badge status-active">{{ _(membership.status) }}</span>
+                    {% else %}
+                    <span class="status-badge status-pending">{{ _("No Active Membership") }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="info-item">
+                <h4>{{ _("Member Since") }}</h4>
+                <div class="value">{{ frappe.utils.formatdate(member.creation, "MMM yyyy") }}</div>
+            </div>
+            {% if volunteer %}
+            <div class="info-item">
+                <h4>{{ _("Volunteer Hours (This Year)") }}</h4>
+                <div class="value">{{ volunteer_hours or 0 }}</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if quick_actions %}
+    <div class="quick-actions">
+        <h4>{{ _("Quick Actions") }}</h4>
+        <div class="action-buttons">
+            {% for action in quick_actions %}
+            <a href="{{ action.route }}" class="btn {{ action.class or 'btn-primary' }}">
+                {% if action.icon %}<i class="{{ action.icon }}"></i> {% endif %}{{ action.title }}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="portal-sections">
+        <!-- Account Management -->
+        <div class="portal-section">
+            <div class="section-header">
+                <h3><span class="icon">👤</span>{{ _("Account Management") }}</h3>
+            </div>
+            <div class="section-content">
+                <ul class="portal-links">
+                    <li>
+                        <a href="/member_dashboard" class="portal-link">
+                            <span class="link-icon"><i class="fa fa-tachometer"></i></span>
+                            <div>
+                                <div class="link-title">{{ _("Member Dashboard") }}</div>
+                                <div class="link-description">{{ _("View your membership overview and recent activity") }}</div>
+                            </div>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/personal_details" class="portal-link">
+                            <span class="link-icon"><i class="fa fa-user"></i></span>
+                            <div>
+                                <div class="link-title">{{ _("Personal Details") }}</div>
+                                <div class="link-description">{{ _("Update your name, pronouns, and personal information") }}</div>
+                            </div>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/my-account" class="portal-link">
+                            <span class="link-icon"><i class="fa fa-cog"></i></span>
+                            <div>
+                                <div class="link-title">{{ _("Account Settings") }}</div>
+                                <div class="link-description">{{ _("Manage your account preferences and security") }}</div>
+                            </div>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/address_change" class="portal-link">
+                            <span class="link-icon"><i class="fa fa-map-marker"></i></span>
+                            <div>
+                                <div class="link-title">{{ _("Update Address") }}</div>
+                                <div class="link-description">{{ _("Change your mailing address and contact details") }}</div>
+                            </div>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/bank_details" class="portal-link">
+                            <span class="link-icon"><i class="fa fa-credit-card"></i></span>
+                            <div>
+                                <div class="link-title">{{ _("Bank Details") }}</div>
+                                <div class="link-description">{{ _("Manage payment methods and SEPA Direct Debit") }}</div>
+                            </div>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Membership Services -->
+        <div class="portal-section">
+            <div class="section-header">
+                <h3><span class="icon">🎫</span>{{ _("Membership Services") }}</h3>
+            </div>
+            <div class="section-content">
+                <ul class="portal-links">
+                    <li>
+                        <a href="/personal_details" class="portal-link">
+                            <span class="link-icon"><i class="fa fa-id-card"></i></span>
+                            <div>
+                                <div class="link-title">{{ _("Personal Details") }}</div>
+                                <div class="link-description">{{ _("Update your personal information and preferences") }}</div>
+                            </div>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/membership_fee_adjustment" class="portal-link">
+                            <span class="link-icon"><i class="fa fa-euro"></i></span>
+                            <div>
+                                <div class="link-title">{{ _("Fee Adjustment") }}</div>
+                                <div class="link-description">{{ _("Request membership fee adjustments") }}</div>
+                            </div>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/bank_details" class="portal-link">
+                            <span class="link-icon"><i class="fa fa-file-text"></i></span>
+                            <div>
+                                <div class="link-title">{{ _("Payment Setup") }}</div>
+                                <div class="link-description">{{ _("Manage bank details and payment methods") }}</div>
+                            </div>
+                        </a>
+                    </li>
+                    {% if membership and membership.status != "Active" %}
+                    <li>
+                        <a href="/payment_retry" class="portal-link">
+                            <span class="link-icon"><i class="fa fa-refresh"></i></span>
+                            <div>
+                                <div class="link-title">{{ _("Payment Retry") }}</div>
+                                <div class="link-description">{{ _("Retry failed payments for your membership") }}</div>
+                            </div>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+
+        <!-- Volunteer Services -->
+        <div class="portal-section">
+            <div class="section-header">
+                <h3><span class="icon">❤️</span>{{ _("Volunteer Services") }}</h3>
+            </div>
+            <div class="section-content">
+                <ul class="portal-links">
+                    {% if volunteer %}
+                    <li>
+                        <a href="/volunteer/dashboard" class="portal-link">
+                            <span class="link-icon"><i class="fa fa-heart"></i></span>
+                            <div>
+                                <div class="link-title">{{ _("Volunteer Dashboard") }}</div>
+                                <div class="link-description">{{ _("Manage your volunteer activities and assignments") }}</div>
+                            </div>
+                        </a>
+                    </li>
+                    {% endif %}
+                    <li>
+                        <a href="/volunteer/expenses" class="portal-link">
+                            <span class="link-icon"><i class="fa fa-receipt"></i></span>
+                            <div>
+                                <div class="link-title">{{ _("Volunteer Expenses") }}</div>
+                                <div class="link-description">{{ _("Submit and track volunteer expense reimbursements") }}</div>
+                            </div>
+                        </a>
+                    </li>
+                    {% if not volunteer %}
+                    <li>
+                        <a href="/volunteer/apply" class="portal-link">
+                            <span class="link-icon"><i class="fa fa-hand-o-up"></i></span>
+                            <div>
+                                <div class="link-title">{{ _("Become a Volunteer") }}</div>
+                                <div class="link-description">{{ _("Join our volunteer community and make a difference") }}</div>
+                            </div>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+
+        <!-- Events & Community -->
+        <div class="portal-section">
+            <div class="section-header">
+                <h3><span class="icon">🎉</span>{{ _("Events & Community") }}</h3>
+            </div>
+            <div class="section-content">
+                <ul class="portal-links">
+                    <li>
+                        <a href="/events" class="portal-link">
+                            <span class="link-icon"><i class="fa fa-calendar"></i></span>
+                            <div>
+                                <div class="link-title">{{ _("Events") }}</div>
+                                <div class="link-description">{{ _("Discover and register for upcoming events") }}</div>
+                            </div>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/chapters" class="portal-link">
+                            <span class="link-icon"><i class="fa fa-users"></i></span>
+                            <div>
+                                <div class="link-title">{{ _("Local Chapters") }}</div>
+                                <div class="link-description">{{ _("Connect with your local chapter community") }}</div>
+                            </div>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/resources" class="portal-link">
+                            <span class="link-icon"><i class="fa fa-book"></i></span>
+                            <div>
+                                <div class="link-title">{{ _("Resources") }}</div>
+                                <div class="link-description">{{ _("Access member resources and materials") }}</div>
+                            </div>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    {% if recent_activity %}
+    <div class="recent-activity">
+        <h3>{{ _("Recent Activity") }}</h3>
+        {% for activity in recent_activity %}
+        <div class="activity-item">
+            <div class="activity-icon">
+                <i class="{{ activity.icon }}"></i>
+            </div>
+            <div class="activity-content">
+                <div>{{ activity.description }}</div>
+                <div class="activity-date">{{ frappe.utils.formatdate(activity.date) }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,5 +1,9 @@
 // Copyright (c) 2025, Your Name and contributors
 // For license information, please see license.txt
+// Cache buster: v2025-01-13-001
+
+// Test if this file is loading
+console.log('Member.js file is loading - v2025-01-13-001');
 
 // Import utility modules
 frappe.require([
@@ -16,6 +20,9 @@ frappe.ui.form.on('Member', {
     // ==================== FORM LIFECYCLE EVENTS ====================
     
     refresh: function(frm) {
+        // Test if JavaScript is loading
+        console.log('Member form refresh event triggered for:', frm.doc.name || 'new document');
+        
         // Initialize UI and custom CSS
         UIUtils.add_custom_css();
         UIUtils.setup_payment_history_grid(frm);
@@ -56,13 +63,28 @@ frappe.ui.form.on('Member', {
         // Add fee management functionality
         add_fee_management_buttons(frm);
         
+        // Ensure fee management section visibility
+        ensure_fee_management_section_visibility(frm);
+        
+        // Also ensure visibility after a short delay (in case form is still loading)
+        setTimeout(() => {
+            ensure_fee_management_section_visibility(frm);
+        }, 500);
+        
         // Add member ID management buttons
         add_member_id_buttons(frm);
         
-        // Check SEPA mandate status
-        if (frm.doc.payment_method === 'Direct Debit' && frm.doc.iban) {
-            SepaUtils.check_sepa_mandate_status(frm);
+        // Button to manually refresh fee section visibility
+        if (frappe.user.has_role(['System Manager', 'Membership Manager', 'Verenigingen Manager'])) {
+            frm.add_custom_button(__('Refresh Fee Section'), function() {
+                ensure_fee_management_section_visibility(frm);
+                frappe.show_alert('Fee section visibility refreshed', 3);
+            }, __('Fee Management'));
+            
         }
+        
+        // Check SEPA mandate status (debounced to avoid multiple rapid calls)
+        check_sepa_mandate_status_debounced(frm);
         
         // Show volunteer info if exists
         VolunteerUtils.show_volunteer_info(frm);
@@ -77,6 +99,12 @@ frappe.ui.form.on('Member', {
     onload: function(frm) {
         // Set up form behavior on load
         setup_form_behavior(frm);
+        
+        // Initialize IBAN tracking for change detection
+        frm._previous_iban = frm.doc.iban;
+        
+        // Ensure fee management section visibility on load
+        ensure_fee_management_section_visibility(frm);
     },
     
     // ==================== FIELD EVENT HANDLERS ====================
@@ -100,12 +128,66 @@ frappe.ui.form.on('Member', {
     
     payment_method: function(frm) {
         UIUtils.handle_payment_method_change(frm);
+        // Only update UI elements, don't prompt for mandate creation during field changes
+        check_sepa_mandate_status_debounced(frm);
     },
     
     iban: function(frm) {
-        if (frm.doc.iban && frm.doc.payment_method === 'Direct Debit') {
-            SepaUtils.check_sepa_mandate_status(frm);
+        // Store the previous IBAN for comparison
+        const oldIban = frm._previous_iban;
+        const newIban = frm.doc.iban;
+        
+        // Auto-derive BIC from IBAN if BIC is empty
+        if (frm.doc.iban && !frm.doc.bic) {
+            // Clean the IBAN first
+            const cleanIban = frm.doc.iban.replace(/\s+/g, '').toUpperCase();
+            
+            // Only update IBAN if it actually changed (to prevent recursion)
+            if (cleanIban !== frm.doc.iban) {
+                frm.set_value('iban', cleanIban);
+                return; // Exit and let the next trigger handle BIC derivation
+            }
+            
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.member.member.derive_bic_from_iban',
+                args: {
+                    iban: cleanIban
+                },
+                callback: function(r) {
+                    if (r.message && r.message.bic) {
+                        frm.set_value('bic', r.message.bic);
+                        frappe.show_alert({
+                            message: __('BIC/SWIFT code automatically derived: {0}', [r.message.bic]),
+                            indicator: 'blue'
+                        }, 3);
+                    } else if (cleanIban.length >= 4) {
+                        // Show message for unsupported bank/country
+                        frappe.show_alert({
+                            message: __('Could not automatically derive BIC for this IBAN. Please enter manually.'),
+                            indicator: 'orange'
+                        }, 4);
+                    }
+                },
+                error: function(r) {
+                    console.error('Error deriving BIC from IBAN:', r);
+                }
+            });
         }
+        
+        // Check if IBAN actually changed and deactivate old mandates after save
+        if (oldIban && newIban && oldIban !== newIban && !frm.doc.__islocal) {
+            // Mark that IBAN changed so we can handle it after save
+            frm._iban_changed = {
+                old_iban: oldIban,
+                new_iban: newIban
+            };
+        }
+        
+        // Store current IBAN for next comparison
+        frm._previous_iban = newIban;
+        
+        // Only update UI elements, don't prompt for mandate creation during field changes
+        check_sepa_mandate_status_debounced(frm);
     },
     
     pincode: function(frm) {
@@ -115,6 +197,56 @@ frappe.ui.form.on('Member', {
                 message: __('Postal code updated. You may want to assign a chapter based on this location.'),
                 indicator: 'blue'
             }, 3);
+        }
+    },
+    
+    after_save: function(frm) {
+        // Handle IBAN change - deactivate old SEPA mandates
+        if (frm._iban_changed && !frm.doc.__islocal) {
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.member.member.deactivate_old_sepa_mandates',
+                args: {
+                    member: frm.doc.name,
+                    new_iban: frm._iban_changed.new_iban
+                },
+                callback: function(r) {
+                    if (r.message && r.message.success && r.message.deactivated_count > 0) {
+                        let message = __('Deactivated {0} old SEPA mandate(s) due to IBAN change', [r.message.deactivated_count]);
+                        if (r.message.deactivated_mandates && r.message.deactivated_mandates.length > 0) {
+                            const mandateList = r.message.deactivated_mandates.map(m => m.mandate_id).join(', ');
+                            message += ': ' + mandateList;
+                        }
+                        
+                        frappe.show_alert({
+                            message: message,
+                            indicator: 'orange'
+                        }, 6);
+                        
+                        console.log('Deactivated SEPA mandates:', r.message.deactivated_mandates);
+                    }
+                },
+                error: function(r) {
+                    console.error('Error deactivating old SEPA mandates:', r);
+                }
+            });
+            
+            // Clear the flag
+            delete frm._iban_changed;
+        }
+        
+        // Only check for SEPA mandate creation after save, and only once per save operation
+        if (frm.doc.payment_method === 'Direct Debit' && frm.doc.iban && !frm.doc.__islocal) {
+            // Prevent multiple calls by using a unique timestamp
+            const save_timestamp = Date.now();
+            frm._sepa_save_check = save_timestamp;
+            
+            // Use setTimeout to ensure the document is fully saved and form refreshed
+            setTimeout(function() {
+                // Only proceed if this is still the latest save check
+                if (frm._sepa_save_check === save_timestamp) {
+                    check_sepa_mandate_and_prompt_creation(frm, 'after_save');
+                }
+            }, 1500);
         }
     }
 });
@@ -463,11 +595,12 @@ function add_fee_management_buttons(frm) {
         }, __('Fee Management'));
         
         // Add button to change fee if user has permission
-        if (frappe.user.has_role(['System Manager', 'Membership Manager'])) {
+        if (frappe.user.has_role(['System Manager', 'Membership Manager', 'Verenigingen Manager'])) {
             frm.add_custom_button(__('Override Membership Fee'), function() {
                 show_fee_override_dialog(frm);
             }, __('Fee Management'));
         }
+        
         
         // Add button to refresh subscription history
         if (frm.doc.customer) {
@@ -479,6 +612,51 @@ function add_fee_management_buttons(frm) {
                 load_subscription_summary(frm);
             }, __('Fee Management'));
         }
+    }
+}
+
+function ensure_fee_management_section_visibility(frm) {
+    // Ensure fee management section is visible for authorized users
+    const hasRequiredRole = frappe.user.has_role(['System Manager', 'Membership Manager', 'Verenigingen Manager']);
+    const shouldShow = !frm.doc.__islocal && hasRequiredRole;
+    
+    if (shouldShow) {
+        // Force show the section and all related fields
+        frm.set_df_property('fee_management_section', 'hidden', 0);
+        frm.set_df_property('fee_management_section', 'depends_on', '');
+        frm.set_df_property('membership_fee_override', 'hidden', 0);
+        frm.set_df_property('fee_override_reason', 'hidden', 0);
+        frm.set_df_property('fee_override_date', 'hidden', 0);
+        frm.set_df_property('fee_override_by', 'hidden', 0);
+        frm.set_df_property('fee_change_history_section', 'hidden', 0);
+        frm.set_df_property('fee_change_history', 'hidden', 0);
+        
+        // Also use toggle_display as backup
+        frm.toggle_display('fee_management_section', true);
+        frm.toggle_display('membership_fee_override', true);
+        frm.toggle_display('fee_override_reason', true);
+        frm.toggle_display('fee_override_date', true);
+        frm.toggle_display('fee_override_by', true);
+        frm.toggle_display('fee_change_history_section', true);
+        frm.toggle_display('fee_change_history', true);
+        
+        // Force refresh the fields
+        frm.refresh_field('membership_fee_override');
+        frm.refresh_field('fee_override_reason');
+        frm.refresh_field('fee_override_date');
+        frm.refresh_field('fee_override_by');
+        frm.refresh_field('fee_change_history');
+        
+        // Direct DOM manipulation to ensure visibility
+        setTimeout(() => {
+            $('[data-fieldname="fee_management_section"]').show();
+            $('[data-fieldname="membership_fee_override"]').show();
+            $('[data-fieldname="fee_override_reason"]').show();
+            $('[data-fieldname="fee_override_date"]').show();
+            $('[data-fieldname="fee_override_by"]').show();
+        }, 100);
+    } else {
+        frm.toggle_display('fee_management_section', false);
     }
 }
 
@@ -1115,48 +1293,227 @@ function display_amendment_status(frm) {
         callback: function(r) {
             if (r.message && r.message.length > 0) {
                 const amendments = r.message;
-                let amendment_html = '<div class="amendment-status" style="margin: 10px 0;">';
-                amendment_html += '<h6><i class="fa fa-edit"></i> Pending Fee Amendments</h6>';
+                let amendment_html = '<div class="amendment-status-container" style="margin: 10px 0;">';
                 
                 for (let amendment of amendments) {
                     let status_color = 'orange';
-                    if (amendment.status === 'Approved') status_color = 'green';
-                    if (amendment.status === 'Rejected') status_color = 'red';
+                    let alert_class = 'alert-warning';
+                    if (amendment.status === 'Approved') {
+                        status_color = 'green';
+                        alert_class = 'alert-success';
+                    }
+                    if (amendment.status === 'Rejected') {
+                        status_color = 'red';
+                        alert_class = 'alert-danger';
+                    }
                     
                     amendment_html += `
-                        <div class="alert alert-info" style="padding: 8px; margin: 5px 0;">
+                        <div class="alert ${alert_class}" style="padding: 12px; margin: 8px 0; border-left: 4px solid var(--${status_color});">
                             <div class="row">
                                 <div class="col-md-8">
-                                    <strong>${amendment.amendment_type}</strong>: ${frappe.format(amendment.requested_amount, {fieldtype: 'Currency'})}
-                                    <br><small>${amendment.reason}</small>
+                                    <h6 style="margin: 0 0 5px 0;"><i class="fa fa-edit"></i> ${amendment.amendment_type}</h6>
+                                    <p style="margin: 0;"><strong>Amount:</strong> ${frappe.format(amendment.requested_amount, {fieldtype: 'Currency'})}</p>
+                                    <p style="margin: 5px 0 0 0;"><small><strong>Reason:</strong> ${amendment.reason}</small></p>
                                 </div>
                                 <div class="col-md-4 text-right">
-                                    <span class="badge badge-${status_color}">${amendment.status}</span>
-                                    <br><small>${frappe.datetime.str_to_user(amendment.effective_date)}</small>
+                                    <span class="badge badge-${status_color} badge-lg" style="font-size: 12px; padding: 4px 8px;">${amendment.status}</span>
+                                    <br><small style="color: #666;">Effective: ${frappe.datetime.str_to_user(amendment.effective_date)}</small>
+                                    <br><a href="/app/membership-amendment-request/${amendment.name}" class="btn btn-xs btn-default" style="margin-top: 5px;">
+                                        View Amendment
+                                    </a>
                                 </div>
                             </div>
-                            <a href="/app/membership-amendment-request/${amendment.name}" class="btn btn-xs btn-default" style="margin-top: 5px;">
-                                View Amendment
-                            </a>
                         </div>
                     `;
                 }
                 
                 amendment_html += '</div>';
                 
-                // Add to form layout
+                // Try injecting the content directly as a dashboard element as a fallback
+                let amendment_displayed = false;
+                
+                // First try the standard HTML field approach
                 if (frm.fields_dict.amendment_status_html) {
-                    frm.fields_dict.amendment_status_html.$wrapper.html(amendment_html);
-                } else {
-                    // Create a temporary display area
-                    frm.dashboard.add_comment(amendment_html, 'blue');
+                    try {
+                        frm.fields_dict.amendment_status_html.$wrapper.html(amendment_html);
+                        frm.set_df_property('amendment_status_section', 'depends_on', '');
+                        frm.set_df_property('amendment_status_section', 'hidden', 0);
+                        frm.toggle_display('amendment_status_section', true);
+                        frm.toggle_display('amendment_status_html', true);
+                        
+                        // Try to expand collapsible section
+                        setTimeout(() => {
+                            const sectionField = frm.get_field('amendment_status_section');
+                            if (sectionField && sectionField.collapse) {
+                                sectionField.collapse(false);
+                            }
+                            
+                            const sectionEl = $('[data-fieldname="amendment_status_section"]');
+                            const collapseToggle = sectionEl.find('.collapse-indicator, .octicon-chevron-down, .octicon-chevron-right');
+                            if (collapseToggle.length > 0) {
+                                collapseToggle.click();
+                            }
+                            
+                            // Check if it's actually visible after all attempts
+                            const htmlEl = $('[data-fieldname="amendment_status_html"]');
+                            if (htmlEl.is(':visible')) {
+                                amendment_displayed = true;
+                            }
+                        }, 200);
+                        
+                    } catch (e) {
+                        console.error('Error setting HTML field:', e);
+                    }
                 }
+                
+                // Fallback: Add as dashboard comment if HTML field doesn't work
+                setTimeout(() => {
+                    if (!amendment_displayed) {
+                        // Clear any existing amendment dashboard elements
+                        frm.dashboard.clear_comment();
+                        
+                        // Add as dashboard element
+                        const dashboard_html = `
+                            <div class="alert alert-info" style="margin: 10px 0;">
+                                <h5><i class="fa fa-info-circle"></i> Pending Fee Amendment</h5>
+                                ${amendment_html}
+                            </div>
+                        `;
+                        
+                        frm.dashboard.add_comment(dashboard_html, 'blue', true);
+                    }
+                }, 500);
                 
                 // Add dashboard indicator
                 frm.dashboard.add_indicator(
                     __('Pending Amendments: {0}', [amendments.length]), 
                     'orange'
                 );
+            } else {
+                // Hide the section if no amendments
+                if (frm.fields_dict.amendment_status_html) {
+                    frm.toggle_display('amendment_status_section', false);
+                    frm.toggle_display('amendment_status_html', false);
+                }
+            }
+        },
+        error: function(r) {
+            console.error('Error loading amendment status:', r);
+            // Hide the section on error
+            if (frm.fields_dict.amendment_status_html) {
+                frm.toggle_display('amendment_status_section', false);
+            }
+        }
+    });
+}
+
+// ==================== SEPA MANDATE OPTIMIZATION ====================
+
+// Debounced SEPA mandate status check to avoid rapid API calls
+let sepa_check_timeout;
+function check_sepa_mandate_status_debounced(frm) {
+    // Clear any existing timeout
+    if (sepa_check_timeout) {
+        clearTimeout(sepa_check_timeout);
+    }
+    
+    // Set a new timeout to check SEPA status after 300ms of inactivity
+    sepa_check_timeout = setTimeout(function() {
+        if (frm.doc.payment_method === 'Direct Debit' && frm.doc.iban) {
+            SepaUtils.check_sepa_mandate_status(frm);
+        } else {
+            // Clear SEPA UI if conditions aren't met
+            if (window.SepaUtils && window.SepaUtils.clear_sepa_ui_elements) {
+                SepaUtils.clear_sepa_ui_elements(frm);
+            }
+        }
+    }, 300);
+}
+
+function check_sepa_mandate_and_prompt_creation(frm, context = 'general') {
+    // Check if SEPA mandate exists and prompt for creation if needed
+    if (!frm.doc.iban || frm.doc.payment_method !== 'Direct Debit') {
+        return;
+    }
+    
+    // Prevent duplicate mandate creation checks by using a unique key
+    const check_key = `${frm.doc.name}-${frm.doc.iban}-${frm.doc.payment_method}-${context}`;
+    if (frm._last_sepa_prompt_key === check_key) {
+        console.log('Skipping duplicate SEPA mandate check for:', check_key);
+        return;
+    }
+    frm._last_sepa_prompt_key = check_key;
+    
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.member.member.get_active_sepa_mandate',
+        args: {
+            member: frm.doc.name,
+            iban: frm.doc.iban
+        },
+        callback: function(r) {
+            if (!r.message) {
+                // No active mandate found - show dialog to create one
+                let message;
+                if (context === 'after_save') {
+                    message = __('You have saved a member with Direct Debit payment method and IBAN, but no active SEPA mandate was found. Would you like to create a SEPA mandate now?');
+                } else if (context === 'iban_change') {
+                    message = __('You have updated the IBAN for Direct Debit payments, but no active SEPA mandate was found for this IBAN. Would you like to create a SEPA mandate now?');
+                } else if (context === 'payment_method_change') {
+                    message = __('You have changed the payment method to Direct Debit, but no active SEPA mandate was found for this IBAN. Would you like to create a SEPA mandate now?');
+                } else {
+                    message = __('You have set the payment method to Direct Debit and provided an IBAN, but no active SEPA mandate was found. Would you like to create a SEPA mandate now?');
+                }
+                
+                frappe.confirm(
+                    message,
+                    function() {
+                        // User clicked Yes - create mandate
+                        if (window.SepaUtils && window.SepaUtils.create_sepa_mandate_with_dialog) {
+                            SepaUtils.create_sepa_mandate_with_dialog(frm, __('Creating SEPA mandate for direct debit payments.'));
+                        }
+                    },
+                    function() {
+                        // User clicked No - just show the UI elements
+                        if (window.SepaUtils && window.SepaUtils.check_sepa_mandate_status) {
+                            SepaUtils.check_sepa_mandate_status(frm);
+                        }
+                    }
+                );
+            } else {
+                // Mandate found - check if IBAN matches
+                const mandateIban = r.message.iban ? r.message.iban.replace(/\s+/g, '').toUpperCase() : '';
+                const currentIban = frm.doc.iban ? frm.doc.iban.replace(/\s+/g, '').toUpperCase() : '';
+                
+                if (mandateIban !== currentIban) {
+                    // IBAN doesn't match existing mandate - ask to create new one
+                    frappe.confirm(
+                        __('You have updated the IBAN, but the existing SEPA mandate is for a different IBAN ({0}). Would you like to create a new SEPA mandate for the new IBAN ({1})?', [r.message.iban, frm.doc.iban]),
+                        function() {
+                            // User clicked Yes - create new mandate
+                            if (window.SepaUtils && window.SepaUtils.create_sepa_mandate_with_dialog) {
+                                SepaUtils.create_sepa_mandate_with_dialog(frm, __('Creating new SEPA mandate for updated IBAN.'));
+                            }
+                        },
+                        function() {
+                            // User clicked No - just show the UI elements
+                            if (window.SepaUtils && window.SepaUtils.check_sepa_mandate_status) {
+                                SepaUtils.check_sepa_mandate_status(frm);
+                            }
+                        }
+                    );
+                } else {
+                    // Mandate exists and IBAN matches - just update UI silently
+                    if (window.SepaUtils && window.SepaUtils.check_sepa_mandate_status) {
+                        SepaUtils.check_sepa_mandate_status(frm);
+                    }
+                }
+            }
+        },
+        error: function(r) {
+            console.error('Error checking SEPA mandate status:', r);
+            // Fallback to regular UI update
+            if (window.SepaUtils && window.SepaUtils.check_sepa_mandate_status) {
+                SepaUtils.check_sepa_mandate_status(frm);
             }
         }
     });
