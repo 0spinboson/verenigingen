@@ -754,11 +754,35 @@ class BoardManager(BaseManager):
                 board_member.volunteer and 
                 board_member.volunteer not in old_board_member_volunteers):
 
+                # Add volunteer assignment history
                 self.add_volunteer_assignment_history(
                     board_member.volunteer,
                     board_member.chapter_role,
                     board_member.from_date
                 )
+                
+                # Add to chapter members if they have an associated member
+                try:
+                    volunteer_doc = frappe.get_doc("Volunteer", board_member.volunteer)
+                    if volunteer_doc.member:
+                        self._add_to_chapter_members(volunteer_doc.member)
+                        self.log_action(
+                            "Auto-added board member to chapter members",
+                            {
+                                "volunteer": board_member.volunteer,
+                                "member": volunteer_doc.member,
+                                "role": board_member.chapter_role
+                            }
+                        )
+                except Exception as e:
+                    self.log_action(
+                        "Failed to auto-add board member to chapter members",
+                        {
+                            "volunteer": board_member.volunteer,
+                            "error": str(e)
+                        },
+                        "error"
+                    )
 
     def get_summary(self) -> Dict:
         """
@@ -849,22 +873,62 @@ class BoardManager(BaseManager):
 
     def _add_to_chapter_members(self, member_id: str):
         """Add board member to chapter members if not already there"""
-        # Check if already a member
-        for member in self.chapter_doc.members or []:
-            if member.member == member_id:
-                if not member.enabled:
-                    # Re-enable if disabled
-                    member.enabled = 1
-                    member.leave_reason = None
-                return
+        try:
+            self.log_action(
+                "Starting _add_to_chapter_members",
+                {
+                    "member_id": member_id,
+                    "current_members_count": len(self.chapter_doc.members or [])
+                }
+            )
+            
+            # Check if already a member
+            for member in self.chapter_doc.members or []:
+                if member.member == member_id:
+                    if not member.enabled:
+                        # Re-enable if disabled
+                        member.enabled = 1
+                        member.leave_reason = None
+                        self.log_action(
+                            "Re-enabled existing chapter member",
+                            {"member_id": member_id}
+                        )
+                    else:
+                        self.log_action(
+                            "Member already exists and is enabled",
+                            {"member_id": member_id}
+                        )
+                    return
 
-        # Not a member yet, add them
-        member_doc = frappe.get_doc("Member", member_id)
-        self.chapter_doc.append("members", {
-            "member": member_id,
-            "member_name": member_doc.full_name,
-            "enabled": 1
-        })
+            # Not a member yet, add them
+            member_doc = frappe.get_doc("Member", member_id)
+            new_member = self.chapter_doc.append("members", {
+                "member": member_id,
+                "chapter_join_date": today(),
+                "enabled": 1
+            })
+            
+            self.log_action(
+                "Added new chapter member",
+                {
+                    "member_id": member_id,
+                    "member_full_name": member_doc.full_name,
+                    "join_date": today(),
+                    "new_members_count": len(self.chapter_doc.members),
+                    "new_member_dict": new_member.as_dict() if hasattr(new_member, 'as_dict') else str(new_member)
+                }
+            )
+            
+        except Exception as e:
+            self.log_action(
+                "Error in _add_to_chapter_members",
+                {
+                    "member_id": member_id,
+                    "error": str(e)
+                },
+                "error"
+            )
+            raise
 
     def _find_active_board_member(self, volunteer: str):
         """Find active board member by volunteer ID"""

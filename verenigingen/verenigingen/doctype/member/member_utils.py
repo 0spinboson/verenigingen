@@ -929,7 +929,7 @@ def sync_member_counter_with_settings(doc, method=None):
         return
     
     if doc.has_value_changed("member_id_start"):
-        old_start = doc.get_db_value("member_id_start") or 1000
+        old_start = cint(doc.get_db_value("member_id_start")) or 1000
         new_start = cint(doc.member_id_start) or 1000
         
         if new_start > old_start:

@@ -535,7 +535,7 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         user.first_name = self.first_name
         user.last_name = self.last_name
         user.send_welcome_email = 1
-        user.user_type = "Website User"
+        user.user_type = "System User"
         
         member_role = "Assocation Member"
         verenigingen_member_role = "Verenigingen Member"
@@ -549,6 +549,9 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         
         user.flags.ignore_permissions = True
         user.insert(ignore_permissions=True)
+        
+        # Set allowed modules for member users
+        set_member_user_modules(user.name)
         
         self.user = user.name
         self.save(ignore_permissions=True)
@@ -1772,11 +1775,14 @@ def create_member_user_account(member_name, send_welcome_email=True):
         user.last_name = member.last_name or ""
         user.full_name = member.full_name
         user.send_welcome_email = int(send_welcome_email)
-        user.user_type = "Website User"
+        user.user_type = "System User"
         user.enabled = 1
         
         # Insert the user
         user.insert(ignore_permissions=True)
+        
+        # Set allowed modules for member users
+        set_member_user_modules(user.name)
         
         # Add member-specific roles
         add_member_roles_to_user(user.name)
@@ -1807,17 +1813,24 @@ def add_member_roles_to_user(user_name):
         # Define the roles that members need for portal access
         member_roles = [
             "Member Portal User",  # Custom role for member portal access
-            "Website User"  # Standard Frappe role for website access
+            "Verenigingen Member"  # Custom role for members
         ]
         
         # Check if Member Portal User role exists, create if not
         if not frappe.db.exists("Role", "Member Portal User"):
             create_member_portal_role()
+            
+        # Check if Verenigingen Member role exists, create if not
+        if not frappe.db.exists("Role", "Verenigingen Member"):
+            create_verenigingen_member_role()
         
         # Add roles to user
         user = frappe.get_doc("User", user_name)
         
         for role in member_roles:
+            if not frappe.db.exists("Role", role):
+                frappe.logger().warning(f"Role {role} does not exist, skipping")
+                continue
             if not any(r.role == role for r in user.roles):
                 user.append("roles", {"role": role})
         
@@ -1846,3 +1859,49 @@ def create_member_portal_role():
     except Exception as e:
         frappe.log_error(f"Error creating Member Portal User role: {str(e)}")
         return None
+
+def create_verenigingen_member_role():
+    """Create the Verenigingen Member role for member access"""
+    try:
+        role = frappe.new_doc("Role")
+        role.role_name = "Verenigingen Member"
+        role.desk_access = 0  # Portal users don't need desk access
+        role.is_custom = 1  # This is a custom role for the app
+        role.insert(ignore_permissions=True)
+        
+        frappe.logger().info("Created Verenigingen Member role")
+        return role.name
+        
+    except Exception as e:
+        frappe.log_error(f"Error creating Verenigingen Member role: {str(e)}")
+        return None
+
+def set_member_user_modules(user_name):
+    """Set allowed modules for member users - restrict to relevant modules only"""
+    try:
+        # Define modules that members should have access to
+        allowed_modules = [
+            "Verenigingen",  # Main app module
+            "Core",  # Essential Frappe core functionality
+            "Desk",  # Basic desk access
+            "Home",  # Home page access
+        ]
+        
+        user = frappe.get_doc("User", user_name)
+        
+        # Clear existing module access and set only allowed ones
+        user.set("block_modules", [])
+        
+        # Get all available modules
+        all_modules = frappe.get_all("Module Def", fields=["name"])
+        
+        # Block all modules except the allowed ones
+        for module in all_modules:
+            if module.name not in allowed_modules:
+                user.append("block_modules", {"module": module.name})
+        
+        user.save(ignore_permissions=True)
+        frappe.logger().info(f"Set module restrictions for user {user_name}")
+        
+    except Exception as e:
+        frappe.log_error(f"Error setting module restrictions for user {user_name}: {str(e)}")

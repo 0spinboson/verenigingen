@@ -338,6 +338,9 @@ function handle_active_change(frm, cdt, cdn) {
 function handle_member_add(frm, cdt, cdn) {
     const row = locals[cdt][cdn];
     row.enabled = 1;
+    if (!row.chapter_join_date) {
+        frappe.model.set_value(cdt, cdn, 'chapter_join_date', frappe.datetime.get_today());
+    }
 }
 
 function handle_member_remove(frm, cdt, cdn) {
@@ -346,13 +349,8 @@ function handle_member_remove(frm, cdt, cdn) {
 
 function handle_member_change(frm, cdt, cdn) {
     const row = locals[cdt][cdn];
-    if (row.member) {
-        frappe.db.get_value('Member', row.member, ['full_name', 'email'], function(r) {
-            if (r) {
-                frappe.model.set_value(cdt, cdn, 'member_name', r.full_name);
-                frappe.model.set_value(cdt, cdn, 'member_email', r.email);
-            }
-        });
+    if (row.member && !row.chapter_join_date) {
+        frappe.model.set_value(cdt, cdn, 'chapter_join_date', frappe.datetime.get_today());
     }
 }
 
@@ -405,18 +403,84 @@ function view_chapter_members(frm) {
 }
 
 function show_board_management_dialog(frm) {
-    frappe.call({
-        method: 'add_board_member',
-        doc: frm.doc,
-        freeze: true,
-        freeze_message: __('Loading board management...'),
-        callback: function(r) {
-            // Handle board management dialog
-        },
-        error: function(r) {
-            frappe.msgprint(__('Error loading board management: {0}', [r.message]));
+    const d = new frappe.ui.Dialog({
+        title: __('Add Board Member'),
+        fields: [
+            {
+                label: __('Volunteer'),
+                fieldname: 'volunteer',
+                fieldtype: 'Link',
+                options: 'Volunteer',
+                reqd: 1,
+                get_query: function() {
+                    return {
+                        filters: {
+                            'status': ['in', ['Active', 'New']]
+                        }
+                    };
+                }
+            },
+            {
+                label: __('Board Role'),
+                fieldname: 'role',
+                fieldtype: 'Link',
+                options: 'Chapter Role',
+                reqd: 1,
+                get_query: function() {
+                    return {
+                        filters: {
+                            'is_active': 1
+                        }
+                    };
+                }
+            },
+            {
+                label: __('From Date'),
+                fieldname: 'from_date',
+                fieldtype: 'Date',
+                default: frappe.datetime.get_today(),
+                reqd: 1
+            },
+            {
+                label: __('To Date'),
+                fieldname: 'to_date',
+                fieldtype: 'Date'
+            }
+        ],
+        primary_action_label: __('Add Board Member'),
+        primary_action: function() {
+            const values = d.get_values();
+            if (!values) return;
+            
+            frappe.call({
+                method: 'add_board_member',
+                doc: frm.doc,
+                args: {
+                    volunteer: values.volunteer,
+                    role: values.role,
+                    from_date: values.from_date,
+                    to_date: values.to_date
+                },
+                freeze: true,
+                freeze_message: __('Adding board member...'),
+                callback: function(r) {
+                    if (r.message && r.message.success) {
+                        frappe.show_alert({
+                            message: __('Board member added successfully'),
+                            indicator: 'green'
+                        }, 3);
+                        frm.reload_doc();
+                        d.hide();
+                    }
+                },
+                error: function(r) {
+                    frappe.msgprint(__('Error adding board member: {0}', [r.message]));
+                }
+            });
         }
     });
+    
+    d.show();
 }
 
 function show_board_history(frm) {

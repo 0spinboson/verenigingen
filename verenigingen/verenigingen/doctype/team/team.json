@@ -157,6 +157,10 @@
    "role": "Team Lead",
    "share": 1,
    "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Verenigingen Member"
   }
  ],
  "row_format": "Dynamic",

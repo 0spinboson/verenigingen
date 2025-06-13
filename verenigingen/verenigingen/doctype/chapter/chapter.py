@@ -67,8 +67,12 @@ class Chapter(WebsiteGenerator):
             # Handle board member changes (delegation to managers)
             self._handle_document_changes()
             
+        except frappe.ValidationError as e:
+            # Log and re-raise validation errors without modification
+            frappe.log_error(f"Chapter validation failed for {self.name}: {str(e)}")
+            raise
         except Exception as e:
-            frappe.log_error(f"Error validating chapter {self.name}: {str(e)}")
+            frappe.log_error(f"Unexpected error validating chapter {self.name}: {str(e)}")
             frappe.throw(_("Validation error occurred. Please check the error log."))
     
     def before_save(self):
@@ -332,10 +336,6 @@ class Chapter(WebsiteGenerator):
             context.parents = [dict(label='View All Chapters',
                 route='chapters', title='View Chapters')]
             
-            # Use manager methods for optimized data retrieval
-            context.members = self.member_manager.get_members(with_details=True)
-            context.board_members = self.board_manager.get_board_members()
-            
             # Check if current user is a board member
             context.is_board_member = self.board_manager.is_board_member()
             context.board_role = self.board_manager.get_member_role()
@@ -345,6 +345,17 @@ class Chapter(WebsiteGenerator):
             
             # Add permission checks for template
             context.can_write_chapter = frappe.has_permission("Chapter", doc=self.name, ptype="write")
+            
+            # Only load sensitive member data if user has permlevel 1 permissions
+            # This applies to board members, system managers, and verenigingen managers
+            if context.is_board_member or context.is_system_manager or "Verenigingen Manager" in frappe.get_roles():
+                # Use manager methods for optimized data retrieval
+                context.members = self.member_manager.get_members(with_details=True)
+                context.board_members = self.board_manager.get_board_members()
+            else:
+                # Regular members cannot see member lists
+                context.members = []
+                context.board_members = []
             
             # Add chapter head member details with error handling
             if self.chapter_head:
@@ -470,20 +481,46 @@ def get_chapter_permission_query_conditions(user=None):
         if "System Manager" in frappe.get_roles(user) or "Verenigingen Manager" in frappe.get_roles(user):
             return ""
             
-        # Get chapters where user is a board member using Query Builder
+        # Get member record for the user
         member = frappe.db.get_value("Member", {"user": user}, "name")
         if member:
-            CBM = DocType('Chapter Board Member')
-            board_chapters = (
-                frappe.qb.from_(CBM)
-                .select(CBM.parent)
-                .where((CBM.member == member) & (CBM.is_active == 1))
-            ).run(as_dict=True)
+            accessible_chapters = []
+            
+            # Get volunteer record for the member (needed for board membership check)
+            volunteer = frappe.db.get_value("Volunteer", {"member": member}, "name")
+            
+            # Get chapters where user is a board member using Query Builder
+            if volunteer:
+                CBM = DocType('Chapter Board Member')
+                board_chapters = (
+                    frappe.qb.from_(CBM)
+                    .select(CBM.parent)
+                    .where((CBM.volunteer == volunteer) & (CBM.is_active == 1))
+                ).run(as_dict=True)
+            else:
+                board_chapters = []
             
             if board_chapters:
-                chapter_list = ["'" + chapter.parent + "'" for chapter in board_chapters]
+                accessible_chapters.extend([chapter.parent for chapter in board_chapters])
+            
+            # Get chapters where user is a regular member using Query Builder
+            CM = DocType('Chapter Member')
+            member_chapters = (
+                frappe.qb.from_(CM)
+                .select(CM.parent)
+                .where((CM.member == member) & (CM.enabled == 1))
+            ).run(as_dict=True)
+            
+            if member_chapters:
+                accessible_chapters.extend([chapter.parent for chapter in member_chapters])
+            
+            # Remove duplicates and create query condition
+            if accessible_chapters:
+                unique_chapters = list(set(accessible_chapters))
+                chapter_list = ["'" + chapter + "'" for chapter in unique_chapters]
                 return f"`tabChapter`.name in ({', '.join(chapter_list)})"
         
+        # Fall back to published chapters for users without member accounts
         return "`tabChapter`.published = 1"
         
     except Exception as e:
@@ -512,6 +549,43 @@ def get_board_memberships(member_name):
     try:
         if not member_name:
             return []
+        
+        # Check if user has permission to view member information
+        current_user = frappe.session.user
+        user_roles = frappe.get_roles(current_user)
+        
+        # Allow if user is System Manager or Verenigingen Manager
+        if "System Manager" in user_roles or "Verenigingen Manager" in user_roles:
+            pass  # Full access
+        else:
+            # Check if user is requesting their own board memberships
+            current_member = frappe.db.get_value("Member", {"user": current_user}, "name")
+            if current_member != member_name:
+                # Check if user is a board member of any chapter that this member belongs to
+                member_chapters = frappe.db.sql("""
+                    SELECT parent FROM `tabChapter Member` 
+                    WHERE member = %s AND enabled = 1
+                """, (member_name,), as_dict=True)
+                
+                user_board_chapters = []
+                if current_member:
+                    user_board_chapters = frappe.db.sql("""
+                        SELECT parent FROM `tabChapter Board Member` 
+                        WHERE member = %s AND is_active = 1
+                    """, (current_member,), as_dict=True)
+                
+                # Check if user has board access to any of the chapters this member belongs to
+                has_access = False
+                for member_chapter in member_chapters:
+                    for user_chapter in user_board_chapters:
+                        if member_chapter.parent == user_chapter.parent:
+                            has_access = True
+                            break
+                    if has_access:
+                        break
+                
+                if not has_access:
+                    frappe.throw(_("You don't have permission to view this member's board information"))
             
         CBM = DocType('Chapter Board Member')
         board_memberships = (
@@ -548,6 +622,27 @@ def get_chapter_board_history(chapter_name):
     try:
         if not chapter_name:
             frappe.throw(_("Chapter name is required"))
+        
+        # Check if user has permission to view chapter board information
+        current_user = frappe.session.user
+        user_roles = frappe.get_roles(current_user)
+        
+        # Allow if user is System Manager or Verenigingen Manager
+        if "System Manager" in user_roles or "Verenigingen Manager" in user_roles:
+            pass  # Full access
+        else:
+            # Check if user is a board member of this chapter
+            current_member = frappe.db.get_value("Member", {"user": current_user}, "name")
+            if current_member:
+                is_board_member = frappe.db.exists("Chapter Board Member", {
+                    "parent": chapter_name,
+                    "member": current_member,
+                    "is_active": 1
+                })
+                if not is_board_member:
+                    frappe.throw(_("You don't have permission to view board history for this chapter"))
+            else:
+                frappe.throw(_("You don't have permission to view board history"))
             
         chapter = frappe.get_doc("Chapter", chapter_name)
         return chapter.get_board_members(include_inactive=True)

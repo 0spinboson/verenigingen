@@ -150,7 +150,8 @@
   "fieldname": "board_members",
   "fieldtype": "Table",
   "label": "Board Members",
-  "options": "Chapter Board Member"
+  "options": "Chapter Board Member",
+  "permlevel": 1
   },
   {
    "allow_bulk_edit": 0, 
@@ -352,7 +353,7 @@
    "length": 0, 
    "no_copy": 0, 
    "options": "Chapter Member", 
-   "permlevel": 0, 
+   "permlevel": 1, 
    "precision": "", 
    "print_hide": 0, 
    "print_hide_if_no_value": 0, 
@@ -402,6 +403,21 @@
    "share": 1, 
    "submit": 0, 
    "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "write": 1,
+   "role": "Verenigingen Manager"
+  },
+  {
+   "read": 1,
+   "role": "Verenigingen Member"
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Chapter Board Member"
   }
  ], 
  "quick_entry": 1, 

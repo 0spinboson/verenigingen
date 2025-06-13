@@ -130,7 +130,7 @@
                         <div class="col-md-8">
                             <strong>{{ _("Requested Amount") }}:</strong> {{ frappe.format_value(request.requested_amount, {"fieldtype": "Currency"}) }}<br>
                             <strong>{{ _("Status") }}:</strong> {{ _(request.status) }}<br>
-                            <small class="text-muted">{{ _("Submitted") }}: {{ frappe.format_datetime(request.creation) }}</small>
+                            <small class="text-muted">{{ _("Submitted") }}: {{ frappe.utils.format_datetime(request.creation) }}</small>
                         </div>
                         <div class="col-md-4">
                             <a href="/app/contribution-amendment-request/{{ request.name }}" class="btn btn-sm btn-outline-primary" target="_blank">

@@ -6,6 +6,7 @@
  "engine": "InnoDB",
  "field_order": [
   "member_details_section",
+  "aanhef",
   "first_name",
   "middle_name",
   "last_name",
@@ -320,6 +321,12 @@
    "fieldtype": "Select",
    "label": "Information Visibility",
    "options": "Public\nBoard Only\nAdmin Only"
+  },
+  {
+   "fieldname": "aanhef",
+   "fieldtype": "Select",
+   "label": "Salutation",
+   "options": "\nMr.\nMrs.\nMs.\nDr.\nProf.\nMr./Mrs."
   },
   {
    "fieldname": "first_name",

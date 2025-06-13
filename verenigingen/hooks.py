@@ -138,7 +138,9 @@ permission_query_conditions = {
     "Membership": "verenigingen.permissions.get_membership_permission_query",
     "Chapter": "verenigingen.verenigingen.doctype.chapter.chapter.get_chapter_permission_query_conditions",
     "Chapter Member": "verenigingen.permissions.get_chapter_member_permission_query",
-    "Membership Termination Request": "verenigingen.permissions.get_termination_permission_query"
+    "Team": "verenigingen.verenigingen.doctype.team.team.get_team_permission_query_conditions",
+    "Membership Termination Request": "verenigingen.permissions.get_termination_permission_query",
+    "Volunteer": "verenigingen.permissions.get_volunteer_permission_query"
 }
 
 has_permission = {

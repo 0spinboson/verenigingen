@@ -27,7 +27,7 @@
                             {% endif %}
                             
                             <h6>{{ member.full_name }}</h6>
-                            <p class="text-muted mb-1">{{ _("Member ID") }}: {{ member.name }}</p>
+                            <p class="text-muted mb-1">{{ _("Member ID") }}: {{ member.member_id }}</p>
                             <p class="text-muted mb-1">{{ _("Since") }}: {{ frappe.format_date(member.member_since) }}</p>
                             {% if member.application_id %}
                             <p class="text-muted mb-1">{{ _("Application ID") }}: {{ member.application_id }}</p>
@@ -181,7 +181,7 @@
                                 </div>
                                 <div class="activity-content">
                                     <p>{{ activity.description }}</p>
-                                    <small class="text-muted">{{ frappe.format_datetime(activity.date) }}</small>
+                                    <small class="text-muted">{{ frappe.utils.format_datetime(activity.date) }}</small>
                                 </div>
                             </div>
                             {% endfor %}

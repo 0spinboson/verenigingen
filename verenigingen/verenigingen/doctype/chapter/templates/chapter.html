@@ -41,7 +41,7 @@
 </table>
 </div>
 
-{% if board_members %}
+{% if board_members and (is_board_member or is_system_manager) %}
 <h3>Chapter Board</h3>
 <div style="margin-bottom: 30px; max-width: 600px" class="with-border">
     <table class="table table-bordered table-condensed">
@@ -50,9 +50,7 @@
                 <th>Role</th>
                 <th>Name</th>
                 <th>Since</th>
-                {% if is_board_member or is_system_manager %}
                 <th>Actions</th>
-                {% endif %}
             </tr>
         </thead>
         <tbody>
@@ -61,13 +59,11 @@
                     <td>{{ board_member.role }}</td>
                     <td>{{ board_member.volunteer_name }}</td>
                     <td>{{ frappe.format_date(board_member.from_date) }}</td>
-                    {% if is_board_member or is_system_manager %}
                     <td>
                         <a href="/app/member/{{ board_member.member }}" class="btn btn-xs btn-default">
                             <i class="fa fa-user"></i> View
                         </a>
                     </td>
-                    {% endif %}
                 </tr>
             {% endfor %}
         </tbody>
@@ -75,6 +71,7 @@
 </div>
 {% endif %}
 
+{% if is_board_member or is_system_manager %}
 <h3>Member Details</h3>
 
 {% if members %}
@@ -95,11 +92,9 @@
 									<a href="{{ member.website_url }}">{{ member.website_url | truncate (50) or '' }}</a>
 								{% endif %}
 								
-								{% if is_board_member or is_system_manager %}
 								<a href="/app/member/{{ member.name }}" class="btn btn-xs btn-default">
 									<i class="fa fa-user"></i> View
 								</a>
-								{% endif %}
 							</div>
 							<div class="clearfix"></div>
 							</div>
@@ -119,6 +114,7 @@
 	</table>
 {% else %}
 	<p>No member yet.</p>
+{% endif %}
 {% endif %}
 
 {% if address %}

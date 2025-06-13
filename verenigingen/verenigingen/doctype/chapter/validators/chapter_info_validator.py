@@ -160,15 +160,21 @@ class ChapterInfoValidator(BaseValidator):
             return
 
         # Check if name already exists
-        existing_chapter = None
         if self.chapter_doc and hasattr(self.chapter_doc, 'name'):
-            # Updating existing chapter
-            existing_chapter = frappe.db.get_value("Chapter", {"name": name, "name": ["!=", self.chapter_doc.name]})
+            # Updating existing chapter - exclude current chapter from duplicate check
+            existing_chapters = frappe.db.sql("""
+                SELECT name FROM `tabChapter` 
+                WHERE name = %s AND name != %s
+                LIMIT 1
+            """, (name, self.chapter_doc.name), as_dict=True)
+            existing_chapter = existing_chapters[0] if existing_chapters else None
         else:
-            # Creating new chapter
+            # Creating new chapter - check for any existing chapter with same name
             existing_chapter = frappe.db.get_value("Chapter", {"name": name})
 
         if existing_chapter:
+            # Debug info - log what was found
+            frappe.log_error(f"Duplicate chapter validation: Found existing chapter '{existing_chapter}' when trying to create/update '{name}'")
             result.add_error(
                 ("Chapter name '{0}' already exists").format(name)
             )

@@ -494,9 +494,11 @@ def submit_expense(expense_data):
             "notes": expense_data.get("notes")
         })
         
-        # Insert and submit
+        # Insert the expense (no submit since doctype is not submittable)
         expense_doc.insert()
-        expense_doc.submit()
+        
+        # Set status to submitted since we can't use document submission
+        expense_doc.db_set("status", "Submitted")
         
         return {
             "success": True,

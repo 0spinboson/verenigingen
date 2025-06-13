@@ -427,6 +427,9 @@ def create_volunteer_from_member(member_doc):
             frappe.msgprint(_("Member does not have an email address. Cannot create volunteer record."))
             return None
             
+        # Note: We allow volunteer creation even if member already has a user account
+        # The volunteer will get an organization email address for volunteer activities
+        
         # Check if volunteer record already exists
         existing_volunteer = frappe.db.exists("Volunteer", {"member": member_doc.name})
         
@@ -479,7 +482,10 @@ def create_volunteer_from_member(member_doc):
         
         success_message = _("Volunteer record created for {0}").format(member_doc.full_name)
         if user_created:
-            success_message += _(" and organization user account created")
+            success_message += _(" with organization user account ({0})").format(volunteer.email)
+        
+        if member_doc.user:
+            success_message += _(" (member keeps existing personal user account)")
         
         frappe.msgprint(success_message)
         return volunteer
@@ -542,10 +548,8 @@ def create_organization_user_for_volunteer(volunteer, member_doc):
                 volunteer.user = existing_user.name
                 volunteer.save(ignore_permissions=True)
             
-            # Update member with organization user link
-            if not member_doc.user:
-                member_doc.user = existing_user.name
-                member_doc.save(ignore_permissions=True)
+            # Keep the existing personal user account on the member record
+            # Only link to member if no personal user account exists
                 
             frappe.msgprint(_("Linked existing user account {0} to volunteer").format(org_email))
             return True
@@ -581,10 +585,9 @@ def create_organization_user_for_volunteer(volunteer, member_doc):
         volunteer.user = user.name
         volunteer.save(ignore_permissions=True)
         
-        # Update member with organization user link (keep existing personal user if any)
-        if not member_doc.user:
-            member_doc.user = user.name
-            member_doc.save(ignore_permissions=True)
+        # Keep the existing personal user account on the member record
+        # The volunteer record will have the organization user account
+        # This allows members to have both personal and organization accounts
         
         frappe.logger().info(f"Created organization user {org_email} for volunteer {volunteer.name}")
         return True

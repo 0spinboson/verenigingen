@@ -369,27 +369,25 @@
                     </div>
                     
                     <div class="form-group">
-                        <label for="organization_type">{{ _("Team, Commission or Chapter") }} *</label>
-                        <select id="organization_type" name="organization_type" required>
-                            <option value="">{{ _("Select type...") }}</option>
-                            {% if organizations.chapters %}
-                                <option value="Chapter">{{ _("Chapter") }}</option>
-                            {% endif %}
-                            {% if organizations.teams %}
-                                <option value="Team">{{ _("Team/Commission") }}</option>
-                            {% endif %}
+                        <label for="chapter_select">{{ _("Chapter") }}</label>
+                        <select id="chapter_select" name="chapter_select">
+                            <option value="">{{ _("Select chapter...") }}</option>
+                            {% for chapter in organizations.chapters %}
+                                <option value="{{ chapter.name }}">{{ chapter.chapter_name }}</option>
+                            {% endfor %}
                             {% if national_chapter %}
-                                <option value="National">{{ national_chapter.chapter_name }} ({{ _("National") }})</option>
-                            {% else %}
-                                <option value="National">{{ _("National") }}</option>
+                                <option value="{{ national_chapter.name }}">{{ national_chapter.chapter_name }} ({{ _("National") }})</option>
                             {% endif %}
                         </select>
                     </div>
                     
-                    <div class="form-group" id="specific-organization-group">
-                        <label for="specific_organization" id="specific-org-label">{{ _("Select Chapter/Team") }} *</label>
-                        <select id="specific_organization" name="specific_organization" disabled>
-                            <option value="">{{ _("Select organization type first...") }}</option>
+                    <div class="form-group">
+                        <label for="team_select">{{ _("Team/Commission") }}</label>
+                        <select id="team_select" name="team_select">
+                            <option value="">{{ _("Select team/commission...") }}</option>
+                            {% for team in organizations.teams %}
+                                <option value="{{ team.name }}">{{ team.team_name }}</option>
+                            {% endfor %}
                         </select>
                     </div>
                 </div>
@@ -482,50 +480,17 @@ $(document).ready(function() {
         }
     });
     
-    // Organization type change handler
-    $('#organization_type').change(function() {
-        const orgType = $(this).val();
-        const orgSelect = $('#specific_organization');
-        const orgGroup = $('#specific-organization-group');
-        const orgLabel = $('#specific-org-label');
+    // Validation: At least one organization must be selected
+    function validateOrganizationSelection() {
+        const chapterSelected = $('#chapter_select').val();
+        const teamSelected = $('#team_select').val();
         
-        if (orgType === 'National') {
-            // Hide the specific organization selector for National
-            orgGroup.hide();
-            orgSelect.prop('required', false);
-        } else {
-            // Show and configure specific organization selector
-            orgGroup.show();
-            orgSelect.prop('required', true);
-            orgSelect.prop('disabled', true).html('<option value="">{{ _("Loading...") }}</option>');
-            
-            // Update label based on type
-            if (orgType === 'Chapter') {
-                orgLabel.text('{{ _("Select Chapter") }} *');
-            } else if (orgType === 'Team') {
-                orgLabel.text('{{ _("Select Team/Commission") }} *');
-            }
-            
-            frappe.call({
-                method: 'verenigingen.templates.pages.volunteer.expenses.get_organization_options',
-                args: {
-                    organization_type: orgType
-                },
-                callback: function(r) {
-                    orgSelect.html('<option value="">{{ _("Select organization...") }}</option>');
-                    
-                    if (r.message && r.message.length > 0) {
-                        r.message.forEach(function(org) {
-                            orgSelect.append(`<option value="${org.value}">${org.label}</option>`);
-                        });
-                        orgSelect.prop('disabled', false);
-                    } else {
-                        orgSelect.html('<option value="">{{ _("No organizations available") }}</option>');
-                    }
-                }
-            });
+        if (!chapterSelected && !teamSelected) {
+            alert('{{ _("Please select either a chapter or a team/commission") }}');
+            return false;
         }
-    });
+        return true;
+    }
     
     // Form submission
     $('#expense-form').submit(function(e) {
@@ -540,23 +505,32 @@ $(document).ready(function() {
         // Clear previous alerts
         formAlerts.empty();
         
+        // Validate organization selection
+        if (!validateOrganizationSelection()) {
+            submitBtn.prop('disabled', false).html('<i class="fa fa-paper-plane"></i> {{ _("Submit Expense") }}');
+            return;
+        }
+        
         // Collect form data
         const formData = {
             description: $('#description').val(),
             amount: $('#amount').val(),
             expense_date: $('#expense_date').val(),
             category: $('#category').val(),
-            organization_type: $('#organization_type').val(),
             notes: $('#notes').val()
         };
         
-        // Add organization field based on type
-        if (formData.organization_type === 'Chapter') {
-            formData.chapter = $('#specific_organization').val();
-        } else if (formData.organization_type === 'Team') {
-            formData.team = $('#specific_organization').val();
+        // Add organization field based on selection
+        const chapterSelected = $('#chapter_select').val();
+        const teamSelected = $('#team_select').val();
+        
+        if (chapterSelected) {
+            formData.organization_type = 'Chapter';
+            formData.chapter = chapterSelected;
+        } else if (teamSelected) {
+            formData.organization_type = 'Team';
+            formData.team = teamSelected;
         }
-        // For National, no specific organization needed
         
         // Submit expense
         frappe.call({
@@ -580,7 +554,8 @@ $(document).ready(function() {
                     $('#expense-form')[0].reset();
                     $('#expense_date').val(new Date().toISOString().split('T')[0]);
                     $('#approval-info').hide();
-                    $('#organization').prop('disabled', true).html('<option value="">{{ _("Select organization type first...") }}</option>');
+                    $('#chapter_select').val('');
+                    $('#team_select').val('');
                     
                     // Reload page after 2 seconds to show new expense
                     setTimeout(function() {

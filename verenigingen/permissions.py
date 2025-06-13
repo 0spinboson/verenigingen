@@ -342,3 +342,21 @@ def get_termination_permission_query(user):
         AND cm.enabled = 1 
         AND ({chapter_filter})
     )"""
+
+def get_volunteer_permission_query(user):
+    """Permission query for Volunteer doctype"""
+    if not user:
+        user = frappe.session.user
+        
+    # Admin roles get full access
+    admin_roles = ["System Manager", "Membership Manager", "Verenigingen Manager", "Volunteer Manager"]
+    if any(role in frappe.get_roles(user) for role in admin_roles):
+        return ""
+    
+    # Members can view their own volunteer records
+    requesting_member = frappe.db.get_value("Member", {"user": user}, "name")
+    if not requesting_member:
+        return "1=0"  # No access if not a member
+    
+    # Allow access to own volunteer records
+    return f"`tabVolunteer`.member = '{requesting_member}'"

@@ -4,6 +4,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.query_builder import DocType
 
 class Team(Document):
     def validate(self):
@@ -424,3 +425,40 @@ def test_team_member_removal():
         import traceback
         traceback.print_exc()
         return {"success": False, "error": str(e)}
+
+def get_team_permission_query_conditions(user=None):
+    """Get permission query conditions for Teams"""
+    try:
+        if not user:
+            user = frappe.session.user
+            
+        if "System Manager" in frappe.get_roles(user) or "Verenigingen Manager" in frappe.get_roles(user):
+            return ""
+            
+        # Get member record for the user
+        member = frappe.db.get_value("Member", {"user": user}, "name")
+        if not member:
+            return "`tabTeam`.name = ''"  # No access if not a member
+            
+        # Get volunteer record for the member
+        volunteer = frappe.db.get_value("Volunteer", {"member": member}, "name")
+        if not volunteer:
+            return "`tabTeam`.name = ''"  # No access if not a volunteer
+            
+        # Get teams where user is a team member using Query Builder
+        TM = DocType('Team Member')
+        team_memberships = (
+            frappe.qb.from_(TM)
+            .select(TM.parent)
+            .where((TM.volunteer == volunteer) & (TM.is_active == 1))
+        ).run(as_dict=True)
+        
+        if team_memberships:
+            team_list = ["'" + team.parent + "'" for team in team_memberships]
+            return f"`tabTeam`.name in ({', '.join(team_list)})"
+        
+        return "`tabTeam`.name = ''"  # No access if not part of any teams
+        
+    except Exception as e:
+        frappe.log_error(f"Error in team permission query: {str(e)}")
+        return "`tabTeam`.name = ''"  # Default to no access on error
