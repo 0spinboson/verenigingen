@@ -106,6 +106,9 @@ scheduler_events = {
         # Termination system maintenance
         "verenigingen.utils.termination_utils.process_overdue_termination_requests",
         "verenigingen.utils.termination_utils.audit_termination_compliance",
+        
+        # SEPA mandate synchronization
+        "verenigingen.verenigingen.doctype.member.mixins.sepa_mixin.check_sepa_mandate_discrepancies",
     ],
     "weekly": [
         # Termination reports and reviews

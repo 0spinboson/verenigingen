@@ -111,15 +111,41 @@ def approve_membership_application(member_name, membership_type=None, chapter=No
     if hasattr(member, 'interested_in_volunteering') and member.interested_in_volunteering:
         activate_volunteer_record(member)
     
+    # Create user account for portal access
+    user_creation_result = create_user_account_for_member(member)
+    
     # Send approval email with payment link
     send_approval_notification(member, invoice, membership_type_doc)
     
+    # Prepare response message
+    message = _("Application approved. Invoice sent to applicant.")
+    if user_creation_result.get("success"):
+        if user_creation_result.get("action") == "created_new":
+            message += _(" User account created for portal access.")
+        elif user_creation_result.get("action") == "linked_existing":
+            message += _(" Linked to existing user account.")
+    else:
+        message += _(" Note: Could not create user account - member will need manual account creation.")
+    
     return {
         "success": True,
-        "message": _("Application approved. Invoice sent to applicant."),
+        "message": message,
         "invoice": invoice.name,
-        "amount": membership_type_doc.amount
+        "amount": membership_type_doc.amount,
+        "user_account": user_creation_result
     }
+
+def create_user_account_for_member(member):
+    """Create user account for approved member"""
+    try:
+        from verenigingen.verenigingen.doctype.member.member import create_member_user_account
+        return create_member_user_account(member.name, send_welcome_email=True)
+    except Exception as e:
+        frappe.log_error(f"Error creating user account for member {member.name}: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 def activate_volunteer_record(member):
     """Activate volunteer record when membership application is approved"""
@@ -150,7 +176,7 @@ def reject_membership_application(member_name, reason, process_refund=False):
     member = frappe.get_doc("Member", member_name)
     
     # Validate application can be rejected
-    if member.application_status not in ["Pending", "Payment Failed", "Payment Cancelled", "Active"]:
+    if member.application_status not in ["Pending", "Payment Failed", "Payment Cancelled", "Approved"]:
         frappe.throw(_("This application cannot be rejected in its current state"))
     
     # Check permissions
@@ -555,7 +581,7 @@ def sync_member_statuses():
             
             if is_application_member:
                 # Handle application-created members
-                if member.application_status == "Active" and member.status != "Active":
+                if member.application_status == "Approved" and member.status != "Active":
                     member.status = "Active"
                     updated = True
                 elif member.application_status == "Rejected" and member.status != "Rejected":
@@ -564,7 +590,7 @@ def sync_member_statuses():
             else:
                 # Handle backend-created members (no application process)
                 if not member.application_status:
-                    member.application_status = "Active"
+                    member.application_status = "Approved"
                     updated = True
                 
                 # Ensure backend-created members are Active by default unless explicitly set
@@ -608,7 +634,7 @@ def fix_backend_member_statuses():
             # If no application_id, this is a backend-created member
             if not member_data.application_id:
                 member = frappe.get_doc("Member", member_data.name)
-                member.application_status = "Active"
+                member.application_status = "Approved"
                 member.status = "Active"
                 member.save()
                 fixed_count += 1
@@ -654,7 +680,7 @@ def get_application_stats():
     avg_time = frappe.db.sql("""
         SELECT AVG(TIMESTAMPDIFF(DAY, application_date, review_date)) as avg_days
         FROM `tabMember`
-        WHERE application_status = 'Active'
+        WHERE application_status = 'Approved'
         AND review_date IS NOT NULL
         AND application_date IS NOT NULL
     """, as_dict=True)
@@ -690,6 +716,49 @@ def get_application_stats():
     stats["volunteer_interest_rate"] = round((volunteer_interested / total_apps * 100) if total_apps > 0 else 0, 1)
     
     return stats
+
+@frappe.whitelist()
+def migrate_active_application_status():
+    """Migrate members with 'Active' application_status to 'Approved'"""
+    try:
+        # Check if user has permission
+        if not any(role in frappe.get_roles() for role in ["System Manager", "Verenigingen Manager"]):
+            frappe.throw(_("Only System Managers and Verenigingen Managers can run this migration"))
+        
+        # Find all members with 'Active' application_status
+        members_to_migrate = frappe.get_all(
+            "Member",
+            filters={"application_status": "Active"},
+            fields=["name", "full_name", "application_id"]
+        )
+        
+        migrated_count = 0
+        
+        for member_data in members_to_migrate:
+            try:
+                member = frappe.get_doc("Member", member_data.name)
+                member.application_status = "Approved"
+                member.save(ignore_permissions=True)
+                migrated_count += 1
+                frappe.logger().info(f"Migrated member {member.name} from Active to Approved application status")
+                
+            except Exception as e:
+                frappe.log_error(f"Error migrating member {member_data.name}: {str(e)}")
+                continue
+        
+        return {
+            "success": True,
+            "message": f"Successfully migrated {migrated_count} members from 'Active' to 'Approved' application status",
+            "migrated_count": migrated_count,
+            "total_found": len(members_to_migrate)
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error in migrate_active_application_status: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 @frappe.whitelist()
 def check_member_iban_data(member_name):

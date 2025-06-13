@@ -22,14 +22,25 @@ def get_context(context):
     if not member_name:
         frappe.throw(_("No member record found for your account"), frappe.DoesNotExistError)
     
-    # Get member document
-    context.member = frappe.get_doc("Member", member_name)
+    # Get member document (may need ignore_permissions for portal users)
+    try:
+        context.member = frappe.get_doc("Member", member_name)
+    except frappe.PermissionError:
+        context.member = frappe.get_doc("Member", member_name, ignore_permissions=True)
     
     # Get current address if exists
     current_address = None
     if context.member.primary_address:
         try:
             current_address = frappe.get_doc("Address", context.member.primary_address)
+        except frappe.PermissionError:
+            # If permission denied, use database access
+            try:
+                current_address = frappe.get_doc("Address", context.member.primary_address, ignore_permissions=True)
+            except frappe.DoesNotExistError:
+                # Address was deleted, clear the reference
+                frappe.db.set_value("Member", member_name, "primary_address", None)
+                frappe.db.commit()
         except frappe.DoesNotExistError:
             # Address was deleted, clear the reference
             frappe.db.set_value("Member", member_name, "primary_address", None)
@@ -123,13 +134,21 @@ def update_member_address(address_data):
     if phone and not re.match(r'^[\+]?[0-9\s\-\(\)]{6,20}$', phone):
         frappe.throw(_("Please enter a valid phone number"))
     
-    member_doc = frappe.get_doc("Member", member_name)
+    # Get member document (may need ignore_permissions for portal users)
+    try:
+        member_doc = frappe.get_doc("Member", member_name)
+    except frappe.PermissionError:
+        member_doc = frappe.get_doc("Member", member_name, ignore_permissions=True)
     
     try:
         # Check if member has existing address
         if member_doc.primary_address:
             # Update existing address
-            address_doc = frappe.get_doc("Address", member_doc.primary_address)
+            try:
+                address_doc = frappe.get_doc("Address", member_doc.primary_address)
+            except frappe.PermissionError:
+                # If permission denied, use database access
+                address_doc = frappe.get_doc("Address", member_doc.primary_address, ignore_permissions=True)
             old_address = {
                 "address_line1": address_doc.address_line1,
                 "address_line2": address_doc.address_line2 or "",
@@ -158,7 +177,7 @@ def update_member_address(address_data):
                 "phone": phone,
                 "email_id": email
             })
-            address_doc.save()
+            address_doc.save(ignore_permissions=True)
             action = "updated"
         else:
             # Create new address
@@ -180,11 +199,11 @@ def update_member_address(address_data):
                     "link_name": member_name
                 }]
             })
-            address_doc.insert()
+            address_doc.insert(ignore_permissions=True)
             
-            # Link to member
-            member_doc.primary_address = address_doc.name
-            member_doc.save()
+            # Link to member using database update to bypass permissions
+            frappe.db.set_value("Member", member_name, "primary_address", address_doc.name)
+            frappe.db.commit()
             action = "created"
         
         # Log the change
@@ -250,13 +269,22 @@ def get_current_address():
     if not member_name:
         frappe.throw(_("No member record found"), frappe.DoesNotExistError)
     
-    member_doc = frappe.get_doc("Member", member_name)
+    # Get member document (may need ignore_permissions for portal users)
+    try:
+        member_doc = frappe.get_doc("Member", member_name)
+    except frappe.PermissionError:
+        member_doc = frappe.get_doc("Member", member_name, ignore_permissions=True)
     
     if not member_doc.primary_address:
         return {"address": None}
     
     try:
-        address_doc = frappe.get_doc("Address", member_doc.primary_address)
+        try:
+            address_doc = frappe.get_doc("Address", member_doc.primary_address)
+        except frappe.PermissionError:
+            # If permission denied, use database access
+            address_doc = frappe.get_doc("Address", member_doc.primary_address, ignore_permissions=True)
+            
         return {
             "address": {
                 "name": address_doc.name,

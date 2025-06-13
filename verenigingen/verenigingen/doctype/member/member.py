@@ -76,6 +76,45 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         # Member ID generation is now handled in before_save based on application status
         pass
     
+    def after_save(self):
+        """Execute after saving the document"""
+        # Create user account for manually created members (non-application members)
+        # Application members get user accounts created during the approval process
+        if not self.is_application_member() and not self.user and self.email:
+            # Only create user account if member doesn't have one and has an email
+            self.create_user_account_if_needed()
+    
+    def create_user_account_if_needed(self):
+        """Create user account for member if conditions are met"""
+        try:
+            # Don't create user for application members (handled in approval process)
+            if self.is_application_member():
+                return
+            
+            # Don't create if user already exists
+            if self.user:
+                return
+            
+            # Must have email to create user
+            if not self.email:
+                return
+            
+            # Only create for active members
+            if getattr(self, 'status', '') not in ['Active', '']:
+                return
+            
+            # Create user account
+            result = create_member_user_account(self.name, send_welcome_email=False)
+            
+            if result.get("success"):
+                frappe.logger().info(f"Auto-created user account for manually created member {self.name}")
+            else:
+                frappe.logger().warning(f"Could not auto-create user account for member {self.name}: {result.get('error', 'Unknown error')}")
+        
+        except Exception as e:
+            frappe.log_error(f"Error in create_user_account_if_needed for member {self.name}: {str(e)}")
+            # Don't raise exception to avoid blocking member save
+    
     def onload(self):
         """Execute when document is loaded"""
         # Update chapter display when form loads
@@ -149,13 +188,28 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             import time
             return str(int(time.time() * 1000))[-8:]
     
+    @frappe.whitelist()
     def ensure_member_id(self):
         """Ensure this member has a member ID if they should have one"""
         if not self.member_id and self.should_have_member_id():
             self.member_id = self.generate_member_id()
             self.save()
-            return True
-        return False
+            return {"success": True, "message": _("Member ID assigned successfully")}
+        return {"success": False, "message": _("Member already has an ID or doesn't qualify for one")}
+    
+    @frappe.whitelist()
+    def force_assign_member_id(self):
+        """Force assign a member ID regardless of normal rules (admin only)"""
+        # Check if user has permission
+        if not frappe.has_permission("Member", "write") or "System Manager" not in frappe.get_roles():
+            frappe.throw(_("Only System Managers can force assign member IDs"))
+        
+        if self.member_id:
+            return {"success": False, "message": _("Member already has a member ID: {0}").format(self.member_id)}
+        
+        self.member_id = self.generate_member_id()
+        self.save()
+        return {"success": True, "message": _("Member ID force assigned successfully: {0}").format(self.member_id)}
             
     def approve_application(self):
         """Approve this application and assign member ID"""
@@ -243,8 +297,8 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
                 # Application members start as Pending
                 self.application_status = "Pending"
             else:
-                # Backend-created members are Active by default
-                self.application_status = "Active"
+                # Backend-created members are considered approved
+                self.application_status = "Approved"
     
     def sync_status_fields(self):
         """Ensure status and application_status fields are synchronized"""
@@ -254,9 +308,9 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         if is_application_member:
             # Handle application-created members
             if hasattr(self, 'application_status') and self.application_status:
-                if self.application_status == "Active" and self.status != "Active":
+                if self.application_status == "Approved" and self.status != "Active":
                     self.status = "Active"
-                    # Set member_since date when application becomes active
+                    # Set member_since date when application becomes approved
                     if not self.member_since:
                         self.member_since = today()
                 elif self.application_status == "Rejected" and self.status != "Rejected":
@@ -268,8 +322,8 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         else:
             # Handle backend-created members (no application process)
             if not hasattr(self, 'application_status') or not self.application_status:
-                # Set application_status to Active for backend-created members
-                self.application_status = "Active"
+                # Set application_status to Approved for backend-created members
+                self.application_status = "Approved"
             
             # Ensure backend-created members are Active by default unless explicitly set
             if not self.status or self.status == "Pending":
@@ -1655,3 +1709,140 @@ def create_and_link_mandate_enhanced(member, mandate_id, iban, bic="", account_h
     except Exception as e:
         frappe.log_error(f"Error creating SEPA mandate: {str(e)}")
         frappe.throw(_("Error creating SEPA mandate: {0}").format(str(e)))
+
+@frappe.whitelist()
+def debug_member_id_assignment(member_name):
+    """Debug why member ID assignment is failing"""
+    try:
+        member = frappe.get_doc("Member", member_name)
+        
+        debug_info = {
+            "member_name": member.name,
+            "current_member_id": getattr(member, 'member_id', None),
+            "has_member_id": bool(getattr(member, 'member_id', None)),
+            "is_application_member": member.is_application_member(),
+            "application_id": getattr(member, 'application_id', None),
+            "application_status": getattr(member, 'application_status', None),
+            "status": getattr(member, 'status', None),
+            "should_have_member_id": member.should_have_member_id(),
+            "can_assign_id": not member.member_id and member.should_have_member_id()
+        }
+        
+        return debug_info
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+@frappe.whitelist()
+def create_member_user_account(member_name, send_welcome_email=True):
+    """Create a user account for a member to access portal pages"""
+    try:
+        # Get the member document
+        member = frappe.get_doc("Member", member_name)
+        
+        # Check if user already exists
+        if member.user:
+            return {
+                "success": False,
+                "message": _("User account already exists for this member"),
+                "user": member.user
+            }
+        
+        # Check if a user with this email already exists
+        existing_user = frappe.db.get_value("User", {"email": member.email}, "name")
+        if existing_user:
+            # Link the existing user to the member
+            member.user = existing_user
+            member.save(ignore_permissions=True)
+            
+            # Add member roles to existing user
+            add_member_roles_to_user(existing_user)
+            
+            return {
+                "success": True,
+                "message": _("Linked existing user account to member"),
+                "user": existing_user,
+                "action": "linked_existing"
+            }
+        
+        # Create new user
+        user = frappe.new_doc("User")
+        user.email = member.email
+        user.first_name = member.first_name or ""
+        user.last_name = member.last_name or ""
+        user.full_name = member.full_name
+        user.send_welcome_email = int(send_welcome_email)
+        user.user_type = "Website User"
+        user.enabled = 1
+        
+        # Insert the user
+        user.insert(ignore_permissions=True)
+        
+        # Add member-specific roles
+        add_member_roles_to_user(user.name)
+        
+        # Link user to member
+        member.user = user.name
+        member.save(ignore_permissions=True)
+        
+        frappe.logger().info(f"Created user account {user.name} for member {member.name}")
+        
+        return {
+            "success": True,
+            "message": _("User account created successfully"),
+            "user": user.name,
+            "action": "created_new"
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error creating user account for member {member_name}: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+def add_member_roles_to_user(user_name):
+    """Add appropriate roles for a member user to access portal pages"""
+    try:
+        # Define the roles that members need for portal access
+        member_roles = [
+            "Member Portal User",  # Custom role for member portal access
+            "Website User"  # Standard Frappe role for website access
+        ]
+        
+        # Check if Member Portal User role exists, create if not
+        if not frappe.db.exists("Role", "Member Portal User"):
+            create_member_portal_role()
+        
+        # Add roles to user
+        user = frappe.get_doc("User", user_name)
+        
+        for role in member_roles:
+            if not any(r.role == role for r in user.roles):
+                user.append("roles", {"role": role})
+        
+        user.save(ignore_permissions=True)
+        frappe.logger().info(f"Added member roles to user {user_name}")
+        
+    except Exception as e:
+        frappe.log_error(f"Error adding roles to user {user_name}: {str(e)}")
+
+def create_member_portal_role():
+    """Create the Member Portal User role with appropriate permissions"""
+    try:
+        role = frappe.new_doc("Role")
+        role.role_name = "Member Portal User"
+        role.desk_access = 0  # Portal users don't need desk access
+        role.is_custom = 1
+        role.insert(ignore_permissions=True)
+        
+        # Add permissions for portal pages access
+        # These permissions would be added via Role Permissions manager
+        # or through custom permission logic in the portal pages
+        
+        frappe.logger().info("Created Member Portal User role")
+        return role.name
+        
+    except Exception as e:
+        frappe.log_error(f"Error creating Member Portal User role: {str(e)}")
+        return None

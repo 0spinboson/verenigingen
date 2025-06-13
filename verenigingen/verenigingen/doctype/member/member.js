@@ -36,6 +36,9 @@ frappe.ui.form.on('Member', {
         // Add customer creation button if not exists
         add_customer_buttons(frm);
         
+        // Add user account management buttons
+        add_user_account_buttons(frm);
+        
         // Add chapter management buttons
         add_chapter_buttons(frm);
         
@@ -133,10 +136,6 @@ frappe.ui.form.on('Member', {
     },
     
     iban: function(frm) {
-        // Store the previous IBAN for comparison
-        const oldIban = frm._previous_iban;
-        const newIban = frm.doc.iban;
-        
         // Auto-derive BIC from IBAN if BIC is empty
         if (frm.doc.iban && !frm.doc.bic) {
             // Clean the IBAN first
@@ -174,19 +173,8 @@ frappe.ui.form.on('Member', {
             });
         }
         
-        // Check if IBAN actually changed and deactivate old mandates after save
-        if (oldIban && newIban && oldIban !== newIban && !frm.doc.__islocal) {
-            // Mark that IBAN changed so we can handle it after save
-            frm._iban_changed = {
-                old_iban: oldIban,
-                new_iban: newIban
-            };
-        }
-        
-        // Store current IBAN for next comparison
-        frm._previous_iban = newIban;
-        
-        // Only update UI elements, don't prompt for mandate creation during field changes
+        // Update UI elements to show current SEPA status
+        // Mandate discrepancy checking is now handled by scheduled task
         check_sepa_mandate_status_debounced(frm);
     },
     
@@ -201,52 +189,13 @@ frappe.ui.form.on('Member', {
     },
     
     after_save: function(frm) {
-        // Handle IBAN change - deactivate old SEPA mandates
-        if (frm._iban_changed && !frm.doc.__islocal) {
-            frappe.call({
-                method: 'verenigingen.verenigingen.doctype.member.member.deactivate_old_sepa_mandates',
-                args: {
-                    member: frm.doc.name,
-                    new_iban: frm._iban_changed.new_iban
-                },
-                callback: function(r) {
-                    if (r.message && r.message.success && r.message.deactivated_count > 0) {
-                        let message = __('Deactivated {0} old SEPA mandate(s) due to IBAN change', [r.message.deactivated_count]);
-                        if (r.message.deactivated_mandates && r.message.deactivated_mandates.length > 0) {
-                            const mandateList = r.message.deactivated_mandates.map(m => m.mandate_id).join(', ');
-                            message += ': ' + mandateList;
-                        }
-                        
-                        frappe.show_alert({
-                            message: message,
-                            indicator: 'orange'
-                        }, 6);
-                        
-                        console.log('Deactivated SEPA mandates:', r.message.deactivated_mandates);
-                    }
-                },
-                error: function(r) {
-                    console.error('Error deactivating old SEPA mandates:', r);
-                }
-            });
-            
-            // Clear the flag
-            delete frm._iban_changed;
-        }
+        // SEPA mandate discrepancy checking is now handled by scheduled task
+        // No real-time processing needed here
         
-        // Only check for SEPA mandate creation after save, and only once per save operation
+        // Still show basic UI updates after save
         if (frm.doc.payment_method === 'Direct Debit' && frm.doc.iban && !frm.doc.__islocal) {
-            // Prevent multiple calls by using a unique timestamp
-            const save_timestamp = Date.now();
-            frm._sepa_save_check = save_timestamp;
-            
-            // Use setTimeout to ensure the document is fully saved and form refreshed
-            setTimeout(function() {
-                // Only proceed if this is still the latest save check
-                if (frm._sepa_save_check === save_timestamp) {
-                    check_sepa_mandate_and_prompt_creation(frm, 'after_save');
-                }
-            }, 1500);
+            // Just update the UI to show current SEPA status
+            check_sepa_mandate_status_debounced(frm);
         }
     }
 });
@@ -296,6 +245,55 @@ function add_customer_buttons(frm) {
                 }
             });
         }, __('Actions'));
+    }
+}
+
+function add_user_account_buttons(frm) {
+    // Only show user account buttons for members with email addresses
+    if (!frm.doc.email) {
+        return;
+    }
+    
+    if (!frm.doc.user) {
+        // Show create user account button if no user exists
+        frm.add_custom_button(__('Create User Account'), function() {
+            frappe.confirm(
+                __('Create a user account for {0} to access member portal pages?', [frm.doc.full_name]),
+                function() {
+                    frappe.call({
+                        method: 'verenigingen.verenigingen.doctype.member.member.create_member_user_account',
+                        args: {
+                            member_name: frm.doc.name,
+                            send_welcome_email: true
+                        },
+                        callback: function(r) {
+                            if (r.message) {
+                                if (r.message.success) {
+                                    frappe.show_alert({
+                                        message: r.message.message,
+                                        indicator: 'green'
+                                    }, 5);
+                                    frm.refresh();
+                                } else {
+                                    frappe.msgprint({
+                                        message: r.message.error || r.message.message,
+                                        indicator: 'red'
+                                    });
+                                }
+                            }
+                        }
+                    });
+                }
+            );
+        }, __('Actions'));
+    } else {
+        // Show user account info if user exists
+        frm.add_custom_button(__('View User Account'), function() {
+            frappe.set_route('Form', 'User', frm.doc.user);
+        }, __('View'));
+        
+        // Add dashboard indicator for user account
+        frm.dashboard.add_indicator(__("Has User Account"), "green");
     }
 }
 
@@ -509,7 +507,7 @@ function add_member_id_buttons(frm) {
                 __('Are you sure you want to assign a member ID to {0}?', [frm.doc.full_name]),
                 function() {
                     frm.call({
-                        method: 'assign_member_id',
+                        method: 'ensure_member_id',
                         doc: frm.doc,
                         callback: function(r) {
                             if (r.message && r.message.success) {
@@ -544,6 +542,56 @@ function add_member_id_buttons(frm) {
                 }
             });
         }, __('Member ID'));
+        
+        frm.add_custom_button(__('Debug Member ID Assignment'), function() {
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.member.member.debug_member_id_assignment',
+                args: {
+                    member_name: frm.doc.name
+                },
+                callback: function(r) {
+                    if (r.message) {
+                        let message = '<h4>Member ID Assignment Debug Info</h4><table class="table table-bordered">';
+                        for (let key in r.message) {
+                            message += `<tr><td><strong>${key}:</strong></td><td>${r.message[key]}</td></tr>`;
+                        }
+                        message += '</table>';
+                        
+                        frappe.msgprint({
+                            title: __('Debug Information'),
+                            message: message,
+                            wide: true
+                        });
+                    }
+                }
+            });
+        }, __('Member ID'));
+        
+        // Add force assign button for System Managers
+        if (user_roles.includes('System Manager')) {
+            frm.add_custom_button(__('Force Assign Member ID'), function() {
+                frappe.confirm(
+                    __('Force assign a member ID to {0}? This bypasses normal assignment rules.', [frm.doc.full_name]),
+                    function() {
+                        frm.call({
+                            method: 'force_assign_member_id',
+                            doc: frm.doc,
+                            callback: function(r) {
+                                if (r.message && r.message.success) {
+                                    frm.reload_doc();
+                                    frappe.show_alert({
+                                        message: r.message.message,
+                                        indicator: 'green'
+                                    }, 5);
+                                } else if (r.message && r.message.message) {
+                                    frappe.msgprint(r.message.message);
+                                }
+                            }
+                        });
+                    }
+                );
+            }, __('Member ID'));
+        }
     }
 }
 
@@ -1431,90 +1479,15 @@ function check_sepa_mandate_status_debounced(frm) {
 }
 
 function check_sepa_mandate_and_prompt_creation(frm, context = 'general') {
-    // Check if SEPA mandate exists and prompt for creation if needed
+    // Simplified function - only update UI, no more real-time prompting
+    // SEPA mandate discrepancy checking is now handled by scheduled task
+    
     if (!frm.doc.iban || frm.doc.payment_method !== 'Direct Debit') {
         return;
     }
     
-    // Prevent duplicate mandate creation checks by using a unique key
-    const check_key = `${frm.doc.name}-${frm.doc.iban}-${frm.doc.payment_method}-${context}`;
-    if (frm._last_sepa_prompt_key === check_key) {
-        console.log('Skipping duplicate SEPA mandate check for:', check_key);
-        return;
+    // Just update the UI to show current SEPA status
+    if (window.SepaUtils && window.SepaUtils.check_sepa_mandate_status) {
+        SepaUtils.check_sepa_mandate_status(frm);
     }
-    frm._last_sepa_prompt_key = check_key;
-    
-    frappe.call({
-        method: 'verenigingen.verenigingen.doctype.member.member.get_active_sepa_mandate',
-        args: {
-            member: frm.doc.name,
-            iban: frm.doc.iban
-        },
-        callback: function(r) {
-            if (!r.message) {
-                // No active mandate found - show dialog to create one
-                let message;
-                if (context === 'after_save') {
-                    message = __('You have saved a member with Direct Debit payment method and IBAN, but no active SEPA mandate was found. Would you like to create a SEPA mandate now?');
-                } else if (context === 'iban_change') {
-                    message = __('You have updated the IBAN for Direct Debit payments, but no active SEPA mandate was found for this IBAN. Would you like to create a SEPA mandate now?');
-                } else if (context === 'payment_method_change') {
-                    message = __('You have changed the payment method to Direct Debit, but no active SEPA mandate was found for this IBAN. Would you like to create a SEPA mandate now?');
-                } else {
-                    message = __('You have set the payment method to Direct Debit and provided an IBAN, but no active SEPA mandate was found. Would you like to create a SEPA mandate now?');
-                }
-                
-                frappe.confirm(
-                    message,
-                    function() {
-                        // User clicked Yes - create mandate
-                        if (window.SepaUtils && window.SepaUtils.create_sepa_mandate_with_dialog) {
-                            SepaUtils.create_sepa_mandate_with_dialog(frm, __('Creating SEPA mandate for direct debit payments.'));
-                        }
-                    },
-                    function() {
-                        // User clicked No - just show the UI elements
-                        if (window.SepaUtils && window.SepaUtils.check_sepa_mandate_status) {
-                            SepaUtils.check_sepa_mandate_status(frm);
-                        }
-                    }
-                );
-            } else {
-                // Mandate found - check if IBAN matches
-                const mandateIban = r.message.iban ? r.message.iban.replace(/\s+/g, '').toUpperCase() : '';
-                const currentIban = frm.doc.iban ? frm.doc.iban.replace(/\s+/g, '').toUpperCase() : '';
-                
-                if (mandateIban !== currentIban) {
-                    // IBAN doesn't match existing mandate - ask to create new one
-                    frappe.confirm(
-                        __('You have updated the IBAN, but the existing SEPA mandate is for a different IBAN ({0}). Would you like to create a new SEPA mandate for the new IBAN ({1})?', [r.message.iban, frm.doc.iban]),
-                        function() {
-                            // User clicked Yes - create new mandate
-                            if (window.SepaUtils && window.SepaUtils.create_sepa_mandate_with_dialog) {
-                                SepaUtils.create_sepa_mandate_with_dialog(frm, __('Creating new SEPA mandate for updated IBAN.'));
-                            }
-                        },
-                        function() {
-                            // User clicked No - just show the UI elements
-                            if (window.SepaUtils && window.SepaUtils.check_sepa_mandate_status) {
-                                SepaUtils.check_sepa_mandate_status(frm);
-                            }
-                        }
-                    );
-                } else {
-                    // Mandate exists and IBAN matches - just update UI silently
-                    if (window.SepaUtils && window.SepaUtils.check_sepa_mandate_status) {
-                        SepaUtils.check_sepa_mandate_status(frm);
-                    }
-                }
-            }
-        },
-        error: function(r) {
-            console.error('Error checking SEPA mandate status:', r);
-            // Fallback to regular UI update
-            if (window.SepaUtils && window.SepaUtils.check_sepa_mandate_status) {
-                SepaUtils.check_sepa_mandate_status(frm);
-            }
-        }
-    });
 }
