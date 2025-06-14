@@ -125,7 +125,7 @@ def get_custom_fields():
 
 def validate_app_dependencies():
     """Validate that required apps are installed"""
-    required_apps = ["erpnext", "payments"]
+    required_apps = ["erpnext", "payments", "hrms"]
     missing_apps = []
     
     for app in required_apps:

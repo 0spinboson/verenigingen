@@ -263,4 +263,12 @@ def get_quick_actions(member, membership, volunteer):
     except:
         pass  # Ignore if field doesn't exist
     
+    # Contact request action - always available
+    actions.append({
+        "title": _("Contact Support"),
+        "route": "/contact_request",
+        "class": "btn-secondary",
+        "icon": "fa-envelope"
+    })
+    
     return actions

@@ -44,6 +44,72 @@ window.UIUtils = window.UIUtils || {
         // Placeholder - can be enhanced later
         console.log('Board memberships functionality placeholder');
     },
+    setup_contact_requests_section: function(frm) {
+        // Add contact requests section to member form
+        if (!frm.is_new() && frm.doc.name) {
+            frm.add_custom_button(__('Contact Requests'), function() {
+                frappe.route_options = {"member": frm.doc.name};
+                frappe.set_route("List", "Member Contact Request");
+            }, __("View"));
+            
+            // Load and display recent contact requests
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.member_contact_request.member_contact_request.get_member_contact_requests',
+                args: {
+                    member: frm.doc.name,
+                    limit: 5
+                },
+                callback: function(r) {
+                    if (r.message && r.message.length > 0) {
+                        UIUtils.render_contact_requests_summary(frm, r.message);
+                    }
+                }
+            });
+        }
+    },
+    render_contact_requests_summary: function(frm, requests) {
+        // Create a summary of recent contact requests
+        let html = `
+            <div class="contact-requests-summary">
+                <h5>${__("Recent Contact Requests")}</h5>
+                <div class="requests-list">
+        `;
+        
+        requests.forEach(function(request) {
+            const status_color = {
+                'Open': 'orange',
+                'In Progress': 'blue', 
+                'Resolved': 'green',
+                'Closed': 'gray'
+            }[request.status] || 'gray';
+            
+            html += `
+                <div class="request-item" style="padding: 8px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>${request.subject}</strong><br>
+                        <small style="color: #666;">${request.request_type} • ${moment(request.request_date).format('MMM DD, YYYY')}</small>
+                    </div>
+                    <span class="indicator ${status_color}">${request.status}</span>
+                </div>
+            `;
+        });
+        
+        html += `
+                </div>
+                <div style="margin-top: 10px;">
+                    <button class="btn btn-xs btn-default" onclick="frappe.set_route('List', 'Member Contact Request', {'member': '${frm.doc.name}'})">
+                        ${__("View All Contact Requests")}
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        // Add to the form - we'll add this to the dashboard area
+        if (!frm.contact_requests_wrapper) {
+            frm.contact_requests_wrapper = $('<div>').appendTo(frm.layout.wrapper.find('.form-dashboard'));
+        }
+        frm.contact_requests_wrapper.html(html);
+    },
     handle_payment_method_change: function(frm) {
         // Basic implementation
         const is_direct_debit = frm.doc.payment_method === 'Direct Debit';
@@ -148,6 +214,52 @@ window.TerminationUtils = window.TerminationUtils || {
     },
     show_termination_history: function(member) {
         console.log('Termination history placeholder');
+    }
+};
+
+// Initialize verenigingen namespace
+frappe.provide("verenigingen.member_form");
+
+verenigingen.member_form = {
+    initialize_member_form: function(frm) {
+        console.log('Initializing member form with contact requests');
+        
+        // Set up basic UI
+        if (window.UIUtils) {
+            UIUtils.add_custom_css();
+            UIUtils.setup_member_id_display(frm);
+            UIUtils.setup_payment_history_grid(frm);
+            UIUtils.setup_contact_requests_section(frm);
+        }
+        
+        // Set up form buttons and actions
+        if (!frm.is_new()) {
+            this.setup_custom_buttons(frm);
+        }
+    },
+    
+    setup_custom_buttons: function(frm) {
+        // Add buttons for member-specific actions
+        if (frm.doc.name) {
+            // Contact request button is already added in UIUtils.setup_contact_requests_section
+            
+            // Add volunteer creation button if not already a volunteer
+            frappe.call({
+                method: 'frappe.client.get_value',
+                args: {
+                    doctype: 'Volunteer',
+                    filters: {'member': frm.doc.name},
+                    fieldname: 'name'
+                },
+                callback: function(r) {
+                    if (!r.message) {
+                        frm.add_custom_button(__('Create Volunteer'), function() {
+                            VolunteerUtils.create_volunteer_from_member(frm);
+                        }, __("Actions"));
+                    }
+                }
+            });
+        }
     }
 };
 

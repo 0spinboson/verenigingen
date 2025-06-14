@@ -12,7 +12,7 @@ app_email = "foppe@veganisme.org"
 app_license = "AGPL-3"
 
 # Required apps - Frappe will ensure these are installed before this app
-required_apps = ["erpnext", "payments"]
+required_apps = ["erpnext", "payments", "hrms"]
 
 # Includes in <head>
 # ------------------
@@ -110,6 +110,9 @@ scheduler_events = {
         
         # SEPA mandate synchronization
         "verenigingen.verenigingen.doctype.member.mixins.sepa_mixin.check_sepa_mandate_discrepancies",
+        
+        # Contact request automation
+        "verenigingen.verenigingen.doctype.member_contact_request.contact_request_automation.process_contact_request_automation",
     ],
     "weekly": [
         # Termination reports and reviews

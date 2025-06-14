@@ -411,6 +411,68 @@ class Volunteer(Document):
             
         return skills_by_category
     
+    @frappe.whitelist()
+    def create_minimal_employee(self):
+        """Create a minimal employee record for ERPNext integration"""
+        try:
+            # Check if employee already exists
+            if self.employee_id:
+                if frappe.db.exists("Employee", self.employee_id):
+                    return self.employee_id
+                else:
+                    # Employee ID exists but record is missing - clear it
+                    self.employee_id = None
+            
+            # Get default company
+            default_company = frappe.defaults.get_global_default("company")
+            if not default_company:
+                companies = frappe.get_all("Company", limit=1, fields=["name"])
+                default_company = companies[0].name if companies else None
+            
+            if not default_company:
+                frappe.throw(_("No company configured in the system. Please contact the administrator."))
+            
+            # Parse volunteer name for first/last name
+            name_parts = self.volunteer_name.split() if self.volunteer_name else ["Volunteer"]
+            first_name = name_parts[0] if name_parts else "Volunteer"
+            last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
+            
+            # Create minimal employee record with required fields
+            employee_data = {
+                "doctype": "Employee",
+                "employee_name": self.volunteer_name,
+                "first_name": first_name,  # Required field
+                "last_name": last_name,
+                "company": default_company,
+                "status": "Active",
+                "gender": "Prefer not to say",  # Required field with default
+                "date_of_birth": "1990-01-01",  # Required field with default
+                "date_of_joining": frappe.utils.today()  # Required field with today's date
+            }
+            
+            # Add optional fields if available
+            if self.email:
+                employee_data["personal_email"] = self.email
+            
+            if self.personal_email:
+                employee_data["company_email"] = self.personal_email
+            
+            # Create employee record
+            employee = frappe.get_doc(employee_data)
+            employee.insert(ignore_permissions=True)
+            
+            # Update volunteer record with employee ID
+            self.employee_id = employee.name
+            self.save(ignore_permissions=True)
+            
+            frappe.logger().info(f"Created minimal employee {employee.name} for volunteer {self.name}")
+            
+            return employee.name
+            
+        except Exception as e:
+            frappe.log_error(f"Error creating minimal employee for volunteer {self.name}: {str(e)}", "Employee Creation Error")
+            frappe.throw(_("Unable to create employee record: {0}").format(str(e)))
+    
 # Integration functions to be called from other doctypes
 
 @frappe.whitelist()
