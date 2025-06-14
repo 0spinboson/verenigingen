@@ -3,6 +3,8 @@
 {% block title %}{{ _("Volunteer Expenses") }}{% endblock %}
 
 {% block head_include %}
+<!-- Ensure jQuery is loaded -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <style>
     .expense-portal {
         max-width: 1200px;
@@ -268,6 +270,20 @@
         color: #ccc;
     }
     
+    .bank-reminder {
+        background: #fff3cd;
+        border: 1px solid #ffeaa7;
+        border-radius: 6px;
+        padding: 12px;
+        margin-top: 8px;
+        color: #856404;
+    }
+    
+    .bank-reminder i {
+        color: #f39c12;
+        margin-right: 8px;
+    }
+    
     @media (max-width: 768px) {
         .expense-portal {
             padding: 10px;
@@ -359,8 +375,8 @@
                     </div>
                     
                     <div class="form-group">
-                        <label for="category">{{ _("Category") }}</label>
-                        <select id="category" name="category">
+                        <label for="category">{{ _("Category") }} *</label>
+                        <select id="category" name="category" required>
                             <option value="">{{ _("Select category...") }}</option>
                             {% for category in expense_categories %}
                                 <option value="{{ category.name }}">{{ category.category_name }}</option>
@@ -393,9 +409,23 @@
                 </div>
                 
                 <div class="form-group">
+                    <label for="receipt">{{ _("Receipt/Invoice") }}</label>
+                    <input type="file" id="receipt" name="receipt" accept="image/*,.pdf,.doc,.docx" 
+                           class="form-control-file">
+                    <small class="form-text text-muted">
+                        {{ _("Upload receipt or invoice (JPG, PNG, PDF, DOC formats accepted)") }}
+                    </small>
+                </div>
+                
+                <div class="form-group">
                     <label for="notes">{{ _("Additional Notes") }}</label>
-                    <textarea id="notes" name="notes" rows="3" 
-                              placeholder="{{ _('Any additional information about this expense...') }}"></textarea>
+                    <textarea id="notes" name="notes" rows="4" 
+                              placeholder="{{ _('Any additional information about this expense...\n\nIMPORTANT: If reimbursement should be paid to a different bank account than on file, please provide the complete bank details here (IBAN, account holder name, bank name).') }}"></textarea>
+                    <div class="bank-reminder">
+                        <i class="fa fa-info-circle"></i>
+                        <strong>{{ _("Bank Account Reminder:") }}</strong>
+                        {{ _("By default, reimbursements will be paid to your bank account on file. If you need payment to a different account, please include complete bank details (IBAN, account holder name, bank name) in the notes above.") }}
+                    </div>
                 </div>
                 
                 <button type="submit" class="btn-submit" id="submit-btn">
@@ -443,7 +473,18 @@
 </div>
 
 <script>
-$(document).ready(function() {
+// Wait for page to load and ensure jQuery is available
+function initExpenseForm() {
+    // Use frappe's jQuery if available, otherwise wait for it
+    const $ = window.$ || window.jQuery || frappe.$;
+    
+    if (!$) {
+        console.log('jQuery not available, retrying...');
+        setTimeout(initExpenseForm, 100);
+        return;
+    }
+    
+    console.log('jQuery loaded, initializing expense form...');
     // Set default expense date to today
     $('#expense_date').val(new Date().toISOString().split('T')[0]);
     
@@ -511,13 +552,53 @@ $(document).ready(function() {
             return;
         }
         
+        // Handle file upload first if present
+        const receiptFile = $('#receipt')[0].files[0];
+        
+        if (receiptFile) {
+            // First upload the file
+            const fileFormData = new FormData();
+            fileFormData.append('file', receiptFile);
+            fileFormData.append('is_private', 0);
+            fileFormData.append('doctype', 'Volunteer Expense');
+            fileFormData.append('docname', '');
+            
+            $.ajax({
+                url: '/api/method/upload_file',
+                type: 'POST',
+                data: fileFormData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    submitExpenseWithReceipt(response.message.file_url);
+                },
+                error: function() {
+                    submitBtn.prop('disabled', false).html('<i class="fa fa-paper-plane"></i> {{ _("Submit Expense") }}');
+                    formAlerts.html(`
+                        <div class="alert alert-danger">
+                            <i class="fa fa-exclamation-triangle"></i>
+                            {{ _("Failed to upload receipt. Please try again.") }}
+                        </div>
+                    `);
+                }
+            });
+        } else {
+            submitExpenseWithReceipt(null);
+        }
+    });
+    
+    function submitExpenseWithReceipt(receiptUrl) {
+        const submitBtn = $('#submit-btn');
+        const formAlerts = $('#form-alerts');
+        
         // Collect form data
         const formData = {
             description: $('#description').val(),
             amount: $('#amount').val(),
             expense_date: $('#expense_date').val(),
             category: $('#category').val(),
-            notes: $('#notes').val()
+            notes: $('#notes').val(),
+            receipt_attachment: receiptUrl
         };
         
         // Add organization field based on selection
@@ -572,17 +653,24 @@ $(document).ready(function() {
                     `);
                 }
             },
-            error: function() {
+            error: function(xhr, status, error) {
                 submitBtn.prop('disabled', false).html('<i class="fa fa-paper-plane"></i> {{ _("Submit Expense") }}');
                 formAlerts.html(`
                     <div class="alert alert-danger">
                         <i class="fa fa-exclamation-triangle"></i>
-                        {{ _("An error occurred while submitting the expense") }}
+                        {{ _("An error occurred while submitting the expense") }}: ${error}
                     </div>
                 `);
             }
         });
-    });
-});
+    }
+}
+
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initExpenseForm);
+} else {
+    initExpenseForm();
+}
 </script>
 {% endblock %}

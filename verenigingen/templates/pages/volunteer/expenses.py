@@ -436,6 +436,10 @@ def get_status_class(status):
 def submit_expense(expense_data):
     """Submit a new expense from the portal"""
     try:
+        # Parse JSON string if needed
+        if isinstance(expense_data, str):
+            import json
+            expense_data = json.loads(expense_data)
         # Get current user's volunteer record
         volunteer = get_user_volunteer_record()
         if not volunteer:
@@ -451,7 +455,7 @@ def submit_expense(expense_data):
             frappe.throw(error_msg)
         
         # Validate required fields
-        required_fields = ["description", "amount", "expense_date", "organization_type"]
+        required_fields = ["description", "amount", "expense_date", "organization_type", "category"]
         for field in required_fields:
             if not expense_data.get(field):
                 frappe.throw(_(f"Field {field} is required"))
@@ -479,6 +483,16 @@ def submit_expense(expense_data):
             else:
                 frappe.throw(_("National chapter not configured in settings"))
         
+        # Get default company
+        default_company = frappe.defaults.get_global_default("company")
+        if not default_company:
+            # Fallback to first company if no default is set
+            companies = frappe.get_all("Company", limit=1, fields=["name"])
+            default_company = companies[0].name if companies else None
+        
+        if not default_company:
+            frappe.throw(_("No company configured in the system. Please contact the administrator."))
+        
         # Create expense document
         expense_doc = frappe.get_doc({
             "doctype": "Volunteer Expense",
@@ -491,7 +505,8 @@ def submit_expense(expense_data):
             "organization_type": expense_data.get("organization_type"),
             "chapter": chapter,
             "team": team,
-            "notes": expense_data.get("notes")
+            "notes": expense_data.get("notes"),
+            "company": default_company
         })
         
         # Insert the expense (no submit since doctype is not submittable)
@@ -507,11 +522,12 @@ def submit_expense(expense_data):
         }
         
     except Exception as e:
-        frappe.log_error(f"Error submitting expense: {str(e)}")
+        frappe.log_error(f"Error submitting expense: {str(e)}", "Volunteer Expense Submission Error")
         return {
             "success": False,
             "message": str(e)
         }
+
 
 @frappe.whitelist()
 def get_organization_options(organization_type, volunteer_name=None):

@@ -177,12 +177,12 @@ function auto_set_organization(frm) {
 										volunteer: frm.doc.volunteer,
 										status: 'Active'
 									},
-									fields: ['team']
+									fields: ['parent']
 								},
 								callback: function(teams) {
 									if (teams.message && teams.message.length === 1) {
 										frm.set_value('organization_type', 'Team');
-										frm.set_value('team', teams.message[0].team);
+										frm.set_value('team', teams.message[0].parent);
 									}
 								}
 							});

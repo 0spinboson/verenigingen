@@ -6,7 +6,6 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "naming_series",
   "volunteer",
   "column_break_1",
   "expense_date",
@@ -34,13 +33,6 @@
   "reimbursement_details"
  ],
  "fields": [
-  {
-   "fieldname": "naming_series",
-   "fieldtype": "Select",
-   "label": "Series",
-   "options": "VE-{YYYY}-{MM}-{####}",
-   "reqd": 1
-  },
   {
    "fieldname": "volunteer",
    "fieldtype": "Link",
@@ -200,7 +192,8 @@
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Volunteer Expense",
- "naming_rule": "By Naming Series",
+ "naming_rule": "Expression (Old Style)",
+ "autoname": "format:VE-{YYYY}-{MM}-{#####}",
  "owner": "Administrator",
  "permissions": [
   {

@@ -59,7 +59,7 @@ class VolunteerExpense(Document):
 		elif self.organization_type == "Team" and self.team:
 			# Check if volunteer is a member of this team
 			team_members = frappe.get_all("Team Member",
-				filters={"team": self.team, "volunteer": self.volunteer, "status": "Active"},
+				filters={"parent": self.team, "volunteer": self.volunteer, "status": "Active"},
 				fields=["name"]
 			)
 			
@@ -92,12 +92,12 @@ class VolunteerExpense(Document):
 			# Try to set team if no single chapter found
 			team_memberships = frappe.get_all("Team Member",
 				filters={"volunteer": self.volunteer, "status": "Active"},
-				fields=["team"]
+				fields=["parent"]
 			)
 			
 			if len(team_memberships) == 1:
 				self.organization_type = "Team"
-				self.team = team_memberships[0].team
+				self.team = team_memberships[0].parent
 	
 	def set_company_default(self):
 		"""Set default company if not specified"""
@@ -214,6 +214,7 @@ def reject_expense(expense_name, reason=""):
 	
 	frappe.msgprint(_("Expense rejected"))
 
+@frappe.whitelist()
 def can_approve_expense(expense):
 	"""Check if current user can approve the expense using enhanced permission system"""
 	from verenigingen.utils.expense_permissions import ExpensePermissionManager

@@ -23,6 +23,7 @@ app_include_css = [
 ]
 app_include_js = [
     # Removed termination_dashboard.js as it's a React component and causes import errors
+    "/assets/verenigingen/js/member_portal_redirect.js"
 ]
 
 # include js in doctype views
@@ -241,8 +242,16 @@ fixtures = [
 # Authentication and authorization
 # --------------------------------
 
+# Session hooks for member portal redirects
+on_session_creation = "verenigingen.auth_hooks.on_session_creation"
+on_logout = "verenigingen.auth_hooks.on_logout"
+
+# Optional: Request hooks to enforce member portal access
+# before_request = "verenigingen.auth_hooks.before_request"
+
+# Custom auth validation (if needed)
 # auth_hooks = [
-#	"verenigingen.auth.validate"
+#     "verenigingen.auth_hooks.validate_auth_via_api"
 # ]
 
 # Automatically update python controller files
