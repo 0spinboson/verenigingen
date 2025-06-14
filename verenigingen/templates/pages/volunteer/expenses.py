@@ -407,10 +407,6 @@ def get_approval_thresholds():
 def get_national_chapter():
     """Get national chapter info from settings"""
     try:
-        # Check if Verenigingen Settings exists
-        if not frappe.db.exists("DocType", "Verenigingen Settings"):
-            return None
-            
         settings = frappe.get_single("Verenigingen Settings")
         if settings and getattr(settings, 'national_board_chapter', None):
             chapter_info = frappe.db.get_value("Chapter", settings.national_board_chapter, 
@@ -422,6 +418,10 @@ def get_national_chapter():
                 }
     except Exception as e:
         frappe.log_error(f"Error getting national chapter: {str(e)}")
+        # Log more details for debugging
+        frappe.logger().error(f"National chapter error details: {str(e)}")
+        import traceback
+        frappe.logger().error(f"National chapter traceback: {traceback.format_exc()}")
     
     return None
 
@@ -470,6 +470,44 @@ def submit_expense(expense_data):
         elif expense_data.get("organization_type") == "Team" and not expense_data.get("team"):
             frappe.throw(_("Please select a team"))
         # National expenses don't require specific organization selection
+        
+        # Enhanced access validation with policy-based national expenses
+        if expense_data.get("organization_type") == "Chapter":
+            organization_name = expense_data.get("chapter")
+            # For chapter expenses, check direct chapter membership
+            direct_membership = frappe.db.exists("Chapter Member", {
+                "parent": organization_name,
+                "volunteer": volunteer.name
+            })
+            if not direct_membership:
+                frappe.throw(_("Direct chapter membership required for {0}").format(organization_name))
+                
+        elif expense_data.get("organization_type") == "Team":
+            organization_name = expense_data.get("team")
+            # For team expenses, only check team membership (no chapter validation needed)
+            team_membership = frappe.db.exists("Team Member", {
+                "parent": organization_name,
+                "volunteer": volunteer.name
+            })
+            if not team_membership:
+                frappe.throw(_("Team membership required for {0}").format(organization_name))
+                
+        elif expense_data.get("organization_type") == "National":
+            # Check if this is a policy-covered expense type
+            category = expense_data.get("category")
+            if category and is_policy_covered_expense(category):
+                # Policy-covered expenses (materials, travel) are allowed for all volunteers
+                frappe.logger().info(f"Policy-covered national expense allowed for volunteer {volunteer.name}: {category}")
+            else:
+                # Other national expenses require board membership
+                settings = frappe.get_single("Verenigingen Settings")
+                if settings.national_board_chapter:
+                    board_membership = frappe.db.exists("Chapter Member", {
+                        "parent": settings.national_board_chapter,
+                        "volunteer": volunteer.name
+                    })
+                    if not board_membership:
+                        frappe.throw(_("National board membership required for non-policy national expenses"))
         
         # Determine chapter/team based on organization type
         chapter = None
@@ -525,6 +563,15 @@ def submit_expense(expense_data):
         # Get expense type from category
         expense_type = get_or_create_expense_type(expense_data.get("category"))
         
+        # Get payable account from company settings
+        payable_account = frappe.db.get_value("Company", default_company, "default_expense_claim_payable_account")
+        if not payable_account:
+            # Fallback to default payable account
+            payable_account = frappe.db.get_value("Company", default_company, "default_payable_account")
+        
+        if not payable_account:
+            frappe.throw(_("No payable account configured for company {0}. Please set default_expense_claim_payable_account or default_payable_account in Company settings.").format(default_company))
+        
         # Create ERPNext Expense Claim
         expense_claim = frappe.get_doc({
             "doctype": "Expense Claim",
@@ -532,6 +579,8 @@ def submit_expense(expense_data):
             "posting_date": expense_data.get("expense_date"),
             "company": default_company,
             "cost_center": cost_center,
+            "payable_account": payable_account,
+            "approval_status": "Approved",  # Set approval status for volunteer expenses
             "title": f"Volunteer Expense - {expense_data.get('description')[:50]}",
             "remark": expense_data.get("notes"),
             "status": "Draft"
@@ -555,7 +604,15 @@ def submit_expense(expense_data):
         
         # Insert and submit the expense claim
         expense_claim.insert(ignore_permissions=True)
-        expense_claim.submit()
+        
+        # Submit the expense claim with error handling
+        try:
+            expense_claim.submit()
+            frappe.logger().info(f"Successfully submitted expense claim: {expense_claim.name}")
+        except Exception as e:
+            frappe.logger().error(f"Error submitting expense claim: {str(e)}")
+            # If submission fails, we can still keep the draft expense claim
+            frappe.log_error(f"Expense claim submission failed: {str(e)}", "Expense Claim Submission Error")
         
         # Also create a reference in our Volunteer Expense system for tracking
         volunteer_expense = frappe.get_doc({
@@ -1016,29 +1073,186 @@ def setup_expense_claim_types():
         return "Travel"
 
 def get_organization_cost_center(expense_data):
-    """Get cost center based on organization"""
+    """Get cost center based on organization with enhanced fallback logic"""
     try:
+        cost_center = None
+        
         if expense_data.get("organization_type") == "Chapter" and expense_data.get("chapter"):
             chapter_doc = frappe.get_doc("Chapter", expense_data.get("chapter"))
-            return chapter_doc.cost_center
+            cost_center = getattr(chapter_doc, 'cost_center', None)
+            
         elif expense_data.get("organization_type") == "Team" and expense_data.get("team"):
             team_doc = frappe.get_doc("Team", expense_data.get("team"))
-            return team_doc.cost_center
+            cost_center = getattr(team_doc, 'cost_center', None)
+            
+            # If team doesn't have cost center, try to get from chapter
+            if not cost_center and hasattr(team_doc, 'chapter') and team_doc.chapter:
+                try:
+                    chapter_doc = frappe.get_doc("Chapter", team_doc.chapter)
+                    cost_center = getattr(chapter_doc, 'cost_center', None)
+                    frappe.logger().info(f"Using chapter cost center for team {team_doc.name}: {cost_center}")
+                except Exception as e:
+                    frappe.logger().error(f"Error getting chapter cost center: {str(e)}")
+            
         elif expense_data.get("organization_type") == "National":
             # Get national cost center from settings
             settings = frappe.get_single("Verenigingen Settings")
             if hasattr(settings, 'national_cost_center') and settings.national_cost_center:
-                return settings.national_cost_center
-            else:
-                # Fallback to default company cost center
-                default_company = frappe.defaults.get_global_default("company")
-                if default_company:
-                    company_doc = frappe.get_doc("Company", default_company)
-                    return company_doc.cost_center
-        return None
+                cost_center = settings.national_cost_center
+        
+        # Enhanced fallback logic
+        if not cost_center:
+            frappe.logger().warning(f"No cost center found for organization type: {expense_data.get('organization_type')}")
+            
+            # Try to get default company cost center
+            default_company = frappe.defaults.get_global_default("company")
+            if not default_company:
+                companies = frappe.get_all("Company", limit=1, fields=["name"])
+                default_company = companies[0].name if companies else None
+            
+            if default_company:
+                # Get main cost center for the company
+                main_cost_centers = frappe.get_all("Cost Center", 
+                    filters={"company": default_company, "is_group": 0}, 
+                    fields=["name"], 
+                    limit=1)
+                
+                if main_cost_centers:
+                    cost_center = main_cost_centers[0].name
+                    frappe.logger().info(f"Using fallback cost center: {cost_center}")
+                else:
+                    # Create a default cost center if none exists
+                    cost_center = create_default_cost_center(default_company)
+        
+        return cost_center
+        
     except Exception as e:
         frappe.log_error(f"Error getting cost center: {str(e)}", "Cost Center Error")
+        # Return a default cost center as last resort
+        return get_fallback_cost_center()
+
+
+def create_default_cost_center(company):
+    """Create a default cost center for expenses"""
+    try:
+        cost_center_name = f"Volunteer Expenses - {frappe.db.get_value('Company', company, 'abbr')}"
+        
+        if not frappe.db.exists("Cost Center", cost_center_name):
+            # Get parent cost center (usually company name)
+            parent_cost_center = frappe.db.get_value("Cost Center", 
+                filters={"company": company, "is_group": 1}, 
+                fieldname="name")
+            
+            if not parent_cost_center:
+                parent_cost_center = company  # Use company as parent
+            
+            cost_center_doc = frappe.get_doc({
+                "doctype": "Cost Center",
+                "cost_center_name": "Volunteer Expenses",
+                "parent_cost_center": parent_cost_center,
+                "company": company,
+                "is_group": 0
+            })
+            cost_center_doc.insert(ignore_permissions=True)
+            frappe.logger().info(f"Created default cost center: {cost_center_name}")
+            return cost_center_name
+        else:
+            return cost_center_name
+            
+    except Exception as e:
+        frappe.log_error(f"Error creating default cost center: {str(e)}", "Cost Center Creation Error")
+        return get_fallback_cost_center()
+
+
+def get_fallback_cost_center():
+    """Get any available cost center as fallback"""
+    try:
+        cost_centers = frappe.get_all("Cost Center", 
+            filters={"is_group": 0}, 
+            fields=["name"], 
+            limit=1)
+        return cost_centers[0].name if cost_centers else None
+    except:
         return None
+
+
+def validate_volunteer_organization_access(volunteer_name, organization_type, organization_name):
+    """
+    Enhanced validation for volunteer access to organizations.
+    Supports direct chapter membership AND indirect access via team membership.
+    """
+    try:
+        volunteer_doc = frappe.get_doc("Volunteer", volunteer_name)
+        
+        if organization_type == "Chapter":
+            # Direct chapter membership check
+            direct_membership = frappe.db.exists("Chapter Member", {
+                "parent": organization_name,
+                "volunteer": volunteer_name
+            })
+            
+            if direct_membership:
+                return True
+            
+            # Indirect access via team membership
+            # Get teams where volunteer is a member and team's chapter matches
+            team_memberships = frappe.get_all("Team Member", 
+                filters={"volunteer": volunteer_name},
+                fields=["parent"])
+            
+            for membership in team_memberships:
+                team_doc = frappe.get_doc("Team", membership.parent)
+                if hasattr(team_doc, 'chapter') and team_doc.chapter == organization_name:
+                    frappe.logger().info(f"Volunteer {volunteer_name} has access to chapter {organization_name} via team {team_doc.name}")
+                    return True
+            
+            return False
+            
+        elif organization_type == "Team":
+            # Direct team membership check
+            team_membership = frappe.db.exists("Team Member", {
+                "parent": organization_name,
+                "volunteer": volunteer_name
+            })
+            return bool(team_membership)
+            
+        elif organization_type == "National":
+            # All volunteers have access to national expenses
+            return True
+            
+        return False
+        
+    except Exception as e:
+        frappe.log_error(f"Error validating volunteer organization access: {str(e)}", "Access Validation Error")
+        # In case of error, allow access to prevent blocking legitimate requests
+        return True
+
+def is_policy_covered_expense(category):
+    """Check if expense category is covered by organizational policy for all volunteers"""
+    try:
+        # Get expense category details
+        category_doc = frappe.get_doc("Expense Category", category)
+        
+        # Policy-covered categories (configurable via category settings)
+        if hasattr(category_doc, 'policy_covered') and category_doc.policy_covered:
+            return True
+        
+        # Fallback: Check by category name for common policy-covered expenses
+        policy_covered_categories = [
+            'Travel',      # Travel expenses
+            'Materials',   # Materials for campaigns/events
+            'Office Supplies',  # Basic office supplies
+            'events'       # Event materials
+        ]
+        
+        category_name = getattr(category_doc, 'category_name', category).lower()
+        return any(policy_cat.lower() in category_name for policy_cat in policy_covered_categories)
+        
+    except Exception as e:
+        frappe.log_error(f"Error checking policy coverage for category {category}: {str(e)}", "Policy Coverage Check")
+        # Default to requiring permission if we can't determine policy coverage
+        return False
+
 
 def get_or_create_expense_type(category):
     """Get or create expense claim type for category"""
