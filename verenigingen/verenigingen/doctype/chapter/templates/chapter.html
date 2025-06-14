@@ -16,7 +16,7 @@
 		<td style='width: 15%'>Name</td>
 		<td>
 			<b>{{ chapter_head_member.full_name }}</b>
-			{% if frappe.user_has_role('System Manager') or is_board_member %}
+			{% if is_system_manager or is_board_member %}
 			<a href="/app/member/{{ chapter_head_member.name }}" class="btn btn-xs btn-default pull-right">
 				<i class="fa fa-external-link"></i> View Profile
 			</a>
@@ -41,7 +41,7 @@
 </table>
 </div>
 
-{% if board_members %}
+{% if board_members and (is_board_member or is_system_manager) %}
 <h3>Chapter Board</h3>
 <div style="margin-bottom: 30px; max-width: 600px" class="with-border">
     <table class="table table-bordered table-condensed">
@@ -50,24 +50,20 @@
                 <th>Role</th>
                 <th>Name</th>
                 <th>Since</th>
-                {% if is_board_member or frappe.user_has_role('System Manager') %}
                 <th>Actions</th>
-                {% endif %}
             </tr>
         </thead>
         <tbody>
             {% for board_member in board_members %}
                 <tr>
                     <td>{{ board_member.role }}</td>
-                    <td>{{ board_member.member_name }}</td>
+                    <td>{{ board_member.volunteer_name }}</td>
                     <td>{{ frappe.format_date(board_member.from_date) }}</td>
-                    {% if is_board_member or frappe.user_has_role('System Manager') %}
                     <td>
                         <a href="/app/member/{{ board_member.member }}" class="btn btn-xs btn-default">
                             <i class="fa fa-user"></i> View
                         </a>
                     </td>
-                    {% endif %}
                 </tr>
             {% endfor %}
         </tbody>
@@ -75,6 +71,7 @@
 </div>
 {% endif %}
 
+{% if is_board_member or is_system_manager %}
 <h3>Member Details</h3>
 
 {% if members %}
@@ -88,18 +85,16 @@
 						<div class="row">
 							<div class="col-lg-6 col-md-6 col-sm-6">
              <div class="pull-left">
-								<b>{{ index|length }}. {{ member.full_name }}</b></div>
+								<b>{{ index|length }}. {{ member.member_name }}</b></div>
 							</div>
 								<div class="pull-right">
 								{% if member.website_url %}
 									<a href="{{ member.website_url }}">{{ member.website_url | truncate (50) or '' }}</a>
 								{% endif %}
 								
-								{% if is_board_member or frappe.user_has_role('System Manager') %}
 								<a href="/app/member/{{ member.name }}" class="btn btn-xs btn-default">
 									<i class="fa fa-user"></i> View
 								</a>
-								{% endif %}
 							</div>
 							<div class="clearfix"></div>
 							</div>
@@ -119,6 +114,7 @@
 	</table>
 {% else %}
 	<p>No member yet.</p>
+{% endif %}
 {% endif %}
 
 {% if address %}
@@ -141,7 +137,7 @@
             View Chapter Members
         </a>
         
-        {% if frappe.utils.has_permission("Chapter", doc=name, ptype="write") %}
+        {% if can_write_chapter %}
         <a href="/app/chapter/{{ name }}" class="btn btn-primary">
             Manage Chapter
         </a>

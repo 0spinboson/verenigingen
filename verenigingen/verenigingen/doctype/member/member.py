@@ -2,27 +2,277 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import getdate, today, add_days, date_diff, now
+import random
 
-class Member(Document):
+from verenigingen.verenigingen.doctype.member.member_id_manager import (
+    generate_member_id, 
+    validate_member_id_change, 
+    MemberIDManager
+)
+from verenigingen.verenigingen.doctype.member.mixins.payment_mixin import PaymentMixin
+from verenigingen.verenigingen.doctype.member.mixins.sepa_mixin import SEPAMandateMixin
+from verenigingen.verenigingen.doctype.member.mixins.chapter_mixin import ChapterMixin
+from verenigingen.verenigingen.doctype.member.mixins.termination_mixin import TerminationMixin
+
+
+
+class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, TerminationMixin):
+    """
+    Member doctype with refactored structure using mixins for better organization
+    """
+    
     def before_save(self):
+        """Execute before saving the document"""
+        # Only generate member ID for approved members or non-application members
         if not self.member_id:
-            self.member_id = self.generate_member_id()
-        self.handle_chapter_assignment()
+            if self.should_have_member_id():
+                frappe.logger().info(f"Generating member ID for {self.name} - application_status: {getattr(self, 'application_status', 'None')}, is_application: {self.is_application_member()}")
+                self.member_id = self.generate_member_id()
+                frappe.logger().info(f"Generated member ID: {self.member_id} for {self.name}")
+            elif self.is_application_member() and not self.application_id:
+                self.application_id = self.generate_application_id()
+        else:
+            frappe.logger().debug(f"Member {self.name} already has member_id: {self.member_id}")
+        
+        # Update current chapter display
+        self.update_current_chapter_display()
+        
+        if hasattr(self, 'reset_counter_to') and self.reset_counter_to:
+            self.reset_counter_to = None
+        
+        # Set appropriate defaults for application_status
+        self.set_application_status_defaults()
+    
+    def validate_fee_override_permissions(self):
+        """Validate that only authorized users can set fee overrides"""
+        # Skip validation for new documents or if no override is set
+        if self.is_new() or not self.membership_fee_override:
+            return
+        
+        # Check if fee override value has changed
+        if self.name:
+            old_amount = frappe.db.get_value("Member", self.name, "membership_fee_override")
+            if old_amount == self.membership_fee_override:
+                return  # No change, no validation needed
+        
+        # Check user permissions for fee override
+        user_roles = frappe.get_roles(frappe.session.user)
+        authorized_roles = ["System Manager", "Membership Manager", "Verenigingen Manager"]
+        
+        if not any(role in user_roles for role in authorized_roles):
+            frappe.throw(
+                _("You do not have permission to override membership fees. Only administrators can modify membership fees."),
+                frappe.PermissionError
+            )
+        
+        # Log the fee override action for audit purposes
+        frappe.logger().info(
+            f"Fee override set by {frappe.session.user} for member {self.name}: "
+            f"Amount: {self.membership_fee_override}, Reason: {self.fee_override_reason}"
+        )
+
+    def before_insert(self):
+        """Execute before inserting new document"""
+        # Member ID generation is now handled in before_save based on application status
+        pass
+    
+    def after_save(self):
+        """Execute after saving the document"""
+        # Create user account for manually created members (non-application members)
+        # Application members get user accounts created during the approval process
+        if not self.is_application_member() and not self.user and self.email:
+            # Only create user account if member doesn't have one and has an email
+            self.create_user_account_if_needed()
+    
+    def create_user_account_if_needed(self):
+        """Create user account for member if conditions are met"""
+        try:
+            # Don't create user for application members (handled in approval process)
+            if self.is_application_member():
+                return
+            
+            # Don't create if user already exists
+            if self.user:
+                return
+            
+            # Must have email to create user
+            if not self.email:
+                return
+            
+            # Only create for active members
+            if getattr(self, 'status', '') not in ['Active', '']:
+                return
+            
+            # Create user account
+            result = create_member_user_account(self.name, send_welcome_email=False)
+            
+            if result.get("success"):
+                frappe.logger().info(f"Auto-created user account for manually created member {self.name}")
+            else:
+                frappe.logger().warning(f"Could not auto-create user account for member {self.name}: {result.get('error', 'Unknown error')}")
+        
+        except Exception as e:
+            frappe.log_error(f"Error in create_user_account_if_needed for member {self.name}: {str(e)}")
+            # Don't raise exception to avoid blocking member save
+    
+    def onload(self):
+        """Execute when document is loaded"""
+        # Update chapter display when form loads
+        if not self.get("__islocal"):
+            self.update_current_chapter_display()
+
+    def is_application_member(self):
+        """Check if this member was created through the application process"""
+        return bool(getattr(self, 'application_id', None))
+    
+    def should_have_member_id(self):
+        """Check if this member should have a member ID assigned"""
+        # Non-application members should get member ID immediately
+        if not self.is_application_member():
+            return True
+        
+        # Application members only get member ID when approved
+        return getattr(self, 'application_status', '') == 'Approved'
+    
+    def generate_application_id(self):
+        """Generate a unique applicant ID for applications"""
+        if frappe.session.user == "Guest":
+            return None
+        
+        try:
+            settings = frappe.get_single("Verenigingen Settings")
+            
+            # Check if the field exists
+            if not hasattr(settings, 'last_applicant_id'):
+                # Initialize applicant ID starting from 1000
+                start_id = getattr(settings, 'applicant_id_start', 1000)
+                settings.last_applicant_id = start_id - 1
+                settings.save()
+
+            new_id = int(getattr(settings, 'last_applicant_id', 999)) + 1
+            settings.last_applicant_id = new_id
+            settings.save()
+
+            return f"APP-{new_id:05d}"  # Format: APP-01000, APP-01001, etc.
+        except Exception as e:
+            # Fallback to timestamp-based ID
+            import time
+            return f"APP-{str(int(time.time() * 1000))[-8:]}"
 
     def generate_member_id(self):
-        settings = frappe.get_single("Verenigingen Settings")
+        """Generate a unique member ID"""
+        if frappe.session.user == "Guest":
+            return None
+        
+        try:
+            settings = frappe.get_single("Verenigingen Settings")
+            
+            # Check if the field exists
+            if not hasattr(settings, 'last_member_id'):
+                # Use a simple timestamp-based ID if settings field doesn't exist
+                import time
+                return str(int(time.time() * 1000))[-8:]  # Last 8 digits of timestamp
+            
+            if not settings.last_member_id:
+                start_id = getattr(settings, 'member_id_start', 10000)
+                settings.last_member_id = start_id - 1
 
-        if not settings.last_member_id:
-            settings.last_member_id = settings.member_id_start -1
+            new_id = int(settings.last_member_id) + 1
 
-        new_id = settings.last_member_id +1
+            settings.last_member_id = new_id
+            settings.save()
 
-        settings.last_member_id = new_id
-        settings.save()
-
-        return str(new_id)
+            return str(new_id)
+        except Exception as e:
+            # Fallback to simple ID generation
+            import time
+            return str(int(time.time() * 1000))[-8:]
+    
+    @frappe.whitelist()
+    def ensure_member_id(self):
+        """Ensure this member has a member ID if they should have one"""
+        if not self.member_id and self.should_have_member_id():
+            self.member_id = self.generate_member_id()
+            self.save()
+            return {"success": True, "message": _("Member ID assigned successfully")}
+        return {"success": False, "message": _("Member already has an ID or doesn't qualify for one")}
+    
+    @frappe.whitelist()
+    def force_assign_member_id(self):
+        """Force assign a member ID regardless of normal rules (admin only)"""
+        # Check if user has permission
+        if not frappe.has_permission("Member", "write") or "System Manager" not in frappe.get_roles():
+            frappe.throw(_("Only System Managers can force assign member IDs"))
+        
+        if self.member_id:
+            return {"success": False, "message": _("Member already has a member ID: {0}").format(self.member_id)}
+        
+        self.member_id = self.generate_member_id()
+        self.save()
+        return {"success": True, "message": _("Member ID force assigned successfully: {0}").format(self.member_id)}
+            
+    def approve_application(self):
+        """Approve this application and assign member ID"""
+        if not self.is_application_member():
+            frappe.throw(_("This is not an application member"))
+        
+        if self.application_status == 'Approved':
+            frappe.throw(_("Application is already approved"))
+        
+        # Assign member ID
+        if not self.member_id:
+            self.member_id = self.generate_member_id()
+        
+        # Update status
+        self.application_status = 'Approved'
+        self.status = 'Active'
+        self.reviewed_by = frappe.session.user
+        self.review_date = now_datetime()
+        
+        # Save the member
+        self.save()
+        
+        # Create membership - this should trigger the subscription logic
+        return self.create_membership_on_approval()
+    
+    def create_membership_on_approval(self):
+        """Create membership record when application is approved"""
+        try:
+            # Get membership type
+            if not self.selected_membership_type:
+                frappe.throw(_("No membership type selected for this application"))
+            
+            membership_type = frappe.get_doc("Membership Type", self.selected_membership_type)
+            
+            # Create membership record
+            membership = frappe.get_doc({
+                "doctype": "Membership",
+                "member": self.name,
+                "membership_type": self.selected_membership_type,
+                "start_date": today(),
+                "status": "Pending",  # Will become Active after payment
+                "auto_renew": 1
+            })
+            membership.insert()
+            
+            # Generate invoice with member's custom fee if applicable
+            from verenigingen.utils.application_payments import create_membership_invoice
+            current_fee = self.get_current_membership_fee()
+            invoice = create_membership_invoice(self, membership, membership_type, current_fee["amount"])
+            
+            # Update member with invoice reference
+            self.application_invoice = invoice.name
+            self.application_payment_status = "Pending"
+            self.save()
+            
+            return membership
+            
+        except Exception as e:
+            frappe.log_error(f"Error creating membership on approval: {str(e)}")
+            frappe.throw(_("Error creating membership: {0}").format(str(e)))
     
     def validate(self):
+        """Validate document data"""
         self.validate_name()
         self.update_full_name()
         self.update_membership_status()
@@ -31,10 +281,56 @@ class Member(Document):
         self.set_payment_reference()
         self.validate_bank_details()
         self.sync_payment_amount()
+        self.validate_member_id_change()
+        self.handle_fee_override_changes()
+        self.sync_status_fields()
+        
+    
+    def set_application_status_defaults(self):
+        """Set appropriate defaults for application_status based on member type"""
+        # Check if application_status is not set
+        if not hasattr(self, 'application_status') or not self.application_status:
+            # Check if this member was created through application process
+            is_application_member = bool(getattr(self, 'application_id', None))
+            
+            if is_application_member:
+                # Application members start as Pending
+                self.application_status = "Pending"
+            else:
+                # Backend-created members are considered approved
+                self.application_status = "Approved"
+    
+    def sync_status_fields(self):
+        """Ensure status and application_status fields are synchronized"""
+        # Check if this member was created through application process
+        is_application_member = bool(getattr(self, 'application_id', None))
+        
+        if is_application_member:
+            # Handle application-created members
+            if hasattr(self, 'application_status') and self.application_status:
+                if self.application_status == "Approved" and self.status != "Active":
+                    self.status = "Active"
+                    # Set member_since date when application becomes approved
+                    if not self.member_since:
+                        self.member_since = today()
+                elif self.application_status == "Rejected" and self.status != "Rejected":
+                    self.status = "Rejected"
+                elif self.application_status == "Pending" and self.status not in ["Pending", "Active"]:
+                    # For pending applications, default to Pending unless already Active
+                    if self.status != "Active":
+                        self.status = "Pending"
+        else:
+            # Handle backend-created members (no application process)
+            if not hasattr(self, 'application_status') or not self.application_status:
+                # Set application_status to Approved for backend-created members
+                self.application_status = "Approved"
+            
+            # Ensure backend-created members are Active by default unless explicitly set
+            if not self.status or self.status == "Pending":
+                self.status = "Active"
 
     def after_insert(self):
-        """Create linked entities after member is created"""
-        # Create customer if not already linked
+        """Execute after document is inserted"""
         if not self.customer and self.email:
             self.create_customer()
 
@@ -43,290 +339,32 @@ class Member(Document):
         try:
             if self.birth_date:
                 from datetime import datetime, date
-                today = date.today()
+                today_date = date.today()
                 if isinstance(self.birth_date, str):
                     born = datetime.strptime(self.birth_date, '%Y-%m-%d').date()
                 else:
                     born = self.birth_date
-            # Calculate age
-                age = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
-            # Set the age field
+                age = today_date.year - born.year - ((today_date.month, today_date.day) < (born.month, born.day))
                 self.age = age
             else:
                 self.age = None
         except Exception as e:
             frappe.log_error(f"Error calculating age: {str(e)}", "Member Error")
-    def handle_chapter_assignment(self):
-        """Handle automatic chapter assignment when primary_chapter changes"""
-        if not self.primary_chapter or self.is_new():
-            return
-            
-        # Check if primary_chapter has changed
-        if self.has_value_changed('primary_chapter'):
-            old_chapter = self.get_doc_before_save().primary_chapter if self.get_doc_before_save() else None
-            new_chapter = self.primary_chapter
-            
-            frappe.logger().info(f"Member {self.name} chapter changing from {old_chapter} to {new_chapter}")
-            
-            # Remove from old chapter if exists
-            if old_chapter:
-                try:
-                    old_chapter_doc = frappe.get_doc("Chapter", old_chapter)
-                    old_chapter_doc.remove_member(self.name, "Changed to different chapter")
-                    frappe.logger().info(f"Removed {self.name} from old chapter {old_chapter}")
-                except Exception as e:
-                    frappe.logger().error(f"Error removing member from old chapter: {str(e)}")
-            
-            # Add to new chapter
-            if new_chapter:
-                try:
-                    new_chapter_doc = frappe.get_doc("Chapter", new_chapter)
-                    added = new_chapter_doc.add_member(self.name)
-                    frappe.logger().info(f"Added {self.name} to new chapter {new_chapter}, result: {added}")
-                except Exception as e:
-                    frappe.logger().error(f"Error adding member to new chapter: {str(e)}")
-    @frappe.whitelist()
-    def load_payment_history(self):
-        """
-        Load payment history for this member with focus on invoices.
-        Also include unreconciled payments, but maintain separation from the Donation system.
-        Then save the document to persist the changes.
-        """
-        # Use the shared logic to load payment history
-        self._load_payment_history_without_save()
-        
-        # Save the document to persist the payment history
-        self.save(ignore_permissions=True)
-        
-        return True
 
-    def on_load(self):
-        """Load payment history when the document is loaded"""
-        if self.customer:
-            self._load_payment_history_without_save()
-
-    def _load_payment_history_without_save(self):
-        """Internal method to load payment history without saving"""
-        if not self.customer:
-            return
+    def generate_application_id(self):
+        """Generate unique application ID"""
+        year = frappe.utils.today()[:4]
+        random_part = str(random.randint(1000, 9999))
+        app_id = f"APP-{year}-{random_part}"
         
-        # Clear existing payment history
-        self.payment_history = []
+        while frappe.db.exists("Member", {"application_id": app_id}):
+            random_part = str(random.randint(1000, 9999))
+            app_id = f"APP-{year}-{random_part}"
         
-        # 1. Get all submitted invoices for this customer
-        invoices = frappe.get_all(
-            "Sales Invoice",
-            filters={
-                "customer": self.customer,
-                "docstatus": 1  # Submitted invoices
-            },
-            fields=[
-                "name", "posting_date", "due_date", "grand_total", 
-                "outstanding_amount", "status"
-            ],
-            order_by="posting_date desc"
-        )
-        
-        # Track payments that are reconciled with invoices
-        reconciled_payments = []
-        
-        # 2. Process each invoice and its payment status
-        for invoice in invoices:
-            invoice_doc = frappe.get_doc("Sales Invoice", invoice.name)
-            
-            # Determine reference documents for this invoice
-            reference_doctype = None
-            reference_name = None
-            transaction_type = "Regular Invoice"
-            
-            # Check if invoice is linked to a membership
-            if hasattr(invoice_doc, 'membership') and invoice_doc.membership:
-                transaction_type = "Membership Invoice"
-                reference_doctype = "Membership"
-                reference_name = invoice_doc.membership
-            
-            # Find linked payment entries
-            payment_entries = frappe.get_all(
-                "Payment Entry Reference",
-                filters={"reference_doctype": "Sales Invoice", "reference_name": invoice.name},
-                fields=["parent", "allocated_amount"]
-            )
-            
-            # Determine payment status and details
-            payment_status = "Unpaid"
-            payment_date = None
-            payment_entry = None
-            payment_method = None
-            paid_amount = 0
-            reconciled = 0
-            
-            if payment_entries:
-                # Track these payments as reconciled
-                for pe in payment_entries:
-                    reconciled_payments.append(pe.parent)
-                    paid_amount += float(pe.allocated_amount or 0)
-                
-                # Get the most recent payment entry for reference
-                most_recent_payment = frappe.get_all(
-                    "Payment Entry",
-                    filters={"name": ["in", [pe.parent for pe in payment_entries]]},
-                    fields=["name", "posting_date", "mode_of_payment", "paid_amount"],
-                    order_by="posting_date desc"
-                )
-                
-                if most_recent_payment:
-                    payment_entry = most_recent_payment[0].name
-                    payment_date = most_recent_payment[0].posting_date
-                    payment_method = most_recent_payment[0].mode_of_payment
-                    reconciled = 1
-            
-            # Set payment status based on invoice and payment data
-            if invoice.status == "Paid":
-                payment_status = "Paid"
-            elif invoice.status == "Overdue":
-                payment_status = "Overdue"
-            elif invoice.status == "Cancelled":
-                payment_status = "Cancelled"
-            elif paid_amount > 0 and paid_amount < invoice.grand_total:
-                payment_status = "Partially Paid"
-            
-            # Check for SEPA mandate
-            has_mandate = 0
-            sepa_mandate = None
-            mandate_status = None
-            mandate_reference = None
-            
-            # First check if there's a mandate linked to the membership
-            if reference_doctype == "Membership" and reference_name:
-                try:
-                    membership_doc = frappe.get_doc("Membership", reference_name)
-                    if hasattr(membership_doc, 'sepa_mandate') and membership_doc.sepa_mandate:
-                        has_mandate = 1
-                        sepa_mandate = membership_doc.sepa_mandate
-                        mandate_doc = frappe.get_doc("SEPA Mandate", sepa_mandate)
-                        mandate_status = mandate_doc.status
-                        mandate_reference = mandate_doc.mandate_id
-                except Exception as e:
-                    frappe.log_error(f"Error checking membership mandate for invoice {invoice.name}: {str(e)}")
-            
-            # If no mandate found, check member's default mandate
-            if not has_mandate:
-                default_mandate = self.get_default_sepa_mandate()
-                if default_mandate:
-                    has_mandate = 1
-                    sepa_mandate = default_mandate.name
-                    mandate_status = default_mandate.status
-                    mandate_reference = default_mandate.mandate_id
-            
-            # Add invoice to payment history
-            self.append("payment_history", {
-                "invoice": invoice.name,
-                "posting_date": invoice.posting_date,
-                "due_date": invoice.due_date,
-                "transaction_type": transaction_type,
-                "reference_doctype": reference_doctype,
-                "reference_name": reference_name,
-                "amount": invoice.grand_total,
-                "outstanding_amount": invoice.outstanding_amount,
-                "status": invoice.status,
-                "payment_status": payment_status,
-                "payment_date": payment_date,
-                "payment_entry": payment_entry,
-                "payment_method": payment_method,
-                "paid_amount": paid_amount,
-                "reconciled": reconciled,
-                "has_mandate": has_mandate,
-                "sepa_mandate": sepa_mandate,
-                "mandate_status": mandate_status,
-                "mandate_reference": mandate_reference
-            })
-        
-        # 3. Now find payments that aren't reconciled with any invoice
-        unreconciled_payments = frappe.get_all(
-            "Payment Entry",
-            filters={
-                "party_type": "Customer",
-                "party": self.customer,
-                "docstatus": 1,
-                "name": ["not in", reconciled_payments or [""] if reconciled_payments else [""]]
-            },
-            fields=["name", "posting_date", "paid_amount", "mode_of_payment", "status", "reference_no", "reference_date"],
-            order_by="posting_date desc"
-        )
-        
-        for payment in unreconciled_payments:
-            # Check if this payment is linked to a Donation
-            donation = None
-            if payment.reference_no:
-                donations = frappe.get_all(
-                    "Donation",
-                    filters={"payment_id": payment.reference_no},
-                    fields=["name"]
-                )
-                if donations:
-                    donation = donations[0].name
-            
-            transaction_type = "Unreconciled Payment"
-            reference_doctype = None
-            reference_name = None
-            notes = "Payment without matching invoice"
-            
-            # If this payment is linked to a donation, update references
-            if donation:
-                transaction_type = "Donation Payment"
-                reference_doctype = "Donation"
-                reference_name = donation
-                notes = "Payment linked to donation"
-            
-            # Create a record for unreconciled payment
-            self.append("payment_history", {
-                "invoice": None,  # No invoice
-                "posting_date": payment.posting_date,
-                "due_date": None,
-                "transaction_type": transaction_type,
-                "reference_doctype": reference_doctype,
-                "reference_name": reference_name,
-                "amount": payment.paid_amount,
-                "outstanding_amount": 0,
-                "status": "N/A",  # No invoice status
-                "payment_status": "Paid",  # Payment exists
-                "payment_date": payment.posting_date,
-                "payment_entry": payment.name,
-                "payment_method": payment.mode_of_payment,
-                "paid_amount": payment.paid_amount,
-                "reconciled": 0,  # Not reconciled
-                "notes": notes
-            })
-            
-    def validate_payment_method(self):
-        """Validate payment method and related fields"""
-        # Check if payment_method exists (it might be on Membership, not Member)
-        if not hasattr(self, 'payment_method'):
-            # payment_method field doesn't exist on Member doctype
-            # Check if we need to validate payment methods from memberships instead
-            memberships = frappe.get_all(
-                "Membership",
-                filters={"member": self.name, "status": ["!=", "Cancelled"]},
-                fields=["name", "payment_method"]
-            )
-            
-            # If there are memberships with Direct Debit, check for SEPA mandate
-            for membership in memberships:
-                if membership.payment_method == "Direct Debit":
-                    # Check if member has SEPA mandate fields
-                    default_mandate = self.get_default_sepa_mandate()
-                    if not default_mandate:
-                        frappe.msgprint(
-                            _("Member {0} has a membership with Direct Debit payment method but no active SEPA mandate.")
-                            .format(self.name),
-                            indicator='yellow'
-                        )
-                    break
-            
-            return
+        return app_id
 
     def validate_name(self):
-        # Validate that name fields don't contain special characters
+        """Validate that name fields don't contain special characters"""
         for field in ['first_name', 'middle_name', 'last_name']:
             if not hasattr(self, field) or not getattr(self, field):
                 continue
@@ -335,36 +373,46 @@ class Member(Document):
                     .format(field.replace('_', ' ').title()))
                     
     def update_full_name(self):
-        # Update the full name based on first, middle and last name
-        full_name = " ".join(filter(None, [self.first_name, self.middle_name, self.last_name]))
+        """Update the full name based on first names, name particles (tussenvoegsels), and last name"""
+        # Build full name with proper handling of name particles
+        name_parts = []
+        
+        if self.first_name:
+            name_parts.append(self.first_name.strip())
+        
+        # Handle name particles (tussenvoegsels) - these should be lowercase when in the middle
+        if self.middle_name:
+            particles = self.middle_name.strip()
+            # Ensure particles are lowercase when between first and last name
+            if particles:
+                name_parts.append(particles.lower())
+        
+        if self.last_name:
+            name_parts.append(self.last_name.strip())
+        
+        full_name = " ".join(name_parts)
         if self.full_name != full_name:
             self.full_name = full_name
             
     def update_membership_status(self):
-        # Skip membership status update for new members or if name is not set
+        """Update the membership status section"""
         if not self.name or not frappe.db.exists("Member", self.name):
             return
             
-        # Update the membership status section
         active_membership = self.get_active_membership()
         
         if active_membership:
             self.current_membership_details = active_membership.name
             
-            # Use renewal_date instead of end_date (since that's what exists in Membership doctype)
             if hasattr(active_membership, 'renewal_date') and active_membership.renewal_date:
-                # Calculate time remaining until renewal date
                 days_left = date_diff(active_membership.renewal_date, getdate(today()))
                 
-                # Don't set time_remaining directly if field doesn't exist
-                # Instead, perhaps add it to notes or a custom field
                 time_remaining_text = ""
                 if days_left < 0:
                     time_remaining_text = _("Expired")
                 elif days_left == 0:
                     time_remaining_text = _("Expires today")
                 else:
-                    # Format as days/months/years depending on length
                     if days_left < 30:
                         time_remaining_text = _("{0} days").format(days_left)
                     elif days_left < 365:
@@ -374,11 +422,9 @@ class Member(Document):
                         years = round(days_left / 365, 1)
                         time_remaining_text = _("{0} years").format(years)
                         
-                # Store this information in notes or a custom field if needed
                 if hasattr(self, 'time_remaining'):
                     self.time_remaining = time_remaining_text
                 elif hasattr(self, 'notes'):
-                    # Optionally add to notes
                     if not self.notes:
                         self.notes = f"<p>Time remaining: {time_remaining_text}</p>"
             
@@ -399,64 +445,13 @@ class Member(Document):
             return frappe.get_doc("Membership", memberships[0].name)
             
         return None
-
-    # Add these methods to the Member class in member.py
     
-    def get_active_sepa_mandates(self):
-        """Get all active SEPA mandates for this member"""
-        return frappe.get_all(
-            "SEPA Mandate",
-            filters={
-                "member": self.name,
-                "status": "Active",
-                "is_active": 1
-            },
-            fields=["name", "mandate_id", "status", "expiry_date", "used_for_memberships", "used_for_donations"]
-        )
-    
-    def get_default_sepa_mandate(self):
-        """Get the default SEPA mandate for this member"""
-        # First, check for a current mandate in the member's mandate links
-        for link in self.sepa_mandates:
-            if link.is_current and link.sepa_mandate:
-                try:
-                    mandate = frappe.get_doc("SEPA Mandate", link.sepa_mandate)
-                    if mandate.status == "Active" and mandate.is_active:
-                        return mandate
-                except frappe.DoesNotExistError:
-                    continue
-        
-        # If no current mandate, get the first active mandate
-        active_mandates = self.get_active_sepa_mandates()
-        if active_mandates:
-            # Mark this as the current mandate
-            for link in self.sepa_mandates:
-                if link.sepa_mandate == active_mandates[0].name:
-                    link.is_current = 1
-                    # Don't save here to avoid recursive save operations
-                    break
-            
-            return frappe.get_doc("SEPA Mandate", active_mandates[0].name)
-        
-        return None
-    
-    def has_active_sepa_mandate(self, purpose="memberships"):
-        """Check if member has an active SEPA mandate for a specific purpose"""
-        filters = {
-            "member": self.name,
-            "status": "Active",
-            "is_active": 1
-        }
-        
-        if purpose == "memberships":
-            filters["used_for_memberships"] = 1
-        elif purpose == "donations":
-            filters["used_for_donations"] = 1
-        
-        return frappe.db.exists("SEPA Mandate", filters)
+    def validate_member_id_change(self):
+        """Validate member ID changes using the ID manager"""
+        validate_member_id_change(self)
     
     def on_trash(self):
-        # Check if member has any active memberships
+        """Check constraints before deletion"""
         active_memberships = frappe.get_all("Membership", 
             filters={"member": self.name, "docstatus": 1, "status": ["!=", "Cancelled"]})
         
@@ -466,17 +461,11 @@ class Member(Document):
     @frappe.whitelist()
     def create_customer(self):
         """Create a customer for this member in ERPNext"""
-        # First check if a customer is already linked to this member
         if self.customer:
             frappe.msgprint(_("Customer {0} already exists for this member").format(self.customer))
             return self.customer
     
-        # REMOVED: The check for customer with same email already exists
-        # We want each member to have their own unique customer
-    
-        # For duplicate name detection, we need a more sophisticated approach
         if self.full_name:
-            # Get all customers with similar names
             similar_name_customers = frappe.get_all(
                 "Customer",
                 filters=[
@@ -485,19 +474,15 @@ class Member(Document):
                 fields=["name", "customer_name", "email_id", "mobile_no"]
             )
     
-            # Check if any match by exact name
             exact_name_match = next((c for c in similar_name_customers if c.customer_name.lower() == self.full_name.lower()), None)
             if exact_name_match:
-                # Don't automatically link - just inform the user
                 customer_info = f"Name: {exact_name_match.name}, Email: {exact_name_match.email_id or 'N/A'}"
                 frappe.msgprint(
                     _("Found existing customer with same name: {0}").format(customer_info) +
                     _("\nCreating a new customer for this member. If you want to link to the existing customer instead, please do so manually.")
                 )
     
-            # If no exact match but we have similar names, prompt the user
             elif similar_name_customers:
-                # Log similar customers for review
                 customer_list = "\n".join([f"- {c.customer_name} ({c.name})" for c in similar_name_customers[:5]])
                 frappe.msgprint(
                     _("Found similar customer names. Please review:") + 
@@ -506,24 +491,22 @@ class Member(Document):
                     _("\nCreating a new customer for this member.")
                 )
         
-        # Create new customer if no match found or if matches were found but we're proceeding with a new customer
         customer = frappe.new_doc("Customer")
         customer.customer_name = self.full_name
         customer.customer_type = "Individual"
 
-        # Set contact details
         if self.email:
             customer.email_id = self.email
-        if self.mobile_no:
+        if hasattr(self, 'contact_number') and self.contact_number:
+            customer.mobile_no = self.contact_number
+        elif hasattr(self, 'mobile_no') and self.mobile_no:
             customer.mobile_no = self.mobile_no
-        if self.phone:
+        if hasattr(self, 'phone') and self.phone:
             customer.phone = self.phone
 
-        # Save customer
         customer.flags.ignore_mandatory = True
         customer.insert(ignore_permissions=True)
 
-        # Link customer to member
         self.customer = customer.name
         self.save(ignore_permissions=True)
 
@@ -540,7 +523,6 @@ class Member(Document):
         if not self.email:
             frappe.throw(_("Email is required to create a user"))
             
-        # Check if user already exists
         if frappe.db.exists("User", self.email):
             user = frappe.get_doc("User", self.email)
             self.user = user.name
@@ -548,498 +530,875 @@ class Member(Document):
             frappe.msgprint(_("Linked to existing user {0}").format(user.name))
             return user.name
             
-        # Create new user
         user = frappe.new_doc("User")
         user.email = self.email
         user.first_name = self.first_name
         user.last_name = self.last_name
         user.send_welcome_email = 1
-        user.user_type = "Website User"
+        user.user_type = "System User"
         
         member_role = "Assocation Member"
         verenigingen_member_role = "Verenigingen Member"
     
-        # Try to find a suitable role
         if frappe.db.exists("Role", member_role):
             user.append("roles", {"role": member_role})
         elif frappe.db.exists("Role", verenigingen_member_role):
             user.append("roles", {"role": verenigingen_member_role})
         else:
-            # No appropriate role found, create a message but continue
             frappe.msgprint(_("Warning: Could not find Member role to assign to user. Creating user without roles."))
         
         user.flags.ignore_permissions = True
         user.insert(ignore_permissions=True)
         
-        # Link user to member
+        # Set allowed modules for member users
+        set_member_user_modules(user.name)
+        
         self.user = user.name
         self.save(ignore_permissions=True)
         
         frappe.msgprint(_("User {0} created successfully").format(user.name))
         return user.name
-        
-    def get_chapters(self):
-        """Get all chapters this member belongs to"""
-        # Check if chapter management is enabled
-        if not is_chapter_management_enabled():
-            return []
-            
-        chapters = []
-        
-        # Add primary chapter
-        if self.primary_chapter:
-            chapters.append({
-                "chapter": self.primary_chapter,
-                "is_primary": 1
-            })
-        
-        # Add chapters where member is in the members list
-        member_chapters = frappe.get_all(
-            "Chapter Member", 
-            filters={"user": self.user, "enabled": 1},
-            fields=["parent as chapter"]
-        )
-        
-        for mc in member_chapters:
-            if mc.chapter != self.primary_chapter:
-                chapters.append({
-                    "chapter": mc.chapter,
-                    "is_primary": 0
-                })
-        
-        # Add chapters where member is on the board
-        board_chapters = frappe.get_all(
-            "Chapter Board Member",
-            filters={"member": self.name, "is_active": 1},
-            fields=["parent as chapter"]
-        )
-        
-        for bc in board_chapters:
-            if not any(c["chapter"] == bc.chapter for c in chapters):
-                chapters.append({
-                    "chapter": bc.chapter,
-                    "is_primary": 0,
-                    "is_board": 1
-                })
-        
-        return chapters
-
-    def is_board_member(self, chapter=None):
-        """Check if member is a board member of any chapter or a specific chapter"""
-        if not is_chapter_management_enabled():
-            return False
-            
-        filters = {"member": self.name, "is_active": 1}
-        
-        if chapter:
-            filters["parent"] = chapter
-        
-        return frappe.db.exists("Chapter Board Member", filters)
     
-    def get_board_roles(self):
-        """Get all board roles for this member"""
-        if not is_chapter_management_enabled():
-            return []
-            
-        board_roles = frappe.get_all(
-            "Chapter Board Member",
-            filters={"member": self.name, "is_active": 1},
-            fields=["parent as chapter", "chapter_role as role"]
-        )
-        
-        return board_roles
+    @frappe.whitelist()
+    def get_active_sepa_mandate(self):
+        """Get the active SEPA mandate for this member - exposed for JavaScript calls"""
+        return self.get_default_sepa_mandate()
     
-    def can_view_member_payments(self, view_member):
-        """Check if this member can view another member's payment info"""
-        # System managers can view all
-        if "System Manager" in frappe.get_roles(self.user):
-            return True
-            
-        # Can always view own payments
-        if self.name == view_member:
-            return True
-        
-        # If chapter management is disabled, only system managers can view others
-        if not is_chapter_management_enabled():
-            return False
-        
-        # Check if member is a board member with financial permissions
-        member_obj = frappe.get_doc("Member", view_member)
-        
-        # If member has set visibility to public, anyone can view
-        if member_obj.permission_category == "Public":
-            return True
-            
-        # If set to Admin Only, only system managers can view (already checked)
-        if member_obj.permission_category == "Admin Only":
-            return False
-        
-        # For Board Only, check if this member is on board with financial permissions
-        if member_obj.primary_chapter:
-            chapter = frappe.get_doc("Chapter", member_obj.primary_chapter)
-            return chapter.can_view_member_payments(self.name)
-        
-        return False
-   
-    def set_payment_reference(self):
-        """Generate a unique payment reference for this membership"""
-        if not self.payment_reference and self.name:
-            # Generate reference: MEMB-YYYY-MM-XXXX
-            self.payment_reference = self.name
+    @frappe.whitelist() 
+    def get_linked_donations(self):
+        """Get linked donations for this member"""
+        from verenigingen.verenigingen.doctype.member.member_utils import get_linked_donations
+        return get_linked_donations(self.name)
     
-    def validate_bank_details(self):
-        """Validate bank details if payment method is Direct Debit"""
-        if self.payment_method == "Direct Debit":
-            # Validate IBAN format if provided
-            if self.iban:
-                self.iban = self.validate_iban_format(self.iban)
+    def handle_fee_override_changes(self):
+        """Handle changes to membership fee override using amendment system"""
+        # Check permissions for fee override changes
+        self.validate_fee_override_permissions()
+        
+        # Skip fee override change tracking for new member applications
+        # Applications should set initial fee amounts without triggering change tracking
+        if not self.name or self.is_new():
+            # For new documents, validate and set audit fields but no change tracking
+            if self.membership_fee_override:
+                if self.membership_fee_override <= 0:
+                    frappe.throw(_("Membership fee override must be greater than 0"))
+                if not self.fee_override_reason:
+                    frappe.throw(_("Please provide a reason for the fee override"))
+                    
+                # Set audit fields for new members (but no change tracking)
+                if not self.fee_override_date:
+                    self.fee_override_date = today()
+                if not self.fee_override_by:
+                    self.fee_override_by = frappe.session.user
+            return
+        
+        # Get current and old values for existing documents
+        new_amount = self.membership_fee_override
+        old_amount = None
+        
+        try:
+            # Method 1: Use has_value_changed if available
+            if hasattr(self, 'has_value_changed') and self.has_value_changed("membership_fee_override"):
+                old_amount = self.get_db_value("membership_fee_override")
+            # Method 2: Compare with database value directly  
+            else:
+                old_amount = frappe.db.get_value("Member", self.name, "membership_fee_override")
+                # Check if values are actually different
+                if old_amount == new_amount:
+                    return  # No change detected
+        except Exception as e:
+            # Fallback: Log error but continue processing if new_amount differs from database
+            frappe.logger().error(f"Error detecting fee override changes for member {self.name}: {str(e)}")
+            return
+        
+        # If we reach here, there's an actual change to process for an existing member
+        frappe.logger().info(f"Processing fee override change for existing member {self.name}: {old_amount} -> {new_amount}")
+        
+        # Set audit fields when adding or changing override
+        if new_amount and not old_amount:
+            self.fee_override_date = today()
+            self.fee_override_by = frappe.session.user
             
-            # Check if we have required fields for Direct Debit
-            if not self.iban:
-                frappe.throw(_("IBAN is required for Direct Debit payment method"))
+        # Validate fee override
+        if new_amount:
+            if new_amount <= 0:
+                frappe.throw(_("Membership fee override must be greater than 0"))
+            if not self.fee_override_reason:
+                frappe.throw(_("Please provide a reason for the fee override"))
+        
+        # Create amendment request immediately instead of relying on after_save hook
+        frappe.logger().info(f"Creating amendment request immediately for member {self.name}")
+        
+        try:
+            from verenigingen.verenigingen.doctype.contribution_amendment_request.contribution_amendment_request import create_fee_change_amendment
             
-            if not self.bank_account_name:
-                frappe.throw(_("Account Holder Name is required for Direct Debit payment method"))
+            amendment = create_fee_change_amendment(
+                member_name=self.name,
+                new_amount=new_amount,
+                reason=self.fee_override_reason or "No reason provided"
+            )
+            
+            frappe.logger().info(f"Successfully created amendment request {amendment.name} for member {self.name}")
+            
+            # Store amendment reference for UI display
+            self._amendment_id = amendment.name
+            
+            # Note: Fee change history will be recorded via the after_save hook to avoid recursive saves
+            
+        except Exception as e:
+            frappe.logger().error(f"Error creating amendment request for member {self.name}: {str(e)}")
+            import traceback
+            frappe.logger().error(f"Full traceback: {traceback.format_exc()}")
+            
+            # Fall back to the pending amendment approach
+            self._pending_amendment = {
+                "old_amount": old_amount,
+                "new_amount": new_amount,
+                "reason": self.fee_override_reason or "No reason provided",
+                "change_date": now(),
+                "changed_by": frappe.session.user
+            }
+            frappe.logger().info(f"Set pending amendment as fallback for member {self.name}: {self._pending_amendment}")
     
-    def validate_iban_format(self, iban):
-        """Basic IBAN validation and formatting"""
-        if not iban:
-            return None
-        
-        # Remove spaces and convert to uppercase
-        iban = iban.replace(' ', '').upper()
-        
-        # Dutch IBAN should be 18 characters
-        if len(iban) < 15 or len(iban) > 34:
-            frappe.throw(_("Invalid IBAN length"))
-        
-        # Format with spaces for readability
-        formatted_iban = ' '.join([iban[i:i+4] for i in range(0, len(iban), 4)])
-        return formatted_iban
     
-    def sync_payment_amount(self):
-        """Sync payment amount from membership type"""
-        if hasattr(self, 'payment_amount') and not self.payment_amount:
-            # Get active membership
-            active_membership = self.get_active_membership()
-            if active_membership and active_membership.membership_type:
-                membership_type = frappe.get_doc("Membership Type", active_membership.membership_type)
-                self.payment_amount = membership_type.amount
-    
-    def create_payment_entry(self, payment_date=None, amount=None):
-        """Create a payment entry for this membership"""
-        if not payment_date:
-            payment_date = today()
-        
-        if not amount:
-            amount = self.payment_amount or 0
-        
-        # Get member's customer
-        member = frappe.get_doc("Member", self.member)
-        if not member.customer:
-            frappe.throw(_("Member must have a linked customer for payment processing"))
-        
-        # Get payment settings
-        settings = frappe.get_single("Verenigingen Settings")
-        
-        payment_entry = frappe.new_doc("Payment Entry")
-        payment_entry.payment_type = "Receive"
-        payment_entry.party_type = "Customer"
-        payment_entry.party = member.customer
-        payment_entry.posting_date = payment_date
-        payment_entry.paid_from = settings.membership_debit_account
-        payment_entry.paid_to = settings.membership_payment_account
-        payment_entry.paid_amount = amount
-        payment_entry.received_amount = amount
-        payment_entry.reference_no = self.payment_reference
-        payment_entry.reference_date = payment_date
-        payment_entry.mode_of_payment = self.payment_method
-        
-        # Add reference to this membership
-        payment_entry.append("references", {
-            "reference_doctype": "Membership",
-            "reference_name": self.name,
-            "allocated_amount": amount
+    def record_fee_change(self, change_data):
+        """Record fee change in history"""
+        self.append("fee_change_history", {
+            "change_date": change_data["change_date"],
+            "old_amount": change_data["old_amount"],
+            "new_amount": change_data["new_amount"],
+            "reason": change_data["reason"],
+            "changed_by": change_data["changed_by"],
+            "subscription_action": change_data.get("subscription_action", "Pending subscription update")
         })
-        
-        payment_entry.flags.ignore_mandatory = True
-        payment_entry.insert(ignore_permissions=True)
-        payment_entry.submit()
-        
-        # Update membership payment status
-        self.payment_status = "Paid"
-        self.payment_date = payment_date
-        self.paid_amount = amount
-        self.db_set('payment_status', 'Paid')
-        self.db_set('payment_date', payment_date)
-        self.db_set('paid_amount', amount)
-        
-        return payment_entry.name
+        # Note: Don't save here to avoid recursive save during validation
     
-    def process_payment(self, payment_method=None):
-        """Process payment for this membership"""
-        if payment_method:
-            self.payment_method = payment_method
+    @frappe.whitelist()
+    def get_current_membership_fee(self):
+        """Get current effective membership fee for this member"""
+        if self.membership_fee_override:
+            return {
+                "amount": self.membership_fee_override,
+                "source": "custom_override",
+                "reason": self.fee_override_reason
+            }
         
-        if self.payment_method == "Direct Debit":
-            # Add to direct debit batch
-            batch = self.add_to_direct_debit_batch()
-            self.payment_status = "Pending"
-            self.db_set('payment_status', 'Pending')
-            return batch
-        else:
-            # Create immediate payment entry
-            payment_entry = self.create_payment_entry()
-            return payment_entry
+        # Get from active membership
+        active_membership = self.get_active_membership()
+        if active_membership and active_membership.membership_type:
+            membership_type = frappe.get_doc("Membership Type", active_membership.membership_type)
+            return {
+                "amount": membership_type.amount,
+                "source": "membership_type",
+                "membership_type": membership_type.membership_type_name
+            }
+        
+        return {"amount": 0, "source": "none"}
     
-    def add_to_direct_debit_batch(self):
-        """Add this membership to a direct debit batch"""
-        # Check if there's an open batch
-        open_batch = frappe.get_all(
-            "Direct Debit Batch",
-            filters={"status": "Draft", "docstatus": 0},
+    @frappe.whitelist()
+    def get_display_membership_fee(self):
+        """Get membership fee for display with amendment status"""
+        current_fee = self.get_current_membership_fee()
+        
+        # Check for pending amendments
+        pending_amendments = frappe.get_all(
+            "Contribution Amendment Request",
+            filters={
+                "member": self.name,
+                "status": ["in", ["Draft", "Pending Approval", "Approved"]],
+                "amendment_type": "Fee Change"
+            },
+            fields=["name", "status", "requested_amount", "effective_date", "reason"],
+            order_by="creation desc",
             limit=1
         )
         
-        if open_batch:
-            batch = frappe.get_doc("Direct Debit Batch", open_batch[0].name)
-        else:
-            # Create new batch
-            batch = frappe.new_doc("Direct Debit Batch")
-            batch.batch_date = today()
-            batch.batch_description = f"Membership payments - {today()}"
-            batch.batch_type = "RCUR"
-            batch.currency = "EUR"
+        if pending_amendments:
+            amendment = pending_amendments[0]
+            return {
+                "current_amount": current_fee["amount"],
+                "display_amount": amendment["requested_amount"],
+                "status": f"Pending - Effective {frappe.format_date(amendment['effective_date']) if amendment['effective_date'] else 'TBD'}",
+                "amendment_status": amendment["status"],
+                "amendment_id": amendment["name"],
+                "reason": amendment["reason"],
+                "source": "amendment_pending"
+            }
         
-        # Add this membership
-        batch.append("invoices", {
-            "membership": self.name,
-            "member": self.member,
-            "member_name": self.member_name,
-            "amount": self.payment_amount,
-            "currency": "EUR",
-            "iban": self.iban,
-            "mandate_reference": self.mandate_reference or self.sepa_mandate,
-            "status": "Pending"
-        })
-        
-        batch.calculate_totals()
-        batch.save()
-        
-        return batch.name
+        # No pending amendments, return current fee
+        return {
+            "current_amount": current_fee["amount"],
+            "display_amount": current_fee["amount"],
+            "status": "Current",
+            "source": current_fee["source"],
+            "reason": current_fee.get("reason")
+        }
     
     @frappe.whitelist()
-    def mark_as_paid(self, payment_date=None, amount=None):
-        """Mark membership as paid"""
-        if not payment_date:
-            payment_date = today()
+    def get_current_subscription_details(self):
+        """Get current active subscription details including billing interval"""
+        if not self.customer:
+            return {"error": "No customer linked to this member"}
         
-        if not amount:
-            amount = self.payment_amount
-        
-        self.payment_status = "Paid"
-        self.payment_date = payment_date
-        self.paid_amount = amount
-        
-        self.save()
-        
-        # Create payment entry if configured
-        settings = frappe.get_single("Verenigingen Settings")
-        if settings.automate_membership_payment_entries:
-            self.create_payment_entry(payment_date, amount)
-        
-        return True
+        try:
+            # Get active subscriptions for this customer
+            active_subscriptions = frappe.get_all(
+                "Subscription",
+                filters={
+                    "party": self.customer,
+                    "party_type": "Customer",
+                    "status": "Active",
+                    "docstatus": 1
+                },
+                fields=["name", "start_date", "end_date", "status"]
+            )
+            
+            if not active_subscriptions:
+                return {
+                    "has_subscription": False,
+                    "message": "No active subscriptions found"
+                }
+            
+            subscription_details = []
+            for sub_data in active_subscriptions:
+                try:
+                    subscription = frappe.get_doc("Subscription", sub_data.name)
+                    
+                    # Get subscription plan details
+                    plan_details = []
+                    total_amount = 0
+                    
+                    for plan in subscription.plans:
+                        plan_doc = frappe.get_doc("Subscription Plan", plan.plan)
+                        # Get price from subscription plan, multiply by quantity
+                        plan_price = plan_doc.cost * plan.qty
+                        plan_details.append({
+                            "plan_name": plan_doc.plan_name,
+                            "price": plan_price,
+                            "quantity": plan.qty,
+                            "billing_interval": plan_doc.billing_interval,
+                            "billing_interval_count": plan_doc.billing_interval_count,
+                            "currency": plan_doc.currency
+                        })
+                        total_amount += plan_price
+                    
+                    subscription_details.append({
+                        "name": subscription.name,
+                        "status": subscription.status,
+                        "start_date": subscription.start_date,
+                        "end_date": subscription.end_date,
+                        "current_invoice_start": subscription.current_invoice_start,
+                        "current_invoice_end": subscription.current_invoice_end,
+                        "total_amount": total_amount,
+                        "plans": plan_details
+                    })
+                    
+                except Exception as e:
+                    frappe.log_error(f"Error getting subscription details for {sub_data.name}: {str(e)}")
+                    continue
+            
+            return {
+                "has_subscription": True,
+                "subscriptions": subscription_details,
+                "count": len(subscription_details)
+            }
+            
+        except Exception as e:
+            frappe.log_error(f"Error getting subscription details for member {self.name}: {str(e)}")
+            return {"error": str(e)}
     
-    def check_payment_status(self):
-        """Check and update payment status"""
-        if self.payment_status == "Paid":
-            return
+    @frappe.whitelist()
+    def refresh_subscription_history(self):
+        """Refresh the subscription history table with current data"""
+        if not self.customer:
+            return {"message": "No customer linked to this member"}
         
-        # Check if payment is overdue
-        if self.payment_status == "Unpaid" and self.start_date:
-            days_overdue = date_diff(today(), self.start_date)
-            if days_overdue > 30:  # Configurable grace period
-                self.payment_status = "Overdue"
-                self.db_set('payment_status', 'Overdue')
+        # Clear existing history
+        self.subscription_history = []
+        
+        # Get all subscriptions for this customer
+        subscriptions = frappe.get_all(
+            "Subscription",
+            filters={"party": self.customer, "party_type": "Customer"},
+            fields=["name", "status", "start_date", "end_date", "modified"],
+            order_by="start_date desc"
+        )
+        
+        for sub_data in subscriptions:
+            try:
+                subscription = frappe.get_doc("Subscription", sub_data.name)
                 
-    @frappe.whitelist()
-    def create_sepa_mandate(self):
-        """
-        Create a new SEPA mandate for this member with enhanced prefilling
-        """
-        # Generate suggested mandate reference
-        mandate_ref_result = generate_mandate_reference(self.name)
-        suggested_reference = mandate_ref_result.get("mandate_reference", f"M-{self.member_id}-{frappe.utils.today().replace('-', '')}")
+                # Calculate total amount from plans
+                total_amount = 0
+                plan_details = []
+                for plan in subscription.plans:
+                    plan_doc = frappe.get_doc("Subscription Plan", plan.plan)
+                    amount = plan_doc.cost * plan.qty
+                    total_amount += amount
+                    plan_details.append(f"{plan_doc.plan_name}: {frappe.format_value(amount, 'Currency')} x {plan.qty}")
+                
+                # Add to history
+                self.append("subscription_history", {
+                    "subscription_name": sub_data.name,
+                    "status": sub_data.status,
+                    "amount": total_amount,
+                    "start_date": sub_data.start_date,
+                    "end_date": sub_data.end_date,
+                    "last_update": sub_data.modified,
+                    "plan_details": "; ".join(plan_details),
+                    "cancellation_reason": ""  # Will need to check subscription doc for this field
+                })
+                
+            except Exception as e:
+                frappe.log_error(f"Error processing subscription {sub_data.name}: {str(e)}")
+                continue
         
-        mandate = frappe.new_doc("SEPA Mandate")
-        mandate.member = self.name
-        mandate.member_name = self.full_name
-        mandate.mandate_id = suggested_reference
-        mandate.account_holder_name = self.bank_account_name or self.full_name
-        mandate.sign_date = frappe.utils.today()
+        self.save(ignore_permissions=True)
+        return {"message": f"Refreshed {len(self.subscription_history)} subscription records"}
+    
+    def update_subscription_history_entry(self, subscription_name, action="updated"):
+        """Update or add a specific subscription to the history"""
+        if not self.customer:
+            return
+            
+        try:
+            subscription = frappe.get_doc("Subscription", subscription_name)
+            
+            # Calculate total amount from plans
+            total_amount = 0
+            plan_details = []
+            for plan in subscription.plans:
+                plan_doc = frappe.get_doc("Subscription Plan", plan.plan)
+                amount = plan_doc.cost * plan.qty
+                total_amount += amount
+                plan_details.append(f"{plan_doc.plan_name}: {frappe.format_value(amount, 'Currency')} x {plan.qty}")
+            
+            # Find existing entry or create new one
+            existing_entry = None
+            for entry in self.subscription_history:
+                if entry.subscription_name == subscription_name:
+                    existing_entry = entry
+                    break
+            
+            if existing_entry:
+                # Update existing entry
+                existing_entry.status = subscription.status
+                existing_entry.amount = total_amount
+                existing_entry.end_date = subscription.end_date
+                existing_entry.last_update = subscription.modified
+                existing_entry.plan_details = "; ".join(plan_details)
+                existing_entry.cancellation_reason = ""
+            else:
+                # Add new entry
+                self.append("subscription_history", {
+                    "subscription_name": subscription_name,
+                    "status": subscription.status,
+                    "amount": total_amount,
+                    "start_date": subscription.start_date,
+                    "end_date": subscription.end_date,
+                    "last_update": subscription.modified,
+                    "plan_details": "; ".join(plan_details),
+                    "cancellation_reason": ""
+                })
+            
+            self.save(ignore_permissions=True)
+            
+        except Exception as e:
+            frappe.log_error(f"Error updating subscription history for {subscription_name}: {str(e)}")
+    
+    def update_active_subscriptions(self):
+        """Update existing subscription plans based on current fee override"""
+        if not self.customer:
+            return {"message": "No customer linked to member"}
         
-        # Prefill bank details if available on member
-        if hasattr(self, 'iban') and self.iban:
-            mandate.iban = self.iban
-        if hasattr(self, 'bic') and self.bic:
-            mandate.bic = self.bic
-        
-        # Set default usage
-        mandate.used_for_memberships = 1
-        mandate.used_for_donations = 0  # Conservative default
-        mandate.mandate_type = "RCUR"  # Recurring by default
-        
-        # Add creation note
-        mandate.notes = f"Created from Member {self.name} on {frappe.utils.today()}"
-        
-        mandate.insert()
-        
-        # Add to member's mandate links as non-current (user needs to activate)
-        self.append("sepa_mandates", {
-            "sepa_mandate": mandate.name,
-            "mandate_reference": mandate.mandate_id,
-            "is_current": 0,  # Not current by default - user will need to review and activate
-            "status": "Draft",
-            "valid_from": mandate.sign_date
-        })
-        
-        self.save()
-        
-        return mandate.name
+        try:
+            current_fee = self.get_current_membership_fee()
+            
+            if current_fee["amount"] <= 0:
+                return {"message": "No fee amount set, skipping subscription update"}
+            
+            # Find existing active subscriptions
+            active_subscriptions = frappe.get_all(
+                "Subscription",
+                filters={
+                    "party": self.customer,
+                    "party_type": "Customer", 
+                    "status": "Active",
+                    "docstatus": 1
+                }
+            )
+            
+            updated_subscriptions = []
+            
+            # Instead of modifying submitted subscriptions, cancel them and create new ones
+            for sub_data in active_subscriptions:
+                try:
+                    subscription = frappe.get_doc("Subscription", sub_data.name)
+                    
+                    # Cancel the existing subscription
+                    subscription.cancel()
+                    print(f"Cancelled subscription {subscription.name}")
+                    
+                    # Create a new subscription with the updated fee
+                    active_membership = self.get_active_membership()
+                    if active_membership:
+                        new_subscription = self.get_or_create_subscription_for_membership(
+                            active_membership, current_fee["amount"]
+                        )
+                        if new_subscription:
+                            updated_subscriptions.append(new_subscription.name)
+                            print(f"Created new subscription {new_subscription.name} with fee {current_fee['amount']}")
+                            
+                            # Update subscription history
+                            self.update_subscription_history_entry(new_subscription.name, "created")
+                    
+                except Exception as e:
+                    print(f"Error replacing subscription {sub_data.name}: {str(e)}")
+                    # If cancellation fails due to membership link, just create a new one
+                    try:
+                        active_membership = self.get_active_membership()
+                        if active_membership:
+                            new_subscription = self.get_or_create_subscription_for_membership(
+                                active_membership, current_fee["amount"]
+                            )
+                            if new_subscription:
+                                updated_subscriptions.append(new_subscription.name)
+                                print(f"Created additional subscription {new_subscription.name} with fee {current_fee['amount']}")
+                                self.update_subscription_history_entry(new_subscription.name, "created")
+                    except Exception as e2:
+                        print(f"Error creating new subscription: {str(e2)}")
+            
+            # If no active subscriptions exist, create one
+            if not active_subscriptions:
+                active_membership = self.get_active_membership()
+                if active_membership:
+                    new_subscription = self.get_or_create_subscription_for_membership(
+                        active_membership, current_fee["amount"]
+                    )
+                    
+                    if new_subscription:
+                        updated_subscriptions.append(new_subscription.name)
+                        self.update_subscription_history_entry(new_subscription.name, "created")
+                        return {
+                            "message": f"Created new subscription {new_subscription.name}",
+                            "updated_subscriptions": updated_subscriptions
+                        }
+            
+            return {
+                "message": f"Updated {len(updated_subscriptions)} subscription(s)",
+                "updated_subscriptions": updated_subscriptions
+            }
+                
+        except Exception as e:
+            print(f"Error in update_active_subscriptions for member {self.name}: {str(e)}")
+            return {"error": str(e)}
+    
+    def get_or_create_subscription_for_membership(self, membership, fee_amount):
+        """Get or create a subscription for the given membership"""
+        if not self.customer:
+            return None
+            
+        try:
+            # Get or create subscription plan for this fee amount
+            plan = self.get_or_create_subscription_plan(fee_amount)
+            if not plan:
+                return None
+            
+            # Create new subscription
+            subscription = frappe.get_doc({
+                "doctype": "Subscription",
+                "party_type": "Customer",
+                "party": self.customer,
+                "start_date": membership.start_date or today(),
+                "end_date": membership.renewal_date,
+                "plans": [{
+                    "plan": plan.name,
+                    "qty": 1
+                }]
+            })
+            
+            subscription.insert(ignore_permissions=True)
+            subscription.submit()
+            
+            frappe.log_error(f"Created subscription {subscription.name} for member {self.name}")
+            return subscription
+            
+        except Exception as e:
+            frappe.log_error(f"Error creating subscription for member {self.name}: {str(e)}")
+            return None
+    
+    def get_or_create_subscription_plan(self, fee_amount):
+        """Get or create a subscription plan for the given fee amount"""
+        try:
+            # Look for existing plan with this amount
+            plan_name = f"Membership Fee - {frappe.format_value(fee_amount, 'Currency')}"
+            
+            existing_plan = frappe.db.exists("Subscription Plan", {"plan_name": plan_name})
+            if existing_plan:
+                return frappe.get_doc("Subscription Plan", existing_plan)
+            
+            # Get or create membership fee item
+            item = self.get_or_create_membership_item()
+            if not item:
+                return None
+            
+            # Create new subscription plan
+            plan = frappe.get_doc({
+                "doctype": "Subscription Plan",
+                "plan_name": plan_name,
+                "item": item.name,
+                "price_determination": "Fixed Rate",
+                "cost": fee_amount,
+                "billing_interval": "Month",
+                "enabled": 1
+            })
+            
+            plan.insert(ignore_permissions=True)
+            frappe.log_error(f"Created subscription plan {plan.name}")
+            return plan
+            
+        except Exception as e:
+            frappe.log_error(f"Error creating subscription plan: {str(e)}")
+            return None
+    
+    def get_or_create_membership_item(self):
+        """Get or create the membership fee item"""
+        try:
+            item_code = "MEMBERSHIP-FEE"
+            
+            existing_item = frappe.db.exists("Item", item_code)
+            if existing_item:
+                return frappe.get_doc("Item", existing_item)
+            
+            # Create membership fee item
+            item = frappe.get_doc({
+                "doctype": "Item",
+                "item_code": item_code,
+                "item_name": "Membership Fee",
+                "item_group": frappe.db.get_single_value("Item", "item_group") or "Services",
+                "is_service_item": 1,
+                "maintain_stock": 0,
+                "include_item_in_manufacturing": 0,
+                "is_purchase_item": 0,
+                "is_sales_item": 1
+            })
+            
+            item.insert(ignore_permissions=True)
+            frappe.log_error(f"Created membership item {item.name}")
+            return item
+            
+        except Exception as e:
+            frappe.log_error(f"Error creating membership item: {str(e)}")
+            return None
 
+    def update_current_chapter_display(self):
+        """Update the current chapter display field based on Chapter Member relationships"""
+        try:
+            chapters = self.get_current_chapters()
+            
+            if not chapters:
+                # Use the custom field until the main field is fixed
+                field_name = 'current_chapter_display_temp' if hasattr(self, 'current_chapter_display_temp') else 'current_chapter_display'
+                setattr(self, field_name, '<p style="color: #888;"><em>No chapter assignment</em></p>')
+                return
+            
+            html_parts = []
+            html_parts.append('<div class="member-chapters">')
+            
+            for chapter in chapters:
+                chapter_info = frappe.get_value("Chapter", chapter['chapter'], ['region'], as_dict=True)
+                chapter_display = chapter['chapter']
+                if chapter_info and chapter_info.region:
+                    chapter_display += f" ({chapter_info.region})"
+                
+                status_badges = []
+                if chapter.get('is_primary'):
+                    status_badges.append('<span class="badge badge-success">Primary</span>')
+                if chapter.get('is_board'):
+                    status_badges.append('<span class="badge badge-info">Board Member</span>')
+                if chapter.get('chapter_join_date'):
+                    status_badges.append(f'<span class="badge badge-light">Joined: {chapter["chapter_join_date"]}</span>')
+                
+                badges_html = ' '.join(status_badges) if status_badges else ''
+                
+                html_parts.append(f'''
+                    <div class="chapter-item" style="margin-bottom: 8px; padding: 8px; border-left: 3px solid #007bff; background-color: #f8f9fa;">
+                        <strong>{chapter_display}</strong>
+                        {f'<br>{badges_html}' if badges_html else ''}
+                    </div>
+                ''')
+            
+            html_parts.append('</div>')
+            # Use the custom field until the main field is fixed
+            field_name = 'current_chapter_display_temp' if hasattr(self, 'current_chapter_display_temp') else 'current_chapter_display'
+            setattr(self, field_name, ''.join(html_parts))
+            
+        except Exception as e:
+            frappe.log_error(f"Error updating chapter display: {str(e)}", "Member Chapter Display")
+            self.current_chapter_display = '<p style="color: #dc3545;">Error loading chapter information</p>'
+
+    def get_current_chapters(self):
+        """Get current chapter memberships from Chapter Member child table"""
+        if not self.name:
+            return []
+        
+        try:
+            # Get chapters where this member is listed in the Chapter Member child table
+            # Use ignore_permissions since this is called within member doc context
+            chapter_members = frappe.get_all(
+                "Chapter Member",
+                filters={
+                    "member": self.name,
+                    "enabled": 1
+                },
+                fields=["parent", "chapter_join_date"],
+                order_by="chapter_join_date desc",
+                ignore_permissions=True
+            )
+            
+            chapters = []
+            for cm in chapter_members:
+                chapters.append({
+                    "chapter": cm.parent,
+                    "chapter_join_date": cm.chapter_join_date,
+                    "is_primary": len(chapters) == 0,  # First one is primary
+                    "is_board": self.is_board_member(cm.parent)
+                })
+            
+            return chapters
+            
+        except Exception as e:
+            frappe.log_error(f"Error getting current chapters: {str(e)}", "Member Chapter Query")
+            return []
+
+
+# Module-level functions for static calls
 @frappe.whitelist()
 def is_chapter_management_enabled():
     """Check if chapter management is enabled in settings"""
-    try:
-        return frappe.db.get_single_value("Verenigingen Settings", "enable_chapter_management") == 1
-    except:
-        # Default to enabled if setting doesn't exist
-        return True
+    from verenigingen.verenigingen.doctype.member.member_utils import is_chapter_management_enabled as check_enabled
+    return check_enabled()
 
 @frappe.whitelist()
 def get_board_memberships(member_name):
-    """Get board memberships for a member with proper permission handling"""
-    if not is_chapter_management_enabled():
-        return []
-        
-    # Query using volunteer relationship since Chapter Board Member links to Volunteer, not Member
-    board_memberships = frappe.db.sql("""
-        SELECT cbm.parent, cbm.chapter_role 
-        FROM `tabChapter Board Member` cbm
-        JOIN `tabVolunteer` v ON cbm.volunteer = v.name
-        WHERE v.member = %s AND cbm.is_active = 1
-    """, (member_name,), as_dict=True)
-    
-    return board_memberships
+    """Get board memberships for a member"""
+    from verenigingen.verenigingen.doctype.member.member_utils import get_board_memberships
+    return get_board_memberships(member_name)
 
 @frappe.whitelist()
-def check_sepa_mandate_status(member):
-    """Check SEPA mandate status for dashboard indicators"""
+def get_active_sepa_mandate(member, iban=None):
+    """Get active SEPA mandate for JavaScript calls"""
     member_doc = frappe.get_doc("Member", member)
-    active_mandates = member_doc.get_active_sepa_mandates()
-    
-    result = {
-        "has_active_mandate": bool(active_mandates),
-        "expiring_soon": False
-    }
-    
-    # Check if any mandate is expiring within 30 days
-    for mandate in active_mandates:
-        if mandate.expiry_date:
-            days_to_expiry = frappe.utils.date_diff(mandate.expiry_date, frappe.utils.today())
-            if 0 < days_to_expiry <= 30:
-                result["expiring_soon"] = True
-                break
-    
-    return result
+    mandate = member_doc.get_default_sepa_mandate()
+    return mandate.as_dict() if mandate else None
 
 @frappe.whitelist()
-def update_member_payment_history(doc, method=None):
-    """Update payment history for member when a payment entry is modified"""
-    if doc.party_type != "Customer":
-        return
-        
-    # Find member linked to this customer
-    members = frappe.get_all(
-        "Member",
-        filters={"customer": doc.party},
-        fields=["name"]
-    )
+def get_member_current_chapters(member_name):
+    """Get current chapters for a member - safe for client calls"""
+    if not member_name:
+        return []
     
-    # Update payment history for each member
-    for member_doc in members:
-        try:
-            member = frappe.get_doc("Member", member_doc.name)
-            member.load_payment_history()
-            member.save(ignore_permissions=True)
-        except Exception as e:
-            frappe.log_error(f"Failed to update payment history for Member {member_doc.name}: {str(e)}")
-
-def update_member_payment_history_from_invoice(doc, method=None):
-    """Update payment history for member when an invoice is modified"""
-    if doc.doctype != "Sales Invoice" or doc.customer is None:
-        return
+    try:
+        # Check if user has permission to access this member
+        member_doc = frappe.get_doc("Member", member_name)
+        return member_doc.get_current_chapters()
         
-    # Find member linked to this customer
-    members = frappe.get_all(
-        "Member",
-        filters={"customer": doc.customer},
-        fields=["name"]
-    )
-    
-    # Update payment history for each member
-    for member_doc in members:
-        try:
-            member = frappe.get_doc("Member", member_doc.name)
-            member.load_payment_history()
-            member.save(ignore_permissions=True)
-        except Exception as e:
-            frappe.log_error(f"Failed to update payment history for Member {member_doc.name}: {str(e)}")
+    except frappe.PermissionError:
+        # If no permission to member, return empty list
+        return []
+    except Exception as e:
+        frappe.log_error(f"Error getting member chapters: {str(e)}", "Member Chapters API")
+        return []
 
-# Add a new method to manually add a payment/donation record
 @frappe.whitelist()
-def add_manual_payment_record(member, amount, payment_date=None, payment_method=None, notes=None):
-    """
-    Manually add a payment record (e.g., for cash donations)
-    """
-    if not member or not amount:
-        frappe.throw(_("Member and amount are required"))
+def get_member_chapter_names(member_name):
+    """Get simple list of chapter names for a member"""
+    if not member_name:
+        return []
+    
+    try:
+        chapters = get_member_current_chapters(member_name)
+        return [ch.get("chapter") for ch in chapters if ch.get("chapter")]
         
+    except Exception as e:
+        frappe.log_error(f"Error getting member chapter names: {str(e)}", "Member Chapters API")
+        return []
+
+@frappe.whitelist()
+def get_member_chapter_display_html(member_name):
+    """Get formatted HTML for member's chapter information"""
+    if not member_name:
+        return ""
+    
+    try:
+        member_doc = frappe.get_doc("Member", member_name)
+        chapters = member_doc.get_current_chapters()
+        
+        if not chapters:
+            return '<p style="color: #888;"><em>No chapter assignment</em></p>'
+        
+        html_parts = []
+        html_parts.append('<div class="member-chapters" style="margin: 10px 0;">')
+        
+        for chapter in chapters:
+            chapter_info = frappe.get_value("Chapter", chapter['chapter'], ['region'], as_dict=True)
+            chapter_display = chapter['chapter']
+            if chapter_info and chapter_info.region:
+                chapter_display += f" ({chapter_info.region})"
+            
+            status_badges = []
+            # Removed the Primary badge as requested
+            if chapter.get('is_board'):
+                status_badges.append('<span class="badge badge-info" style="margin-right: 5px;">Board Member</span>')
+            if chapter.get('chapter_join_date'):
+                status_badges.append(f'<span class="badge badge-light" style="margin-right: 5px;">Joined: {chapter["chapter_join_date"]}</span>')
+            
+            badges_html = ''.join(status_badges)
+            
+            # Make chapter name clickable to open the chapter
+            chapter_link = f'<a href="/app/chapter/{chapter["chapter"]}" target="_blank" style="color: #007bff; text-decoration: none; font-weight: bold;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">{chapter_display}</a>'
+            
+            html_parts.append(f'''
+                <div class="chapter-item" style="margin-bottom: 8px; padding: 10px; border-left: 3px solid #007bff; background-color: #f8f9fa; border-radius: 4px;">
+                    {chapter_link}
+                    {f'<br><div style="margin-top: 5px;">{badges_html}</div>' if badges_html else ''}
+                </div>
+            ''')
+        
+        html_parts.append('</div>')
+        return ''.join(html_parts)
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting member chapter display: {str(e)}", "Member Chapter Display API")
+        return '<p style="color: #dc3545;">Error loading chapter information</p>'
+
+def handle_fee_override_after_save(doc, method=None):
+    """Hook function to handle fee override changes after save using amendment system"""
+    frappe.logger().info(f"handle_fee_override_after_save called for member {doc.name}, method={method}")
+    
+    # Handle any remaining _pending_amendment that wasn't processed during validation
+    if hasattr(doc, '_pending_amendment'):
+        try:
+            frappe.logger().info(f"Processing remaining pending amendment for member {doc.name}")
+            
+            # Create amendment request
+            from verenigingen.verenigingen.doctype.contribution_amendment_request.contribution_amendment_request import create_fee_change_amendment
+            
+            amendment = create_fee_change_amendment(
+                member_name=doc.name,
+                new_amount=doc._pending_amendment["new_amount"],
+                reason=doc._pending_amendment["reason"]
+            )
+            
+            # Record the change in history for audit trail (without saving again)
+            doc.append("fee_change_history", {
+                "change_date": doc._pending_amendment["change_date"],
+                "old_amount": doc._pending_amendment["old_amount"],
+                "new_amount": doc._pending_amendment["new_amount"],
+                "reason": doc._pending_amendment["reason"],
+                "changed_by": doc._pending_amendment["changed_by"],
+                "subscription_action": f"Amendment request created: {amendment.name}"
+            })
+            # Save the history separately to avoid recursion
+            frappe.db.sql("""
+                UPDATE `tabMember` 
+                SET fee_change_history = %s 
+                WHERE name = %s
+            """, (frappe.as_json(doc.fee_change_history), doc.name))
+            frappe.db.commit()
+            
+            delattr(doc, '_pending_amendment')
+            frappe.logger().info(f"Successfully created fallback amendment request {amendment.name} for member {doc.name}")
+            
+        except Exception as e:
+            frappe.logger().error(f"Error creating fallback amendment request for member {doc.name}: {str(e)}")
+            # Don't re-raise to avoid blocking the save operation
+    
+    # Legacy support: handle old _pending_fee_change if it exists
+    elif hasattr(doc, '_pending_fee_change'):
+        try:
+            frappe.logger().info(f"Processing legacy fee change for member {doc.name}")
+            # Record change without triggering another save
+            doc.append("fee_change_history", doc._pending_fee_change)
+            doc.update_active_subscriptions()
+            delattr(doc, '_pending_fee_change')
+            frappe.logger().info(f"Successfully processed legacy fee override change for member {doc.name}")
+        except Exception as e:
+            frappe.logger().error(f"Error processing legacy fee override for member {doc.name}: {str(e)}")
+    else:
+        frappe.logger().debug(f"No pending fee change or amendment found for member {doc.name}")
+
+@frappe.whitelist()
+def get_current_subscription_details(member):
+    """Get current active subscription details including billing interval for a member"""
     member_doc = frappe.get_doc("Member", member)
     
     if not member_doc.customer:
-        frappe.throw(_("Member must have a customer record"))
+        return {"error": "No customer linked to this member"}
+    
+    try:
+        # Get active subscriptions for this customer
+        active_subscriptions = frappe.get_all(
+            "Subscription",
+            filters={
+                "party": member_doc.customer,
+                "party_type": "Customer",
+                "status": "Active",
+                "docstatus": 1
+            },
+            fields=["name", "start_date", "end_date", "status"]
+        )
         
-    # Create a Payment Entry
-    payment = frappe.new_doc("Payment Entry")
-    payment.payment_type = "Receive"
-    payment.party_type = "Customer"
-    payment.party = member_doc.customer
-    payment.posting_date = payment_date or frappe.utils.today()
-    payment.paid_amount = float(amount)
-    payment.received_amount = float(amount)
-    payment.mode_of_payment = payment_method or "Cash"
-    
-    # Set company from Verenigingen Settings
-    settings = frappe.get_single("Verenigingen Settings")
-    payment.company = settings.company or frappe.defaults.get_global_default('company')
-    
-    # Set accounts
-    payment.paid_from = frappe.get_value("Company", payment.company, "default_receivable_account")
-    payment.paid_to = settings.donation_payment_account or frappe.get_value("Company", payment.company, "default_cash_account")
-    
-    # Add remarks
-    payment.remarks = notes or "Manual donation entry"
-    
-    # Save and submit
-    payment.insert(ignore_permissions=True)
-    payment.submit()
-    
-    # Refresh member's payment history
-    member_doc.load_payment_history()
-    member_doc.save(ignore_permissions=True)
-    
-    return payment.name
+        if not active_subscriptions:
+            return {
+                "has_subscription": False,
+                "message": "No active subscriptions found"
+            }
+        
+        subscription_details = []
+        for sub_data in active_subscriptions:
+            try:
+                subscription = frappe.get_doc("Subscription", sub_data.name)
+                
+                # Get subscription plan details
+                plan_details = []
+                total_amount = 0
+                
+                for plan in subscription.plans:
+                    plan_doc = frappe.get_doc("Subscription Plan", plan.plan)
+                    plan_details.append({
+                        "plan_name": plan_doc.plan_name,
+                        "price": plan_doc.cost,
+                        "billing_interval": plan_doc.billing_interval,
+                        "billing_interval_count": plan_doc.billing_interval_count,
+                        "currency": plan_doc.currency
+                    })
+                    total_amount += plan_doc.cost
+                
+                subscription_details.append({
+                    "name": subscription.name,
+                    "status": subscription.status,
+                    "start_date": subscription.start_date,
+                    "end_date": subscription.end_date,
+                    "current_invoice_start": subscription.current_invoice_start,
+                    "current_invoice_end": subscription.current_invoice_end,
+                    "total_amount": total_amount,
+                    "plans": plan_details
+                })
+                
+            except Exception as e:
+                frappe.log_error(f"Error getting subscription details for {sub_data.name}: {str(e)}")
+                continue
+        
+        return {
+            "has_subscription": True,
+            "subscriptions": subscription_details,
+            "count": len(subscription_details)
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting subscription details for member {member}: {str(e)}")
+        return {"error": str(e)}
 
 @frappe.whitelist()
 def get_linked_donations(member):
@@ -1076,697 +1435,473 @@ def get_linked_donations(member):
     return {"success": False, "message": "No donor record found for this member"}
 
 @frappe.whitelist()
-def create_donor_from_member(member):
+def assign_member_id(member_name):
     """
-    Create a donor record from a member for tracking donations
+    Manually assign a member ID to a member who doesn't have one yet.
+    This can be used for approved applications or existing members without IDs.
     """
-    if not member:
-        frappe.throw(_("No member specified"))
+    if not frappe.has_permission("Member", "write"):
+        frappe.throw(_("Insufficient permissions to assign member ID"))
+    
+    # Only allow System Manager and Membership Manager roles to manually assign member IDs
+    allowed_roles = ["System Manager", "Membership Manager"]
+    user_roles = frappe.get_roles(frappe.session.user)
+    if not any(role in user_roles for role in allowed_roles):
+        frappe.throw(_("Only System Managers and Membership Managers can manually assign member IDs"))
+    
+    try:
+        member = frappe.get_doc("Member", member_name)
         
-    member_doc = frappe.get_doc("Member", member)
-    
-    # Check if donor with same email already exists
-    if member_doc.email:
-        existing_donor = frappe.db.exists("Donor", {"donor_email": member_doc.email})
-        if existing_donor:
-            return existing_donor
-    
-    # Create new donor
-    donor = frappe.new_doc("Donor")
-    donor.donor_name = member_doc.full_name or member_doc.name
-    donor.donor_type = "Individual"
-    donor.donor_email = member_doc.email
-    donor.contact_person = member_doc.full_name or member_doc.name
-    donor.phone = member_doc.mobile_no or member_doc.phone
-    
-    # Set default donor category - get from settings if possible
-    donor.donor_category = "Regular Donor"  # Default
-    
-    # Get preferred communication method based on member data
-    if member_doc.email:
-        donor.preferred_communication_method = "Email"
-    elif member_doc.mobile_no:
-        donor.preferred_communication_method = "Phone"
-    
-    # Save with ignore permissions to ensure it works for all users
-    donor.insert(ignore_permissions=True)
-    
-    frappe.msgprint(_("Donor record {0} created from member").format(donor.name))
-    return donor.name
-
-@frappe.whitelist()
-def create_sepa_mandate_from_bank_details(member, iban, bic=None, account_holder_name=None, mandate_type="RCUR", sign_date=None, used_for_memberships=1, used_for_donations=0):
-    """
-    Create a new SEPA mandate based on bank details already entered
-    """
-    if not member or not iban:
-        frappe.throw(_("Member and IBAN are required"))
-    
-    if not sign_date:
-        sign_date = frappe.utils.today()
-    
-    # Get member details if not provided
-    member_doc = frappe.get_doc("Member", member)
-    if not account_holder_name:
-        account_holder_name = member_doc.full_name
-    
-    # Create mandate ID with timestamp to ensure uniqueness
-    timestamp = frappe.utils.now().replace(' ', '').replace('-', '').replace(':', '')[:14]
-    mandate_id = f"M-{member_doc.member_id}-{timestamp}"
-    
-    # Create new mandate
-    mandate = frappe.new_doc("SEPA Mandate")
-    mandate.mandate_id = mandate_id
-    mandate.member = member
-    mandate.member_name = member_doc.full_name
-    mandate.account_holder_name = account_holder_name
-    mandate.iban = iban
-    if bic:
-        mandate.bic = bic
-    mandate.sign_date = sign_date
-    mandate.mandate_type = mandate_type
-    
-    # Set usage flags
-    mandate.used_for_memberships = 1 if used_for_memberships else 0
-    mandate.used_for_donations = 1 if used_for_donations else 0
-    
-    # Set status to active
-    mandate.status = "Active"
-    mandate.is_active = 1
-    
-    mandate.insert(ignore_permissions=True)
-    
-    # Add to member's mandate links
-    member_doc.append("sepa_mandates", {
-        "sepa_mandate": mandate.name,
-        "is_current": 1
-    })
-    
-    # Save the member document
-    member_doc.save(ignore_permissions=True)
-    
-    return mandate.name
-
-@frappe.whitelist()
-def get_member_form_settings():
-    """Get settings for the member form based on system configuration"""
-    settings = {
-        "show_chapter_field": is_chapter_management_enabled(),
-        "chapter_field_label": _("Chapter") if is_chapter_management_enabled() else ""
-    }
-    
-    return settings
-
-@frappe.whitelist()
-def find_chapter_by_postal_code(postal_code):
-    """Find chapters matching a postal code"""
-    if not is_chapter_management_enabled():
-        return {"success": False, "message": "Chapter management is disabled"}
+        # Check if member already has an ID
+        if member.member_id:
+            return {
+                "success": False,
+                "message": _("Member already has ID: {0}").format(member.member_id)
+            }
         
-    if not postal_code:
-        return {"success": False, "message": "Postal code is required"}
-    
-    # Get all published chapters
-    chapters = frappe.get_all(
-        "Chapter",
-        filters={"published": 1},
-        fields=["name", "region", "postal_codes"]
-    )
-    
-    matching_chapters = []
-    
-    for chapter in chapters:
-        if not chapter.get("postal_codes"):
-            continue
-            
-        # Create chapter object to use the matching method
-        chapter_doc = frappe.get_doc("Chapter", chapter.name)
-        if chapter_doc.matches_postal_code(postal_code):
-            matching_chapters.append({
-                "name": chapter.name,
-                "region": chapter.region
-            })
-    
-    return {
-        "success": True,
-        "matching_chapters": matching_chapters
-    }
+        # For application members, they should be approved first
+        if member.is_application_member() and not member.should_have_member_id():
+            return {
+                "success": False,
+                "message": _("Application member must be approved before assigning member ID. Current status: {0}").format(member.application_status)
+            }
+        
+        # Generate and assign member ID
+        from verenigingen.verenigingen.doctype.member.member_id_manager import MemberIDManager
+        next_id = MemberIDManager.get_next_member_id()
+        member.member_id = str(next_id)
+        
+        # Save the member
+        member.save()
+        
+        frappe.msgprint(_("Member ID {0} assigned successfully to {1}").format(next_id, member.full_name))
+        
+        return {
+            "success": True,
+            "member_id": str(next_id),
+            "message": _("Member ID {0} assigned successfully").format(next_id)
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error assigning member ID to {member_name}: {str(e)}")
+        return {
+            "success": False,
+            "message": _("Error assigning member ID: {0}").format(str(e))
+        }
 
 @frappe.whitelist()
-def check_and_handle_sepa_mandate(member, iban):
-    """Check if a mandate exists for this IBAN and handle accordingly"""
-    member_doc = frappe.get_doc("Member", member)
-    
-    # Find any mandate with matching IBAN
-    matching_mandates = frappe.get_all(
-        "SEPA Mandate",
-        filters={
-            "member": member,
-            "iban": iban,
-            "status": "Active",
-            "is_active": 1
-        },
-        fields=["name"]
-    )
-    
-    if matching_mandates:
-        # Found an active mandate with this IBAN
-        mandate_doc = frappe.get_doc("SEPA Mandate", matching_mandates[0].name)
+def validate_mandate_creation(member, iban, mandate_id):
+    """Validate mandate creation parameters and check for existing mandates"""
+    try:
+        # Check if member exists
+        if not frappe.db.exists("Member", member):
+            return {"error": _("Member does not exist")}
         
-        # See if this mandate is already set as current
-        is_current = False
-        for mandate_link in member_doc.sepa_mandates:
-            if mandate_link.sepa_mandate == mandate_doc.name and mandate_link.is_current:
-                is_current = True
+        # Check if mandate ID already exists
+        existing_mandate = frappe.db.exists("SEPA Mandate", {"mandate_id": mandate_id})
+        if existing_mandate:
+            return {"error": _("Mandate ID {0} already exists").format(mandate_id)}
+        
+        # Check for existing active mandates for this member
+        existing_mandates = frappe.get_all(
+            "SEPA Mandate",
+            filters={
+                "member": member,
+                "status": "Active",
+                "is_active": 1
+            },
+            fields=["name", "mandate_id", "iban"]
+        )
+        
+        # Check if there's an existing mandate for the same IBAN
+        iban_mandate = None
+        for mandate in existing_mandates:
+            if mandate.iban == iban:
+                iban_mandate = mandate.mandate_id
                 break
         
-        if not is_current:
-            # Set this mandate as current
-            for mandate_link in member_doc.sepa_mandates:
-                if mandate_link.sepa_mandate == mandate_doc.name:
-                    mandate_link.is_current = 1
-                else:
-                    mandate_link.is_current = 0
-            
-            member_doc.save(ignore_permissions=True)
-            return {"action": "use_existing", "mandate": mandate_doc.name}
-        else:
-            # Already set as current
-            return {"action": "none_needed"}
-    else:
-        # No matching mandate, need to create a new one
-        return {"action": "create_new"}
-
-@frappe.whitelist()
-def need_new_mandate(member, iban):
-    """Check if we need to create a new mandate for this IBAN"""
-    # Find any mandate with matching IBAN
-    matching_mandates = frappe.get_all(
-        "SEPA Mandate",
-        filters={
-            "member": member,
-            "iban": iban,
-            "status": "Active",
-            "is_active": 1
-        },
-        fields=["name"]
-    )
-    
-    # If no matching mandates, we need a new one
-    return {"need_new": not bool(matching_mandates)}
-
-@frappe.whitelist()
-def create_and_link_mandate(member, iban, bic=None, account_holder_name=None, 
-                           mandate_type="RCUR", sign_date=None, 
-                           used_for_memberships=1, used_for_donations=0):
-    """Create a new mandate and link it to the member in one atomic operation"""
-    if not member or not iban:
-        frappe.throw(_("Member and IBAN are required"))
-    
-    if not sign_date:
-        sign_date = frappe.utils.today()
-    
-    # Get member details if not provided
-    member_doc = frappe.get_doc("Member", member)
-    if not account_holder_name:
-        account_holder_name = member_doc.full_name
-    
-    # Find existing active mandates for this member
-    existing_mandates = frappe.get_all(
-        "SEPA Mandate",
-        filters={
-            "member": member,
-            "status": "Active",
-            "is_active": 1
-        },
-        fields=["name"]
-    )
-    
-    # If using for memberships, suspend existing mandates used for memberships
-    if used_for_memberships:
-        for mandate_data in existing_mandates:
-            mandate = frappe.get_doc("SEPA Mandate", mandate_data.name)
-            if mandate.used_for_memberships:
-                # Set existing mandates to Suspended
-                mandate.status = "Suspended"
-                mandate.is_active = 0
-                mandate.save(ignore_permissions=True)
-    
-    # Similarly for donations if needed
-    if used_for_donations:
-        for mandate_data in existing_mandates:
-            mandate = frappe.get_doc("SEPA Mandate", mandate_data.name)
-            if mandate.used_for_donations and mandate.status == "Active":
-                mandate.status = "Suspended"
-                mandate.is_active = 0
-                mandate.save(ignore_permissions=True)
-    
-    # Create mandate ID with timestamp to ensure uniqueness
-    timestamp = frappe.utils.now().replace(' ', '').replace('-', '').replace(':', '')[:14]
-    mandate_id = f"M-{member_doc.member_id}-{timestamp}"
-    
-    # Create new mandate
-    mandate = frappe.new_doc("SEPA Mandate")
-    mandate.mandate_id = mandate_id
-    mandate.member = member
-    mandate.member_name = member_doc.full_name
-    mandate.account_holder_name = account_holder_name
-    mandate.iban = iban
-    if bic:
-        mandate.bic = bic
-    mandate.sign_date = sign_date
-    mandate.mandate_type = mandate_type
-    
-    # Set usage flags
-    mandate.used_for_memberships = 1 if used_for_memberships else 0
-    mandate.used_for_donations = 1 if used_for_donations else 0
-    
-    # Set status to active
-    mandate.status = "Active"
-    mandate.is_active = 1
-    
-    mandate.insert(ignore_permissions=True)
-    
-    # Check if a link for this mandate already exists and delete it to avoid duplicates
-    frappe.db.delete("Member SEPA Mandate Link", {
-        "parent": member,
-        "sepa_mandate": mandate.name
-    })
-    
-    # Now update all mandate links to set is_current=0
-    frappe.db.sql("""
-        UPDATE `tabMember SEPA Mandate Link`
-        SET is_current = 0
-        WHERE parent = %s
-    """, (member,))
-    
-    # Add the new mandate link
-    frappe.db.sql("""
-        INSERT INTO `tabMember SEPA Mandate Link`
-        (name, parent, parentfield, parenttype, sepa_mandate, is_current, mandate_reference, status, valid_from)
-        VALUES (%s, %s, 'sepa_mandates', 'Member', %s, 1, %s, %s, %s)
-    """, (frappe.generate_hash(), member, mandate.name, mandate.mandate_id, 'Active', mandate.sign_date))
-    
-    # Commit the transaction to ensure all changes are saved
-    frappe.db.commit()
-    
-    # Clear document cache to ensure fresh data on reload
-    frappe.clear_document_cache("Member", member)
-    
-    return mandate.name
+        result = {"valid": True}
+        
+        if iban_mandate:
+            result["existing_mandate"] = iban_mandate
+            result["warning"] = _("An active mandate already exists for this IBAN: {0}").format(iban_mandate)
+        
+        return result
+        
+    except Exception as e:
+        frappe.log_error(f"Error validating mandate creation: {str(e)}")
+        return {"error": _("Error validating mandate: {0}").format(str(e))}
 
 @frappe.whitelist()
 def derive_bic_from_iban(iban):
-    """Derive BIC/SWIFT code from IBAN for supported countries"""
-    if not iban:
+    """Derive BIC code from IBAN"""
+    try:
+        from verenigingen.verenigingen.doctype.direct_debit_batch.direct_debit_batch import get_bic_from_iban
+        bic = get_bic_from_iban(iban)
+        return {"bic": bic} if bic else {"bic": None}
+    except Exception as e:
+        frappe.log_error(f"Error deriving BIC from IBAN {iban}: {str(e)}")
         return {"bic": None}
-    
-    # Remove any spaces from IBAN
-    iban = iban.replace(' ', '').upper()
-    
-    # Extract country code and bank code
-    if len(iban) < 8:  # IBAN must have at least 8 characters to extract country and bank code
-        return {"bic": None}
-    
-    country_code = iban[:2]
-    
-    # Different countries have different positions for bank codes in IBAN
-    bank_code_map = {
-        # Country: (start_pos, length)
-        'NL': (4, 4),  # Netherlands: CCBB BBBB AAAA AAAA AA (C=country, B=bank, A=account)
-        'DE': (4, 8),  # Germany: CCBB BBBB BBAA AAAA AAAA A
-        'BE': (4, 3),  # Belgium: CCBB BAAA AAAA AAKK (K=checksum)
-        'FR': (4, 5),  # France: CCBB BBBP PKKA AAAA AAAA AAKK
-        'IT': (5, 5),  # Italy: CCKA ABBB BBAA AAAA AAAA AAA
-        'ES': (4, 4),  # Spain: CCBB BBAA AAKK AAAA AAAA
-        'GB': (4, 6),  # UK: CCBB BBAA AAAA AAAA AA
-    }
-    
-    # Check if country is supported
-    if country_code not in bank_code_map:
-        return {"bic": None}
-    
-    # Extract bank code
-    start_pos, length = bank_code_map[country_code]
-    if len(iban) < start_pos + length:
-        return {"bic": None}
-    
-    bank_code = iban[start_pos:start_pos+length]
-    
-    # BIC structure: 4 chars (bank code) + 2 chars (country code) + 2 chars (location code) + [3 chars branch code, optional]
-    # Example: ABNANL2A for ABN AMRO Bank in Netherlands
-    
-    # We need a mapping from national bank codes to BIC codes
-    # This is a simplified mapping for demonstration - in production, you'd need a complete database
-    bank_to_bic = {
-        # Netherlands
-        'ABNA': 'ABNANL2A',  # ABN AMRO
-        'RABO': 'RABONL2U',  # Rabobank
-        'INGB': 'INGBNL2A',  # ING Bank
-        'SNSB': 'SNSBNL2A',  # SNS Bank
-        'TRIO': 'TRIONL2U',  # Triodos Bank
-        'BUNQ': 'BUNQNL2A', # BUNQ
-        'ASNB': 'ASNBNL21', # ASNB
-        
-        # Germany
-        '10010010': 'PBNKDEFF',   # Postbank
-        '37040044': 'COBADEFF',   # Commerzbank
-        '50010517': 'INGDDEFF',   # ING-DiBa
-        '70020270': 'HYVEDEMM',   # HypoVereinsbank
-        '10000000': 'MARKDEF1100', # Bundesbank
-        
-        # Add more banks as needed
-    }
-    
-    # Get BIC for this bank code if available
-    bic = bank_to_bic.get(bank_code)
-    
-    # If not found in our static dictionary, try to use a service or API
-    # (You would implement this part based on your preferred service)
-    if not bic:
-        # Try to use a more comprehensive method, maybe another API or database
-        # For now, we just construct a generic BIC based on the bank code
-        # This is just an example and won't work for real banking!
-        if len(bank_code) >= 4:  # We need at least 4 chars for the bank code
-            # Use first 4 chars of bank code + country code + default location 'X'
-            bic = bank_code[:4] + country_code + 'X'
-    
-    return {"bic": bic}
-# Add these methods to your member.py file
 
 @frappe.whitelist()
-def check_mandate_iban_mismatch(member, current_iban):
-    """
-    Check if we should show SEPA mandate creation popup:
-    1. No existing mandate at all (first-time setup)
-    2. Existing mandate with different IBAN (bank account change)
-    """
-    frappe.logger().debug(f"check_mandate_iban_mismatch called with member={member}, current_iban={current_iban}")
-    
-    if not member or not current_iban:
-        return {"show_popup": False, "error": "Missing parameters"}
-    
-    # Normalize current IBAN for comparison
-    current_iban_normalized = current_iban.replace(' ', '').upper()
-    
-    # Get all active SEPA mandates for this member
-    existing_mandates = frappe.get_all(
-        "SEPA Mandate",
-        filters={
+def deactivate_old_sepa_mandates(member, new_iban):
+    """Deactivate old SEPA mandates when IBAN changes"""
+    try:
+        # Get all active mandates for this member
+        active_mandates = frappe.get_all(
+            "SEPA Mandate",
+            filters={
+                "member": member,
+                "status": "Active",
+                "is_active": 1
+            },
+            fields=["name", "iban", "mandate_id", "status"]
+        )
+        
+        deactivated_count = 0
+        deactivated_mandates = []
+        
+        for mandate_data in active_mandates:
+            # Only deactivate mandates with different IBAN
+            if mandate_data.iban != new_iban:
+                mandate = frappe.get_doc("SEPA Mandate", mandate_data.name)
+                
+                # Deactivate the mandate
+                mandate.status = "Cancelled"
+                mandate.is_active = 0
+                mandate.cancellation_date = today()
+                mandate.cancellation_reason = f"IBAN changed from {mandate.iban} to {new_iban}"
+                
+                mandate.save()
+                
+                deactivated_count += 1
+                deactivated_mandates.append({
+                    "mandate_id": mandate.mandate_id,
+                    "old_iban": mandate.iban
+                })
+                
+                frappe.logger().info(f"Deactivated SEPA mandate {mandate.mandate_id} for member {member} due to IBAN change")
+        
+        return {
+            "success": True,
+            "deactivated_count": deactivated_count,
+            "deactivated_mandates": deactivated_mandates
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error deactivating old SEPA mandates for member {member}: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
+def get_active_sepa_mandate(member, iban=None):
+    """Get active SEPA mandate for a member"""
+    try:
+        filters = {
             "member": member,
             "status": "Active",
             "is_active": 1
+        }
+        
+        if iban:
+            filters["iban"] = iban
+        
+        mandates = frappe.get_all(
+            "SEPA Mandate",
+            filters=filters,
+            fields=["name", "mandate_id", "status", "iban", "account_holder_name"],
+            order_by="creation desc",
+            limit=1
+        )
+        
+        return mandates[0] if mandates else None
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting active SEPA mandate for member {member}: {str(e)}")
+        return None
+
+@frappe.whitelist()
+def assign_missing_member_ids():
+    """Assign member IDs to all members who should have them but don't"""
+    members_without_ids = frappe.get_all(
+        "Member",
+        filters={
+            "member_id": ["is", "not set"]
         },
-        fields=["name", "mandate_id", "iban", "creation"],
-        order_by="creation desc"
+        fields=["name", "application_status", "application_id", "full_name"]
     )
     
-    frappe.logger().debug(f"Found {len(existing_mandates)} active mandates")
+    assigned_count = 0
+    for member_data in members_without_ids:
+        try:
+            member = frappe.get_doc("Member", member_data.name)
+            if member.should_have_member_id():
+                member.ensure_member_id()
+                assigned_count += 1
+                frappe.logger().info(f"Assigned member ID {member.member_id} to {member.full_name}")
+        except Exception as e:
+            frappe.logger().error(f"Failed to assign member ID to {member_data.name}: {str(e)}")
     
-    # SCENARIO 1: No existing mandates - show popup for first-time setup
-    if not existing_mandates:
-        frappe.logger().debug("No existing mandates found - showing first-time setup popup")
-        return {
-            "show_popup": True,
-            "reason": "no_existing_mandates",
-            "scenario": "first_time_setup",
-            "message": "No SEPA mandate found. Create one for Direct Debit payments?"
-        }
-    
-    # SCENARIO 2: Check if any existing mandate has a different IBAN
-    for mandate in existing_mandates:
-        mandate_iban_normalized = mandate.iban.replace(' ', '').upper() if mandate.iban else ''
-        
-        frappe.logger().debug(f"Comparing mandate IBAN '{mandate_iban_normalized}' with current '{current_iban_normalized}'")
-        
-        if mandate_iban_normalized and mandate_iban_normalized != current_iban_normalized:
-            # Found a mismatch - show popup for bank account change
-            frappe.logger().debug(f"IBAN mismatch found in mandate {mandate.name}")
-            return {
-                "show_popup": True,
-                "existing_mandate": mandate.name,
-                "existing_iban": mandate.iban,
-                "current_iban": current_iban,
-                "reason": "iban_mismatch",
-                "scenario": "bank_account_change",
-                "message": f"Your IBAN differs from existing mandate. Create new mandate?"
-            }
-    
-    # SCENARIO 3: All existing mandates have the same IBAN - no popup needed
-    frappe.logger().debug("All existing mandates have matching IBAN")
     return {
-        "show_popup": False, 
-        "reason": "iban_matches",
-        "scenario": "no_change_needed"
+        "total_checked": len(members_without_ids),
+        "assigned": assigned_count,
+        "message": f"Assigned member IDs to {assigned_count} out of {len(members_without_ids)} members"
     }
 
 @frappe.whitelist()
-def create_and_link_mandate_enhanced(member, mandate_id, iban, bic=None, account_holder_name=None, 
-                                   mandate_type="RCUR", sign_date=None, 
-                                   used_for_memberships=1, used_for_donations=0,
-                                   notes=None, replace_mandate=None):
-    """
-    Enhanced version of create_and_link_mandate with better mandate management
-    """
-    if not member or not iban or not mandate_id:
-        frappe.throw(_("Member, IBAN, and Mandate ID are required"))
-    
-    if not sign_date:
-        sign_date = frappe.utils.today()
-    
-    # Get member details
-    member_doc = frappe.get_doc("Member", member)
-    if not account_holder_name:
-        account_holder_name = member_doc.full_name
-    
-    # Check if mandate ID already exists
-    if frappe.db.exists("SEPA Mandate", {"mandate_id": mandate_id}):
-        frappe.throw(_("Mandate ID {0} already exists. Please use a different reference.").format(mandate_id))
-    
-    # If replacing an existing mandate, mark it as replaced
-    if replace_mandate:
-        try:
-            old_mandate = frappe.get_doc("SEPA Mandate", replace_mandate)
-            old_mandate.status = "Cancelled"
-            old_mandate.is_active = 0
-            old_mandate.cancelled_date = frappe.utils.today()
-            old_mandate.cancelled_reason = "Bank account change"
-            if notes:
-                old_mandate.notes = (old_mandate.notes or '') + f"\nReplaced on {frappe.utils.today()}: {notes}"
-            old_mandate.save(ignore_permissions=True)
-            frappe.logger().debug(f"Marked mandate {replace_mandate} as replaced")
-        except Exception as e:
-            frappe.logger().error(f"Error replacing mandate {replace_mandate}: {str(e)}")
-    
-    # Handle other existing mandates based on usage
-    existing_mandates = frappe.get_all(
-        "SEPA Mandate",
-        filters={
-            "member": member,
-            "status": "Active",
-            "is_active": 1,
-            "name": ["!=", replace_mandate] if replace_mandate else ["!=", ""]
-        },
-        fields=["name", "used_for_memberships", "used_for_donations"]
-    )
-    
-    # Suspend conflicting mandates
-    for mandate_data in existing_mandates:
-        mandate = frappe.get_doc("SEPA Mandate", mandate_data.name)
-        should_suspend = False
+def create_and_link_mandate_enhanced(member, mandate_id, iban, bic="", account_holder_name="", 
+                                   mandate_type="Recurring", sign_date=None, used_for_memberships=1, 
+                                   used_for_donations=0, notes="", replace_existing=None):
+    """Create a new SEPA mandate and link it to the member"""
+    try:
+        if not sign_date:
+            sign_date = today()
         
-        # If new mandate is for memberships, suspend existing membership mandates
-        if used_for_memberships and mandate.used_for_memberships:
-            should_suspend = True
-            
-        # If new mandate is for donations, suspend existing donation mandates
-        if used_for_donations and mandate.used_for_donations:
-            should_suspend = True
-            
-        if should_suspend:
-            mandate.status = "Superseded"
-            mandate.is_active = 0
-            mandate.superseded_date = frappe.utils.today()
-            mandate.superseded_by = mandate_id
-            mandate.save(ignore_permissions=True)
-            frappe.logger().debug(f"Superseded mandate {mandate.name}")
-    
-    # Create new mandate
-    mandate = frappe.new_doc("SEPA Mandate")
-    mandate.mandate_id = mandate_id
-    mandate.member = member
-    mandate.member_name = member_doc.full_name
-    mandate.account_holder_name = account_holder_name
-    mandate.iban = iban
-    
-    # Auto-derive BIC if not provided
-    if not bic:
-        bic_result = derive_bic_from_iban(iban)
-        if bic_result and bic_result.get('bic'):
-            bic = bic_result['bic']
-    
-    if bic:
+        # Convert mandate type to internal format
+        type_mapping = {
+            "One-off": "OOFF",
+            "Recurring": "RCUR"
+        }
+        internal_type = type_mapping.get(mandate_type, "RCUR")
+        
+        # Create mandate
+        mandate = frappe.new_doc("SEPA Mandate")
+        mandate.mandate_id = mandate_id
+        mandate.member = member
+        mandate.iban = iban
         mandate.bic = bic
-        
-    mandate.sign_date = sign_date
-    mandate.mandate_type = mandate_type
-    
-    # Set usage flags
-    mandate.used_for_memberships = 1 if used_for_memberships else 0
-    mandate.used_for_donations = 1 if used_for_donations else 0
-    
-    # Set status to active
-    mandate.status = "Active"
-    mandate.is_active = 1
-    
-    # Add notes
-    if notes:
+        mandate.account_holder_name = account_holder_name
+        mandate.mandate_type = internal_type
+        mandate.sign_date = sign_date
+        mandate.used_for_memberships = int(used_for_memberships)
+        mandate.used_for_donations = int(used_for_donations)
+        mandate.status = "Active"
+        mandate.is_active = 1
         mandate.notes = notes
         
-    # Add creation context
-    creation_notes = f"Created via member form on {frappe.utils.today()}"
-    if replace_mandate:
-        creation_notes += f" (replacing {replace_mandate})"
-    
-    mandate.notes = (mandate.notes + "\n" + creation_notes) if mandate.notes else creation_notes
-    
-    mandate.insert(ignore_permissions=True)
-    
-    # Clean up existing mandate links for this member
-    frappe.db.delete("Member SEPA Mandate Link", {
-        "parent": member,
-        "sepa_mandate": mandate.name
-    })
-    
-    # Set all existing mandate links to not current
-    frappe.db.sql("""
-        UPDATE `tabMember SEPA Mandate Link`
-        SET is_current = 0
-        WHERE parent = %s
-    """, (member,))
-    
-    # Add the new mandate link
-    frappe.db.sql("""
-        INSERT INTO `tabMember SEPA Mandate Link`
-        (name, parent, parentfield, parenttype, sepa_mandate, is_current, mandate_reference, status, valid_from)
-        VALUES (%s, %s, 'sepa_mandates', 'Member', %s, 1, %s, %s, %s)
-    """, (
-        frappe.generate_hash(), 
-        member, 
-        mandate.name, 
-        mandate.mandate_id, 
-        'Active', 
-        mandate.sign_date
-    ))
-    
-    # Commit the transaction
-    frappe.db.commit()
-    
-    # Clear document cache
-    frappe.clear_document_cache("Member", member)
-    
-    frappe.logger().debug(f"Created and linked mandate {mandate.name} with ID {mandate_id}")
-    
-    return {
-        "mandate_name": mandate.name,
-        "mandate_id": mandate_id,
-        "replaced_mandate": replace_mandate,
-        "superseded_mandates": len([m for m in existing_mandates if used_for_memberships and m.used_for_memberships or used_for_donations and m.used_for_donations])
-    }
+        mandate.insert()
+        
+        # Update member's SEPA mandates table
+        member_doc = frappe.get_doc("Member", member)
+        
+        # Mark existing mandates as non-current if replacing
+        if replace_existing:
+            for link in member_doc.sepa_mandates:
+                if link.mandate_reference == replace_existing:
+                    link.is_current = 0
+        
+        # Add new mandate link
+        member_doc.append("sepa_mandates", {
+            "sepa_mandate": mandate.name,
+            "mandate_reference": mandate_id,
+            "is_current": 1,
+            "status": "Active",
+            "valid_from": sign_date
+        })
+        
+        member_doc.save()
+        
+        return {
+            "success": True,
+            "mandate_name": mandate.name,
+            "mandate_id": mandate_id
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error creating SEPA mandate: {str(e)}")
+        frappe.throw(_("Error creating SEPA mandate: {0}").format(str(e)))
 
 @frappe.whitelist()
-def generate_mandate_reference(member):
-    """
-    Generate a suggested mandate reference for a member
-    """
-    member_doc = frappe.get_doc("Member", member)
-    
-    # Get member ID or fallback
-    member_id = member_doc.member_id or member_doc.name.replace('Assoc-Member-', '').replace('-', '')
-    
-    # Generate timestamp
-    from datetime import datetime
-    now = datetime.now()
-    date_str = now.strftime('%Y%m%d')
-    
-    # Find next sequential number for today
-    existing_mandates_today = frappe.get_all(
-        "SEPA Mandate",
-        filters={
-            "mandate_id": ["like", f"M-{member_id}-{date_str}-%"],
-            "creation": [">=", now.strftime('%Y-%m-%d 00:00:00')]
-        },
-        fields=["mandate_id"]
-    )
-    
-    sequence = len(existing_mandates_today) + 1
-    sequence_str = str(sequence).zfill(3)  # 3-digit sequence with leading zeros
-    
-    suggested_reference = f"M-{member_id}-{date_str}-{sequence_str}"
-    
-    return {"mandate_reference": suggested_reference}
+def debug_member_id_assignment(member_name):
+    """Debug why member ID assignment is failing"""
+    try:
+        member = frappe.get_doc("Member", member_name)
+        
+        debug_info = {
+            "member_name": member.name,
+            "current_member_id": getattr(member, 'member_id', None),
+            "has_member_id": bool(getattr(member, 'member_id', None)),
+            "is_application_member": member.is_application_member(),
+            "application_id": getattr(member, 'application_id', None),
+            "application_status": getattr(member, 'application_status', None),
+            "status": getattr(member, 'status', None),
+            "should_have_member_id": member.should_have_member_id(),
+            "can_assign_id": not member.member_id and member.should_have_member_id()
+        }
+        
+        return debug_info
+        
+    except Exception as e:
+        return {"error": str(e)}
 
 @frappe.whitelist()
-def validate_mandate_reference(mandate_id):
-    """
-    Validate if a mandate reference is available
-    """
-    exists = frappe.db.exists("SEPA Mandate", {"mandate_id": mandate_id})
-    
-    return {
-        "available": not bool(exists),
-        "exists": bool(exists)
-    }
-
-@frappe.whitelist()
-def debug_postal_code_matching(postal_code):
-    """Debug function to test postal code matching"""
-    if not postal_code:
-        return {"error": "No postal code provided"}
-    
-    # Get all published chapters
-    chapters = frappe.get_all(
-        "Chapter",
-        filters={"published": 1},
-        fields=["name", "region", "postal_codes"]
-    )
-    
-    results = {
-        "postal_code": postal_code,
-        "total_chapters": len(chapters),
-        "matching_chapters": [],
-        "non_matching_chapters": []
-    }
-    
-    for chapter in chapters:
-        if not chapter.get("postal_codes"):
-            results["non_matching_chapters"].append({
-                "name": chapter.name,
-                "reason": "No postal codes defined"
-            })
-            continue
+def create_member_user_account(member_name, send_welcome_email=True):
+    """Create a user account for a member to access portal pages"""
+    try:
+        # Get the member document
+        member = frappe.get_doc("Member", member_name)
+        
+        # Check if user already exists
+        if member.user:
+            return {
+                "success": False,
+                "message": _("User account already exists for this member"),
+                "user": member.user
+            }
+        
+        # Check if a user with this email already exists
+        existing_user = frappe.db.get_value("User", {"email": member.email}, "name")
+        if existing_user:
+            # Link the existing user to the member
+            member.user = existing_user
+            member.save(ignore_permissions=True)
             
-        # Create chapter object to use the matching method
-        try:
-            chapter_doc = frappe.get_doc("Chapter", chapter.name)
-            matches = chapter_doc.matches_postal_code(postal_code)
+            # Add member roles to existing user
+            add_member_roles_to_user(existing_user)
             
-            if matches:
-                results["matching_chapters"].append({
-                    "name": chapter.name,
-                    "region": chapter.region,
-                    "postal_codes": chapter.postal_codes
-                })
-            else:
-                results["non_matching_chapters"].append({
-                    "name": chapter.name,
-                    "postal_codes": chapter.postal_codes,
-                    "reason": "No match"
-                })
-        except Exception as e:
-            results["non_matching_chapters"].append({
-                "name": chapter.name,
-                "reason": f"Error: {str(e)}"
-            })
-    
-    return results
+            return {
+                "success": True,
+                "message": _("Linked existing user account to member"),
+                "user": existing_user,
+                "action": "linked_existing"
+            }
+        
+        # Create new user
+        user = frappe.new_doc("User")
+        user.email = member.email
+        user.first_name = member.first_name or ""
+        user.last_name = member.last_name or ""
+        user.full_name = member.full_name
+        user.send_welcome_email = int(send_welcome_email)
+        user.user_type = "System User"
+        user.enabled = 1
+        
+        # Insert the user
+        user.insert(ignore_permissions=True)
+        
+        # Set allowed modules for member users
+        set_member_user_modules(user.name)
+        
+        # Add member-specific roles
+        add_member_roles_to_user(user.name)
+        
+        # Link user to member
+        member.user = user.name
+        member.save(ignore_permissions=True)
+        
+        frappe.logger().info(f"Created user account {user.name} for member {member.name}")
+        
+        return {
+            "success": True,
+            "message": _("User account created successfully"),
+            "user": user.name,
+            "action": "created_new"
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error creating user account for member {member_name}: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+def add_member_roles_to_user(user_name):
+    """Add appropriate roles for a member user to access portal pages"""
+    try:
+        # Define the roles that members need for portal access
+        member_roles = [
+            "Member Portal User",  # Custom role for member portal access
+            "Verenigingen Member"  # Custom role for members
+        ]
+        
+        # Check if Member Portal User role exists, create if not
+        if not frappe.db.exists("Role", "Member Portal User"):
+            create_member_portal_role()
+            
+        # Check if Verenigingen Member role exists, create if not
+        if not frappe.db.exists("Role", "Verenigingen Member"):
+            create_verenigingen_member_role()
+        
+        # Add roles to user
+        user = frappe.get_doc("User", user_name)
+        
+        for role in member_roles:
+            if not frappe.db.exists("Role", role):
+                frappe.logger().warning(f"Role {role} does not exist, skipping")
+                continue
+            if not any(r.role == role for r in user.roles):
+                user.append("roles", {"role": role})
+        
+        user.save(ignore_permissions=True)
+        frappe.logger().info(f"Added member roles to user {user_name}")
+        
+    except Exception as e:
+        frappe.log_error(f"Error adding roles to user {user_name}: {str(e)}")
+
+def create_member_portal_role():
+    """Create the Member Portal User role with appropriate permissions"""
+    try:
+        role = frappe.new_doc("Role")
+        role.role_name = "Member Portal User"
+        role.desk_access = 0  # Portal users don't need desk access
+        role.is_custom = 1
+        role.insert(ignore_permissions=True)
+        
+        # Add permissions for portal pages access
+        # These permissions would be added via Role Permissions manager
+        # or through custom permission logic in the portal pages
+        
+        frappe.logger().info("Created Member Portal User role")
+        return role.name
+        
+    except Exception as e:
+        frappe.log_error(f"Error creating Member Portal User role: {str(e)}")
+        return None
+
+def create_verenigingen_member_role():
+    """Create the Verenigingen Member role for member access"""
+    try:
+        role = frappe.new_doc("Role")
+        role.role_name = "Verenigingen Member"
+        role.desk_access = 0  # Portal users don't need desk access
+        role.is_custom = 1  # This is a custom role for the app
+        role.insert(ignore_permissions=True)
+        
+        frappe.logger().info("Created Verenigingen Member role")
+        return role.name
+        
+    except Exception as e:
+        frappe.log_error(f"Error creating Verenigingen Member role: {str(e)}")
+        return None
+
+def set_member_user_modules(user_name):
+    """Set allowed modules for member users - restrict to relevant modules only"""
+    try:
+        # Define modules that members should have access to
+        allowed_modules = [
+            "Verenigingen",  # Main app module
+            "Core",  # Essential Frappe core functionality
+            "Desk",  # Basic desk access
+            "Home",  # Home page access
+        ]
+        
+        user = frappe.get_doc("User", user_name)
+        
+        # Clear existing module access and set only allowed ones
+        user.set("block_modules", [])
+        
+        # Get all available modules
+        all_modules = frappe.get_all("Module Def", fields=["name"])
+        
+        # Block all modules except the allowed ones
+        for module in all_modules:
+            if module.name not in allowed_modules:
+                user.append("block_modules", {"module": module.name})
+        
+        user.save(ignore_permissions=True)
+        frappe.logger().info(f"Set module restrictions for user {user_name}")
+        
+    except Exception as e:
+        frappe.log_error(f"Error setting module restrictions for user {user_name}: {str(e)}")

@@ -4,7 +4,12 @@
 frappe.ui.form.on('Volunteer', {
     refresh: function(frm) {
         // Set up dynamic link for address and contact
-        frappe.dynamic_link = {doc: frm.doc, fieldname: 'name', doctype: 'Volunteer'};
+        // If volunteer is linked to a member, use member's address/contact
+        if (frm.doc.member) {
+            frappe.dynamic_link = {doc: {name: frm.doc.member, doctype: 'Member'}, fieldname: 'name', doctype: 'Member'};
+        } else {
+            frappe.dynamic_link = {doc: frm.doc, fieldname: 'name', doctype: 'Volunteer'};
+        }
         
         // Toggle address and contact display
         frm.toggle_display(['address_html', 'contact_html'], !frm.doc.__islocal);
@@ -66,6 +71,18 @@ frappe.ui.form.on('Volunteer', {
     },
     
     member: function(frm) {
+        // When member is changed, update the dynamic link for address/contact
+        if (frm.doc.member) {
+            frappe.dynamic_link = {doc: {name: frm.doc.member, doctype: 'Member'}, fieldname: 'name', doctype: 'Member'};
+        } else {
+            frappe.dynamic_link = {doc: frm.doc, fieldname: 'name', doctype: 'Volunteer'};
+        }
+        
+        // Refresh address and contact display
+        if (!frm.doc.__islocal) {
+            frappe.contacts.render_address_and_contact(frm);
+        }
+        
         // When member is selected, fetch relevant information
         if (frm.doc.member) {
             frappe.call({
@@ -130,10 +147,12 @@ function render_aggregated_assignments(frm) {
     // Add header
     $('<div class="assignments-header"><h4>' + __('Current Assignments') + '</h4></div>').appendTo(assignments_container);
     
-    // Get assignments data
+    // Get assignments data with error handling
     frappe.call({
         method: 'get_aggregated_assignments',
         doc: frm.doc,
+        freeze: true,
+        freeze_message: __('Loading assignments...'),
         callback: function(r) {
             if (r.message && r.message.length) {
                 // Create table
@@ -205,6 +224,10 @@ function render_aggregated_assignments(frm) {
             .click(function() {
                 show_add_activity_dialog(frm);
             });
+        },
+        error: function(r) {
+            frappe.msgprint(__('Failed to load assignments: {0}', [r.message || __('Unknown error')]));
+            $(`<div class="text-muted text-danger">${__('Error loading assignments')}</div>`).appendTo(assignments_container);
         }
     });
 }
@@ -296,6 +319,8 @@ function show_add_activity_dialog(frm) {
             frappe.call({
                 method: 'add_activity',
                 doc: frm.doc,
+                freeze: true,
+                freeze_message: __('Adding activity...'),
                 args: {
                     activity_type: values.activity_type,
                     role: values.role,
@@ -317,6 +342,9 @@ function show_add_activity_dialog(frm) {
                         // Refresh the assignments view
                         render_aggregated_assignments(frm);
                     }
+                },
+                error: function(r) {
+                    frappe.msgprint(__('Failed to add activity: {0}', [r.message || __('Unknown error')]));
                 }
             });
             
@@ -352,6 +380,8 @@ function show_end_activity_dialog(frm, activity_name) {
             frappe.call({
                 method: 'end_activity',
                 doc: frm.doc,
+                freeze: true,
+                freeze_message: __('Ending activity...'),
                 args: {
                     activity_name: activity_name,
                     end_date: values.end_date,
@@ -367,6 +397,9 @@ function show_end_activity_dialog(frm, activity_name) {
                         // Refresh the assignments view
                         render_aggregated_assignments(frm);
                     }
+                },
+                error: function(r) {
+                    frappe.msgprint(__('Failed to end activity: {0}', [r.message || __('Unknown error')]));
                 }
             });
             
@@ -383,6 +416,8 @@ function show_volunteer_timeline(frm) {
     frappe.call({
         method: 'get_volunteer_history',
         doc: frm.doc,
+        freeze: true,
+        freeze_message: __('Loading volunteer history...'),
         callback: function(r) {
             if (r.message) {
                 var history = r.message;
@@ -470,6 +505,9 @@ function show_volunteer_timeline(frm) {
                     'font-size': '12px'
                 });
             }
+        },
+        error: function(r) {
+            frappe.msgprint(__('Failed to load volunteer history: {0}', [r.message || __('Unknown error')]));
         }
     });
 }
@@ -536,181 +574,229 @@ function add_new_skill(frm) {
 }
 
 // Function to generate volunteer report
-function generate_volunteer_report(frm) {
-    // Generate a comprehensive volunteer report
-    frappe.call({
-        method: 'get_skills_by_category',
-        doc: frm.doc,
-        callback: function(r) {
-            if (r.message) {
-                var skills_by_category = r.message;
-                
-                // Create HTML for the report
-                var html = '<div class="volunteer-report">';
-                html += '<h3>' + __('Volunteer Report for {0}', [frm.doc.volunteer_name]) + '</h3>';
-                
-                // Basic information section
-                html += '<div class="report-section"><h4>' + __('Basic Information') + '</h4>';
-                html += '<table class="table table-condensed">';
-                html += '<tr><td><strong>' + __('Name') + '</strong></td><td>' + frm.doc.volunteer_name + '</td></tr>';
-                html += '<tr><td><strong>' + __('Status') + '</strong></td><td>' + frm.doc.status + '</td></tr>';
-                html += '<tr><td><strong>' + __('Volunteer Since') + '</strong></td><td>' + 
-                       frappe.datetime.str_to_user(frm.doc.start_date) + '</td></tr>';
-                html += '<tr><td><strong>' + __('Commitment Level') + '</strong></td><td>' + 
-                       (frm.doc.commitment_level || 'Not specified') + '</td></tr>';
-                html += '<tr><td><strong>' + __('Experience Level') + '</strong></td><td>' + 
-                       (frm.doc.experience_level || 'Not specified') + '</td></tr>';
-                html += '<tr><td><strong>' + __('Work Style') + '</strong></td><td>' + 
-                       (frm.doc.preferred_work_style || 'Not specified') + '</td></tr>';
-                html += '</table></div>';
-                
-                // Current assignments section
-                html += '<div class="report-section"><h4>' + __('Current Assignments') + '</h4>';
-                
-                // Get assignments from current view
+async function generate_volunteer_report(frm) {
+    // Show loading indicator
+    frappe.show_progress(__('Generating Report'), 10, 100, __('Loading data...'));
+    
+    try {
+        // Use Promise.all to fetch data concurrently
+        const [skillsResult, assignmentsResult] = await Promise.all([
+            new Promise((resolve, reject) => {
+                frappe.call({
+                    method: 'get_skills_by_category',
+                    doc: frm.doc,
+                    callback: function(r) {
+                        if (r.message !== undefined) {
+                            resolve(r.message);
+                        } else {
+                            reject(new Error('Failed to get skills data'));
+                        }
+                    },
+                    error: function(r) {
+                        reject(new Error(r.message || 'Failed to get skills data'));
+                    }
+                });
+            }),
+            new Promise((resolve, reject) => {
                 frappe.call({
                     method: 'get_aggregated_assignments',
                     doc: frm.doc,
                     callback: function(r) {
-                        if (r.message && r.message.length) {
-                            html += '<table class="table table-condensed">';
-                            html += '<thead><tr><th>' + __('Role') + '</th><th>' + __('Type') + '</th><th>' + 
-                                   __('Source') + '</th><th>' + __('Since') + '</th></tr></thead>';
-                            html += '<tbody>';
-                            
-                            r.message.forEach(function(assignment) {
-                                html += '<tr>';
-                                html += '<td>' + assignment.role + '</td>';
-                                html += '<td>' + assignment.source_type + '</td>';
-                                html += '<td>' + assignment.source_doctype_display + ': ' + assignment.source_name_display + '</td>';
-                                html += '<td>' + frappe.datetime.str_to_user(assignment.start_date) + '</td>';
-                                html += '</tr>';
-                            });
-                            
-                            html += '</tbody></table>';
+                        if (r.message !== undefined) {
+                            resolve(r.message);
                         } else {
-                            html += '<p>' + __('No active assignments') + '</p>';
+                            reject(new Error('Failed to get assignments data'));
                         }
-                        
-                        // Skills section
-                        html += '<div class="report-section"><h4>' + __('Skills and Qualifications') + '</h4>';
-                        
-                        if (Object.keys(skills_by_category).length) {
-                            html += '<div class="row">';
-                            
-                            for (var category in skills_by_category) {
-                                html += '<div class="col-sm-6 col-md-4">';
-                                html += '<div class="skill-category"><h5>' + category + '</h5>';
-                                html += '<ul class="list-unstyled">';
-                                
-                                skills_by_category[category].forEach(function(skill) {
-                                    html += '<li><span class="skill-name">' + skill.skill + '</span> <span class="skill-level">' + 
-                                           skill.level + '</span></li>';
-                                });
-                                
-                                html += '</ul></div></div>';
-                            }
-                            
-                            html += '</div>';
-                        } else {
-                            html += '<p>' + __('No skills recorded') + '</p>';
-                        }
-                        
-                        html += '</div>';
-                        
-                        // Areas of interest section
-                        if (frm.doc.interests && frm.doc.interests.length) {
-                            html += '<div class="report-section"><h4>' + __('Areas of Interest') + '</h4>';
-                            html += '<ul class="list-inline">';
-                            
-                            frm.doc.interests.forEach(function(interest) {
-                                html += '<li class="interest-tag">' + interest.interest_area + '</li>';
-                            });
-                            
-                            html += '</ul></div>';
-                        }
-                        
-                        // Footer
-                        html += '<div class="report-footer text-muted small">' + 
-                               __('Report generated on {0}', [frappe.datetime.now_date()]) + '</div>';
-                        
-                        html += '</div>'; // volunteer-report
-                        
-                        // Show the report in a dialog
-                        var d = new frappe.ui.Dialog({
-                            title: __('Volunteer Report'),
-                            fields: [{
-                                fieldtype: 'HTML',
-                                options: html
-                            }],
-                            primary_action_label: __('Print'),
-                            primary_action: function() {
-                                // Print the report
-                                var w = window.open();
-                                w.document.write('<html><head><title>' + 
-                                                __('Volunteer Report - {0}', [frm.doc.volunteer_name]) + 
-                                                '</title>');
-                                w.document.write('<style>');
-                                w.document.write('body { font-family: Arial, sans-serif; margin: 20px; }');
-                                w.document.write('.volunteer-report { max-width: 800px; margin: 0 auto; }');
-                                w.document.write('.report-section { margin-bottom: 20px; }');
-                                w.document.write('.skill-category { border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; }');
-                                w.document.write('.skill-level { background-color: #f0f0f0; padding: 2px 6px; border-radius: 10px; font-size: 0.9em; }');
-                                w.document.write('.interest-tag { display: inline-block; background-color: #f0f0f0; padding: 3px 8px; margin: 3px; border-radius: 10px; }');
-                                w.document.write('.report-footer { margin-top: 30px; border-top: 1px solid #ddd; padding-top: 10px; }');
-                                w.document.write('table { width: 100%; border-collapse: collapse; }');
-                                w.document.write('th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }');
-                                w.document.write('</style></head><body>');
-                                w.document.write(html);
-                                w.document.write('</body></html>');
-                                w.print();
-                                w.close();
-                            },
-                            secondary_action_label: __('Close'),
-                            secondary_action: function() {
-                                d.hide();
-                            }
-                        });
-                        
-                        d.show();
-                        
-                        // Add some custom CSS for the report
-                        d.$wrapper.find('.volunteer-report').css({
-                            'max-height': '500px',
-                            'overflow-y': 'auto',
-                            'padding': '10px'
-                        });
-                        
-                        d.$wrapper.find('.report-section').css({
-                            'margin-bottom': '25px',
-                            'border-bottom': '1px solid var(--gray-200)',
-                            'padding-bottom': '15px'
-                        });
-                        
-                        d.$wrapper.find('.skill-category').css({
-                            'border': '1px solid var(--gray-200)',
-                            'border-radius': '4px',
-                            'padding': '10px',
-                            'margin-bottom': '10px'
-                        });
-                        
-                        d.$wrapper.find('.skill-level').css({
-                            'background-color': 'var(--gray-100)',
-                            'padding': '2px 6px',
-                            'border-radius': '10px',
-                            'font-size': '0.9em'
-                        });
-                        
-                        d.$wrapper.find('.interest-tag').css({
-                            'display': 'inline-block',
-                            'background-color': 'var(--gray-100)',
-                            'padding': '3px 8px',
-                            'margin': '3px',
-                            'border-radius': '10px'
-                        });
+                    },
+                    error: function(r) {
+                        reject(new Error(r.message || 'Failed to get assignments data'));
                     }
                 });
-            }
+            })
+        ]);
+        
+        frappe.show_progress(__('Generating Report'), 50, 100, __('Processing data...'));
+        
+        const skills_by_category = skillsResult || {};
+        const assignments = assignmentsResult || [];
+        
+        // Generate HTML report
+        const html = generate_report_html(frm, skills_by_category, assignments);
+        
+        frappe.show_progress(__('Generating Report'), 90, 100, __('Finalizing...'));
+        
+        // Show the report in a dialog
+        show_report_dialog(frm, html);
+        
+        frappe.hide_progress();
+        
+    } catch (error) {
+        frappe.hide_progress();
+        frappe.msgprint(__('Failed to generate report: {0}', [error.message]));
+    }
+}
+
+// Helper function to generate report HTML
+function generate_report_html(frm, skills_by_category, assignments) {
+    var html = '<div class="volunteer-report">';
+    html += '<h3>' + __('Volunteer Report for {0}', [frm.doc.volunteer_name]) + '</h3>';
+    
+    // Basic information section
+    html += '<div class="report-section"><h4>' + __('Basic Information') + '</h4>';
+    html += '<table class="table table-condensed">';
+    html += '<tr><td><strong>' + __('Name') + '</strong></td><td>' + frm.doc.volunteer_name + '</td></tr>';
+    html += '<tr><td><strong>' + __('Status') + '</strong></td><td>' + frm.doc.status + '</td></tr>';
+    html += '<tr><td><strong>' + __('Volunteer Since') + '</strong></td><td>' + 
+           frappe.datetime.str_to_user(frm.doc.start_date) + '</td></tr>';
+    html += '<tr><td><strong>' + __('Commitment Level') + '</strong></td><td>' + 
+           (frm.doc.commitment_level || 'Not specified') + '</td></tr>';
+    html += '<tr><td><strong>' + __('Experience Level') + '</strong></td><td>' + 
+           (frm.doc.experience_level || 'Not specified') + '</td></tr>';
+    html += '<tr><td><strong>' + __('Work Style') + '</strong></td><td>' + 
+           (frm.doc.preferred_work_style || 'Not specified') + '</td></tr>';
+    html += '</table></div>';
+    
+    // Current assignments section
+    html += '<div class="report-section"><h4>' + __('Current Assignments') + '</h4>';
+    
+    if (assignments && assignments.length) {
+        html += '<table class="table table-condensed">';
+        html += '<thead><tr><th>' + __('Role') + '</th><th>' + __('Type') + '</th><th>' + 
+               __('Source') + '</th><th>' + __('Since') + '</th></tr></thead>';
+        html += '<tbody>';
+        
+        assignments.forEach(function(assignment) {
+            html += '<tr>';
+            html += '<td>' + assignment.role + '</td>';
+            html += '<td>' + assignment.source_type + '</td>';
+            html += '<td>' + assignment.source_doctype_display + ': ' + assignment.source_name_display + '</td>';
+            html += '<td>' + frappe.datetime.str_to_user(assignment.start_date) + '</td>';
+            html += '</tr>';
+        });
+        
+        html += '</tbody></table>';
+    } else {
+        html += '<p>' + __('No active assignments') + '</p>';
+    }
+    
+    // Skills section
+    html += '<div class="report-section"><h4>' + __('Skills and Qualifications') + '</h4>';
+    
+    if (Object.keys(skills_by_category).length) {
+        html += '<div class="row">';
+        
+        for (var category in skills_by_category) {
+            html += '<div class="col-sm-6 col-md-4">';
+            html += '<div class="skill-category"><h5>' + category + '</h5>';
+            html += '<ul class="list-unstyled">';
+            
+            skills_by_category[category].forEach(function(skill) {
+                html += '<li><span class="skill-name">' + skill.skill + '</span> <span class="skill-level">' + 
+                       skill.level + '</span></li>';
+            });
+            
+            html += '</ul></div></div>';
         }
+        
+        html += '</div>';
+    } else {
+        html += '<p>' + __('No skills recorded') + '</p>';
+    }
+    
+    html += '</div>';
+    
+    // Areas of interest section
+    if (frm.doc.interests && frm.doc.interests.length) {
+        html += '<div class="report-section"><h4>' + __('Areas of Interest') + '</h4>';
+        html += '<ul class="list-inline">';
+        
+        frm.doc.interests.forEach(function(interest) {
+            html += '<li class="interest-tag">' + interest.interest_area + '</li>';
+        });
+        
+        html += '</ul></div>';
+    }
+    
+    // Footer
+    html += '<div class="report-footer text-muted small">' + 
+           __('Report generated on {0}', [frappe.datetime.now_date()]) + '</div>';
+    
+    html += '</div>'; // volunteer-report
+    
+    return html;
+}
+
+// Helper function to show report dialog
+function show_report_dialog(frm, html) {
+    var d = new frappe.ui.Dialog({
+        title: __('Volunteer Report'),
+        fields: [{
+            fieldtype: 'HTML',
+            options: html
+        }],
+        primary_action_label: __('Print'),
+        primary_action: function() {
+            // Print the report
+            var w = window.open();
+            w.document.write('<html><head><title>' + 
+                            __('Volunteer Report - {0}', [frm.doc.volunteer_name]) + 
+                            '</title>');
+            w.document.write('<style>');
+            w.document.write('body { font-family: Arial, sans-serif; margin: 20px; }');
+            w.document.write('.volunteer-report { max-width: 800px; margin: 0 auto; }');
+            w.document.write('.report-section { margin-bottom: 20px; }');
+            w.document.write('.skill-category { border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; }');
+            w.document.write('.skill-level { background-color: #f0f0f0; padding: 2px 6px; border-radius: 10px; font-size: 0.9em; }');
+            w.document.write('.interest-tag { display: inline-block; background-color: #f0f0f0; padding: 3px 8px; margin: 3px; border-radius: 10px; }');
+            w.document.write('.report-footer { margin-top: 30px; border-top: 1px solid #ddd; padding-top: 10px; }');
+            w.document.write('table { width: 100%; border-collapse: collapse; }');
+            w.document.write('th, td { padding: 8px; text-align: left; border-bottom: 1px solid #ddd; }');
+            w.document.write('</style></head><body>');
+            w.document.write(html);
+            w.document.write('</body></html>');
+            w.print();
+            w.close();
+        },
+        secondary_action_label: __('Close'),
+        secondary_action: function() {
+            d.hide();
+        }
+    });
+    
+    d.show();
+    
+    // Add some custom CSS for the report
+    d.$wrapper.find('.volunteer-report').css({
+        'max-height': '500px',
+        'overflow-y': 'auto',
+        'padding': '10px'
+    });
+    
+    d.$wrapper.find('.report-section').css({
+        'margin-bottom': '25px',
+        'border-bottom': '1px solid var(--gray-200)',
+        'padding-bottom': '15px'
+    });
+    
+    d.$wrapper.find('.skill-category').css({
+        'border': '1px solid var(--gray-200)',
+        'border-radius': '4px',
+        'padding': '10px',
+        'margin-bottom': '10px'
+    });
+    
+    d.$wrapper.find('.skill-level').css({
+        'background-color': 'var(--gray-100)',
+        'padding': '2px 6px',
+        'border-radius': '10px',
+        'font-size': '0.9em'
+    });
+    
+    d.$wrapper.find('.interest-tag').css({
+        'display': 'inline-block',
+        'background-color': 'var(--gray-100)',
+        'padding': '3px 8px',
+        'margin': '3px',
+        'border-radius': '10px'
     });
 }

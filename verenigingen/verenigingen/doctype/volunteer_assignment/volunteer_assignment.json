@@ -4,9 +4,9 @@
   "doctype": "DocType",
   "engine": "InnoDB",
   "field_order": [
-    "assignment_type",
     "reference_doctype",
     "reference_name",
+    "assignment_type",
     "role",
     "column_break_4",
     "start_date",
@@ -26,27 +26,32 @@
       "in_list_view": 1,
       "label": "Assignment Type",
       "options": "Board Position\nCommittee\nTeam\nProject\nEvent\nOther",
-      "reqd": 1
+      "reqd": 1,
+      "columns": 2
     },
     {
       "fieldname": "reference_doctype",
       "fieldtype": "Link",
       "label": "Related To",
       "options": "DocType",
-      "in_list_view": 1
+      "in_list_view": 1,
+      "columns": 1
     },
     {
       "fieldname": "reference_name",
       "fieldtype": "Dynamic Link",
       "label": "Reference Name",
-      "options": "reference_doctype"
+      "options": "reference_doctype",
+      "in_list_view": 1,
+      "columns": 2
     },
     {
       "fieldname": "role",
       "fieldtype": "Data",
       "in_list_view": 1,
       "label": "Role/Position",
-      "reqd": 1
+      "reqd": 1,
+      "columns": 2
     },
     {
       "fieldname": "column_break_4",
@@ -57,18 +62,21 @@
       "fieldtype": "Date",
       "in_list_view": 1,
       "label": "Start Date",
-      "reqd": 1
+      "reqd": 1,
+      "columns": 1
     },
     {
       "fieldname": "end_date",
       "fieldtype": "Date",
-      "label": "End Date"
+      "label": "End Date",
+      "in_list_view": 1,
+      "columns": 1
     },
     {
       "default": "Active",
       "fieldname": "status",
       "fieldtype": "Select",
-      "in_list_view": 1,
+      "in_list_view": 0,
       "label": "Status",
       "options": "Active\nCompleted\nPaused\nCancelled"
     },

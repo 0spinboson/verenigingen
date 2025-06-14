@@ -16,7 +16,7 @@ class TestMember(FrappeTestCase):
             "first_name": f"Test{self.unique_id}",
             "last_name": "Member",
             "email": f"testmember{self.unique_id}@example.com",
-            "mobile_no": "+31612345678",
+            "contact_number": "+31612345678",
             "payment_method": "Bank Transfer",
             "status": "Active",
             "member_since": today()
@@ -75,7 +75,7 @@ class TestMember(FrappeTestCase):
             "first_name": f"Test{unique_id}",
             "last_name": "Member",
             "email": f"testmember{unique_id}@example.com",
-            "mobile_no": "+31612345678",
+            "contact_number": "+31612345678",
             "payment_method": "Bank Transfer"
         }
         
@@ -101,7 +101,7 @@ class TestMember(FrappeTestCase):
             "first_name": f"Test{unique_id}@", # Invalid character
             "last_name": "Member",
             "email": f"testmember{unique_id}@example.com",
-            "mobile_no": "+31612345678",
+            "contact_number": "+31612345678",
             "payment_method": "Bank Transfer"
         }
         
@@ -120,7 +120,7 @@ class TestMember(FrappeTestCase):
             "first_name": f"Test{unique_id}",
             "last_name": "Member",
             "email": f"testmember{unique_id}@example.com",
-            "mobile_no": "+31612345678",
+            "contact_number": "+31612345678",
             "payment_method": "Direct Debit",
             "iban": "NL02ABNA0123456789",
             "bank_account_name": f"Test{unique_id} Member"
@@ -141,7 +141,7 @@ class TestMember(FrappeTestCase):
             "first_name": f"Test{unique_id}",
             "last_name": "Member",
             "email": f"testmember{unique_id}@example.com",
-            "mobile_no": "+31612345678",
+            "contact_number": "+31612345678",
             "payment_method": "Bank Transfer"
         }
         
@@ -181,7 +181,7 @@ class TestMember(FrappeTestCase):
             customer = frappe.get_doc("Customer", customer_name)
             self.assertEqual(customer.customer_name, member.full_name)
             self.assertEqual(customer.email_id, member.email)
-            self.assertEqual(customer.mobile_no, member.mobile_no)
+            self.assertEqual(customer.mobile_no, member.contact_number)
     
     def test_create_user(self):
         """Test user creation from member"""
@@ -194,7 +194,7 @@ class TestMember(FrappeTestCase):
                 "first_name": f"Test{unique_id}",
                 "last_name": "Member",
                 "email": f"testmember{unique_id}@example.com",
-                "mobile_no": "+31612345678",
+                "contact_number": "+31612345678",
                 "payment_method": "Bank Transfer"
             }
             
@@ -232,7 +232,7 @@ class TestMember(FrappeTestCase):
             "first_name": f"Test{unique_id}",
             "last_name": "Member",
             "email": f"testmember{unique_id}@example.com",
-            "mobile_no": "+31612345678",
+            "contact_number": "+31612345678",
             "payment_method": "Bank Transfer"
         }
         
@@ -264,7 +264,7 @@ class TestMember(FrappeTestCase):
             "first_name": f"Test{unique_id}",
             "last_name": "Member",
             "email": f"testmember{unique_id}@example.com",
-            "mobile_no": "+31612345678",
+            "contact_number": "+31612345678",
             "payment_method": "Bank Transfer",
             "birth_date": add_days(today(), -365 * 30) # 30 years ago
         }
@@ -323,7 +323,7 @@ class TestMember(FrappeTestCase):
             "first_name": f"Test{unique_id}",
             "last_name": "Member",
             "email": f"testmember{unique_id}@example.com",
-            "mobile_no": "+31612345678",
+            "contact_number": "+31612345678",
             "payment_method": "Bank Transfer"
         }
         
@@ -352,7 +352,7 @@ class TestMember(FrappeTestCase):
             "first_name": f"Test{unique_id}",
             "last_name": "Member",
             "email": f"testmember{unique_id}@example.com",
-            "mobile_no": "+31612345678",
+            "contact_number": "+31612345678",
             "payment_method": "Bank Transfer"
         }
         
@@ -375,7 +375,7 @@ class TestMember(FrappeTestCase):
             "first_name": f"Test{unique_id}",
             "last_name": "Member",
             "email": f"testmember{unique_id}@example.com",
-            "mobile_no": "+31612345678",
+            "contact_number": "+31612345678",
             "payment_method": "Bank Transfer"
         }
         
@@ -410,7 +410,7 @@ class TestMember(FrappeTestCase):
             "first_name": f"Test{unique_id}",
             "last_name": "Member",
             "email": f"testmember{unique_id}@example.com",
-            "mobile_no": "+31612345678",
+            "contact_number": "+31612345678",
             "payment_method": "Bank Transfer"
         }
         
@@ -433,7 +433,7 @@ class TestMember(FrappeTestCase):
             "first_name": f"Test{unique_id}",
             "last_name": "Member",
             "email": f"testmember{unique_id}@example.com",
-            "mobile_no": "+31612345678",
+            "contact_number": "+31612345678",
             "payment_method": "Bank Transfer"
         }
         
@@ -447,3 +447,126 @@ class TestMember(FrappeTestCase):
         self.assertFalse(member.current_membership_start)
         self.assertFalse(member.current_membership_end)
         self.assertFalse(member.membership_status)
+    
+    def test_iban_transfer_from_application(self):
+        """Test that IBAN data is properly transferred from application to member"""
+        unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        member_data = {
+            "first_name": f"Test{unique_id}",
+            "last_name": "Member",
+            "email": f"testmember{unique_id}@example.com",
+            "contact_number": "+31612345678",
+            "payment_method": "Direct Debit",
+            "iban": "NL02ABNA0123456789",
+            "bic": "ABNANL2A",
+            "bank_account_name": f"Test{unique_id} Member"
+        }
+        
+        member = frappe.new_doc("Member")
+        member.update(member_data)
+        member.insert()
+        
+        # Verify IBAN data is properly stored
+        self.assertEqual(member.iban, "NL02 ABNA 0123 4567 89")  # Should be formatted
+        self.assertEqual(member.bic, "ABNANL2A")
+        self.assertEqual(member.bank_account_name, f"Test{unique_id} Member")
+        self.assertEqual(member.payment_method, "Direct Debit")
+    
+    def test_subscription_details_retrieval(self):
+        """Test that subscription details are retrieved correctly"""
+        unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        member_data = {
+            "first_name": f"Test{unique_id}",
+            "last_name": "Member",
+            "email": f"testmember{unique_id}@example.com",
+            "contact_number": "+31612345678",
+            "payment_method": "Bank Transfer"
+        }
+        
+        member = frappe.new_doc("Member")
+        member.update(member_data)
+        member.insert()
+        
+        # Test get_subscription_details method exists and works
+        self.assertTrue(hasattr(member, 'get_subscription_details'))
+        self.assertTrue(callable(getattr(member, 'get_subscription_details')))
+        
+        # Should not error even with no subscriptions
+        try:
+            details = member.get_subscription_details()
+            # Should return empty data structure or None
+            self.assertTrue(details is None or isinstance(details, dict))
+        except Exception as e:
+            self.fail(f"get_subscription_details raised {type(e).__name__} unexpectedly!")
+    
+    def test_linked_donations_retrieval(self):
+        """Test that linked donations are retrieved correctly"""
+        unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        member_data = {
+            "first_name": f"Test{unique_id}",
+            "last_name": "Member",
+            "email": f"testmember{unique_id}@example.com",
+            "contact_number": "+31612345678",
+            "payment_method": "Bank Transfer"
+        }
+        
+        member = frappe.new_doc("Member")
+        member.update(member_data)
+        member.insert()
+        
+        # Create customer first
+        if not member.customer:
+            member.create_customer()
+            member.reload()
+        
+        # Test get_linked_donations method exists and works
+        self.assertTrue(hasattr(member, 'get_linked_donations'))
+        self.assertTrue(callable(getattr(member, 'get_linked_donations')))
+        
+        # Should not error even with no donations
+        try:
+            donations = member.get_linked_donations()
+            # Should return list (empty or with data)
+            self.assertTrue(isinstance(donations, list))
+        except Exception as e:
+            self.fail(f"get_linked_donations raised {type(e).__name__} unexpectedly!")
+    
+    def test_contact_number_field_usage(self):
+        """Test that contact_number field is used instead of mobile_no"""
+        unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        member_data = {
+            "first_name": f"Test{unique_id}",
+            "last_name": "Member",
+            "email": f"testmember{unique_id}@example.com",
+            "contact_number": "+31612345678",
+            "payment_method": "Bank Transfer"
+        }
+        
+        member = frappe.new_doc("Member")
+        member.update(member_data)
+        member.insert()
+        
+        # Verify contact_number is used
+        self.assertEqual(member.contact_number, "+31612345678")
+        
+        # Verify mobile_no field does not exist or is not used
+        self.assertFalse(hasattr(member, 'mobile_no') and getattr(member, 'mobile_no', None))
+    
+    def test_membership_fee_display(self):
+        """Test that membership fee is properly displayed"""
+        unique_id = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+        member_data = {
+            "first_name": f"Test{unique_id}",
+            "last_name": "Member",
+            "email": f"testmember{unique_id}@example.com",
+            "contact_number": "+31612345678",
+            "payment_method": "Bank Transfer",
+            "membership_fee": 50.0
+        }
+        
+        member = frappe.new_doc("Member")
+        member.update(member_data)
+        member.insert()
+        
+        # Verify membership_fee field is available
+        self.assertEqual(member.membership_fee, 50.0)

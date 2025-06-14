@@ -1,1620 +1,1493 @@
 // Copyright (c) 2025, Your Name and contributors
 // For license information, please see license.txt
+// Cache buster: v2025-01-13-001
+
+// Test if this file is loading
+console.log('Member.js file is loading - v2025-01-13-001');
+
+// Import utility modules
+frappe.require([
+    '/assets/verenigingen/js/member/js_modules/payment-utils.js',
+    '/assets/verenigingen/js/member/js_modules/chapter-utils.js',
+    '/assets/verenigingen/js/member/js_modules/sepa-utils.js',
+    '/assets/verenigingen/js/member/js_modules/termination-utils.js',
+    '/assets/verenigingen/js/member/js_modules/volunteer-utils.js',
+    '/assets/verenigingen/js/member/js_modules/ui-utils.js'
+]);
 
 frappe.ui.form.on('Member', {
-    refresh: function(frm) {
-        if (frm.fields_dict.payment_history) {
-            $(frm.fields_dict.payment_history.grid.wrapper).addClass('payment-history-grid');
-        }
-        
-        // Add buttons to create customer and user
-        if (frm.doc.docstatus === 1) {
-            // Add payment processing button
-            if (frm.doc.payment_status !== 'Paid') {
-                frm.add_custom_button(__('Process Payment'), function() {
-                    process_payment(frm);
-                }, __('Actions'));
-            }
-            
-            if (frm.fields_dict.payment_history && frm.fields_dict.payment_history.grid && 
-                frm.fields_dict.payment_history.grid.grid_rows) {
-                frm.fields_dict.payment_history.grid.grid_rows.forEach(row => {
-                    format_payment_history_row(row);
-                });
-            }
-            
-            // Add mark as paid button
-            if (frm.doc.payment_status !== 'Paid') {
-                frm.add_custom_button(__('Mark as Paid'), function() {
-                    mark_as_paid(frm);
-                }, __('Actions'));
-            }
-        }
-        
-        if (!frm.doc.customer) {
-            frm.add_custom_button(__('Create Customer'), function() {
-                frm.call({
-                    doc: frm.doc,
-                    method: 'create_customer',
-                    callback: function(r) {
-                        if (r.message) {
-                            frm.refresh();
-                        }
-                    }
-                });
-            }, __('Actions'));
-        }
-        
-        if (frm.fields_dict.payment_history) {
-            // Remove 'No.' column from the payment history grid
-            setTimeout(function() {
-                const gridWrapper = $(frm.fields_dict.payment_history.grid.wrapper);
-                
-                // Find and hide the idx column
-                gridWrapper.find('.grid-heading-row .grid-row-check').hide();
-                gridWrapper.find('.grid-heading-row .row-index').hide();
-                
-                // Hide idx column in all rows
-                gridWrapper.find('.grid-body .data-row .row-index').hide();
-                gridWrapper.find('.grid-body .data-row .grid-row-check').hide();
-                
-                // Add a class to enable custom styling via CSS
-                gridWrapper.addClass('no-idx-column');
-            }, 500);
-        }
-        
-        // In the refresh function in member.js
-        if (frm.doc.customer) {
-            // Your existing buttons that require customer to be set
-            frm.add_custom_button(__('Customer'), function() {
-                frappe.set_route('Form', 'Customer', frm.doc.customer);
-            }, __('View'));
     
-            // Add the new button in the same condition block
-            frm.add_custom_button(__('Refresh Financial History'), function() {
-                frappe.show_alert({
-                    message: __("Refreshing financial history..."),
-                    indicator: 'blue'
-                });
-                
-                frappe.call({
-                    method: "load_payment_history",
-                    doc: frm.doc,
-                    callback: function(r) {
-                        frm.refresh_field("payment_history");
-                        
-                        // Count records by type
-                        let records = frm.doc.payment_history || [];
-                        let stats = {
-                            total: records.length,
-                            invoices: 0,
-                            membership_invoices: 0,
-                            unreconciled: 0,
-                            donations: 0,
-                            paid: 0,
-                            unpaid: 0,
-                            overdue: 0,
-                            total_amount: 0,
-                            outstanding: 0
-                        };
-                        
-                        records.forEach(record => {
-                            stats.total_amount += flt(record.amount || 0);
-                            stats.outstanding += flt(record.outstanding_amount || 0);
-                            
-                            if (record.transaction_type === "Regular Invoice") {
-                                stats.invoices++;
-                                if (record.payment_status === "Paid") stats.paid++;
-                                else if (record.payment_status === "Overdue") stats.overdue++;
-                                else if (["Unpaid", "Partially Paid"].includes(record.payment_status)) stats.unpaid++;
-                            } 
-                            else if (record.transaction_type === "Membership Invoice") {
-                                stats.membership_invoices++;
-                                if (record.payment_status === "Paid") stats.paid++;
-                                else if (record.payment_status === "Overdue") stats.overdue++;
-                                else if (["Unpaid", "Partially Paid"].includes(record.payment_status)) stats.unpaid++;
-                            }
-                            else if (record.transaction_type === "Donation Payment") {
-                                stats.donations++;
-                            }
-                            else if (record.transaction_type === "Unreconciled Payment") {
-                                stats.unreconciled++;
-                            }
-                        });
-                        
-                        // Show a more detailed message
-                        let message = `<div>Financial history refreshed:<br>
-                            ${stats.invoices + stats.membership_invoices} invoices (${stats.membership_invoices} membership, ${stats.paid} paid, ${stats.unpaid} unpaid, ${stats.overdue} overdue)<br>
-                            ${stats.unreconciled} unreconciled payments, ${stats.donations} linked to donations<br>
-                            Total: ${format_currency(stats.total_amount)}, Outstanding: ${format_currency(stats.outstanding)}</div>`;
-                            
-                        frappe.show_alert({
-                            message: message,
-                            indicator: stats.outstanding > 0 ? 'orange' : 'green'
-                        }, 10);
-                    }
-                });
-            }, __('Actions'));
+    // ==================== FORM LIFECYCLE EVENTS ====================
+    
+    refresh: function(frm) {
+        // Test if JavaScript is loading
+        console.log('Member form refresh event triggered for:', frm.doc.name || 'new document');
+        
+        // Initialize UI and custom CSS
+        UIUtils.add_custom_css();
+        UIUtils.setup_payment_history_grid(frm);
+        UIUtils.setup_member_id_display(frm);
+        
+        // Add action buttons for submitted documents
+        if (frm.doc.docstatus === 1) {
+            add_payment_buttons(frm);
+        }
+        
+        // Add customer creation button if not exists
+        add_customer_buttons(frm);
+        
+        // Add user account management buttons
+        add_user_account_buttons(frm);
+        
+        // Add chapter management buttons
+        add_chapter_buttons(frm);
+        
+        // Add view buttons for related records
+        add_view_buttons(frm);
+        
+        // Add volunteer-related buttons
+        add_volunteer_buttons(frm);
+        
+        // Add termination buttons and status display
+        add_termination_buttons(frm);
+        
+        // Add suspension buttons
+        add_suspension_buttons(frm);
+        
+        // Display termination status
+        display_termination_status(frm);
+        
+        // Display amendment status
+        display_amendment_status(frm);
+        
+        // Display suspension status
+        display_suspension_status(frm);
+        
+        // Add fee management functionality
+        add_fee_management_buttons(frm);
+        
+        // Ensure fee management section visibility
+        ensure_fee_management_section_visibility(frm);
+        
+        // Also ensure visibility after a short delay (in case form is still loading)
+        setTimeout(() => {
+            ensure_fee_management_section_visibility(frm);
+        }, 500);
+        
+        // Add member ID management buttons
+        add_member_id_buttons(frm);
+        
+        // Button to manually refresh fee section visibility
+        if (frappe.user.has_role(['System Manager', 'Membership Manager', 'Verenigingen Manager'])) {
+            frm.add_custom_button(__('Refresh Fee Section'), function() {
+                ensure_fee_management_section_visibility(frm);
+                frappe.show_alert('Fee section visibility refreshed', 3);
+            }, __('Fee Management'));
             
-            // Add link button to view all donations for this customer
-            frm.add_custom_button(__('View Donations'), function() {
-                frappe.call({
-                    method: "verenigingen.verenigingen.doctype.member.member.get_linked_donations",
-                    args: {
-                        "member": frm.doc.name
-                    },
-                    callback: function(r) {
-                        if (r.message && r.message.donor) {
-                            frappe.route_options = {
-                                "donor": r.message.donor
-                            };
-                            frappe.set_route("List", "Donation");
-                        } else {
-                            frappe.msgprint(__("No donor record linked to this member."));
-                        }
-                    }
-                });
-            }, __('View'));
         }
         
-        // Chapter-related buttons - check if chapter management is enabled
-        frappe.call({
-            method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
-            callback: function(r) {
-                if (r.message) {
-                    // Only show chapter buttons if enabled
-                    if (frm.doc.primary_chapter) {
-                        frm.add_custom_button(__('View Chapter'), function() {
-                            frappe.set_route('Form', 'Chapter', frm.doc.primary_chapter);
-                        }, __('View'));
-                    }
-                    
-                    frm.add_custom_button(__('Change Chapter'), function() {
-                        suggest_chapter_for_member(frm);
-                    }, __('Actions'));
-                    
-                    // Add chapter suggestion UI when no chapter is assigned
-                    if (!frm.doc.__islocal && !frm.doc.primary_chapter && !$('.chapter-suggestion-container').length) {
-                        var $container = $('<div class="chapter-suggestion-container alert alert-info mt-2"></div>');
-                        $container.html(`
-                            <p>${__("This member doesn't have a chapter assigned yet.")}</p>
-                            <button class="btn btn-sm btn-primary suggest-chapter-btn">
-                                ${__("Find a Chapter")}
-                            </button>
-                        `);
-                        
-                        $(frm.fields_dict.primary_chapter.wrapper).append($container);
-                        
-                        // Add click handler
-                        $('.suggest-chapter-btn').on('click', function() {
-                            suggest_chapter_for_member(frm);
-                        });
-                    }
-                    
-                    // Add a nice visual indicator in the form header if chapter is set
-                    if (frm.doc.primary_chapter && !frm.doc.__unsaved) {
-                        frm.dashboard.add_indicator(__("Member of {0}", [frm.doc.primary_chapter]), "blue");
-                    }
-                    
-                    // Add debug button for testing postal code matching (remove in production)
-                    if (frappe.boot.developer_mode) {
-                        frm.add_custom_button(__('Debug Postal Code'), function() {
-                            if (!frm.doc.primary_address) {
-                                frappe.msgprint(__('Please set a primary address first'));
-                                return;
-                            }
-                            
-                            // Get address and test postal code matching
-                            frappe.call({
-                                method: 'frappe.client.get',
-                                args: {
-                                    doctype: 'Address',
-                                    name: frm.doc.primary_address
-                                },
-                                callback: function(r) {
-                                    if (r.message && r.message.pincode) {
-                                        frappe.call({
-                                            method: 'verenigingen.verenigingen.doctype.member.member.debug_postal_code_matching',
-                                            args: {
-                                                postal_code: r.message.pincode
-                                            },
-                                            callback: function(debug_r) {
-                                                console.log('Postal code debug results:', debug_r.message);
-                                                
-                                                let message = `<div><strong>Postal Code Debug Results for ${r.message.pincode}</strong><br><br>`;
-                                                message += `Total chapters: ${debug_r.message.total_chapters}<br>`;
-                                                message += `Matching chapters: ${debug_r.message.matching_chapters.length}<br><br>`;
-                                                
-                                                if (debug_r.message.matching_chapters.length > 0) {
-                                                    message += '<strong>Matching Chapters:</strong><ul>';
-                                                    debug_r.message.matching_chapters.forEach(function(chapter) {
-                                                        message += `<li>${chapter.name} (${chapter.region}) - Patterns: ${chapter.postal_codes}</li>`;
-                                                    });
-                                                    message += '</ul><br>';
-                                                }
-                                                
-                                                if (debug_r.message.non_matching_chapters.length > 0) {
-                                                    message += '<strong>Non-matching Chapters (first 5):</strong><ul>';
-                                                    debug_r.message.non_matching_chapters.slice(0, 5).forEach(function(chapter) {
-                                                        message += `<li>${chapter.name} - ${chapter.reason}</li>`;
-                                                    });
-                                                    message += '</ul>';
-                                                }
-                                                
-                                                message += '</div>';
-                                                
-                                                frappe.msgprint({
-                                                    title: 'Postal Code Debug Results',
-                                                    message: message,
-                                                    indicator: debug_r.message.matching_chapters.length > 0 ? 'green' : 'orange'
-                                                });
-                                            }
-                                        });
-                                    } else {
-                                        frappe.msgprint(__('No postal code found in the address'));
-                                    }
-                                }
-                            });
-                        }, __('Debug'));
-                    }
-                    
-                    // Check if user is a board member of any chapter
-                    frappe.call({
-                        method: 'verenigingen.verenigingen.doctype.member.member.get_board_memberships',
-                        args: {
-                            member_name: frm.doc.name
-                        },
-                        callback: function(r) {
-                            if (r.message && r.message.length) {
-                                // Show board memberships
-                                var html = '<div class="board-memberships"><h4>Board Positions</h4><ul>';
-
-                                r.message.forEach(function(board) {
-                                    html += '<li><strong>' + board.chapter_role + '</strong> at <a href="/app/chapter/' + 
-                                            board.parent + '">' + board.parent + '</a></li>';
-                                });
-
-                                html += '</ul></div>';
-
-                                $(frm.fields_dict.board_memberships_html.wrapper).html(html);
-                            }
-                        }
-                    });
-                } else {
-                    // Hide chapter field if chapter management is disabled
-                    frm.toggle_display('primary_chapter', false);
-                    frm.toggle_display('chapter_and_volunteer_activity_section', false);
-                    
-                    if (frm.fields_dict.board_memberships_html) {
-                        $(frm.fields_dict.board_memberships_html.wrapper).empty();
-                    }
-                }
-            }
-        });
+        // Check SEPA mandate status (debounced to avoid multiple rapid calls)
+        check_sepa_mandate_status_debounced(frm);
         
-        // Add button to create user
-        if (!frm.doc.user && frm.doc.email) {
-            frm.add_custom_button(__('Create User'), function() {
-                frm.call({
-                    doc: frm.doc,
-                    method: 'create_user',
-                    callback: function(r) {
-                        if (r.message) {
-                            frm.refresh();
-                        }
-                    }
-                });
-            }, __('Actions'));
-        }
+        // Show volunteer info if exists
+        VolunteerUtils.show_volunteer_info(frm);
         
-        frm.add_custom_button(__('Create Volunteer'), function() {
-            // First get the email domain from settings
-            frappe.call({
-                method: 'frappe.client.get_value',
-                args: {
-                    doctype: 'Verenigingen Settings',
-                    fieldname: 'organization_email_domain'
-                },
-                callback: function(r) {
-                    // Default domain if not set
-                    const domain = r.message && r.message.organization_email_domain 
-                        ? r.message.organization_email_domain 
-                        : 'example.org';
-                
-                    // Generate organization email based on full name
-                    // Replace spaces with dots and convert to lowercase
-                    const nameForEmail = frm.doc.full_name 
-                        ? frm.doc.full_name.replace(/\s+/g, '.').toLowerCase()
-                        : '';
-                
-                    // Construct organization email
-                    const orgEmail = nameForEmail ? `${nameForEmail}@${domain}` : '';
-                
-                    // Set route options for creating volunteer
-                    frappe.route_options = {
-                        'volunteer_name': frm.doc.full_name,
-                        'member': frm.doc.name,
-                        'preferred_pronouns': frm.doc.pronouns,
-                        'email': orgEmail,  // Organization email
-                        'personal_email': frm.doc.email || ''  // Personal email from member
-                    };
-                
-                    // Create new volunteer doc
-                    frappe.new_doc('Volunteer');
-                }
-            });
-        }, __('Actions'));
+        // Show board memberships if any
+        UIUtils.show_board_memberships(frm);
         
-        // Add button to create a new membership
-        frm.add_custom_button(__('Create Membership'), function() {
-            frappe.new_doc('Membership', {
-                'member': frm.doc.name,
-                'member_name': frm.doc.full_name,
-                'email': frm.doc.email,
-                'mobile_no': frm.doc.mobile_no,
-                'start_date': frappe.datetime.get_today()
-            });
-        }, __('Actions'));
-        
-        // Add button to view memberships
-        frm.add_custom_button(__('View Memberships'), function() {
-            frappe.set_route('List', 'Membership', {'member': frm.doc.name});
-        }, __('View'));
-        
-        // Add button to view linked customer
-        if (frm.doc.customer) {
-            frm.add_custom_button(__('Customer'), function() {
-                frappe.set_route('Form', 'Customer', frm.doc.customer);
-            }, __('View'));
-        }
-        
-        // Add button to view linked user
-        if (frm.doc.user) {
-            frm.add_custom_button(__('User'), function() {
-                frappe.set_route('Form', 'User', frm.doc.user);
-            }, __('View'));
-        }
-        
-        // Add button to view current membership
-        if (frm.doc.current_membership_details) {
-            frm.add_custom_button(__('Current Membership'), function() {
-                frappe.set_route('Form', 'Membership', frm.doc.current_membership_details);
-            }, __('View'));
-        }
-        
-        // Add button to view existing volunteer record if any
-        frm.add_custom_button(__('View Volunteer'), function() {
-            frappe.call({
-                method: 'frappe.client.get_list',
-                args: {
-                    doctype: 'Volunteer',
-                    filters: {
-                        'member': frm.doc.name
-                    },
-                    fields: ['name']
-                },
-                callback: function(r) {
-                    if (r.message && r.message.length > 0) {
-                        frappe.set_route('Form', 'Volunteer', r.message[0].name);
-                    } else {
-                        frappe.msgprint(__('No volunteer record found for this member. Please create one first.'));
-                    }
-                }
-            });
-        }, __('View'));
-        
-        // SEPA Mandate Management Buttons
-        if (!frm.is_new()) {
-            // Add button to create new SEPA mandate
-            frm.add_custom_button(__('Create SEPA Mandate'), function() {
-                const suggestedReference = generateMandateReference(frm.doc);
-                frappe.route_options = {
-                    'member': frm.doc.name,
-                    'member_name': frm.doc.full_name,
-                    'mandate_id': suggestedReference,
-                    'account_holder_name': frm.doc.bank_account_name || frm.doc.full_name,
-                    'iban': frm.doc.iban || '',
-                    'bic': frm.doc.bic || '',
-                    'sign_date': frappe.datetime.get_today(),
-                    'used_for_memberships': 1,
-                    'used_for_donations': 0,
-                    'mandate_type': 'RCUR'
-                };
-                
-                frappe.new_doc('SEPA Mandate');
-            }, __('Actions'));
-            
-            // Add button to view SEPA mandates
-            frm.add_custom_button(__('View SEPA Mandates'), function() {
-                frappe.set_route('List', 'SEPA Mandate', {
-                    'member': frm.doc.name
-                });
-            }, __('View'));
-            
-            // If there's a current mandate, add button to view it
-            let currentMandate = null;
-            if (frm.doc.sepa_mandates && frm.doc.sepa_mandates.length) {
-                currentMandate = frm.doc.sepa_mandates.find(m => m.is_current);
-            }
-            
-            if (currentMandate) {
-                frm.add_custom_button(__('Current SEPA Mandate'), function() {
-                    frappe.set_route('Form', 'SEPA Mandate', currentMandate.sepa_mandate);
-                }, __('View'));
-            }
-            
-            // Add custom button for SEPA mandates grid
-            if (frm.fields_dict['sepa_mandates']) {
-                frm.fields_dict['sepa_mandates'].grid.add_custom_button(__('Create New Mandate'), 
-                    function() {
-                        frappe.new_doc('SEPA Mandate', {
-                            'member': frm.doc.name,
-                            'member_name': frm.doc.full_name,
-                            'account_holder_name': frm.doc.full_name
-                        });
-                    }
-                );
-            }
-        }
-
-        // Attach triggers to name fields dynamically
-        ['first_name', 'middle_name', 'last_name'].forEach(field => {
-            frm.fields_dict[field].df.onchange = () => frm.trigger('update_full_name');
-        });
-        
-        // Check for volunteer record and display details - UPDATED FOR NEW SCHEMA
-        if (!frm.doc.__islocal && frm.fields_dict.volunteer_details_html) {
-            frappe.call({
-                method: 'frappe.client.get_list',
-                args: {
-                    doctype: 'Volunteer',
-                    filters: {
-                        'member': frm.doc.name
-                    },
-                    fields: ['name', 'volunteer_name', 'status', 'commitment_level', 'experience_level', 'preferred_work_style']
-                },
-                callback: function(r) {
-                    if (r.message && r.message.length > 0) {
-                        const volunteer = r.message[0];
-                        
-                        // Get volunteer skills
-                        frappe.call({
-                            method: 'frappe.client.get',
-                            args: {
-                                doctype: 'Volunteer',
-                                name: volunteer.name
-                            },
-                            callback: function(r) {
-                                if (r.message) {
-                                    const volunteerDoc = r.message;
-                                    let skillsHtml = '';
-                                    
-                                    // Use the new skills_and_qualifications field instead of volunteer_skills
-                                    if (volunteerDoc.skills_and_qualifications && volunteerDoc.skills_and_qualifications.length > 0) {
-                                        skillsHtml = '<div class="volunteer-skills"><h5>Skills</h5><ul>';
-                                        volunteerDoc.skills_and_qualifications.forEach(function(skill) {
-                                            skillsHtml += '<li>' + skill.volunteer_skill;
-                                            if (skill.proficiency_level) {
-                                                skillsHtml += ' <span class="text-muted">(' + skill.proficiency_level + ')</span>';
-                                            }
-                                            skillsHtml += '</li>';
-                                        });
-                                        skillsHtml += '</ul></div>';
-                                    }
-
-                                    // Add interests if available
-                                    let interestsHtml = '';
-                                    if (volunteerDoc.interests && volunteerDoc.interests.length > 0) {
-                                        interestsHtml = '<div class="volunteer-interests"><h5>Areas of Interest</h5><div class="flex">';
-                                        volunteerDoc.interests.forEach(function(interest) {
-                                            interestsHtml += '<span class="badge badge-light mr-2 mb-2">' + 
-                                                interest.interest_area + '</span>';
-                                        });
-                                        interestsHtml += '</div></div>';
-                                    }
-                                    
-                                    // Create volunteer info HTML - Updated with new fields
-                                    let html = `
-                                        <div class="volunteer-info">
-                                            <h4><a href="/app/volunteer/${volunteer.name}">${volunteer.volunteer_name}</a></h4>
-                                            <div class="row">
-                                                <div class="col-md-6">
-                                                    <p><strong>Status:</strong> ${volunteer.status || 'Not specified'}</p>
-                                                    <p><strong>Commitment:</strong> ${volunteer.commitment_level || 'Not specified'}</p>
-                                                </div>
-                                                <div class="col-md-6">
-                                                    <p><strong>Experience:</strong> ${volunteer.experience_level || 'Not specified'}</p>
-                                                    <p><strong>Work Style:</strong> ${volunteer.preferred_work_style || 'Not specified'}</p>
-                                                </div>
-                                            </div>
-                                            ${interestsHtml}
-                                            ${skillsHtml}
-                                        </div>
-                                    `;
-                                    
-                                    $(frm.fields_dict.volunteer_details_html.wrapper).html(html);
-                                }
-                            }
-                        });
-                    } else {
-                        // No volunteer record found
-                        $(frm.fields_dict.volunteer_details_html.wrapper).html(`
-                            <div class="volunteer-info text-muted">
-                                <p>No volunteer record linked to this member.</p>
-                                <button class="btn btn-xs btn-default create-volunteer-btn">
-                                    Create Volunteer Record
-                                </button>
-                            </div>
-                        `);
-                        
-                        // Add click handler for create button
-                        $(frm.fields_dict.volunteer_details_html.wrapper).find('.create-volunteer-btn').on('click', function() {
-                            frm.events.createVolunteerRecord(frm);
-                        });
-                    }
-                }
-            });
-        }
-        
-        // Add CSS for chapter selection interface
-        frappe.dom.set_style(`
-            .chapter-suggestion-container {
-                margin-top: 10px;
-                padding: 10px;
-            }
-            .suggested-chapter {
-                font-weight: bold;
-                color: var(--primary);
-            }
-        `);
+        // Load and display current subscription details
+        load_subscription_summary(frm);
     },
     
     onload: function(frm) {
-        if (!frm.is_new()) {
-            // Check if member has active SEPA mandates
+        // Set up form behavior on load
+        setup_form_behavior(frm);
+        
+        // Initialize IBAN tracking for change detection
+        frm._previous_iban = frm.doc.iban;
+        
+        // Ensure fee management section visibility on load
+        ensure_fee_management_section_visibility(frm);
+    },
+    
+    // ==================== FIELD EVENT HANDLERS ====================
+    
+    full_name: function(frm) {
+        // Auto-generate full name from component fields when individual fields change
+        update_full_name_from_components(frm);
+    },
+    
+    first_name: function(frm) {
+        update_full_name_from_components(frm);
+    },
+    
+    middle_name: function(frm) {
+        update_full_name_from_components(frm);
+    },
+    
+    last_name: function(frm) {
+        update_full_name_from_components(frm);
+    },
+    
+    payment_method: function(frm) {
+        UIUtils.handle_payment_method_change(frm);
+        // Only update UI elements, don't prompt for mandate creation during field changes
+        check_sepa_mandate_status_debounced(frm);
+    },
+    
+    iban: function(frm) {
+        // Auto-derive BIC from IBAN if BIC is empty
+        if (frm.doc.iban && !frm.doc.bic) {
+            // Clean the IBAN first
+            const cleanIban = frm.doc.iban.replace(/\s+/g, '').toUpperCase();
+            
+            // Only update IBAN if it actually changed (to prevent recursion)
+            if (cleanIban !== frm.doc.iban) {
+                frm.set_value('iban', cleanIban);
+                return; // Exit and let the next trigger handle BIC derivation
+            }
+            
             frappe.call({
-                method: 'verenigingen.verenigingen.doctype.member.member.check_sepa_mandate_status',
+                method: 'verenigingen.verenigingen.doctype.member.member.derive_bic_from_iban',
+                args: {
+                    iban: cleanIban
+                },
+                callback: function(r) {
+                    if (r.message && r.message.bic) {
+                        frm.set_value('bic', r.message.bic);
+                        frappe.show_alert({
+                            message: __('BIC/SWIFT code automatically derived: {0}', [r.message.bic]),
+                            indicator: 'blue'
+                        }, 3);
+                    } else if (cleanIban.length >= 4) {
+                        // Show message for unsupported bank/country
+                        frappe.show_alert({
+                            message: __('Could not automatically derive BIC for this IBAN. Please enter manually.'),
+                            indicator: 'orange'
+                        }, 4);
+                    }
+                },
+                error: function(r) {
+                    console.error('Error deriving BIC from IBAN:', r);
+                }
+            });
+        }
+        
+        // Update UI elements to show current SEPA status
+        // Mandate discrepancy checking is now handled by scheduled task
+        check_sepa_mandate_status_debounced(frm);
+    },
+    
+    pincode: function(frm) {
+        // Simple notification when postal code changes
+        if (frm.doc.pincode && !frm.doc.current_chapter_display) {
+            frappe.show_alert({
+                message: __('Postal code updated. You may want to assign a chapter based on this location.'),
+                indicator: 'blue'
+            }, 3);
+        }
+    },
+    
+    after_save: function(frm) {
+        // SEPA mandate discrepancy checking is now handled by scheduled task
+        // No real-time processing needed here
+        
+        // Still show basic UI updates after save
+        if (frm.doc.payment_method === 'Direct Debit' && frm.doc.iban && !frm.doc.__islocal) {
+            // Just update the UI to show current SEPA status
+            check_sepa_mandate_status_debounced(frm);
+        }
+    }
+});
+
+// ==================== CHILD TABLE EVENT HANDLERS ====================
+
+frappe.ui.form.on('Member Payment History', {
+    payment_history_add: function(frm, cdt, cdn) {
+        const row = locals[cdt][cdn];
+        if (!row.transaction_date) {
+            frappe.model.set_value(cdt, cdn, 'transaction_date', frappe.datetime.get_today());
+        }
+    },
+    
+    amount: function(frm, cdt, cdn) {
+        const row = locals[cdt][cdn];
+        if (!row.outstanding_amount) {
+            frappe.model.set_value(cdt, cdn, 'outstanding_amount', row.amount || 0);
+        }
+    }
+});
+
+// ==================== BUTTON SETUP FUNCTIONS ====================
+
+function add_payment_buttons(frm) {
+    if (frm.doc.payment_status !== 'Paid') {
+        frm.add_custom_button(__('Process Payment'), function() {
+            PaymentUtils.process_payment(frm);
+        }, __('Actions'));
+        
+        frm.add_custom_button(__('Mark as Paid'), function() {
+            PaymentUtils.mark_as_paid(frm);
+        }, __('Actions'));
+    }
+}
+
+function add_customer_buttons(frm) {
+    if (!frm.doc.customer) {
+        frm.add_custom_button(__('Create Customer'), function() {
+            frm.call({
+                doc: frm.doc,
+                method: 'create_customer',
+                callback: function(r) {
+                    if (r.message) {
+                        frm.refresh();
+                    }
+                }
+            });
+        }, __('Actions'));
+    }
+}
+
+function add_user_account_buttons(frm) {
+    // Only show user account buttons for members with email addresses
+    if (!frm.doc.email) {
+        return;
+    }
+    
+    if (!frm.doc.user) {
+        // Show create user account button if no user exists
+        frm.add_custom_button(__('Create User Account'), function() {
+            frappe.confirm(
+                __('Create a user account for {0} to access member portal pages?', [frm.doc.full_name]),
+                function() {
+                    frappe.call({
+                        method: 'verenigingen.verenigingen.doctype.member.member.create_member_user_account',
+                        args: {
+                            member_name: frm.doc.name,
+                            send_welcome_email: true
+                        },
+                        callback: function(r) {
+                            if (r.message) {
+                                if (r.message.success) {
+                                    frappe.show_alert({
+                                        message: r.message.message,
+                                        indicator: 'green'
+                                    }, 5);
+                                    frm.refresh();
+                                } else {
+                                    frappe.msgprint({
+                                        message: r.message.error || r.message.message,
+                                        indicator: 'red'
+                                    });
+                                }
+                            }
+                        }
+                    });
+                }
+            );
+        }, __('Actions'));
+    } else {
+        // Show user account info if user exists
+        frm.add_custom_button(__('View User Account'), function() {
+            frappe.set_route('Form', 'User', frm.doc.user);
+        }, __('View'));
+        
+        // Add dashboard indicator for user account
+        frm.dashboard.add_indicator(__("Has User Account"), "green");
+    }
+}
+
+function add_chapter_buttons(frm) {
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
+        callback: function(r) {
+            if (r.message) {
+                if (frm.doc.current_chapter_display) {
+                    frm.add_custom_button(__('View Chapter'), function() {
+                        frappe.set_route('Form', 'Chapter', frm.doc.current_chapter_display);
+                    }, __('View'));
+                }
+                
+                frm.add_custom_button(__('Assign Chapter'), function() {
+                    frm.set_value('current_chapter_display', '');
+                    frm.refresh_field('current_chapter_display');
+                }, __('Actions'));
+                
+                // Add simple chapter suggestion when no chapter is assigned
+                add_simple_chapter_suggestion(frm);
+                
+                // Add visual indicator for chapter membership
+                if (frm.doc.current_chapter_display && !frm.doc.__unsaved) {
+                    frm.dashboard.add_indicator(__("Member of {0}", [frm.doc.current_chapter_display]), "blue");
+                }
+                
+                // Add debug button for postal code matching (development only)
+                if (frappe.boot.developer_mode) {
+                    frm.add_custom_button(__('Debug Postal Code'), function() {
+                        UIUtils.show_debug_postal_code_info(frm);
+                    }, __('Debug'));
+                }
+            }
+        }
+    });
+}
+
+function add_view_buttons(frm) {
+    if (frm.doc.customer) {
+        frm.add_custom_button(__('Customer'), function() {
+            frappe.set_route('Form', 'Customer', frm.doc.customer);
+        }, __('View'));
+        
+        frm.add_custom_button(__('Refresh Financial History'), function() {
+            PaymentUtils.refresh_financial_history(frm);
+        }, __('Actions'));
+        
+        frm.add_custom_button(__('View Donations'), function() {
+            frappe.call({
+                method: "verenigingen.verenigingen.doctype.member.member.get_linked_donations",
+                args: {
+                    "member": frm.doc.name
+                },
+                callback: function(r) {
+                    if (r.message && r.message.donor) {
+                        frappe.route_options = {
+                            "donor": r.message.donor
+                        };
+                        frappe.set_route("List", "Donation");
+                    } else {
+                        frappe.msgprint(__("No donor record linked to this member."));
+                    }
+                }
+            });
+        }, __('View'));
+    }
+}
+
+function add_volunteer_buttons(frm) {
+    // Check if volunteer profile exists
+    frappe.call({
+        method: 'frappe.client.get_list',
+        args: {
+            doctype: 'Volunteer',
+            filters: {
+                'member': frm.doc.name
+            }
+        },
+        callback: function(r) {
+            if (r.message && r.message.length > 0) {
+                const volunteer = r.message[0];
+                
+                frm.add_custom_button(__('View Volunteer Profile'), function() {
+                    frappe.set_route('Form', 'Volunteer', volunteer.name);
+                }, __('View'));
+                
+                frm.add_custom_button(__('Volunteer Activities'), function() {
+                    VolunteerUtils.show_volunteer_activities(volunteer.name);
+                }, __('View'));
+                
+                frm.add_custom_button(__('Volunteer Assignments'), function() {
+                    VolunteerUtils.show_volunteer_assignments(volunteer.name);
+                }, __('View'));
+            } else {
+                frm.add_custom_button(__('Create Volunteer Profile'), function() {
+                    VolunteerUtils.create_volunteer_from_member(frm);
+                }, __('Actions'));
+            }
+        }
+    });
+}
+
+function add_termination_buttons(frm) {
+    // Check termination status and permissions first
+    frappe.call({
+        method: 'verenigingen.permissions.can_terminate_member_api',
+        args: {
+            member_name: frm.doc.name
+        },
+        callback: function(perm_result) {
+            const can_terminate = perm_result.message;
+            
+            if (!can_terminate) {
+                // User doesn't have permission, don't show termination buttons
+                return;
+            }
+            
+            // User has permission, check termination status
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_member_termination_status',
                 args: {
                     member: frm.doc.name
                 },
                 callback: function(r) {
                     if (r.message) {
-                        if (!r.message.has_active_mandate) {
-                            frm.dashboard.add_indicator(
-                                __('No Active SEPA Mandate'), 
-                                'orange'
-                            );
-                        } else if (r.message.expiring_soon) {
-                            frm.dashboard.add_indicator(
-                                __('SEPA Mandate Expiring Soon'), 
-                                'yellow'
-                            );
-                        }
-                    }
-                }
-            });
-            
-            // Get form settings based on system configuration
-            frappe.call({
-                method: 'verenigingen.verenigingen.doctype.member.member.get_member_form_settings',
-                callback: function(r) {
-                    if (r.message) {
-                        // Toggle chapter field visibility based on settings
-                        frm.toggle_display('primary_chapter', r.message.show_chapter_field);
-                        frm.toggle_display('chapter_and_volunteer_activity_section', r.message.show_chapter_field);
+                        const status = r.message;
                         
-                        // Update chapter field label if needed
-                        if (r.message.chapter_field_label) {
-                            frm.set_df_property('primary_chapter', 'label', r.message.chapter_field_label);
+                        // Add terminate button if no active termination
+                        if (!status.has_active_termination) {
+                            let button_class = 'btn-danger';
+                            let button_text = __('Terminate Membership');
+                            
+                            let btn = frm.add_custom_button(button_text, function() {
+                                TerminationUtils.show_termination_dialog(frm.doc.name, frm.doc.full_name);
+                            }, __('Actions'));
+                            
+                            if (btn && btn.addClass) {
+                                btn.addClass(button_class + ' termination-button');
+                            }
                         }
+                        
+                        
+                        // Add view termination history button
+                        frm.add_custom_button(__('Termination History'), function() {
+                            TerminationUtils.show_termination_history(frm.doc.name);
+                        }, __('View'));
                     }
                 }
             });
         }
-    },
-    
-    primary_chapter: function(frm) {
-        // When primary chapter is changed, automatically assign member to that chapter
-        if (frm.doc.primary_chapter && !frm.doc.__islocal && !frm._chapter_assignment_in_progress) {
-            // Prevent infinite loops
-            frm._chapter_assignment_in_progress = true;
-            
-            frappe.call({
-                method: 'verenigingen.verenigingen.doctype.chapter.chapter.assign_member_to_chapter',
-                args: {
-                    member: frm.doc.name,
-                    chapter: frm.doc.primary_chapter,
-                    note: 'Chapter updated via member form'
-                },
-                callback: function(r) {
-                    frm._chapter_assignment_in_progress = false;
-                    
-                    if (r.message && r.message.success) {
-                        if (r.message.added_to_members) {
-                            frappe.show_alert({
-                                message: __('Added to {0} chapter members list', [frm.doc.primary_chapter]),
-                                indicator: 'green'
-                            }, 5);
-                        } else {
-                            frappe.show_alert({
-                                message: __('Already a member of {0} chapter', [frm.doc.primary_chapter]),
-                                indicator: 'blue'
-                            }, 3);
-                        }
-                    }
-                },
-                error: function(r) {
-                    frm._chapter_assignment_in_progress = false;
-                    console.error('Error assigning member to chapter:', r);
-                }
-            });
-        }
-    },
-    
-    primary_address: function(frm) {
-        // If address is set, always check for chapter suggestions (not just when chapter is empty)
-        if (frm.doc.primary_address && !frm.doc.__islocal) {
-            // First check if chapter management is enabled
-            frappe.call({
-                method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
-                callback: function(r) {
-                    if (r.message) {
-                        // Add a small delay to ensure address is fully loaded
-                        setTimeout(function() {
-                            suggest_chapter_from_address(frm);
-                        }, 500);
-                    }
-                }
-            });
-        }
-    },
-    
-    createVolunteerRecord: function(frm) {
-        // First get the email domain from settings
-        frappe.call({
-            method: 'frappe.client.get_value',
-            args: {
-                doctype: 'Verenigingen Settings',
-                fieldname: 'organization_email_domain'
-            },
-            callback: function(r) {
-                // Default domain if not set
-                const domain = r.message && r.message.organization_email_domain 
-                    ? r.message.organization_email_domain 
-                    : 'example.org';
-            
-                // Generate organization email based on full name
-                // Replace spaces with dots and convert to lowercase
-                const nameForEmail = frm.doc.full_name 
-                    ? frm.doc.full_name.replace(/\s+/g, '.').toLowerCase()
-                    : '';
-            
-                // Construct organization email
-                const orgEmail = nameForEmail ? `${nameForEmail}@${domain}` : '';
-            
-                // Set route options for creating volunteer
-                frappe.route_options = {
-                    'volunteer_name': frm.doc.full_name,
-                    'member': frm.doc.name,
-                    'preferred_pronouns': frm.doc.pronouns,
-                    'email': orgEmail,  // Organization email
-                    'personal_email': frm.doc.email || '',  // Personal email from member
-                    'status': 'Active',  // Default to Active
-                    'start_date': frappe.datetime.get_today()  // Set start date
-                };
-            
-                // Create new volunteer doc
-                frappe.new_doc('Volunteer');
-            }
-        });
-    },
-    
-    update_full_name: function(frm) {
-        // Build full name from components
-        let full_name = [
-            frm.doc.first_name,
-            frm.doc.middle_name,
-            frm.doc.last_name
-        ].filter(Boolean).join(' ');
-        
-        frm.set_value('full_name', full_name);
-    },
-    
-    payment_method: function(frm) {
-        // Show/hide bank details based on payment method
-        const is_direct_debit = frm.doc.payment_method === 'Direct Debit';
-        const show_bank_details = ['Direct Debit', 'Bank Transfer'].includes(frm.doc.payment_method);
-        
-        frm.toggle_display(['bank_details_section'], show_bank_details);
-        frm.toggle_reqd(['iban', 'bank_account_name'], is_direct_debit);
-    },
-    
-    before_save: function(frm) {
-        // Consolidated IBAN and BIC processing before save
-        if (frm.doc.iban) {
-            // Format IBAN
-            frm.doc.iban = formatIBAN(frm.doc.iban);
-            
-            // Auto-derive BIC if Direct Debit and no BIC set
-            if (frm.doc.payment_method === 'Direct Debit' && 
-                (!frm.doc.bic || frm.doc.bic === '')) {
-                
-                // Try to get BIC synchronously - this is the only place we do BIC derivation
-                frappe.call({
-                    method: 'verenigingen.verenigingen.doctype.member.member.derive_bic_from_iban',
-                    args: {
-                        iban: frm.doc.iban
-                    },
-                    async: false,
-                    callback: function(r) {
-                        if (r.message && r.message.bic) {
-                            frm.doc.bic = r.message.bic;
-                            frappe.show_alert({
-                                message: __('BIC/SWIFT code derived from IBAN'),
-                                indicator: 'green'
-                            }, 3);
-                        }
-                    }
-                });
-            }
-        }
-    },
-    
-    after_save: function(frm) {
-        console.log('Member after_save triggered');
-        
-        // Check for chapter suggestions after save if address exists but no chapter
-        if (frm.doc.primary_address && !frm.doc.primary_chapter) {
-            frappe.call({
-                method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
-                callback: function(r) {
-                    if (r.message) {
-                        setTimeout(function() {
-                            suggest_chapter_from_address(frm);
-                        }, 1000);
-                    }
-                }
-            });
-        }
-        
-        // Only check for mandate popup if:
-        // 1. Document is saved (not new)
-        // 2. Has IBAN 
-        // 3. Has bank account name
-        if (!frm.doc.__islocal && frm.doc.iban && frm.doc.bank_account_name) {
-            console.log('Conditions met for SEPA mandate check');
-            
-            // Prevent multiple simultaneous checks
-            if (frm._mandate_check_in_progress) {
-                console.log('Mandate check already in progress, skipping');
-                return;
-            }
-            
-            // Check if we should show mandate popup
-            checkForMandateWithRetry(frm, frm.doc.iban);
-        }
-    }
-});
+    });
+}
 
-// Handlers for the Member SEPA Mandate Link child table
-frappe.ui.form.on('Member SEPA Mandate Link', {
-    sepa_mandate: function(frm, cdt, cdn) {
-        // When a mandate is selected, fetch its details
-        const row = locals[cdt][cdn];
+function add_simple_chapter_suggestion(frm) {
+    if (!frm.doc.__islocal && !frm.doc.current_chapter_display && !$('.chapter-suggestion-container').length) {
+        var $container = $('<div class="chapter-suggestion-container alert alert-info mt-2"></div>');
+        $container.html(`
+            <p><i class="fa fa-info-circle"></i> ${__("This member doesn't have a chapter assigned yet.")}</p>
+            <p class="mb-0"><small class="text-muted">${__("Use the Chapter field above to assign this member to a chapter.")}</small></p>
+        `);
         
-        if (row.sepa_mandate) {
-            frappe.db.get_value('SEPA Mandate', row.sepa_mandate, 
-                ['mandate_id', 'status', 'sign_date', 'expiry_date'], 
-                function(r) {
-                    if (r) {
-                        frappe.model.set_value(cdt, cdn, 'mandate_reference', r.mandate_id);
-                        frappe.model.set_value(cdt, cdn, 'status', r.status);
-                        frappe.model.set_value(cdt, cdn, 'valid_from', r.sign_date);
-                        frappe.model.set_value(cdt, cdn, 'valid_until', r.expiry_date);
-                    }
+        $(frm.fields_dict.current_chapter_display.wrapper).append($container);
+    }
+}
+
+// ==================== FORM SETUP FUNCTIONS ====================
+
+function setup_form_behavior(frm) {
+    // Set up member ID field behavior
+    if (frm.doc.member_id) {
+        frm.set_df_property('member_id', 'read_only', 1);
+    }
+    
+    // Set up payment method dependent fields
+    UIUtils.handle_payment_method_change(frm);
+    
+    // Set up organization user creation if enabled
+    setup_organization_user_creation(frm);
+}
+
+function setup_organization_user_creation(frm) {
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.verenigingen_settings.verenigingen_settings.get_organization_email_domain',
+        callback: function(r) {
+            if (r.message && r.message.organization_email_domain) {
+                if (!frm.doc.user && frm.doc.docstatus === 1) {
+                    frm.add_custom_button(__('Create Organization User'), function() {
+                        UIUtils.create_organization_user(frm);
+                    }, __('Actions'));
+                }
+            }
+        }
+    });
+}
+
+
+function add_member_id_buttons(frm) {
+    // Check if user has permission to manage member IDs
+    const user_roles = frappe.user_roles || [];
+    const can_manage_member_ids = user_roles.includes('System Manager') || user_roles.includes('Membership Manager');
+    
+    if (!can_manage_member_ids) {
+        return; // User doesn't have permission
+    }
+    
+    // Add "Assign Member ID" button if member doesn't have one
+    if (!frm.doc.member_id) {
+        frm.add_custom_button(__('Assign Member ID'), function() {
+            frappe.confirm(
+                __('Are you sure you want to assign a member ID to {0}?', [frm.doc.full_name]),
+                function() {
+                    frm.call({
+                        method: 'ensure_member_id',
+                        doc: frm.doc,
+                        callback: function(r) {
+                            if (r.message && r.message.success) {
+                                frm.reload_doc();
+                                frappe.show_alert({
+                                    message: r.message.message,
+                                    indicator: 'green'
+                                }, 5);
+                            } else if (r.message && r.message.message) {
+                                frappe.msgprint(r.message.message);
+                            }
+                        }
+                    });
                 }
             );
-        }
-    },
+        }, __('Member ID'));
+    }
     
-    is_current: function(frm, cdt, cdn) {
-        // When setting a mandate as current, unset others
-        const row = locals[cdt][cdn];
+    // Add "View Member ID Statistics" button for System Managers
+    if (user_roles.includes('System Manager')) {
+        frm.add_custom_button(__('Member ID Statistics'), function() {
+            show_member_id_statistics_dialog();
+        }, __('Member ID'));
         
-        if (row.is_current) {
-            // Unset current on other mandates
-            frm.doc.sepa_mandates.forEach(function(mandate) {
-                if (mandate.name !== cdn && mandate.is_current) {
-                    frappe.model.set_value(mandate.doctype, mandate.name, 'is_current', 0);
+        frm.add_custom_button(__('Preview Next ID'), function() {
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.member.member_id_manager.get_next_member_id_preview',
+                callback: function(r) {
+                    if (r.message) {
+                        frappe.msgprint(__('Next member ID that will be assigned: {0}', [r.message.next_id]));
+                    }
                 }
             });
-        }
-    }
-});
-
-// CONSOLIDATED SEPA MANDATE CHECK WITH RETRY LOGIC
-function checkForMandateWithRetry(frm, iban, retryCount = 0) {
-    const maxRetries = 2;
-    
-    console.log(`Checking for mandate mismatch, attempt ${retryCount + 1}`);
-    
-    // Set flag to prevent concurrent checks
-    frm._mandate_check_in_progress = true;
-    
-    frappe.call({
-        method: 'verenigingen.verenigingen.doctype.member.member.check_mandate_iban_mismatch',
-        args: {
-            member: frm.doc.name,
-            current_iban: iban
-        },
-        callback: function(r) {
-            console.log('Server response for mandate IBAN check:', r);
-            
-            frm._mandate_check_in_progress = false;
-            
-            if (r.message && r.message.show_popup) {
-                console.log(`Showing dialog for scenario: ${r.message.scenario}`);
-                
-                let message;
-                
-                // Customize message based on scenario
-                if (r.message.scenario === 'first_time_setup') {
-                    message = __('No SEPA mandate exists yet for Direct Debit payments.') + 
-                             '\n\n' + __('Would you like to create a SEPA mandate for this bank account?');
-                } else if (r.message.scenario === 'bank_account_change') {
-                    message = __('The IBAN you entered differs from your existing SEPA mandate.') + 
-                             '\n' + __('Current mandate IBAN: {0}', [r.message.existing_iban]) +
-                             '\n' + __('New IBAN: {0}', [frm.doc.iban]) +
-                             '\n\n' + __('Would you like to create a new SEPA mandate for the new bank account?');
-                } else {
-                    message = r.message.message || __('Would you like to create a SEPA mandate?');
+        }, __('Member ID'));
+        
+        frm.add_custom_button(__('Debug Member ID Assignment'), function() {
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.member.member.debug_member_id_assignment',
+                args: {
+                    member_name: frm.doc.name
+                },
+                callback: function(r) {
+                    if (r.message) {
+                        let message = '<h4>Member ID Assignment Debug Info</h4><table class="table table-bordered">';
+                        for (let key in r.message) {
+                            message += `<tr><td><strong>${key}:</strong></td><td>${r.message[key]}</td></tr>`;
+                        }
+                        message += '</table>';
+                        
+                        frappe.msgprint({
+                            title: __('Debug Information'),
+                            message: message,
+                            wide: true
+                        });
+                    }
                 }
-                
-                // Show the mandate creation dialog
-                setTimeout(() => {
-                    showMandateCreationDialog(frm, message, r.message);
-                }, 500);
-            } else {
-                console.log('No popup needed:', r.message?.reason);
-            }
-        },
-        error: function(r) {
-            console.error('Error checking mandate IBAN mismatch:', r);
-            frm._mandate_check_in_progress = false;
-            
-            // Retry logic
-            if (retryCount < maxRetries) {
-                console.log(`Retrying mandate check in 1 second (attempt ${retryCount + 2}/${maxRetries + 1})`);
-                setTimeout(() => {
-                    checkForMandateWithRetry(frm, iban, retryCount + 1);
-                }, 1000);
-            } else {
-                // Show error with option to create mandate anyway
+            });
+        }, __('Member ID'));
+        
+        // Add force assign button for System Managers
+        if (user_roles.includes('System Manager')) {
+            frm.add_custom_button(__('Force Assign Member ID'), function() {
                 frappe.confirm(
-                    __('Unable to check existing SEPA mandates due to a technical error.') + '\n\n' +
-                    __('Would you like to create a new SEPA mandate anyway?'),
+                    __('Force assign a member ID to {0}? This bypasses normal assignment rules.', [frm.doc.full_name]),
                     function() {
-                        // User chose to create mandate anyway
-                        const fallbackData = {
-                            scenario: 'error_fallback',
-                            message: 'Creating mandate after error'
-                        };
-                        showMandateCreationDialog(frm, __('Create SEPA mandate'), fallbackData);
-                    },
-                    function() {
-                        // User chose not to create mandate
-                        frappe.show_alert({
-                            message: __('No SEPA mandate created. You can create one manually later if needed.'),
-                            indicator: 'blue'
-                        }, 5);
+                        frm.call({
+                            method: 'force_assign_member_id',
+                            doc: frm.doc,
+                            callback: function(r) {
+                                if (r.message && r.message.success) {
+                                    frm.reload_doc();
+                                    frappe.show_alert({
+                                        message: r.message.message,
+                                        indicator: 'green'
+                                    }, 5);
+                                } else if (r.message && r.message.message) {
+                                    frappe.msgprint(r.message.message);
+                                }
+                            }
+                        });
                     }
                 );
-            }
+            }, __('Member ID'));
         }
-    });
-}
-
-// Enhanced mandate creation dialog with payment method suggestion
-function showMandateCreationDialog(frm, message = null, serverData = null) {
-    console.log('showMandateCreationDialog called with serverData:', serverData);
-    
-    // Generate suggested mandate reference
-    const suggestedReference = generateMandateReference(frm.doc);
-    
-    const confirmMessage = message || __('Would you like to create a new SEPA mandate for this bank account?');
-    
-    frappe.confirm(
-        confirmMessage,
-        function() {
-            console.log('User confirmed mandate creation');
-            
-            const d = new frappe.ui.Dialog({
-                title: __('Create SEPA Mandate'),
-                fields: [
-                    {
-                        label: __('Mandate Reference'),
-                        fieldname: 'mandate_id',
-                        fieldtype: 'Data',
-                        default: suggestedReference,
-                        reqd: 1,
-                        description: __('Unique identifier for this mandate')
-                    },
-                    {
-                        label: __('IBAN'),
-                        fieldname: 'iban',
-                        fieldtype: 'Data',
-                        default: frm.doc.iban,
-                        reqd: 1,
-                        read_only: 1
-                    },
-                    {
-                        label: __('BIC/SWIFT'),
-                        fieldname: 'bic',
-                        fieldtype: 'Data',
-                        default: frm.doc.bic || '',
-                        description: __('Will be auto-derived if left empty')
-                    },
-                    {
-                        label: __('Account Holder Name'),
-                        fieldname: 'account_holder_name',
-                        fieldtype: 'Data',
-                        default: frm.doc.bank_account_name || frm.doc.full_name,
-                        reqd: 1
-                    },
-                    {
-                        label: __('Sign Date'),
-                        fieldname: 'sign_date',
-                        fieldtype: 'Date',
-                        default: frappe.datetime.get_today(),
-                        reqd: 1
-                    },
-                    {
-                        label: __('Mandate Type'),
-                        fieldname: 'mandate_type',
-                        fieldtype: 'Select',
-                        options: [
-                            {label: __('Recurring payments (recommended)'), value: 'RCUR'},
-                            {label: __('One-off payment'), value: 'OOFF'}
-                        ],
-                        default: 'RCUR',
-                        reqd: 1
-                    },
-                    {
-                        label: __('Usage'),
-                        fieldname: 'usage_section',
-                        fieldtype: 'Section Break'
-                    },
-                    {
-                        label: __('Use for Memberships'),
-                        fieldname: 'used_for_memberships',
-                        fieldtype: 'Check',
-                        default: 1
-                    },
-                    {
-                        label: __('Use for Donations'),
-                        fieldname: 'used_for_donations',
-                        fieldtype: 'Check',
-                        default: 0
-                    },
-                    {
-                        label: __('Payment Method'),
-                        fieldname: 'payment_section',
-                        fieldtype: 'Section Break'
-                    },
-                    {
-                        label: __('Update Payment Method to Direct Debit'),
-                        fieldname: 'update_payment_method',
-                        fieldtype: 'Check',
-                        default: frm.doc.payment_method !== 'Direct Debit' ? 1 : 0,
-                        description: __('Recommended for SEPA mandate usage')
-                    },
-                    {
-                        label: __('Notes'),
-                        fieldname: 'notes_section',
-                        fieldtype: 'Section Break'
-                    },
-                    {
-                        label: __('Additional Notes'),
-                        fieldname: 'notes',
-                        fieldtype: 'Small Text',
-                        default: serverData && serverData.existing_mandate ? 
-                            __('Replacing mandate due to bank account change') : ''
-                    }
-                ],
-                primary_action_label: __('Create Mandate'),
-                primary_action(values) {
-                    console.log('Creating mandate with values:', values);
-                    
-                    // If there's an existing mandate that we're replacing, mark it as replaced
-                    const additionalArgs = {};
-                    if (serverData && serverData.existing_mandate) {
-                        additionalArgs.replace_mandate = serverData.existing_mandate;
-                    }
-                    
-                    frappe.call({
-                        method: 'verenigingen.verenigingen.doctype.member.member.create_and_link_mandate_enhanced',
-                        args: {
-                            member: frm.doc.name,
-                            mandate_id: values.mandate_id,
-                            iban: values.iban,
-                            bic: values.bic || '',
-                            account_holder_name: values.account_holder_name,
-                            mandate_type: values.mandate_type,
-                            sign_date: values.sign_date,
-                            used_for_memberships: values.used_for_memberships,
-                            used_for_donations: values.used_for_donations,
-                            notes: values.notes,
-                            ...additionalArgs
-                        },
-                        callback: function(r) {
-                            console.log('Mandate creation response:', r);
-                            if (r.message) {
-                                let alertMessage = __('SEPA Mandate {0} created successfully', [values.mandate_id]);
-                                if (serverData && serverData.existing_mandate) {
-                                    alertMessage += '. ' + __('Previous mandate has been marked as replaced.');
-                                }
-                                
-                                frappe.show_alert({
-                                    message: alertMessage,
-                                    indicator: 'green'
-                                }, 7);
-                                
-                                // Update payment method if requested
-                                if (values.update_payment_method && frm.doc.payment_method !== 'Direct Debit') {
-                                    frm.set_value('payment_method', 'Direct Debit');
-                                    frappe.show_alert({
-                                        message: __('Payment method updated to Direct Debit'),
-                                        indicator: 'blue'
-                                    }, 5);
-                                }
-                                
-                                // Wait a moment then reload the form
-                                setTimeout(() => {
-                                    frm.reload_doc();
-                                }, 1500);
-                            }
-                        },
-                        error: function(r) {
-                            console.error('Error creating mandate:', r);
-                        }
-                    });
-                    d.hide();
-                }
-            });
-            
-            d.show();
-            
-            // Auto-derive BIC when IBAN changes
-            d.fields_dict.iban.df.onchange = function() {
-                const iban = d.get_value('iban');
-                if (iban && !d.get_value('bic')) {
-                    frappe.call({
-                        method: 'verenigingen.verenigingen.doctype.member.member.derive_bic_from_iban',
-                        args: { iban: iban },
-                        callback: function(r) {
-                            if (r.message && r.message.bic) {
-                                d.set_value('bic', r.message.bic);
-                            }
-                        }
-                    });
-                }
-            };
-        },
-        function() {
-            console.log('User declined mandate creation');
-            frappe.show_alert(__('No new SEPA mandate created. The existing mandate will remain active.'), 5);
-        }
-    );
-}
-
-// Function to generate a suggested mandate reference
-function generateMandateReference(memberDoc) {
-    // Format: M-[MemberID]-[YYYYMMDD]-[Random3Digits]
-    const today = new Date();
-    const dateStr = today.getFullYear().toString() + 
-                   (today.getMonth() + 1).toString().padStart(2, '0') + 
-                   today.getDate().toString().padStart(2, '0');
-    
-    const randomSuffix = Math.floor(Math.random() * 900) + 100; // 3-digit random number
-    
-    let memberId = memberDoc.member_id || memberDoc.name.replace('Assoc-Member-', '').replace(/-/g, '');
-    
-    return `M-${memberId}-${dateStr}-${randomSuffix}`;
-}
-
-// Function to suggest chapters based on address
-function suggest_chapter_from_address(frm) {
-    console.log('suggest_chapter_from_address called for address:', frm.doc.primary_address);
-    
-    if (!frm.doc.primary_address) {
-        console.log('No primary address set');
-        return;
     }
-    
-    // Get the address details
+}
+
+function show_member_id_statistics_dialog() {
     frappe.call({
-        method: 'frappe.client.get',
-        args: {
-            doctype: 'Address',
-            name: frm.doc.primary_address
-        },
+        method: 'verenigingen.verenigingen.doctype.member.member_id_manager.get_member_id_statistics',
         callback: function(r) {
-            console.log('Address response:', r);
-            
             if (r.message) {
-                const address = r.message;
+                const stats = r.message;
+                let html = `
+                    <div class="member-id-stats">
+                        <h4>Member ID Statistics</h4>
+                        <table class="table table-bordered">
+                            <tr><td><strong>Next ID to be assigned:</strong></td><td>${stats.next_id}</td></tr>
+                            <tr><td><strong>Current counter value:</strong></td><td>${stats.current_counter}</td></tr>
+                            <tr><td><strong>Highest assigned ID:</strong></td><td>${stats.highest_assigned}</td></tr>
+                            <tr><td><strong>Total members with numeric IDs:</strong></td><td>${stats.total_with_numeric_ids}</td></tr>
+                            <tr><td><strong>Gap count:</strong></td><td>${stats.gap_count}</td></tr>
+                `;
                 
-                // Debug log the address data
-                console.log('Address data:', {
-                    pincode: address.pincode,
-                    state: address.state,
-                    city: address.city,
-                    country: address.country
-                });
-                
-                // Check if we have a postal code
-                if (!address.pincode) {
-                    console.log('No postal code found in address');
-                    frappe.show_alert({
-                        message: __('No postal code found in address. Please add a postal code to enable chapter suggestions.'),
-                        indicator: 'orange'
-                    }, 5);
-                    return;
+                if (stats.gaps && stats.gaps.length > 0) {
+                    html += `<tr><td><strong>Available gaps (first 10):</strong></td><td>${stats.gaps.join(', ')}</td></tr>`;
                 }
                 
-                // Call the suggestion function with address details
-                suggest_chapter_for_member(frm, {
-                    postal_code: address.pincode,
-                    state: address.state,
-                    city: address.city
+                html += `</table></div>`;
+                
+                const dialog = new frappe.ui.Dialog({
+                    title: __('Member ID Statistics'),
+                    size: 'large',
+                    fields: [
+                        {
+                            fieldtype: 'HTML',
+                            options: html
+                        }
+                    ]
                 });
-            } else {
-                console.log('No address data received');
-                frappe.show_alert({
-                    message: __('Could not load address details for chapter suggestion'),
-                    indicator: 'red'
-                }, 5);
+                
+                dialog.show();
             }
-        },
-        error: function(r) {
-            console.error('Error loading address:', r);
-            frappe.show_alert({
-                message: __('Error loading address details'),
-                indicator: 'red'
-            }, 5);
         }
     });
 }
 
-// Main function to suggest chapters for a member
-function suggest_chapter_for_member(frm, location_data) {
-    console.log('suggest_chapter_for_member called with location_data:', location_data);
-    
-    // First check if chapter management is enabled
-    frappe.call({
-        method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
-        callback: function(r) {
-            if (!r.message) {
-                frappe.msgprint(__('Chapter management is disabled in system settings.'));
-                return;
-            }
-            
-            let postal_code, state, city;
-            
-            if (location_data) {
-                postal_code = location_data.postal_code;
-                state = location_data.state;
-                city = location_data.city;
-            }
-            
-            console.log('Calling server method with:', {
-                member_name: frm.doc.name,
-                postal_code: postal_code,
-                state: state,
-                city: city
-            });
-            
-            // Call server method to find matching chapters
-            frappe.call({
-                method: 'verenigingen.verenigingen.doctype.chapter.chapter.suggest_chapter_for_member',
-                args: {
-                    member_name: frm.doc.name,
-                    postal_code: postal_code || null,
-                    state: state || null,
-                    city: city || null
-                },
-                callback: function(r) {
-                    console.log('Chapter suggestion response:', r);
-                    
-                    if (!r.message) {
-                        console.log('No chapter suggestions returned');
-                        // If no suggestions, show the simple chapter selector
-                        show_chapter_selector(frm);
-                        return;
-                    }
-                    
-                    const results = r.message;
-                    
-                    if (results.disabled) {
-                        frappe.msgprint(__('Chapter management is disabled in system settings.'));
-                        return;
-                    }
-                    
-                    // Debug log the results
-                    console.log('Chapter suggestion results:', {
-                        matches_by_postal: results.matches_by_postal?.length || 0,
-                        matches_by_region: results.matches_by_region?.length || 0,
-                        matches_by_city: results.matches_by_city?.length || 0,
-                        all_chapters: results.all_chapters?.length || 0
-                    });
-                    
-                    // Prioritize matches in this order: postal > region > city
-                    let best_matches = results.matches_by_postal?.length ? results.matches_by_postal :
-                                      results.matches_by_region?.length ? results.matches_by_region :
-                                      results.matches_by_city?.length ? results.matches_by_city :
-                                      [];
-                                      
-                    if (best_matches.length === 1) {
-                        // Single best match - suggest directly
-                        suggest_single_chapter(frm, best_matches[0], location_data);
-                    } else if (best_matches.length > 1) {
-                        // Multiple matches - show selection with matches highlighted
-                        show_chapter_selector(frm, best_matches);
-                    } else {
-                        console.log('No matching chapters found');
-                        frappe.show_alert({
-                            message: __('No chapters found matching postal code {0}. Showing all available chapters.', [postal_code]),
-                            indicator: 'blue'
-                        }, 5);
-                        // No matches - show standard selector
-                        show_chapter_selector(frm);
-                    }
-                },
-                error: function(r) {
-                    console.error('Error getting chapter suggestions:', r);
-                    frappe.show_alert({
-                        message: __('Error finding chapter suggestions. Showing all chapters.'),
-                        indicator: 'orange'
-                    }, 5);
-                    show_chapter_selector(frm);
-                }
-            });
+function add_fee_management_buttons(frm) {
+    if (frm.doc.docstatus === 1) {
+        // Add button to view current fee info
+        frm.add_custom_button(__('View Fee Details'), function() {
+            show_fee_details_dialog(frm);
+        }, __('Fee Management'));
+        
+        // Add button to change fee if user has permission
+        if (frappe.user.has_role(['System Manager', 'Membership Manager', 'Verenigingen Manager'])) {
+            frm.add_custom_button(__('Override Membership Fee'), function() {
+                show_fee_override_dialog(frm);
+            }, __('Fee Management'));
         }
-    });
-}
-
-// Function to suggest a single chapter
-function suggest_single_chapter(frm, chapter, location_data) {
-    let location_text = "";
-    if (location_data) {
-        if (location_data.postal_code) {
-            location_text = __("postal code {0}", [location_data.postal_code]);
-        } else if (location_data.city) {
-            location_text = location_data.city;
-        } else if (location_data.state) {
-            location_text = location_data.state;
+        
+        
+        // Add button to refresh subscription history
+        if (frm.doc.customer) {
+            frm.add_custom_button(__('Refresh Subscription History'), function() {
+                refresh_subscription_history(frm);
+            }, __('Fee Management'));
+            
+            frm.add_custom_button(__('Refresh Subscription Summary'), function() {
+                load_subscription_summary(frm);
+            }, __('Fee Management'));
         }
     }
+}
+
+function ensure_fee_management_section_visibility(frm) {
+    // Ensure fee management section is visible for authorized users
+    const hasRequiredRole = frappe.user.has_role(['System Manager', 'Membership Manager', 'Verenigingen Manager']);
+    const shouldShow = !frm.doc.__islocal && hasRequiredRole;
     
-    frappe.confirm(
-        __('Based on your location in {0}, we suggest joining the {1} chapter. Would you like to join this chapter?', 
-        [location_text || 'your area', chapter.name]),
-        function() {
-            // Yes - set primary chapter and add member to the chapter's members list
-            frappe.call({
-                method: 'verenigingen.verenigingen.doctype.chapter.chapter.assign_member_to_chapter',
-                args: {
-                    member: frm.doc.name,
-                    chapter: chapter.name
-                },
-                callback: function(r) {
-                    if (!r.exc) {
-                        frappe.msgprint(__('You have joined the {0} chapter', [chapter.name]));
-                        frm.reload_doc();
-                    }
-                }
-            });
-        },
-        function() {
-            // No - show the standard chapter selection dialog
-            show_chapter_selector(frm);
-        }
-    );
+    if (shouldShow) {
+        // Force show the section and all related fields
+        frm.set_df_property('fee_management_section', 'hidden', 0);
+        frm.set_df_property('fee_management_section', 'depends_on', '');
+        frm.set_df_property('membership_fee_override', 'hidden', 0);
+        frm.set_df_property('fee_override_reason', 'hidden', 0);
+        frm.set_df_property('fee_override_date', 'hidden', 0);
+        frm.set_df_property('fee_override_by', 'hidden', 0);
+        frm.set_df_property('fee_change_history_section', 'hidden', 0);
+        frm.set_df_property('fee_change_history', 'hidden', 0);
+        
+        // Also use toggle_display as backup
+        frm.toggle_display('fee_management_section', true);
+        frm.toggle_display('membership_fee_override', true);
+        frm.toggle_display('fee_override_reason', true);
+        frm.toggle_display('fee_override_date', true);
+        frm.toggle_display('fee_override_by', true);
+        frm.toggle_display('fee_change_history_section', true);
+        frm.toggle_display('fee_change_history', true);
+        
+        // Force refresh the fields
+        frm.refresh_field('membership_fee_override');
+        frm.refresh_field('fee_override_reason');
+        frm.refresh_field('fee_override_date');
+        frm.refresh_field('fee_override_by');
+        frm.refresh_field('fee_change_history');
+        
+        // Direct DOM manipulation to ensure visibility
+        setTimeout(() => {
+            $('[data-fieldname="fee_management_section"]').show();
+            $('[data-fieldname="membership_fee_override"]').show();
+            $('[data-fieldname="fee_override_reason"]').show();
+            $('[data-fieldname="fee_override_date"]').show();
+            $('[data-fieldname="fee_override_by"]').show();
+        }, 100);
+    } else {
+        frm.toggle_display('fee_management_section', false);
+    }
 }
 
-// Function to show chapter selector dialog
-function show_chapter_selector(frm, suggested_chapters) {
+function show_fee_details_dialog(frm) {
     frappe.call({
-        method: 'frappe.client.get_list',
-        args: {
-            doctype: 'Chapter',
-            filters: {
-                'published': 1
-            },
-            fields: ['name', 'region', 'introduction']
-        },
-        callback: function(r) {
-            if (!r.message || !r.message.length) {
-                frappe.msgprint(__('No active chapters found'));
-                return;
-            }
-            
-            const chapters = r.message;
-            
-            // Format options for the select field
-            let options = chapters.map(function(chapter) {
-                return {
-                    value: chapter.name,
-                    label: __("{0} ({1})", [chapter.name, chapter.region])
-                };
-            });
-            
-            // Determine the most suitable default
-            let default_chapter = frm.doc.primary_chapter;
-            
-            // If we have suggested chapters, use the first one as default
-            if (suggested_chapters && suggested_chapters.length) {
-                default_chapter = suggested_chapters[0].name;
-            }
-            
-            const d = new frappe.ui.Dialog({
-                title: __('Select Chapter'),
-                fields: [
-                    {
-                        label: __('Chapter'),
-                        fieldname: 'chapter',
-                        fieldtype: 'Select',
-                        options: options,
-                        reqd: 1,
-                        default: default_chapter
-                    },
-                    {
-                        label: __('Note'),
-                        fieldname: 'note',
-                        fieldtype: 'Small Text',
-                        depends_on: 'eval:!doc.chapter'
-                    }
-                ],
-                primary_action_label: __('Join Chapter'),
-                primary_action: function() {
-                    const values = d.get_values();
-                    
-                    if (!values.chapter) {
-                        frappe.msgprint(__('Please select a chapter'));
-                        return;
-                    }
-                    
-                    if (values.chapter === frm.doc.primary_chapter) {
-                        frappe.msgprint(__('No change in chapter'));
-                        d.hide();
-                        return;
-                    }
-                    
-                    // Call new method that both sets primary_chapter and adds to chapter members
-                    frappe.call({
-                        method: 'verenigingen.verenigingen.doctype.chapter.chapter.assign_member_to_chapter',
-                        args: {
-                            member: frm.doc.name,
-                            chapter: values.chapter,
-                            note: values.note
-                        },
-                        callback: function(r) {
-                            if(!r.exc) {
-                                frappe.msgprint(__('Successfully joined the {0} chapter', [values.chapter]));
-                                frm.reload_doc();
-                                d.hide();
-                            }
-                        }
-                    });
-                }
-            });
-            
-            d.show();
-            
-            // If we have suggested chapters, highlight them in the dialog
-            if (suggested_chapters && suggested_chapters.length) {
-                setTimeout(function() {
-                    // Add a note about the suggestions
-                    const suggested_names = suggested_chapters.map(c => c.name).join(', ');
-                    const suggestion_note = $(`<div class="alert alert-info mt-3">
-                        <span>${__('Suggested chapters based on your location:')} <strong>${suggested_names}</strong></span>
-                    </div>`);
-                    
-                    $(d.body).find('.form-layout').prepend(suggestion_note);
-                }, 500);
-            }
-        }
-    });
-}
-
-function process_payment(frm) {
-    frappe.call({
-        method: 'process_payment',
+        method: 'get_current_membership_fee',
         doc: frm.doc,
         callback: function(r) {
             if (r.message) {
-                frm.reload_doc();
-                frappe.msgprint(__('Payment processing initiated'));
+                const fee_info = r.message;
+                let html = `
+                    <div class="fee-details">
+                        <h4>Current Membership Fee Information</h4>
+                        <table class="table table-bordered">
+                            <tr><td><strong>Current Amount:</strong></td><td>${format_currency(fee_info.amount)}</td></tr>
+                            <tr><td><strong>Source:</strong></td><td>${get_fee_source_label(fee_info.source)}</td></tr>
+                `;
+                
+                if (fee_info.source === 'custom_override' && fee_info.reason) {
+                    html += `<tr><td><strong>Override Reason:</strong></td><td>${fee_info.reason}</td></tr>`;
+                }
+                
+                if (fee_info.membership_type) {
+                    html += `<tr><td><strong>Membership Type:</strong></td><td>${fee_info.membership_type}</td></tr>`;
+                }
+                
+                html += `</table></div>`;
+                
+                const dialog = new frappe.ui.Dialog({
+                    title: __('Membership Fee Details'),
+                    size: 'large',
+                    fields: [
+                        {
+                            fieldtype: 'HTML',
+                            options: html
+                        }
+                    ]
+                });
+                
+                dialog.show();
             }
         }
     });
 }
 
-function mark_as_paid(frm) {
+function show_fee_override_dialog(frm) {
     const dialog = new frappe.ui.Dialog({
-        title: __('Mark as Paid'),
+        title: __('Override Membership Fee'),
+        size: 'large',
         fields: [
             {
-                fieldname: 'payment_date',
-                fieldtype: 'Date',
-                label: __('Payment Date'),
-                default: frappe.datetime.get_today(),
-                reqd: 1
+                fieldtype: 'Currency',
+                fieldname: 'new_fee_amount',
+                label: __('New Fee Amount'),
+                reqd: 1,
+                description: __('Enter the new membership fee amount for this member')
             },
             {
-                fieldname: 'amount',
-                fieldtype: 'Currency',
-                label: __('Amount'),
-                default: frm.doc.payment_amount,
-                reqd: 1
+                fieldtype: 'Small Text',
+                fieldname: 'override_reason',
+                label: __('Reason for Override'),
+                reqd: 1,
+                description: __('Explain why this member needs a different fee amount')
+            },
+            {
+                fieldtype: 'HTML',
+                options: `
+                    <div class="alert alert-info">
+                        <h5>Important Notes:</h5>
+                        <ul>
+                            <li>This will update the member's subscription with the new amount</li>
+                            <li>The change will be recorded in the fee change history</li>
+                            <li>Active subscriptions will be cancelled and recreated</li>
+                        </ul>
+                    </div>
+                `
             }
         ],
-        primary_action_label: __('Mark as Paid'),
+        primary_action_label: __('Apply Fee Override'),
         primary_action: function(values) {
-            frappe.call({
-                method: 'mark_as_paid',
-                doc: frm.doc,
-                args: {
-                    payment_date: values.payment_date,
-                    amount: values.amount
-                },
-                callback: function(r) {
-                    if (r.message) {
+            frappe.confirm(
+                __('Are you sure you want to override the membership fee to {0}?', [format_currency(values.new_fee_amount)]),
+                function() {
+                    frm.set_value('membership_fee_override', values.new_fee_amount);
+                    frm.set_value('fee_override_reason', values.override_reason);
+                    
+                    frm.save().then(() => {
                         dialog.hide();
-                        frm.reload_doc();
-                    }
+                        frappe.show_alert({
+                            message: __('Membership fee override applied successfully'),
+                            indicator: 'green'
+                        }, 5);
+                    });
                 }
-            });
+            );
         }
     });
     
     dialog.show();
 }
 
-frappe.ui.form.on('Member Payment History', {
-    payment_history_add: function(frm, cdt, cdn) {
-        // Format new rows as they're added
-        let grid_row = frm.fields_dict.payment_history.grid.grid_rows_by_docname[cdn];
-        format_payment_history_row(grid_row);
-    }
-});
-
-// Helper function to format payment history grid rows
-function format_payment_history_row(grid_row) {
-    if (!grid_row || !grid_row.doc) return;
-    
-    setTimeout(() => {
-        try {
-            // Get all cells in the row
-            const cells = grid_row.row.find('.grid-row-column');
-            if (!cells.length) return;
-            
-            // Add special styling based on record type
-            const transaction_type = grid_row.doc.transaction_type;
-            
-            // Add visual indicator to the row
-            $(grid_row.row).attr('data-type', transaction_type);
-            
-            // Style unreconciled payments differently
-            if (transaction_type === "Unreconciled Payment") {
-                $(grid_row.row).addClass('unreconciled-row');
-                $(grid_row.row).css({
-                    'background-color': '#f5f7fa',  // Light gray background
-                    'font-style': 'italic'
-                });
-            }
-            
-            // Style donation payments differently
-            if (transaction_type === "Donation Payment") {
-                $(grid_row.row).addClass('donation-row');
-                $(grid_row.row).css({
-                    'background-color': '#fcf8e3',  // Light yellow background
-                    'font-style': 'italic'
-                });
-            }
-            
-            // Format transaction type with appropriate icon
-            let type_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'transaction_type');
-            if (type_idx >= 0 && cells[type_idx]) {
-                let type_icon = 'file-text';
-                let icon_color = 'text-muted';
-                
-                if (transaction_type === 'Membership Invoice') {
-                    type_icon = 'users';
-                    icon_color = 'text-primary';
-                }
-                else if (transaction_type === 'Donation Payment') {
-                    type_icon = 'heart';
-                    icon_color = 'text-danger';
-                }
-                else if (transaction_type === 'Unreconciled Payment') {
-                    type_icon = 'question-circle';
-                    icon_color = 'text-muted';
-                }
-                
-                const type_html = `<span>
-                    <i class="fa fa-${type_icon} ${icon_color}" style="margin-right: 5px;"></i>
-                    ${transaction_type || ''}
-                </span>`;
-                $(cells[type_idx]).html(type_html);
-            }
-            
-            // Format invoice status with color if it exists
-            const status = grid_row.doc.status;
-            let status_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'status');
-            if (status_idx >= 0 && cells[status_idx] && status && status !== 'N/A') {
-                let status_color = 'gray';
-                if (status === 'Paid') status_color = 'green';
-                else if (status === 'Overdue') status_color = 'red';
-                else if (status === 'Unpaid') status_color = 'orange';
-                
-                const status_html = `<span class="indicator ${status_color}">${status || ''}</span>`;
-                $(cells[status_idx]).html(status_html);
-            }
-            
-            // Format payment status with color
-            const payment_status = grid_row.doc.payment_status;
-            let payment_status_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'payment_status');
-            if (payment_status_idx >= 0 && cells[payment_status_idx]) {
-                let status_color = 'gray';
-                if (payment_status === 'Paid') status_color = 'green';
-                else if (payment_status === 'Overdue') status_color = 'red';
-                else if (payment_status === 'Unpaid') status_color = 'orange';
-                else if (payment_status === 'Partially Paid') status_color = 'blue';
-                
-                const status_html = `<span class="indicator ${status_color}">${payment_status || ''}</span>`;
-                $(cells[payment_status_idx]).html(status_html);
-            }
-            
-            // Format mandate status if it exists
-            if (grid_row.doc.has_mandate) {
-                const mandate_status = grid_row.doc.mandate_status;
-                let mandate_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'mandate_status');
-                if (mandate_idx >= 0 && cells[mandate_idx]) {
-                    let mandate_color = 'gray';
-                    if (mandate_status === 'Active') mandate_color = 'green';
-                    else if (mandate_status === 'Expired' || mandate_status === 'Cancelled') mandate_color = 'red';
-                    else if (mandate_status === 'Suspended') mandate_color = 'orange';
-                    
-                    const mandate_html = `<span class="indicator ${mandate_color}">${mandate_status || ''}</span>`;
-                    $(cells[mandate_idx]).html(mandate_html);
-                }
-            }
-            
-            // Add reference document link if exists
-            if (grid_row.doc.reference_doctype && grid_row.doc.reference_name) {
-                let ref_type_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'reference_doctype');
-                let ref_name_idx = grid_row.grid.fields.findIndex(f => f.fieldname === 'reference_name');
-                
-                if (ref_name_idx >= 0 && cells[ref_name_idx]) {
-                    const ref_html = `<a href="/app/${grid_row.doc.reference_doctype.toLowerCase().replace(/ /g, '-')}/${grid_row.doc.reference_name}">${grid_row.doc.reference_name}</a>`;
-                    $(cells[ref_name_idx]).html(ref_html);
-                }
-            }
-            
-        } catch (e) {
-            console.error('Error formatting payment history row:', e);
-        }
-    }, 100);
+function get_fee_source_label(source) {
+    const labels = {
+        'custom_override': 'Custom Override',
+        'membership_type': 'Membership Type Default',
+        'none': 'No Fee Set'
+    };
+    return labels[source] || source;
 }
 
-// Function to format IBAN - ONLY used in before_save now
-function formatIBAN(iban) {
-    if (!iban) return '';
+function refresh_subscription_history(frm) {
+    frappe.call({
+        method: 'refresh_subscription_history',
+        doc: frm.doc,
+        callback: function(r) {
+            if (r.message) {
+                frm.reload_doc();
+                frappe.show_alert({
+                    message: r.message.message || 'Subscription history refreshed',
+                    indicator: 'green'
+                }, 3);
+            }
+        }
+    });
+}
+
+function display_termination_status(frm) {
+    if (!frm.doc.name) return;
     
-    // Remove spaces and convert to uppercase
-    iban = iban.replace(/\s+/g, '').toUpperCase();
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_member_termination_status',
+        args: {
+            member: frm.doc.name
+        },
+        callback: function(r) {
+            if (r.message) {
+                const status = r.message;
+                
+                // Update termination status HTML field
+                update_termination_status_html(frm, status);
+                
+                // Add dashboard indicators
+                add_termination_dashboard_indicators(frm, status);
+            }
+        }
+    });
+}
+
+function update_termination_status_html(frm, status) {
+    let html = '<div class="termination-status-display">';
     
-    // Format with spaces every 4 characters
-    return iban.replace(/(.{4})/g, '$1 ').trim();
+    if (status.is_terminated && status.executed_requests && status.executed_requests.length > 0) {
+        const term_data = status.executed_requests[0];
+        html += `
+            <div class="alert alert-danger">
+                <h5><i class="fa fa-exclamation-triangle"></i> Membership Terminated</h5>
+                <p><strong>Termination Type:</strong> ${term_data.termination_type}</p>
+                <p><strong>Execution Date:</strong> ${frappe.datetime.str_to_user(term_data.execution_date)}</p>
+                <p><strong>Request:</strong> <a href="/app/membership-termination-request/${term_data.name}">${term_data.name}</a></p>
+            </div>
+        `;
+        
+        
+    } else if (status.pending_requests && status.pending_requests.length > 0) {
+        const pending = status.pending_requests[0];
+        const status_colors = {
+            'Draft': 'warning',
+            'Pending Approval': 'warning',
+            'Approved': 'info'
+        };
+        const alert_class = status_colors[pending.status] || 'secondary';
+        
+        html += `
+            <div class="alert alert-${alert_class}">
+                <h5><i class="fa fa-clock-o"></i> Termination Request Pending</h5>
+                <p><strong>Status:</strong> ${pending.status}</p>
+                <p><strong>Type:</strong> ${pending.termination_type}</p>
+                <p><strong>Request Date:</strong> ${frappe.datetime.str_to_user(pending.request_date)}</p>
+                <p><strong>Request:</strong> <a href="/app/membership-termination-request/${pending.name}">${pending.name}</a></p>
+            </div>
+        `;
+        
+    } else {
+        html += `
+            <div class="alert alert-success">
+                <h6><i class="fa fa-check-circle"></i> Active Membership</h6>
+                <p>No termination requests or actions on record.</p>
+            </div>
+        `;
+    }
+    
+    html += '</div>';
+    
+    // Update the HTML field
+    if (frm.fields_dict.termination_status_html) {
+        frm.fields_dict.termination_status_html.html(html);
+    }
+}
+
+function add_termination_dashboard_indicators(frm, status) {
+    if (status.is_terminated && status.executed_requests && status.executed_requests.length > 0) {
+        const term_data = status.executed_requests[0];
+        
+        frm.dashboard.add_indicator(
+            __('Membership Terminated'), 
+            'red'
+        );
+        
+        if (term_data.execution_date) {
+            frm.dashboard.add_indicator(
+                __('Terminated on {0}', [frappe.datetime.str_to_user(term_data.execution_date)]), 
+                'grey'
+            );
+        }
+        
+    } else if (status.pending_requests && status.pending_requests.length > 0) {
+        const pending = status.pending_requests[0];
+        
+        if (pending.status === 'Pending Approval') {
+            frm.dashboard.add_indicator(
+                __('Termination Pending Approval'), 
+                'orange'
+            );
+        } else if (pending.status === 'Approved') {
+            frm.dashboard.add_indicator(
+                __('Termination Approved - Awaiting Execution'), 
+                'yellow'
+            );
+        }
+    }
+}
+
+// ==================== SUBSCRIPTION SUMMARY FUNCTIONS ====================
+
+function load_subscription_summary(frm) {
+    if (!frm.doc.customer || !frm.doc.name) {
+        return;
+    }
+    
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.member.member.get_current_subscription_details',
+        args: {
+            member: frm.doc.name
+        },
+        callback: function(r) {
+            if (r.message) {
+                update_subscription_summary_display(frm, r.message);
+            }
+        }
+    });
+}
+
+function update_subscription_summary_display(frm, subscription_data) {
+    let html = '<div class="subscription-summary-display">';
+    
+    if (subscription_data.error) {
+        html += `
+            <div class="alert alert-warning">
+                <h6><i class="fa fa-exclamation-triangle"></i> Error Loading Subscriptions</h6>
+                <p>${subscription_data.error}</p>
+            </div>
+        `;
+    } else if (!subscription_data.has_subscription) {
+        html += `
+            <div class="alert alert-info">
+                <h6><i class="fa fa-info-circle"></i> No Active Subscriptions</h6>
+                <p>${subscription_data.message || 'This member has no active subscription plans.'}</p>
+            </div>
+        `;
+    } else {
+        html += `
+            <div class="alert alert-success">
+                <h6><i class="fa fa-check-circle"></i> Active Subscriptions (${subscription_data.count})</h6>
+            </div>
+        `;
+        
+        subscription_data.subscriptions.forEach(function(subscription) {
+            html += `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <h6 class="mb-0">
+                            <a href="/app/subscription/${subscription.name}">${subscription.name}</a>
+                            <span class="badge badge-success float-right">${subscription.status}</span>
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Period:</strong> ${frappe.datetime.str_to_user(subscription.start_date)} - ${subscription.end_date ? frappe.datetime.str_to_user(subscription.end_date) : 'Ongoing'}</p>
+                                <p><strong>Current Billing:</strong> ${frappe.datetime.str_to_user(subscription.current_invoice_start)} - ${frappe.datetime.str_to_user(subscription.current_invoice_end)}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Total Amount:</strong> ${format_currency(subscription.total_amount)}</p>
+                            </div>
+                        </div>
+            `;
+            
+            if (subscription.plans && subscription.plans.length > 0) {
+                html += `
+                    <h6>Subscription Plans:</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>Plan</th>
+                                    <th>Amount</th>
+                                    <th>Billing Frequency</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                subscription.plans.forEach(function(plan) {
+                    let billing_text = plan.billing_interval_count > 1 
+                        ? `Every ${plan.billing_interval_count} ${plan.billing_interval}s`
+                        : `${plan.billing_interval}ly`;
+                    
+                    html += `
+                        <tr>
+                            <td>${plan.plan_name}</td>
+                            <td>${format_currency(plan.price, plan.currency)}</td>
+                            <td>${billing_text}</td>
+                        </tr>
+                    `;
+                });
+                
+                html += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            }
+            
+            html += `
+                    </div>
+                </div>
+            `;
+        });
+    }
+    
+    html += '</div>';
+    
+    // Update the HTML field
+    if (frm.fields_dict.current_subscription_summary) {
+        frm.fields_dict.current_subscription_summary.html(html);
+    }
+}
+
+// ==================== NAME HANDLING FUNCTIONS ====================
+
+function update_full_name_from_components(frm) {
+    // Build full name with proper handling of name particles (tussenvoegsels)
+    let name_parts = [];
+    
+    if (frm.doc.first_name && frm.doc.first_name.trim()) {
+        name_parts.push(frm.doc.first_name.trim());
+    }
+    
+    // Handle name particles (tussenvoegsels) - these should be lowercase when in the middle
+    if (frm.doc.middle_name && frm.doc.middle_name.trim()) {
+        let particles = frm.doc.middle_name.trim();
+        // Ensure particles are lowercase when between first and last name
+        name_parts.push(particles.toLowerCase());
+    }
+    
+    if (frm.doc.last_name && frm.doc.last_name.trim()) {
+        name_parts.push(frm.doc.last_name.trim());
+    }
+    
+    let full_name = name_parts.join(' ');
+    
+    // Only update if the generated name is different and not empty
+    if (full_name && frm.doc.full_name !== full_name) {
+        frm.set_value('full_name', full_name);
+    }
+}
+
+// ==================== SUSPENSION FUNCTIONS ====================
+
+function add_suspension_buttons(frm) {
+    if (!frm.doc.name) return;
+    
+    // Check if user can perform suspension actions
+    frappe.call({
+        method: 'verenigingen.api.suspension_api.can_suspend_member',
+        args: {
+            member_name: frm.doc.name
+        },
+        callback: function(perm_result) {
+            const can_suspend = perm_result.message;
+            
+            if (!can_suspend) {
+                return; // No permission, don't show buttons
+            }
+            
+            // Get current suspension status
+            frappe.call({
+                method: 'verenigingen.api.suspension_api.get_suspension_status',
+                args: {
+                    member_name: frm.doc.name
+                },
+                callback: function(status_result) {
+                    if (status_result.message) {
+                        const status = status_result.message;
+                        
+                        if (status.is_suspended) {
+                            // Member is suspended - show unsuspend button
+                            let btn = frm.add_custom_button(__('Unsuspend Member'), function() {
+                                show_unsuspension_dialog(frm);
+                            }, __('Actions'));
+                            
+                            if (btn && btn.addClass) {
+                                btn.addClass('btn-success suspension-button');
+                            }
+                        } else {
+                            // Member is not suspended - show suspend button
+                            let btn = frm.add_custom_button(__('Suspend Member'), function() {
+                                show_suspension_dialog(frm);
+                            }, __('Actions'));
+                            
+                            if (btn && btn.addClass) {
+                                btn.addClass('btn-warning suspension-button');
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    });
+}
+
+function show_suspension_dialog(frm) {
+    // First get suspension preview
+    frappe.call({
+        method: 'verenigingen.api.suspension_api.get_suspension_preview',
+        args: {
+            member_name: frm.doc.name
+        },
+        callback: function(r) {
+            if (r.message) {
+                const preview = r.message;
+                
+                let preview_html = `
+                    <div class="suspension-preview">
+                        <h5>Suspension Impact</h5>
+                        <ul>
+                            <li><strong>Member Status:</strong> ${preview.member_status} → Suspended</li>
+                `;
+                
+                if (preview.has_user_account) {
+                    preview_html += `<li><strong>User Account:</strong> Will be disabled</li>`;
+                }
+                
+                if (preview.active_teams > 0) {
+                    preview_html += `<li><strong>Team Memberships:</strong> ${preview.active_teams} team(s) will be suspended</li>`;
+                    if (preview.team_details && preview.team_details.length > 0) {
+                        preview_html += `<li><strong>Teams:</strong> `;
+                        preview_html += preview.team_details.map(t => `${t.team} (${t.role})`).join(', ');
+                        preview_html += `</li>`;
+                    }
+                }
+                
+                if (preview.active_memberships > 0) {
+                    preview_html += `<li><strong>Active Memberships:</strong> ${preview.active_memberships} membership(s) remain active</li>`;
+                }
+                
+                preview_html += `</ul></div>`;
+                
+                const dialog = new frappe.ui.Dialog({
+                    title: __('Suspend Member: {0}', [frm.doc.full_name]),
+                    size: 'large',
+                    fields: [
+                        {
+                            fieldtype: 'HTML',
+                            options: preview_html
+                        },
+                        {
+                            fieldtype: 'Section Break',
+                            label: __('Suspension Details')
+                        },
+                        {
+                            fieldname: 'suspension_reason',
+                            fieldtype: 'Small Text',
+                            label: __('Reason for Suspension'),
+                            reqd: 1,
+                            description: __('Explain why this member is being suspended')
+                        },
+                        {
+                            fieldtype: 'Column Break'
+                        },
+                        {
+                            fieldname: 'suspend_user',
+                            fieldtype: 'Check',
+                            label: __('Suspend User Account'),
+                            default: 1,
+                            description: __('Disable the member\'s backend user account')
+                        },
+                        {
+                            fieldname: 'suspend_teams',
+                            fieldtype: 'Check',
+                            label: __('Suspend Team Memberships'),
+                            default: 1,
+                            description: __('Remove member from all teams')
+                        }
+                    ],
+                    primary_action_label: __('Suspend Member'),
+                    primary_action: function(values) {
+                        frappe.confirm(
+                            __('Are you sure you want to suspend {0}?', [frm.doc.full_name]),
+                            function() {
+                                frappe.call({
+                                    method: 'verenigingen.api.suspension_api.suspend_member',
+                                    args: {
+                                        member_name: frm.doc.name,
+                                        suspension_reason: values.suspension_reason,
+                                        suspend_user: values.suspend_user,
+                                        suspend_teams: values.suspend_teams
+                                    },
+                                    callback: function(r) {
+                                        if (r.message && r.message.success) {
+                                            dialog.hide();
+                                            frm.reload_doc();
+                                        }
+                                    }
+                                });
+                            }
+                        );
+                    }
+                });
+                
+                dialog.show();
+            }
+        }
+    });
+}
+
+function show_unsuspension_dialog(frm) {
+    const dialog = new frappe.ui.Dialog({
+        title: __('Unsuspend Member: {0}', [frm.doc.full_name]),
+        fields: [
+            {
+                fieldtype: 'HTML',
+                options: `
+                    <div class="alert alert-info">
+                        <h5>Unsuspension Process</h5>
+                        <ul>
+                            <li>Member status will be restored to previous state</li>
+                            <li>User account will be reactivated</li>
+                            <li>Team memberships require manual restoration</li>
+                        </ul>
+                    </div>
+                `
+            },
+            {
+                fieldname: 'unsuspension_reason',
+                fieldtype: 'Small Text',
+                label: __('Reason for Unsuspension'),
+                reqd: 1,
+                description: __('Explain why this member is being unsuspended')
+            }
+        ],
+        primary_action_label: __('Unsuspend Member'),
+        primary_action: function(values) {
+            frappe.confirm(
+                __('Are you sure you want to unsuspend {0}?', [frm.doc.full_name]),
+                function() {
+                    frappe.call({
+                        method: 'verenigingen.api.suspension_api.unsuspend_member',
+                        args: {
+                            member_name: frm.doc.name,
+                            unsuspension_reason: values.unsuspension_reason
+                        },
+                        callback: function(r) {
+                            if (r.message && r.message.success) {
+                                dialog.hide();
+                                frm.reload_doc();
+                            }
+                        }
+                    });
+                }
+            );
+        }
+    });
+    
+    dialog.show();
+}
+
+function display_suspension_status(frm) {
+    if (!frm.doc.name) return;
+    
+    frappe.call({
+        method: 'verenigingen.api.suspension_api.get_suspension_status',
+        args: {
+            member_name: frm.doc.name
+        },
+        callback: function(r) {
+            if (r.message) {
+                const status = r.message;
+                
+                if (status.is_suspended) {
+                    // Add dashboard indicator for suspended member
+                    frm.dashboard.add_indicator(
+                        __('Member Suspended'), 
+                        'orange'
+                    );
+                    
+                    if (status.user_suspended) {
+                        frm.dashboard.add_indicator(
+                            __('User Account Disabled'), 
+                            'red'
+                        );
+                    }
+                    
+                    if (status.active_teams === 0) {
+                        frm.dashboard.add_indicator(
+                            __('No Active Teams'), 
+                            'grey'
+                        );
+                    }
+                }
+            }
+        }
+    });
+}
+
+function display_amendment_status(frm) {
+    if (!frm.doc.name) return;
+    
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.membership_amendment_request.membership_amendment_request.get_member_pending_amendments',
+        args: {
+            member_name: frm.doc.name
+        },
+        callback: function(r) {
+            if (r.message && r.message.length > 0) {
+                const amendments = r.message;
+                let amendment_html = '<div class="amendment-status-container" style="margin: 10px 0;">';
+                
+                for (let amendment of amendments) {
+                    let status_color = 'orange';
+                    let alert_class = 'alert-warning';
+                    if (amendment.status === 'Approved') {
+                        status_color = 'green';
+                        alert_class = 'alert-success';
+                    }
+                    if (amendment.status === 'Rejected') {
+                        status_color = 'red';
+                        alert_class = 'alert-danger';
+                    }
+                    
+                    amendment_html += `
+                        <div class="alert ${alert_class}" style="padding: 12px; margin: 8px 0; border-left: 4px solid var(--${status_color});">
+                            <div class="row">
+                                <div class="col-md-8">
+                                    <h6 style="margin: 0 0 5px 0;"><i class="fa fa-edit"></i> ${amendment.amendment_type}</h6>
+                                    <p style="margin: 0;"><strong>Amount:</strong> ${frappe.format(amendment.requested_amount, {fieldtype: 'Currency'})}</p>
+                                    <p style="margin: 5px 0 0 0;"><small><strong>Reason:</strong> ${amendment.reason}</small></p>
+                                </div>
+                                <div class="col-md-4 text-right">
+                                    <span class="badge badge-${status_color} badge-lg" style="font-size: 12px; padding: 4px 8px;">${amendment.status}</span>
+                                    <br><small style="color: #666;">Effective: ${frappe.datetime.str_to_user(amendment.effective_date)}</small>
+                                    <br><a href="/app/membership-amendment-request/${amendment.name}" class="btn btn-xs btn-default" style="margin-top: 5px;">
+                                        View Amendment
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                amendment_html += '</div>';
+                
+                // Try injecting the content directly as a dashboard element as a fallback
+                let amendment_displayed = false;
+                
+                // First try the standard HTML field approach
+                if (frm.fields_dict.amendment_status_html) {
+                    try {
+                        frm.fields_dict.amendment_status_html.$wrapper.html(amendment_html);
+                        frm.set_df_property('amendment_status_section', 'depends_on', '');
+                        frm.set_df_property('amendment_status_section', 'hidden', 0);
+                        frm.toggle_display('amendment_status_section', true);
+                        frm.toggle_display('amendment_status_html', true);
+                        
+                        // Try to expand collapsible section
+                        setTimeout(() => {
+                            const sectionField = frm.get_field('amendment_status_section');
+                            if (sectionField && sectionField.collapse) {
+                                sectionField.collapse(false);
+                            }
+                            
+                            const sectionEl = $('[data-fieldname="amendment_status_section"]');
+                            const collapseToggle = sectionEl.find('.collapse-indicator, .octicon-chevron-down, .octicon-chevron-right');
+                            if (collapseToggle.length > 0) {
+                                collapseToggle.click();
+                            }
+                            
+                            // Check if it's actually visible after all attempts
+                            const htmlEl = $('[data-fieldname="amendment_status_html"]');
+                            if (htmlEl.is(':visible')) {
+                                amendment_displayed = true;
+                            }
+                        }, 200);
+                        
+                    } catch (e) {
+                        console.error('Error setting HTML field:', e);
+                    }
+                }
+                
+                // Fallback: Add as dashboard comment if HTML field doesn't work
+                setTimeout(() => {
+                    if (!amendment_displayed) {
+                        // Clear any existing amendment dashboard elements
+                        frm.dashboard.clear_comment();
+                        
+                        // Add as dashboard element
+                        const dashboard_html = `
+                            <div class="alert alert-info" style="margin: 10px 0;">
+                                <h5><i class="fa fa-info-circle"></i> Pending Fee Amendment</h5>
+                                ${amendment_html}
+                            </div>
+                        `;
+                        
+                        frm.dashboard.add_comment(dashboard_html, 'blue', true);
+                    }
+                }, 500);
+                
+                // Add dashboard indicator
+                frm.dashboard.add_indicator(
+                    __('Pending Amendments: {0}', [amendments.length]), 
+                    'orange'
+                );
+            } else {
+                // Hide the section if no amendments
+                if (frm.fields_dict.amendment_status_html) {
+                    frm.toggle_display('amendment_status_section', false);
+                    frm.toggle_display('amendment_status_html', false);
+                }
+            }
+        },
+        error: function(r) {
+            console.error('Error loading amendment status:', r);
+            // Hide the section on error
+            if (frm.fields_dict.amendment_status_html) {
+                frm.toggle_display('amendment_status_section', false);
+            }
+        }
+    });
+}
+
+// ==================== SEPA MANDATE OPTIMIZATION ====================
+
+// Debounced SEPA mandate status check to avoid rapid API calls
+let sepa_check_timeout;
+function check_sepa_mandate_status_debounced(frm) {
+    // Clear any existing timeout
+    if (sepa_check_timeout) {
+        clearTimeout(sepa_check_timeout);
+    }
+    
+    // Set a new timeout to check SEPA status after 300ms of inactivity
+    sepa_check_timeout = setTimeout(function() {
+        if (frm.doc.payment_method === 'Direct Debit' && frm.doc.iban) {
+            SepaUtils.check_sepa_mandate_status(frm);
+        } else {
+            // Clear SEPA UI if conditions aren't met
+            if (window.SepaUtils && window.SepaUtils.clear_sepa_ui_elements) {
+                SepaUtils.clear_sepa_ui_elements(frm);
+            }
+        }
+    }, 300);
+}
+
+function check_sepa_mandate_and_prompt_creation(frm, context = 'general') {
+    // Simplified function - only update UI, no more real-time prompting
+    // SEPA mandate discrepancy checking is now handled by scheduled task
+    
+    if (!frm.doc.iban || frm.doc.payment_method !== 'Direct Debit') {
+        return;
+    }
+    
+    // Just update the UI to show current SEPA status
+    if (window.SepaUtils && window.SepaUtils.check_sepa_mandate_status) {
+        SepaUtils.check_sepa_mandate_status(frm);
+    }
 }

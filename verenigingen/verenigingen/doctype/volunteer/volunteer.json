@@ -13,6 +13,7 @@
   "image",
   "personal_email",
   "preferred_pronouns",
+  "user",
   "column_break_5",
   "email",
   "status",
@@ -119,6 +120,13 @@
    "read_only": 1
   },
   {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "label": "User Account",
+   "options": "User",
+   "description": "System user account for this volunteer"
+  },
+  {
    "fieldname": "volunteer_profile_section",
    "fieldtype": "Section Break",
    "label": "Volunteer Profile"
@@ -208,13 +216,7 @@
   }
  ],
  "image_field": "image",
- "links": [
-  {
-   "link_doctype": "Member",
-   "link_fieldname": "full_name",
-   "parent_doctype": "Member"
-  }
- ],
+ "links": [],
  "modified": "2025-05-18 12:43:45.267592",
  "modified_by": "Administrator",
  "module": "Verenigingen",
@@ -230,19 +232,45 @@
    "print": 1,
    "read": 1,
    "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
    "role": "Verenigingen Manager",
    "share": 1,
    "write": 1
   },
   {
    "create": 1,
-   "email": 1, 
+   "email": 1,
+   "export": 1,
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Association Manager",
+   "role": "Membership Manager",
    "share": 1,
    "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Volunteer Manager",
+   "share": 1
+  },
+  {
+   "read": 1,
+   "role": "Member"
   }
  ],
  "sort_field": "modified",

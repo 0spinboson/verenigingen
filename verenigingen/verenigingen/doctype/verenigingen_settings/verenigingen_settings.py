@@ -53,3 +53,11 @@ def get_income_account_query(doctype, txt, searchfield, start, page_len, filters
         ORDER BY name
         LIMIT %s OFFSET %s
     """, (company, "%" + txt + "%", "%" + txt + "%", page_len, start))
+
+@frappe.whitelist()
+def get_organization_email_domain():
+    """Get organization email domain setting for user creation"""
+    settings = frappe.get_single("Verenigingen Settings")
+    return {
+        "organization_email_domain": getattr(settings, "organization_email_domain", None)
+    }

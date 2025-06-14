@@ -14,61 +14,69 @@ def setup_membership_scheduler_events():
     }
 def notify_about_orphaned_records():
     """Send email notifications about orphaned subscriptions and memberships"""
-    from verenigingen.verenigingen.report.orphaned_subscriptions_report.orphaned_subscriptions_report import get_data
-    
-    orphaned_data = get_data()
-    
-    if not orphaned_data:
-        return
-    
-    # Prepare the email content
-    email_content = "<h3>Orphaned Memberships and Subscriptions Report</h3>"
-    email_content += "<p>The following issues were detected in the system:</p>"
-    
-    email_content += "<table border='1' cellpadding='5' style='border-collapse: collapse;'>"
-    email_content += "<tr><th>Type</th><th>Document</th><th>Status</th><th>Issue</th></tr>"
-    
-    for item in orphaned_data:
-        email_content += f"<tr>"
-        email_content += f"<td>{item.record_type}</td>"
-        email_content += f"<td><a href='/app/{item.record_type.lower()}/{item.document}'>{item.document}</a></td>"
-        email_content += f"<td>{item.status}</td>"
-        email_content += f"<td>{item.issue}</td>"
-        email_content += f"</tr>"
-    
-    email_content += "</table>"
-    
-    email_content += "<p>Please review these issues and take appropriate action.</p>"
-    
-    # Get recipients from Verenigingen Settings
-    settings = frappe.get_single("Verenigingen Settings")
-    recipients = []
-    
-    # Add appropriate roles or specific users as recipients
-    membership_managers = frappe.get_all(
-        "Has Role", 
-        filters={"role": "Membership Manager", "parenttype": "User"},
-        fields=["parent"]
-    )
-    
-    for manager in membership_managers:
-        user = frappe.get_doc("User", manager.parent)
-        if user.enabled and user.email:
-            recipients.append(user.email)
-    
-    # Also add any specific emails configured in settings
-    if hasattr(settings, 'orphaned_report_recipients') and settings.orphaned_report_recipients:
-        recipients.extend([r.strip() for r in settings.orphaned_report_recipients.split(',')])
-    
-    if recipients:
-        frappe.sendmail(
-            recipients=recipients,
-            subject="Orphaned Memberships and Subscriptions Report",
-            message=email_content,
-            reference_doctype="Membership",
-            reference_name="Report"
+    try:
+        from verenigingen.verenigingen.report.orphaned_subscriptions_report.orphaned_subscriptions_report import get_data
+        
+        orphaned_data = get_data()
+        
+        if not orphaned_data:
+            return
+        
+        # Prepare the email content
+        email_content = "<h3>Orphaned Memberships and Subscriptions Report</h3>"
+        email_content += "<p>The following issues were detected in the system:</p>"
+        
+        email_content += "<table border='1' cellpadding='5' style='border-collapse: collapse;'>"
+        email_content += "<tr><th>Type</th><th>Document</th><th>Status</th><th>Issue</th></tr>"
+        
+        for item in orphaned_data:
+            email_content += f"<tr>"
+            email_content += f"<td>{item['record_type']}</td>"
+            email_content += f"<td><a href='/app/{item['record_type'].lower()}/{item['document']}'>{item['document']}</a></td>"
+            email_content += f"<td>{item['status']}</td>"
+            email_content += f"<td>{item['issue']}</td>"
+            email_content += f"</tr>"
+        
+        email_content += "</table>"
+        
+        email_content += "<p>Please review these issues and take appropriate action.</p>"
+        
+        # Get recipients from Verenigingen Settings
+        settings = frappe.get_single("Verenigingen Settings")
+        recipients = []
+        
+        # Add appropriate roles or specific users as recipients
+        membership_managers = frappe.get_all(
+            "Has Role", 
+            filters={"role": "Membership Manager", "parenttype": "User"},
+            fields=["parent"]
         )
-
+        
+        for manager in membership_managers:
+            user = frappe.get_doc("User", manager.parent)
+            if user.enabled and user.email:
+                recipients.append(user.email)
+        
+        # Also add any specific emails configured in settings
+        if hasattr(settings, 'orphaned_report_recipients') and settings.orphaned_report_recipients:
+            recipients.extend([r.strip() for r in settings.orphaned_report_recipients.split(',')])
+        
+        if recipients:
+            frappe.sendmail(
+                recipients=recipients,
+                subject="Orphaned Memberships and Subscriptions Report",
+                message=email_content,
+                reference_doctype="Membership",
+                reference_name="Report"
+            )
+    except ImportError as e:
+        frappe.log_error(f"Could not import orphaned subscriptions report: {str(e)}", 
+                        "Scheduler Import Error")
+        return
+    except Exception as e:
+        frappe.log_error(f"Error in notify_about_orphaned_records: {str(e)}", 
+                        "Scheduler Error")
+        return
 def process_expired_memberships():
     """Mark memberships as expired if end date has passed"""
     memberships = frappe.get_all(

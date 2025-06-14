@@ -6,8 +6,6 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "member",
-  "member_name",
   "volunteer",
   "volunteer_name",
   "role_type",
@@ -21,31 +19,18 @@
  ],
  "fields": [
   {
-   "fieldname": "member",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Member",
-   "options": "Member"
-  },
-  {
-   "fetch_from": "member.full_name",
-   "fieldname": "member_name",
-   "fieldtype": "Data",
-   "label": "Member Name",
-   "read_only": 1
-  },
-  {
    "fieldname": "volunteer",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Volunteer",
-   "options": "Volunteer"
+   "options": "Volunteer",
+   "reqd": 1
   },
   {
    "fetch_from": "volunteer.volunteer_name",
    "fieldname": "volunteer_name",
    "fieldtype": "Data",
-   "in_list_view": 1,
+   "in_list_view": 0,
    "label": "Volunteer Name",
    "read_only": 1
   },
@@ -63,7 +48,7 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Role",
-   "reqd": 1
+   "reqd": 0
   },
   {
    "fieldname": "column_break_5",
@@ -72,6 +57,7 @@
   {
    "fieldname": "from_date",
    "fieldtype": "Date",
+   "in_list_view": 1,
    "label": "From Date",
    "reqd": 1
   },

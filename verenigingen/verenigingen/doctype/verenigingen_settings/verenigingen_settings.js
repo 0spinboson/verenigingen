@@ -66,6 +66,7 @@ frappe.ui.form.on("Verenigingen Settings", {
 		frm.set_intro(__("You can learn more about memberships in the manual. ") + `<a href='${docs_url}'>${__('ERPNext Docs')}</a>`, true);
 		frm.trigger("setup_buttons_for_membership");
 		frm.trigger("setup_buttons_for_donation");
+		frm.trigger("setup_member_portal_buttons");
 	},
 
 	setup_buttons_for_membership: function(frm) {
@@ -129,5 +130,83 @@ frappe.ui.form.on("Verenigingen Settings", {
 				frm.refresh();
 			});
 		}, __("Donations"));
+	},
+
+	setup_member_portal_buttons: function(frm) {
+		// Add member portal management buttons
+		frm.add_custom_button(__("View Portal Stats"), () => {
+			frappe.call({
+				method: "verenigingen.utils.member_portal_utils.get_member_portal_stats",
+				callback: function(r) {
+					if (r.message) {
+						const stats = r.message;
+						let message = `
+							<h4>Member Portal Statistics</h4>
+							<table class="table table-bordered">
+								<tr><td><strong>Total Member Users:</strong></td><td>${stats.total_member_users}</td></tr>
+								<tr><td><strong>Members with Portal Home:</strong></td><td>${stats.members_with_portal_home}</td></tr>
+								<tr><td><strong>Members with Linked Records:</strong></td><td>${stats.members_with_linked_records}</td></tr>
+								<tr><td><strong>Portal Adoption Rate:</strong></td><td>${stats.portal_adoption_rate}%</td></tr>
+							</table>
+						`;
+						
+						frappe.msgprint({
+							title: __("Member Portal Statistics"),
+							message: message,
+							wide: true
+						});
+					}
+				}
+			});
+		}, __("Member Portal"));
+
+		frm.add_custom_button(__("Setup Portal Home Pages"), () => {
+			frappe.confirm(
+				__("Set /member_portal as home page for all users with Member role?"),
+				function() {
+					frappe.call({
+						method: "verenigingen.utils.member_portal_utils.set_all_members_home_page",
+						args: {
+							home_page: "/member_portal"
+						},
+						callback: function(r) {
+							if (r.message && r.message.success) {
+								frappe.show_alert({
+									message: __("Updated {0} member users with portal home page", [r.message.updated_count]),
+									indicator: "green"
+								}, 5);
+							} else {
+								frappe.msgprint({
+									title: __("Error"),
+									message: r.message.message || "Failed to update member home pages",
+									indicator: "red"
+								});
+							}
+						}
+					});
+				}
+			);
+		}, __("Member Portal"));
+
+		frm.add_custom_button(__("Test Portal Redirect"), () => {
+			frappe.call({
+				method: "verenigingen.utils.member_portal_utils.get_user_appropriate_home_page",
+				callback: function(r) {
+					if (r.message) {
+						frappe.show_alert({
+							message: __("Your appropriate home page: {0}", [r.message]),
+							indicator: "blue"
+						}, 5);
+						
+						// Optionally navigate to it
+						setTimeout(() => {
+							if (confirm("Navigate to your home page now?")) {
+								window.location.href = r.message;
+							}
+						}, 2000);
+					}
+				}
+			});
+		}, __("Member Portal"));
 	}
 });

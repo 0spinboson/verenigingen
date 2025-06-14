@@ -1,0 +1,1100 @@
+{% extends "templates/web.html" %}
+
+{% block title %}{{ _("Apply for Membership") }}{% endblock %}
+
+{% block page_content %}
+<div class="membership-application-form">
+    <div class="page-header">
+        <h1>{{ _("Become a Member") }}</h1>
+        <p class="lead">{{ _("Join our association and become part of our community!") }}</p>
+    </div>
+    
+    <!-- Progress Bar -->
+    <div class="progress-container mb-4">
+        <div class="progress">
+            <div class="progress-bar" role="progressbar" style="width: 16.67%" id="form-progress"></div>
+        </div>
+        <div class="progress-steps">
+            <span class="step active" data-step="1">Personal Info</span>
+            <span class="step" data-step="2">Address</span>
+            <span class="step" data-step="3">Membership</span>
+            <span class="step" data-step="4">Volunteer</span>
+            <span class="step" data-step="5">Payment</span>
+            <span class="step" data-step="6">Confirm</span>
+        </div>
+    </div>
+    
+    <form id="membership-application-form" class="application-form" onsubmit="return false;">
+        <!-- Step 1: Personal Information -->
+        <div class="form-step active" data-step="1">
+            <div class="card">
+                <div class="card-header">
+                    <h3>{{ _("Personal Information") }}</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="first_name" class="required">{{ _("First Name") }}</label>
+                            <input type="text" class="form-control" id="first_name" name="first_name">
+                            <div class="invalid-feedback"></div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="middle_name">{{ _("Middle Name") }}</label>
+                            <input type="text" class="form-control" id="middle_name" name="middle_name">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="last_name" class="required">{{ _("Last Name") }}</label>
+                            <input type="text" class="form-control" id="last_name" name="last_name">
+                            <div class="invalid-feedback"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="email" class="required">{{ _("Email Address") }}</label>
+                            <input type="email" class="form-control" id="email" name="email">
+                            <div class="invalid-feedback"></div>
+                            <small class="form-text text-muted">{{ _("This will be your login email") }}</small>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="mobile_no">{{ _("Mobile Number") }}</label>
+                            <input type="tel" class="form-control" id="mobile_no" name="mobile_no">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="birth_date" class="required">{{ _("Birth Date") }}</label>
+                            <input type="date" class="form-control" id="birth_date" name="birth_date">
+                            <div class="invalid-feedback"></div>
+                            <div id="age-warning" class="alert alert-warning mt-2" style="display: none;"></div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="pronouns">{{ _("Pronouns") }}</label>
+                            <select class="form-control" id="pronouns" name="pronouns">
+                                <option value="">{{ _("Select...") }}</option>
+                                <option value="She/her">She/her</option>
+                                <option value="He/him">He/him</option>
+                                <option value="They/them">They/them</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="phone">{{ _("Phone") }}</label>
+                            <input type="tel" class="form-control" id="phone" name="phone">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Step 2: Address Information -->
+        <div class="form-step" data-step="2" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <h3>{{ _("Address Information") }}</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label for="address_line1" class="required">{{ _("Address Line 1") }}</label>
+                            <input type="text" class="form-control" id="address_line1" name="address_line1" required>
+                            <div class="invalid-feedback"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label for="address_line2">{{ _("Address Line 2") }}</label>
+                            <input type="text" class="form-control" id="address_line2" name="address_line2">
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label for="city" class="required">{{ _("City") }}</label>
+                            <input type="text" class="form-control" id="city" name="city" required>
+                            <div class="invalid-feedback"></div>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="state">{{ _("State/Province") }}</label>
+                            <input type="text" class="form-control" id="state" name="state">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label for="postal_code" class="required">{{ _("Postal Code") }}</label>
+                            <input type="text" class="form-control" id="postal_code" name="postal_code" required>
+                            <div class="invalid-feedback"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="country" class="required">{{ _("Country") }}</label>
+                            <select class="form-control" id="country" name="country" required>
+                                <option value="">{{ _("Select Country...") }}</option>
+                            </select>
+                            <div class="invalid-feedback"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Enhanced Step 3: Membership Selection with Custom Amount Support -->
+        <div class="form-step" data-step="3" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <h3>{{ _("Membership Selection") }}</h3>
+                </div>
+                <div class="card-body">
+                    <!-- Chapter Selection (always visible) -->
+                    <div id="chapter-selection">
+                        <h5>{{ _("Chapter Selection") }} <small class="text-muted">({{ _("Optional") }})</small></h5>
+                        <div class="row mb-4">
+                            <div class="col-md-12">
+                                <div id="suggested-chapter" class="alert alert-info" style="display: none;">
+                                    <p>{{ _("Based on your postal code, we suggest:") }} <strong id="suggested-chapter-name"></strong></p>
+                                    <button type="button" class="btn btn-sm btn-primary" id="accept-suggestion">
+                                        {{ _("Join this chapter") }}
+                                    </button>
+                                </div>
+                                
+                                <label for="selected_chapter">{{ _("Which chapter would you like to join?") }}</label>
+                                <select class="form-control" id="selected_chapter" name="selected_chapter">
+                                    <option value="">{{ _("Select a chapter...") }}</option>
+                                </select>
+                                <small class="form-text text-muted">
+                                    {{ _("Choose the chapter you'd like to be part of. Leave blank to be assigned automatically based on your location.") }}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Membership Type Selection with Custom Amount Support -->
+                    <h5 class="required">{{ _("Membership Type") }}</h5>
+                    <div id="membership-types" class="membership-type-selection">
+                        <!-- Membership types will be loaded here -->
+                    </div>
+                    <div class="invalid-feedback" id="membership-type-error" style="display: none;"></div>
+                    
+                    <!-- Membership Fee Display -->
+                    <div id="membership-fee-display" class="alert alert-info mt-4" style="display: none;">
+                        <h5>{{ _("Selected Membership") }}</h5>
+                        <div id="fee-details"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Step 4: Volunteer Interest -->
+        <div class="form-step" data-step="4" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <h3>{{ _("Volunteer Interest") }} <small class="text-muted">({{ _("Optional") }})</small></h3>
+                </div>
+                <div class="card-body">
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="interested_in_volunteering" name="interested_in_volunteering">
+                        <label class="form-check-label" for="interested_in_volunteering">
+                            {{ _("I'm interested in volunteering with the association") }}
+                        </label>
+                    </div>
+                    
+                    <div id="volunteer-details" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="volunteer_availability">{{ _("Availability") }}</label>
+                                <select class="form-control" id="volunteer_availability" name="volunteer_availability">
+                                    <option value="">{{ _("Select...") }}</option>
+                                    <option value="Occasional">{{ _("Occasional (Few times a year)") }}</option>
+                                    <option value="Monthly">{{ _("Monthly") }}</option>
+                                    <option value="Weekly">{{ _("Weekly") }}</option>
+                                    <option value="Project-based">{{ _("Project-based") }}</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="volunteer_experience_level">{{ _("Experience Level") }}</label>
+                                <select class="form-control" id="volunteer_experience_level" name="volunteer_experience_level">
+                                    <option value="">{{ _("Select...") }}</option>
+                                    <option value="Beginner">{{ _("Beginner") }}</option>
+                                    <option value="Intermediate">{{ _("Intermediate") }}</option>
+                                    <option value="Experienced">{{ _("Experienced") }}</option>
+                                    <option value="Expert">{{ _("Expert") }}</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label>{{ _("Areas of Interest") }}</label>
+                            <div id="volunteer-interests" class="checkbox-grid">
+                                <!-- Interest areas will be loaded here -->
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label>{{ _("Skills") }}</label>
+                            <div id="volunteer-skills">
+                                <div class="skill-row mb-2">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <input type="text" class="form-control" placeholder="{{ _('Skill name') }}" name="skill_name[]">
+                                        </div>
+                                        <div class="col-md-4">
+                                            <select class="form-control" name="skill_level[]">
+                                                <option value="">{{ _("Level") }}</option>
+                                                <option value="Beginner">{{ _("Beginner") }}</option>
+                                                <option value="Intermediate">{{ _("Intermediate") }}</option>
+                                                <option value="Advanced">{{ _("Advanced") }}</option>
+                                                <option value="Expert">{{ _("Expert") }}</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2">
+                                            <button type="button" class="btn btn-sm btn-secondary add-skill">+</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Communication Preferences -->
+                    <h5 class="mt-4">{{ _("Communication Preferences") }}</h5>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="accepts_mandatory_communications" 
+                               name="accepts_mandatory_communications" checked disabled>
+                        <label class="form-check-label" for="accepts_mandatory_communications">
+                            {{ _("I understand I will receive mandatory association communications") }}
+                            <small class="text-muted">{{ _("(AGM invites, official notices)") }}</small>
+                        </label>
+                    </div>
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" id="newsletter_opt_in" 
+                               name="newsletter_opt_in" checked>
+                        <label class="form-check-label" for="newsletter_opt_in">
+                            {{ _("Subscribe to optional newsletters") }}
+                            <small class="text-muted">{{ _("(Updates, events, volunteer opportunities)") }}</small>
+                        </label>
+                    </div>
+                    
+                    <!-- How did you hear about us -->
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <label for="application_source">{{ _("How did you hear about us?") }}</label>
+                            <select class="form-control" id="application_source" name="application_source">
+                                <option value="">{{ _("Select...") }}</option>
+                                <option value="Website">{{ _("Website") }}</option>
+                                <option value="Social Media">{{ _("Social Media") }}</option>
+                                <option value="Friend/Family">{{ _("Friend/Family") }}</option>
+                                <option value="Event">{{ _("Event") }}</option>
+                                <option value="Other">{{ _("Other") }}</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6" id="source-details-container" style="display: none;">
+                            <label for="application_source_details">{{ _("Please specify") }}</label>
+                            <input type="text" class="form-control" id="application_source_details" 
+                                   name="application_source_details">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Step 5: Payment Details -->
+        <div class="form-step" data-step="5" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <h3>{{ _("Payment Details") }}</h3>
+                </div>
+                <div class="card-body">
+                    <!-- Payment Method Selection -->
+                    <h5 class="required">{{ _("Payment Method") }}</h5>
+                    <div class="payment-methods-container">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div id="payment-methods-list">
+                                    <!-- This will be populated by JavaScript -->
+                                    <div class="text-center">
+                                        <i class="fa fa-spinner fa-spin"></i> Loading payment methods...
+                                    </div>
+                                </div>
+                                
+                                <div id="payment-method-fallback" style="display: none;">
+                                    <select class="form-control" id="payment_method" name="payment_method">
+                                        <!-- Remove required attribute - we'll handle validation in JavaScript -->
+                                    </select>
+                                    <div class="invalid-feedback"></div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="payment-info-panel">
+                                    <div id="payment-method-details" style="display: none;">
+                                        <h6>Payment Details</h6>
+                                        <div id="payment-details-content"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Credit Card Details (shown when Credit Card is selected) -->
+                    <div id="credit-card-details" class="mt-4" style="display: none;">
+                        <h5>{{ _("Credit Card Information") }}</h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="card_number" class="required">{{ _("Card Number") }}</label>
+                                <input type="text" class="form-control" id="card_number" name="card_number" 
+                                       placeholder="1234 5678 9012 3456" maxlength="19">
+                                <div class="invalid-feedback"></div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="card_holder_name" class="required">{{ _("Cardholder Name") }}</label>
+                                <input type="text" class="form-control" id="card_holder_name" name="card_holder_name" 
+                                       placeholder="{{ _('Full name on card') }}">
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-3 mb-3">
+                                <label for="expiry_month" class="required">{{ _("Month") }}</label>
+                                <select class="form-control" id="expiry_month" name="expiry_month">
+                                    <option value="">{{ _("MM") }}</option>
+                                    <option value="01">01</option>
+                                    <option value="02">02</option>
+                                    <option value="03">03</option>
+                                    <option value="04">04</option>
+                                    <option value="05">05</option>
+                                    <option value="06">06</option>
+                                    <option value="07">07</option>
+                                    <option value="08">08</option>
+                                    <option value="09">09</option>
+                                    <option value="10">10</option>
+                                    <option value="11">11</option>
+                                    <option value="12">12</option>
+                                </select>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="expiry_year" class="required">{{ _("Year") }}</label>
+                                <select class="form-control" id="expiry_year" name="expiry_year">
+                                    <option value="">{{ _("YYYY") }}</option>
+                                    {% for year in range(2024, 2035) %}
+                                    <option value="{{ year }}">{{ year }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="cvv" class="required">{{ _("CVV") }}</label>
+                                <input type="text" class="form-control" id="cvv" name="cvv" 
+                                       placeholder="123" maxlength="4">
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Bank Account Details (shown when Direct Debit is selected) -->
+                    <div id="bank-account-details" class="mt-4" style="display: none;">
+                        <h5>{{ _("Bank Account Information") }}</h5>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="iban" class="required">{{ _("IBAN") }}</label>
+                                <input type="text" class="form-control" id="iban" name="iban" 
+                                       placeholder="NL91 ABNA 0417 1643 00" maxlength="34">
+                                <small class="form-text text-muted">{{ _("International Bank Account Number") }}</small>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                            <div class="col-md-6 mb-3" style="display: none;">
+                                <label for="bic">{{ _("BIC/SWIFT Code") }} <small class="text-muted">({{ _("Auto-derived") }})</small></label>
+                                <input type="text" class="form-control" id="bic" name="bic" 
+                                       placeholder="ABNANL2A" maxlength="11" readonly>
+                                <small class="form-text text-muted">{{ _("Automatically derived from IBAN") }}</small>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="bank_account_name" class="required">{{ _("Account Holder Name") }}</label>
+                                <input type="text" class="form-control" id="bank_account_name" name="bank_account_name" 
+                                       placeholder="{{ _('Full name on bank account') }}">
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- SEPA Mandate Notice -->
+                        <div id="sepa-mandate-notice" class="alert alert-warning mt-3">
+                            <h6><i class="fa fa-info-circle"></i> {{ _("SEPA Direct Debit Information") }}</h6>
+                            <p>{{ _("By providing your bank details, you authorize us to collect payments from your bank account via SEPA Direct Debit.") }}</p>
+                            <ul class="mb-0">
+                                <li>{{ _("You can cancel the mandate at any time") }}</li>
+                                <li>{{ _("First collection will occur 5-7 business days after setup") }}</li>
+                                <li>{{ _("You will receive advance notice before each collection") }}</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <!-- Bank Transfer Details (shown when Bank Transfer is selected) -->
+                    <div id="bank-transfer-details" class="mt-4" style="display: none;">
+                        <h5>{{ _("Bank Transfer & Account Information") }}</h5>
+                        
+                        <!-- Bank Account Information for Payment Matching -->
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="transfer_iban">{{ _("Your Bank Account (IBAN)") }} <small class="text-muted">({{ _("Optional") }})</small></label>
+                                <input type="text" class="form-control" id="transfer_iban" name="transfer_iban" 
+                                       placeholder="NL91 ABNA 0417 1643 00" maxlength="34">
+                                <small class="form-text text-muted">{{ _("Helps us match your payment to your application") }}</small>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                            <div class="col-md-6 mb-3" style="display: none;">
+                                <label for="transfer_bic">{{ _("BIC/SWIFT Code") }} <small class="text-muted">({{ _("Auto-derived") }})</small></label>
+                                <input type="text" class="form-control" id="transfer_bic" name="transfer_bic" 
+                                       placeholder="ABNANL2A" maxlength="11" readonly>
+                                <small class="form-text text-muted">{{ _("Automatically derived from IBAN") }}</small>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="transfer_account_name">{{ _("Account Holder Name") }} <small class="text-muted">({{ _("Optional") }})</small></label>
+                                <input type="text" class="form-control" id="transfer_account_name" name="transfer_account_name" 
+                                       placeholder="{{ _('Full name on bank account') }}">
+                                <small class="form-text text-muted">{{ _("Name as it appears on your bank account") }}</small>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Payment Instructions -->
+                        <div class="alert alert-info mt-3">
+                            <h6><i class="fa fa-info-circle"></i> {{ _("Bank Transfer Payment Instructions") }}</h6>
+                            <p>{{ _("After submitting your application, you will receive payment instructions via email.") }}</p>
+                            <ul class="mb-0">
+                                <li>{{ _("Payment must be completed within 14 days") }}</li>
+                                <li>{{ _("Your membership will be activated after payment confirmation") }}</li>
+                                <li>{{ _("Please include your application reference in the payment description") }}</li>
+                                <li>{{ _("Providing your bank account details above helps us match your payment faster") }}</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Step 6: Final Confirmation -->
+        <div class="form-step" data-step="6" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <h3>{{ _("Review & Confirm") }}</h3>
+                </div>
+                <div class="card-body">
+                    <!-- Complete Application Summary -->
+                    <div class="alert alert-info">
+                        <h5>{{ _("Application Summary") }}</h5>
+                        <div id="final-application-summary">
+                            <!-- Summary will be populated here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Terms and Conditions -->
+                    <div class="mt-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="terms" name="terms" required>
+                            <label class="form-check-label" for="terms">
+                                {{ _("I agree to the") }} 
+                                <a href="/terms" target="_blank">{{ _("Terms and Conditions") }}</a> 
+                                {{ _("and") }} 
+                                <a href="/privacy" target="_blank">{{ _("Privacy Policy") }}</a>
+                            </label>
+                            <div class="invalid-feedback"></div>
+                        </div>
+                        
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" id="gdpr_consent" name="gdpr_consent" required>
+                            <label class="form-check-label" for="gdpr_consent">
+                                {{ _("I consent to the processing of my personal data as described in the Privacy Policy") }}
+                            </label>
+                            <div class="invalid-feedback"></div>
+                        </div>
+                        
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="checkbox" id="confirm_accuracy" name="confirm_accuracy" required>
+                            <label class="form-check-label" for="confirm_accuracy">
+                                {{ _("I confirm that all information provided is accurate and complete") }}
+                            </label>
+                            <div class="invalid-feedback"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Additional Notes -->
+                    <div class="mt-4">
+                        <label for="additional_notes">{{ _("Additional Notes") }} <small class="text-muted">({{ _("Optional") }})</small></label>
+                        <textarea class="form-control" id="additional_notes" name="additional_notes" rows="3" 
+                                 placeholder="{{ _('Any additional information or special requests...') }}"></textarea>
+                    </div>
+                    
+                    <!-- Final Submission Notice -->
+                    <div class="alert alert-success mt-4">
+                        <h6><i class="fa fa-check-circle"></i> {{ _("Ready to Submit") }}</h6>
+                        <p class="mb-0">{{ _("By clicking 'Submit Application', your membership application will be processed and you will receive a confirmation email.") }}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Navigation Buttons -->
+        <div class="form-navigation mt-4">
+            <button type="button" class="btn btn-secondary" id="prev-btn" style="display: none;">
+                {{ _("Previous") }}
+            </button>
+            <button type="button" class="btn btn-primary" id="next-btn">
+                {{ _("Next") }}
+            </button>
+            <button type="button" class="btn btn-success" id="submit-btn" style="display: none;">
+                {{ _("Submit Application & Pay") }}
+            </button>
+        </div>
+    </form>
+</div>
+
+<style>
+.membership-application-form {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.required::after {
+    content: " *";
+    color: red;
+}
+
+.progress-container {
+    position: relative;
+}
+
+.progress-steps {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+}
+
+.progress-steps .step {
+    font-size: 0.875rem;
+    color: #6c757d;
+    position: relative;
+}
+
+.progress-steps .step.active {
+    color: #007bff;
+    font-weight: bold;
+}
+
+.membership-type-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+}
+
+.membership-type-card {
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    padding: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.membership-type-card:hover {
+    border-color: #007bff;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.membership-type-card.selected {
+    border-color: #007bff;
+    background-color: #e7f3ff;
+}
+
+.checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.5rem;
+}
+
+.skill-row {
+    margin-bottom: 0.5rem;
+}
+
+.form-navigation {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 2rem;
+}
+
+.invalid-feedback {
+    display: none;
+}
+
+.is-invalid ~ .invalid-feedback {
+    display: block;
+}
+</style>
+{% endblock %}
+
+{% block script %}
+<script>
+// Debug initialization
+console.log('=== MEMBERSHIP APPLICATION DEBUG ===');
+console.log('Page loaded, checking dependencies...');
+
+// Check if jQuery is loaded
+if (typeof $ === 'undefined') {
+    console.error('jQuery is not loaded!');
+} else {
+    console.log('✓ jQuery loaded:', $.fn.jquery);
+}
+
+// Check if frappe is loaded
+if (typeof frappe === 'undefined') {
+    console.error('Frappe is not loaded!');
+} else {
+    console.log('✓ Frappe loaded');
+}
+
+// Simple initialization fallback
+$(document).ready(function() {
+    console.log('Document ready - attempting initialization...');
+    
+    // Check if main script loaded
+    if (typeof MembershipApplication === 'undefined') {
+        console.error('MembershipApplication class not found! Loading fallback...');
+        
+        // Minimal fallback implementation
+        initializeFallbackApplication();
+    } else {
+        console.log('✓ MembershipApplication class found');
+        
+        // Initialize application
+        try {
+            window.membershipApp = new MembershipApplication({
+                maxSteps: 6,
+                autoSaveInterval: 30000
+            });
+            console.log('✓ Application initialized successfully');
+        } catch (error) {
+            console.error('Failed to initialize application:', error);
+            initializeFallbackApplication();
+        }
+    }
+});
+
+// Fallback implementation for basic form navigation
+function initializeFallbackApplication() {
+    console.log('Initializing fallback application...');
+    
+    let currentStep = 1;
+    const maxSteps = 6;
+    
+    // Show first step
+    $('.form-step').hide();
+    $('.form-step[data-step="1"]').show();
+    $('#prev-btn').hide();
+    
+    // Next button handler
+    $('#next-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        console.log('Next clicked, current step:', currentStep);
+        
+        // Basic validation for current step
+        if (validateStep(currentStep)) {
+            if (currentStep < maxSteps) {
+                currentStep++;
+                showStep(currentStep);
+            }
+        }
+    });
+    
+    // Previous button handler
+    $('#prev-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        console.log('Previous clicked, current step:', currentStep);
+        
+        if (currentStep > 1) {
+            currentStep--;
+            showStep(currentStep);
+        }
+    });
+    
+    // Submit button handler
+    $('#submit-btn').off('click').on('click', function(e) {
+        e.preventDefault();
+        console.log('FALLBACK Submit clicked - this should not happen if main script loaded');
+        alert('Using fallback submission - main script failed to load');
+        submitForm();
+    });
+    
+    function showStep(step) {
+        console.log('Showing step:', step);
+        
+        // Hide all steps
+        $('.form-step').hide();
+        
+        // Show current step
+        $(`.form-step[data-step="${step}"]`).show();
+        
+        // Update navigation buttons
+        $('#prev-btn').toggle(step > 1);
+        $('#next-btn').toggle(step < maxSteps);
+        $('#submit-btn').toggle(step === maxSteps);
+        
+        // Update progress bar
+        const progress = (step / maxSteps) * 100;
+        $('#form-progress').css('width', `${progress}%`);
+        
+        // Update step indicators
+        $('.step').removeClass('active completed');
+        for (let i = 1; i < step; i++) {
+            $(`.step[data-step="${i}"]`).addClass('completed');
+        }
+        $(`.step[data-step="${step}"]`).addClass('active');
+        
+        // Scroll to top
+        window.scrollTo(0, 0);
+    }
+    
+    function validateStep(step) {
+        console.log('Validating step:', step);
+        let isValid = true;
+        
+        // Clear previous errors
+        $('.is-invalid').removeClass('is-invalid');
+        $('.invalid-feedback').hide();
+        
+        switch(step) {
+            case 1: // Personal info
+                const requiredFields = ['#first_name', '#last_name', '#email', '#birth_date'];
+                requiredFields.forEach(field => {
+                    const $field = $(field);
+                    if (!$field.val() || $field.val().trim() === '') {
+                        $field.addClass('is-invalid');
+                        let feedback = $field.siblings('.invalid-feedback');
+                        if (feedback.length === 0) {
+                            $field.after('<div class="invalid-feedback">This field is required</div>');
+                        }
+                        $field.siblings('.invalid-feedback').show();
+                        isValid = false;
+                    }
+                });
+                
+                // Email validation
+                const email = $('#email').val();
+                if (email && !isValidEmail(email)) {
+                    $('#email').addClass('is-invalid');
+                    $('#email').siblings('.invalid-feedback').text('Please enter a valid email').show();
+                    isValid = false;
+                }
+                break;
+                
+            case 2: // Address
+                const addressFields = ['#address_line1', '#city', '#postal_code', '#country'];
+                addressFields.forEach(field => {
+                    const $field = $(field);
+                    if (!$field.val() || $field.val().trim() === '') {
+                        $field.addClass('is-invalid');
+                        let feedback = $field.siblings('.invalid-feedback');
+                        if (feedback.length === 0) {
+                            $field.after('<div class="invalid-feedback">This field is required</div>');
+                        }
+                        $field.siblings('.invalid-feedback').show();
+                        isValid = false;
+                    }
+                });
+                break;
+                
+            case 3: // Membership type
+                if (!$('input[name="membership_type"]:checked').length && !$('#selected_membership_type').val()) {
+                    $('#membership-type-error').text('Please select a membership type').show();
+                    isValid = false;
+                }
+                break;
+                
+            case 4: // Volunteer (optional)
+                // No required fields
+                break;
+                
+            case 5: // Payment
+                if (!$('#payment_method').val() && !$('input[name="payment_method_selection"]:checked').length) {
+                    alert('Please select a payment method');
+                    isValid = false;
+                }
+                
+                if (!$('#terms').is(':checked')) {
+                    alert('Please accept the terms and conditions');
+                    isValid = false;
+                }
+                
+                if (!$('#gdpr_consent').is(':checked')) {
+                    alert('Please consent to data processing');
+                    isValid = false;
+                }
+                break;
+        }
+        
+        if (!isValid) {
+            console.log('Validation failed for step', step);
+        }
+        
+        return isValid;
+    }
+    
+    function isValidEmail(email) {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+    
+    function submitForm() {
+        console.log('Submitting form...');
+        
+        // Collect all form data
+        const formData = {
+            // Personal info
+            first_name: $('#first_name').val(),
+            middle_name: $('#middle_name').val(),
+            last_name: $('#last_name').val(),
+            email: $('#email').val(),
+            mobile_no: $('#mobile_no').val(),
+            phone: $('#phone').val(),
+            birth_date: $('#birth_date').val(),
+            pronouns: $('#pronouns').val(),
+            
+            // Address
+            address_line1: $('#address_line1').val(),
+            address_line2: $('#address_line2').val(),
+            city: $('#city').val(),
+            state: $('#state').val(),
+            postal_code: $('#postal_code').val(),
+            country: $('#country').val(),
+            
+            // Membership
+            selected_membership_type: $('#membership_type').val() || $('input[name="membership_type"]:checked').val(),
+            selected_chapter: $('#selected_chapter').val(),
+            
+            // Volunteer
+            interested_in_volunteering: $('#interested_in_volunteering').is(':checked'),
+            volunteer_availability: $('#volunteer_availability').val(),
+            volunteer_experience_level: $('#volunteer_experience_level').val(),
+            
+            // Communication
+            newsletter_opt_in: $('#newsletter_opt_in').is(':checked'),
+            application_source: $('#application_source').val(),
+            application_source_details: $('#application_source_details').val(),
+            
+            // Payment
+            payment_method: $('#payment_method').val() || $('input[name="payment_method_selection"]:checked').val(),
+            additional_notes: $('#additional_notes').val(),
+            terms: $('#terms').is(':checked'),
+            gdpr_consent: $('#gdpr_consent').is(':checked')
+        };
+        
+        console.log('Form data:', formData);
+        
+        // Disable submit button
+        $('#submit-btn').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Processing...');
+        
+        // Submit via AJAX
+        frappe.call({
+            method: 'verenigingen.api.membership_application.submit_application',
+            args: {
+                data: formData
+            },
+            callback: function(r) {
+                console.log('Submit response:', r);
+                
+                if (r.message && r.message.success) {
+                    // Show success message
+                    $('.membership-application-form').html(`
+                        <div class="text-center py-5">
+                            <div class="success-icon mb-4">
+                                <i class="fa fa-check-circle text-success" style="font-size: 4rem;"></i>
+                            </div>
+                            <h2 class="text-success">Application Submitted Successfully!</h2>
+                            ${r.message.application_id ? `
+                                <div class="alert alert-info mx-auto" style="max-width: 500px;">
+                                    <h4>Your Application ID: <strong>${r.message.application_id}</strong></h4>
+                                    <p>Please save this ID for future reference.</p>
+                                </div>
+                            ` : ''}
+                            <p class="lead">${r.message.message || 'Thank you for your application!'}</p>
+                        </div>
+                    `);
+                } else {
+                    // Show error
+                    frappe.msgprint({
+                        title: 'Submission Error',
+                        message: r.message.error || 'An error occurred. Please try again.',
+                        indicator: 'red'
+                    });
+                    
+                    $('#submit-btn').prop('disabled', false).html('Submit Application & Pay');
+                }
+            },
+            error: function(r) {
+                console.error('Submit error:', r);
+                frappe.msgprint({
+                    title: 'Error',
+                    message: 'Failed to submit application. Please try again.',
+                    indicator: 'red'
+                });
+                
+                $('#submit-btn').prop('disabled', false).html('Submit Application & Pay');
+            }
+        });
+    }
+    
+    // Load initial data
+    loadFormData();
+    
+    function loadFormData() {
+        console.log('Loading form data...');
+        
+        // Load countries
+        frappe.call({
+            method: 'verenigingen.api.membership_application.get_application_form_data',
+            callback: function(r) {
+                console.log('Form data loaded:', r.message);
+                
+                if (r.message && r.message.success !== false) {
+                    // Populate countries
+                    if (r.message.countries) {
+                        const $country = $('#country');
+                        $country.empty().append('<option value="">Select Country...</option>');
+                        r.message.countries.forEach(country => {
+                            $country.append(`<option value="${country.name}">${country.name}</option>`);
+                        });
+                    }
+                    
+                    // Populate chapters if available and enabled
+                    if (r.message.chapters && r.message.chapters.length > 0) {
+                        const $chapter = $('#selected_chapter');
+                        $chapter.empty().append('<option value="">Select a chapter...</option>');
+                        r.message.chapters.forEach(chapter => {
+                            $chapter.append(`<option value="${chapter.name}">${chapter.name}${chapter.region ? ' - ' + chapter.region : ''}</option>`);
+                        });
+                        $('#chapter-selection').show();
+                        console.log('Chapter selection enabled with', r.message.chapters.length, 'chapters');
+                    } else {
+                        $('#chapter-selection').hide();
+                        console.log('Chapter selection disabled - no chapters available');
+                    }
+                    
+                    // Populate membership types
+                    if (r.message.membership_types) {
+                        const $container = $('#membership-types');
+                        $container.empty();
+                        
+                        r.message.membership_types.forEach(type => {
+                            $container.append(`
+                                <div class="membership-type-card" data-type="${type.name}">
+                                    <label>
+                                        <input type="radio" name="membership_type" value="${type.name}" style="display: none;">
+                                        <h5>${type.membership_type_name}</h5>
+                                        <p>${type.description || ''}</p>
+                                        <div class="price">${type.currency} ${type.amount}</div>
+                                    </label>
+                                </div>
+                            `);
+                        });
+                        
+                        // Bind click events
+                        $('.membership-type-card').click(function() {
+                            $('.membership-type-card').removeClass('selected');
+                            $(this).addClass('selected');
+                            $(this).find('input[type="radio"]').prop('checked', true);
+                            $('#membership-type-error').hide();
+                        });
+                    }
+                }
+            },
+            error: function(r) {
+                console.error('Failed to load form data:', r);
+            }
+        });
+        
+        // Add postal code change handler for chapter suggestions
+        $('#postal_code').on('blur', function() {
+            const postalCode = $(this).val();
+            const country = $('#country').val() || 'Netherlands';
+            
+            if (postalCode && $('#chapter-selection').is(':visible')) {
+                suggestChapterFromPostalCode(postalCode, country);
+            }
+        });
+        
+        // Handle accept suggestion button
+        $('#accept-suggestion').on('click', function() {
+            const suggestedChapter = $('#suggested-chapter-name').text();
+            if (suggestedChapter) {
+                $('#selected_chapter').val(suggestedChapter);
+                $('#suggested-chapter').hide();
+            }
+        });
+    }
+    
+    function suggestChapterFromPostalCode(postalCode, country) {
+        console.log('Suggesting chapter for postal code:', postalCode);
+        
+        frappe.call({
+            method: 'verenigingen.api.membership_application.validate_postal_code',
+            args: {
+                postal_code: postalCode,
+                country: country
+            },
+            callback: function(r) {
+                console.log('Postal code validation result:', r.message);
+                
+                if (r.message && r.message.suggested_chapters && r.message.suggested_chapters.length > 0) {
+                    const suggestedChapter = r.message.suggested_chapters[0];
+                    $('#suggested-chapter-name').text(suggestedChapter.name || suggestedChapter);
+                    $('#suggested-chapter').show();
+                } else {
+                    $('#suggested-chapter').hide();
+                }
+            },
+            error: function(r) {
+                console.error('Error validating postal code:', r);
+                $('#suggested-chapter').hide();
+            }
+        });
+    }
+    
+    console.log('Fallback application initialized');
+}
+
+// Additional debugging for form visibility
+console.log('Form steps found:', $('.form-step').length);
+console.log('Navigation buttons found:', {
+    next: $('#next-btn').length,
+    prev: $('#prev-btn').length,
+    submit: $('#submit-btn').length
+});
+
+// Check for console errors
+window.addEventListener('error', function(e) {
+    console.error('JavaScript error:', e.error);
+});
+</script>
+
+<script src="/assets/verenigingen/js/membership_application.js"></script>
+<style>
+.form-step {
+    display: none;
+}
+.form-step.active {
+    display: block !important;
+}
+.invalid-feedback {
+    display: none;
+    color: #dc3545;
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+.is-invalid ~ .invalid-feedback {
+    display: block;
+}
+</style>
+{% endblock %}

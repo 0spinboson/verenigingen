@@ -152,21 +152,15 @@
   {
    "create": 1,
    "email": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Association Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "email": 1,
    "read": 1,
    "report": 1,
    "role": "Team Lead",
    "share": 1,
    "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Verenigingen Member"
   }
  ],
  "row_format": "Dynamic",

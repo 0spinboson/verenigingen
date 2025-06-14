@@ -1,0 +1,371 @@
+{% extends "templates/web.html" %}
+
+{% block title %}{{ _("Adjust Membership Fee") }}{% endblock %}
+
+{% block head_include %}
+<style>
+.fee-adjustment-container {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.info-card {
+    background: #f8f9fa;
+    border-left: 4px solid #007bff;
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+}
+
+.fee-card {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.fee-input-group {
+    margin: 20px 0;
+}
+
+.fee-slider {
+    width: 100%;
+    margin: 10px 0;
+}
+
+.fee-display {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: #007bff;
+    text-align: center;
+    margin: 10px 0;
+}
+
+.btn-submit-fee {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 12px 30px;
+    border-radius: 4px;
+    font-size: 1.1em;
+    cursor: pointer;
+    width: 100%;
+}
+
+.btn-submit-fee:hover {
+    background: #218838;
+}
+
+.btn-submit-fee:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+}
+
+.pending-request {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.alert {
+    padding: 12px 15px;
+    margin-bottom: 15px;
+    border-radius: 4px;
+}
+
+.alert-info { background: #d1ecf1; border-color: #bee5eb; color: #0c5460; }
+.alert-warning { background: #fff3cd; border-color: #ffeaa7; color: #856404; }
+.alert-success { background: #d4edda; border-color: #c3e6cb; color: #155724; }
+.alert-danger { background: #f8d7da; border-color: #f5c6cb; color: #721c24; }
+</style>
+{% endblock %}
+
+{% block page_content %}
+<div class="fee-adjustment-container">
+    <div class="row">
+        <div class="col-md-8">
+            <h2>{{ _("Adjust Your Membership Fee") }}</h2>
+            
+            {% if not can_adjust_fee[0] %}
+            <div class="alert alert-warning">
+                <i class="fa fa-exclamation-triangle"></i>
+                {{ can_adjust_fee[1] }}
+            </div>
+            {% else %}
+            
+            <!-- Current Fee Information -->
+            <div class="fee-card">
+                <h4>{{ _("Current Membership Information") }}</h4>
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>{{ _("Membership Type") }}:</strong> {{ membership_type.membership_type_name }}</p>
+                        <p><strong>{{ _("Standard Fee") }}:</strong> {{ frappe.format_value(membership_type.amount, {"fieldtype": "Currency"}) }}</p>
+                        <p><strong>{{ _("Your Current Fee") }}:</strong> {{ frappe.format_value(current_fee.amount, {"fieldtype": "Currency"}) }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>{{ _("Minimum Allowed") }}:</strong> {{ frappe.format_value(minimum_fee, {"fieldtype": "Currency"}) }}</p>
+                        <p><strong>{{ _("Fee Source") }}:</strong> 
+                            {% if current_fee.source == "custom_override" %}
+                                {{ _("Custom Amount") }}
+                            {% else %}
+                                {{ _("Standard Rate") }}
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pending Requests -->
+            {% if pending_requests %}
+            <div class="fee-card">
+                <h4>{{ _("Pending Requests") }}</h4>
+                {% for request in pending_requests %}
+                <div class="pending-request">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <strong>{{ _("Requested Amount") }}:</strong> {{ frappe.format_value(request.requested_amount, {"fieldtype": "Currency"}) }}<br>
+                            <strong>{{ _("Status") }}:</strong> {{ _(request.status) }}<br>
+                            <small class="text-muted">{{ _("Submitted") }}: {{ frappe.utils.format_datetime(request.creation) }}</small>
+                        </div>
+                        <div class="col-md-4">
+                            <a href="/app/contribution-amendment-request/{{ request.name }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                {{ _("View Details") }}
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- Fee Adjustment Form -->
+            <div class="fee-card">
+                <h4>{{ _("Adjust Your Fee") }}</h4>
+                
+                <div class="info-card">
+                    <h6>{{ _("Important Information") }}</h6>
+                    <ul>
+                        <li>{{ _("You can adjust your membership fee up to {0} times per year").format(settings.max_adjustments_per_year) }}</li>
+                        <li>{{ _("Minimum fee is {0}").format(frappe.format_value(minimum_fee, {"fieldtype": "Currency"})) }}</li>
+                        <li>{{ _("Maximum fee via this form is {0}").format(frappe.format_value(minimum_fee * 5, {"fieldtype": "Currency"})) }}</li>
+                        <li>{{ _("For higher amounts, please contact us directly") }}</li>
+                        {% if settings.require_approval_for_decreases %}
+                        <li>{{ _("Fee reductions require approval") }}</li>
+                        {% endif %}
+                        {% if settings.require_approval_for_increases %}
+                        <li>{{ _("Fee increases require approval") }}</li>
+                        {% endif %}
+                    </ul>
+                </div>
+
+                <form id="fee-adjustment-form">
+                    <div class="fee-input-group">
+                        <label for="new-fee-amount">{{ _("New Monthly Fee Amount") }}</label>
+                        <input type="range" 
+                               id="fee-slider" 
+                               class="fee-slider"
+                               min="{{ minimum_fee }}" 
+                               max="{{ minimum_fee * 5 }}" 
+                               step="1"
+                               value="{{ current_fee.amount }}">
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input type="number" 
+                                       id="new-fee-amount" 
+                                       class="form-control"
+                                       min="{{ minimum_fee }}" 
+                                       max="{{ minimum_fee * 5 }}"
+                                       step="0.50"
+                                       value="{{ current_fee.amount }}"
+                                       required>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="fee-display" id="fee-display">
+                                    {{ frappe.format_value(current_fee.amount, {"fieldtype": "Currency"}) }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if settings.adjustment_reason_required %}
+                    <div class="form-group">
+                        <label for="adjustment-reason">{{ _("Reason for Adjustment") }} <span class="text-danger">*</span></label>
+                        <textarea id="adjustment-reason" 
+                                  class="form-control" 
+                                  rows="3" 
+                                  placeholder="{{ _('Please explain why you want to adjust your membership fee...') }}"
+                                  required></textarea>
+                    </div>
+                    {% endif %}
+
+                    <div class="form-group">
+                        <button type="submit" class="btn-submit-fee" id="submit-btn">
+                            {{ _("Submit Fee Adjustment") }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="col-md-4">
+            <!-- Sidebar with help information -->
+            <div class="fee-card">
+                <h5>{{ _("Why Adjust Your Fee?") }}</h5>
+                <p>{{ _("We believe everyone should be able to contribute according to their ability. You can:") }}</p>
+                <ul>
+                    <li>{{ _("Increase your fee to provide extra support") }}</li>
+                    <li>{{ _("Reduce your fee if facing financial difficulties") }}</li>
+                    <li>{{ _("Set a fee that reflects your current situation") }}</li>
+                </ul>
+            </div>
+
+            <div class="fee-card">
+                <h5>{{ _("Need Help?") }}</h5>
+                <p>{{ _("If you have questions about fee adjustments or need financial assistance, please contact us.") }}</p>
+                <a href="mailto:{{ member_contact_email }}" class="btn btn-outline-primary btn-sm">
+                    {{ _("Contact Support") }}
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Success/Error Messages -->
+<div id="message-container" style="position: fixed; top: 20px; right: 20px; z-index: 1000;"></div>
+{% endblock %}
+
+{% block script %}
+<script>
+$(document).ready(function() {
+    const feeSlider = $('#fee-slider');
+    const feeInput = $('#new-fee-amount');
+    const feeDisplay = $('#fee-display');
+    const form = $('#fee-adjustment-form');
+    const submitBtn = $('#submit-btn');
+    
+    // Sync slider and input
+    feeSlider.on('input', function() {
+        const value = parseFloat($(this).val());
+        feeInput.val(value);
+        updateFeeDisplay(value);
+    });
+    
+    feeInput.on('input', function() {
+        const value = parseFloat($(this).val());
+        if (!isNaN(value)) {
+            feeSlider.val(value);
+            updateFeeDisplay(value);
+        }
+    });
+    
+    function updateFeeDisplay(amount) {
+        feeDisplay.text('€' + amount.toFixed(2));
+        
+        // Update button state based on amount validity
+        const minFee = parseFloat(feeSlider.attr('min'));
+        const maxFee = parseFloat(feeSlider.attr('max'));
+        
+        if (amount < minFee || amount > maxFee) {
+            submitBtn.prop('disabled', true);
+            submitBtn.text('{{ _("Contact us for amounts outside this range") }}');
+            submitBtn.attr('title', '{{ _("For amounts outside the normal range, please contact us at {0}").format(member_contact_email) }}');
+        } else {
+            submitBtn.prop('disabled', false);
+            submitBtn.text('{{ _("Submit Fee Adjustment") }}');
+            submitBtn.removeAttr('title');
+        }
+    }
+    
+    // Form submission
+    form.on('submit', function(e) {
+        e.preventDefault();
+        
+        const newAmount = parseFloat(feeInput.val());
+        const reason = $('#adjustment-reason').val();
+        
+        // Validate
+        if (isNaN(newAmount) || newAmount < parseFloat(feeSlider.attr('min'))) {
+            showMessage('{{ _("Please enter a valid amount above the minimum") }}', 'danger');
+            return;
+        }
+        
+        {% if settings.adjustment_reason_required %}
+        if (!reason.trim()) {
+            showMessage('{{ _("Please provide a reason for the adjustment") }}', 'danger');
+            return;
+        }
+        {% endif %}
+        
+        submitBtn.prop('disabled', true);
+        submitBtn.text('{{ _("Processing...") }}');
+        
+        // Submit request
+        frappe.call({
+            method: 'verenigingen.templates.pages.membership_fee_adjustment.submit_fee_adjustment_request',
+            args: {
+                new_amount: newAmount,
+                reason: reason || ''
+            },
+            callback: function(r) {
+                if (r.message && r.message.success) {
+                    showMessage(r.message.message, 'success');
+                    
+                    // Reload page after 2 seconds
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    showMessage('{{ _("An error occurred. Please try again.") }}', 'danger');
+                    submitBtn.prop('disabled', false);
+                    submitBtn.text('{{ _("Submit Fee Adjustment") }}');
+                }
+            },
+            error: function(r) {
+                let errorMsg = '{{ _("An error occurred. Please try again.") }}';
+                if (r && r._server_messages) {
+                    try {
+                        const messages = JSON.parse(r._server_messages);
+                        if (messages.length > 0) {
+                            const parsed = JSON.parse(messages[0]);
+                            errorMsg = parsed.message || errorMsg;
+                        }
+                    } catch (e) {
+                        // Use default error message
+                    }
+                }
+                
+                showMessage(errorMsg, 'danger');
+                submitBtn.prop('disabled', false);
+                submitBtn.text('{{ _("Submit Fee Adjustment") }}');
+            }
+        });
+    });
+    
+    function showMessage(message, type) {
+        const alertClass = 'alert-' + type;
+        const messageHtml = `
+            <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+                ${message}
+                <button type="button" class="close" data-dismiss="alert">
+                    <span>&times;</span>
+                </button>
+            </div>
+        `;
+        
+        $('#message-container').html(messageHtml);
+        
+        // Auto-dismiss after 5 seconds
+        setTimeout(function() {
+            $('.alert').alert('close');
+        }, 5000);
+    }
+});
+</script>
+{% endblock %}

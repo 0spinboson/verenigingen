@@ -141,3 +141,32 @@ class SEPAMandate(Document):
                             mandate_link.is_current = 0
                     
                     member.save(ignore_permissions=True)
+
+def cancel_mandate(self, reason=None, cancellation_date=None):
+    """
+    Cancel SEPA mandate method
+    """
+    if not cancellation_date:
+        cancellation_date = frappe.utils.today()
+    
+    # Update mandate status
+    self.status = "Cancelled"
+    self.is_active = 0
+    self.cancelled_date = cancellation_date
+    self.cancelled_reason = reason or "Mandate cancelled"
+    
+    # Add cancellation note
+    cancellation_note = f"Cancelled on {cancellation_date}"
+    if reason:
+        cancellation_note += f" - Reason: {reason}"
+    
+    if self.notes:
+        self.notes += f"\n\n{cancellation_note}"
+    else:
+        self.notes = cancellation_note
+    
+    # Save the mandate
+    self.flags.ignore_permissions = True
+    self.save()
+    
+    frappe.logger().info(f"Cancelled SEPA mandate {self.mandate_id}")
