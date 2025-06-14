@@ -6,8 +6,13 @@ Scripts to validate features, migrations, and system integrity.
 
 - **`validate_bank_details.py`** - Validate bank details functionality
 - **`validate_configurable_email.py`** - Validate configurable email system
+- **`validate_contact_request_implementation.py`** - Validate contact request feature implementation
 - **`validate_member_portal.py`** - Validate member portal functionality
 - **`validate_personal_details.py`** - Validate personal details handling
+- **`test_expense_approval_fix.py`** - Validate expense claim approval workflow fix
+- **`test_member_portal_fix.py`** - Validate member portal expense query fix
+- **`test_chapter_membership_fix.py`** - Validate chapter membership validation fix
+- **`test_chapter_membership_final.py`** - Final validation test confirming the fix works
 
 ## Migration Validation (`migrations/`)
 

@@ -1,6 +1,8 @@
 """
 Comprehensive unit tests for ERPNext Expense Claims integration
 Tests the volunteer expense submission system with ERPNext HRMS integration
+
+Updated: December 2024 - Reflects legacy system phase-out and ERPNext-only workflow
 """
 
 import frappe
@@ -11,9 +13,9 @@ from verenigingen.templates.pages.volunteer.expenses import (
     submit_expense, 
     get_organization_cost_center,
     get_or_create_expense_type,
-    setup_expense_claim_types,
     test_expense_integration
 )
+# Note: setup_expense_claim_types function removed in ERPNext integration simplification
 
 
 class TestERPNextExpenseIntegration(unittest.TestCase):
@@ -312,41 +314,18 @@ class TestERPNextExpenseIntegration(unittest.TestCase):
             result = get_or_create_expense_type("Invalid Type")
             self.assertEqual(result, "Travel")  # Should fallback to existing type
 
-    @patch('frappe.defaults.get_global_default')
-    @patch('frappe.db.get_value')
-    @patch('frappe.get_doc')
-    def test_setup_expense_claim_types_success(self, mock_get_doc, mock_get_value, mock_get_default):
-        """Test successful expense claim type setup"""
-        mock_get_default.return_value = "Test Company"
-        mock_get_value.return_value = "Test Expense Account - TC"
-        
-        mock_expense_type = MagicMock()
-        mock_expense_type.accounts = []
-        mock_get_doc.return_value = mock_expense_type
-        
-        with patch('frappe.db.exists', return_value=False):
-            result = setup_expense_claim_types()
+    def test_expense_claim_type_integration_simplified(self):
+        """Test that expense claim types work with ERPNext native functionality"""
+        # This test verifies that we can work with existing ERPNext expense claim types
+        with patch('frappe.db.get_value', return_value="Travel"):
+            result = get_or_create_expense_type("Travel")
             self.assertEqual(result, "Travel")
-            mock_expense_type.append.assert_called_once()
-
-    @patch('frappe.defaults.get_global_default')
-    def test_setup_expense_claim_types_no_company(self, mock_get_default):
-        """Test expense claim type setup with no company"""
-        mock_get_default.return_value = None
         
-        with patch('frappe.get_all', return_value=[]):
-            result = setup_expense_claim_types()
-            self.assertEqual(result, "Travel")
-
-    @patch('frappe.defaults.get_global_default')
-    @patch('frappe.db.get_value')
-    def test_setup_expense_claim_types_no_expense_account(self, mock_get_value, mock_get_default):
-        """Test expense claim type setup with no expense account"""
-        mock_get_default.return_value = "Test Company"
-        mock_get_value.return_value = None  # No expense account found
-        
-        result = setup_expense_claim_types()
-        self.assertEqual(result, "Travel")
+        # Test fallback to ERPNext default types
+        with patch('frappe.db.get_value', side_effect=[None, "Travel"]):
+            with patch('frappe.get_all', return_value=[{"name": "Travel"}]):
+                result = get_or_create_expense_type("NonExistent")
+                self.assertEqual(result, "Travel")
 
     def test_expense_data_validation_missing_fields(self):
         """Test expense submission with missing required fields"""
@@ -386,7 +365,7 @@ class TestERPNextExpenseIntegration(unittest.TestCase):
         mock_exists.side_effect = lambda doctype, name=None: doctype in ['Expense Claim', 'Expense Claim Type']
         
         # This should pass HRMS checks
-        with patch('verenigingen.templates.pages.volunteer.expenses.setup_expense_claim_types', return_value="Travel"):
+        with patch('verenigingen.templates.pages.volunteer.expenses.get_or_create_expense_type', return_value="Travel"):
             with patch('frappe.get_all', return_value=[]):  # No volunteers found
                 result = test_expense_integration()
                 self.assertFalse(result.get('success'))  # Fails because no volunteers, but HRMS checks pass
@@ -553,45 +532,106 @@ class TestERPNextExpenseEdgeCases(unittest.TestCase):
         """Test handling of concurrent expense submissions (race conditions)"""
         import threading
         import time
+        import queue
         
-        results = []
+        # Thread-safe queue for results
+        results_queue = queue.Queue()
+        submission_errors = queue.Queue()
         
         def submit_test_expense(thread_id):
-            expense_data = {
-                'description': f'Concurrent expense {thread_id}',
-                'amount': 25.00,
-                'expense_date': '2024-12-14',
-                'organization_type': 'National',
-                'category': 'Travel',
-                'notes': f'Thread {thread_id}'
-            }
-            
-            mock_volunteer = MagicMock()
-            mock_volunteer.employee_id = f"HR-EMP-{thread_id:03d}"
-            
-            with patch('verenigingen.templates.pages.volunteer.expenses.get_user_volunteer_record', return_value=mock_volunteer):
-                with patch('frappe.get_doc', return_value=MagicMock(name=f"EXP-{thread_id:03d}")):
-                    with patch('verenigingen.templates.pages.volunteer.expenses.get_or_create_expense_type', return_value="Travel"):
-                        result = submit_expense(expense_data)
-                        results.append(result)
+            try:
+                # Create thread-local expense data
+                expense_data = {
+                    'description': f'Concurrent expense {thread_id}',
+                    'amount': 25.00 + thread_id,  # Unique amounts to avoid conflicts
+                    'expense_date': '2024-12-14',
+                    'organization_type': 'National',
+                    'category': 'Travel',
+                    'notes': f'Thread {thread_id} test'
+                }
+                
+                # Create thread-specific mocks to avoid shared state issues
+                mock_volunteer = MagicMock()
+                mock_volunteer.name = f"test-volunteer-{thread_id}"
+                mock_volunteer.employee_id = f"HR-EMP-{thread_id:03d}"
+                
+                # Create thread-specific mock expense claim
+                mock_expense_claim = MagicMock()
+                mock_expense_claim.name = f"EXP-CLAIM-{thread_id:03d}"
+                mock_expense_claim.insert.return_value = None
+                mock_expense_claim.submit.return_value = None
+                
+                # Create thread-specific mock volunteer expense  
+                mock_volunteer_expense = MagicMock()
+                mock_volunteer_expense.name = f"VOL-EXP-{thread_id:03d}"
+                
+                # Use thread-local patches to avoid conflicts
+                with patch('verenigingen.templates.pages.volunteer.expenses.get_user_volunteer_record', return_value=mock_volunteer):
+                    with patch('frappe.get_doc') as mock_get_doc:
+                        # Configure mock to return different objects for different doctypes
+                        def get_doc_side_effect(doctype, *args, **kwargs):
+                            if doctype == "Expense Claim":
+                                return mock_expense_claim
+                            elif doctype == "Volunteer Expense":
+                                return mock_volunteer_expense
+                            elif doctype == "Volunteer":
+                                return mock_volunteer
+                            else:
+                                return MagicMock()
+                        
+                        mock_get_doc.side_effect = get_doc_side_effect
+                        
+                        with patch('verenigingen.templates.pages.volunteer.expenses.get_or_create_expense_type', return_value="Travel"):
+                            with patch('frappe.defaults.get_global_default', return_value="Test Company"):
+                                with patch('frappe.db.get_value', return_value="Test Account"):
+                                    with patch('verenigingen.templates.pages.volunteer.expenses.get_organization_cost_center', return_value="Test Cost Center"):
+                                        # Add small delay to increase chance of race conditions
+                                        time.sleep(0.01 * thread_id)
+                                        
+                                        result = submit_expense(expense_data)
+                                        results_queue.put((thread_id, result))
+                                        
+            except Exception as e:
+                submission_errors.put((thread_id, str(e)))
         
-        # Create 5 concurrent threads
+        # Create 5 concurrent threads with proper thread safety
         threads = []
         for i in range(5):
-            thread = threading.Thread(target=submit_test_expense, args=(i,))
+            thread = threading.Thread(target=submit_test_expense, args=(i,), daemon=True)
             threads.append(thread)
         
         # Start all threads
         for thread in threads:
             thread.start()
         
-        # Wait for all to complete
+        # Wait for all to complete with timeout
         for thread in threads:
-            thread.join()
+            thread.join(timeout=10.0)  # 10 second timeout
+            if thread.is_alive():
+                self.fail(f"Thread did not complete within timeout")
+        
+        # Collect results from thread-safe queue
+        results = []
+        while not results_queue.empty():
+            thread_id, result = results_queue.get()
+            results.append(result)
+        
+        # Check for any submission errors
+        errors = []
+        while not submission_errors.empty():
+            thread_id, error = submission_errors.get()
+            errors.append(f"Thread {thread_id}: {error}")
+        
+        if errors:
+            self.fail(f"Submission errors occurred: {'; '.join(errors)}")
         
         # All should succeed
-        self.assertEqual(len(results), 5)
-        self.assertTrue(all(r.get('success') for r in results))
+        self.assertEqual(len(results), 5, f"Expected 5 results, got {len(results)}")
+        
+        # Check each result individually for better error reporting
+        for i, result in enumerate(results):
+            with self.subTest(thread_id=i):
+                self.assertTrue(result.get('success'), f"Thread {i} failed: {result.get('message')}")
 
     def test_database_connection_failure_during_submission(self):
         """Test handling of database connection failures"""

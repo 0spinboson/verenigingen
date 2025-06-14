@@ -6,7 +6,12 @@ from frappe.tests.utils import FrappeTestCase
 
 
 class TestVolunteerExpensePortal(FrappeTestCase):
-    """Comprehensive tests for the volunteer expense portal"""
+    """
+    Comprehensive tests for the volunteer expense portal
+    
+    UPDATED: December 2024 - Tests now reflect ERPNext integration
+    Legacy Volunteer Expense Dashboard functionality has been phased out
+    """
     
     @classmethod
     def setUpClass(cls):

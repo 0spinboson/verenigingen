@@ -43,7 +43,7 @@ The Volunteer Expense Portal provides a user-friendly interface for volunteers t
 1. Volunteer submits expense through portal
 2. System determines required approval level based on amount
 3. Notification sent to appropriate approvers
-4. Approvers can use Expense Approval Dashboard for review
+4. Approvers can use ERPNext Expense Claims list for review
 5. Volunteer receives confirmation/rejection notification
 
 ## Technical Implementation
@@ -62,10 +62,11 @@ The Volunteer Expense Portal provides a user-friendly interface for volunteers t
 - **Notifications**: Enhanced email system with professional templates
 
 ### Database Integration
-- **Volunteer Expense**: Main expense document
-- **Expense Category**: Categorization system
-- **Chapter/Team**: Organization relationships
-- **Expense Permissions**: Permission validation system
+- **ERPNext Expense Claims**: Primary expense management (native ERPNext HRMS)
+- **Volunteer Expense**: Legacy tracking records (linked to ERPNext claims)
+- **Expense Category**: Categorization system (maps to ERPNext Expense Claim Types)
+- **Chapter/Team**: Organization relationships with cost center integration
+- **Employee Records**: Auto-created for volunteers submitting expenses
 
 ## User Journey
 
@@ -84,9 +85,10 @@ The Volunteer Expense Portal provides a user-friendly interface for volunteers t
 ## Administrator Features
 
 ### Dashboard Access
-- **Expense Approval Dashboard**: `/app/expense-approval-dashboard`
-- **Chapter Expense Report**: Query report with filtering
-- **Bulk approval**: Process multiple expenses simultaneously
+- **ERPNext Expense Claims**: `/app/expense-claim` (native ERPNext approval workflow)
+- **Chapter Expense Report**: Query report with filtering (`/app/query-report/Chapter%20Expense%20Report`)
+- **Bulk approval**: Process multiple expenses simultaneously via ERPNext interface
+- **Workspace Access**: Verenigingen workspace provides direct links to all expense management tools
 
 ### Configuration
 - **Expense Categories**: Manage available categories
@@ -147,12 +149,35 @@ The portal is fully responsive and optimized for:
 - Mobile phones (<768px)
 - Print-friendly layouts
 
+## Migration to ERPNext
+
+**System Evolution (December 2024):**
+The expense system has been fully migrated from a custom approval dashboard to ERPNext's native HRMS Expense Claims module:
+
+### Migration Benefits
+- **Professional Workflow**: Native ERPNext approval processes
+- **Financial Integration**: Direct integration with accounting modules
+- **Reporting**: Advanced ERPNext reporting capabilities
+- **Compliance**: Built-in audit trails and compliance features
+- **Scalability**: Enterprise-grade expense management
+
+### Technical Changes
+- **Legacy Dashboard**: Removed (December 2024)
+- **Volunteer Expense Records**: Maintained for tracking, linked to ERPNext claims
+- **Employee Creation**: Automatic employee record creation for volunteers
+- **Cost Center Integration**: Enhanced organization-based cost center logic
+- **Policy-Based Expenses**: National expense categories for all volunteers
+
+### Access Points
+- **Volunteers**: Continue using `/volunteer/expenses` portal (no change in UX)
+- **Administrators**: Use ERPNext Expense Claims interface (`/app/expense-claim`)
+- **Reports**: Chapter Expense Report integrates both systems transparently
+
 ## Future Enhancements
 
 Potential improvements for future releases:
 - Mobile app integration
 - Receipt scanning with OCR
-- Integration with accounting systems
-- Advanced reporting and analytics
-- Expense policy automation
+- Advanced policy automation
 - Multi-currency support enhancement
+- Enhanced ERPNext module customizations

@@ -223,7 +223,7 @@ def get_quick_actions(member, membership, volunteer):
                 "Volunteer Expense",
                 filters={
                     "volunteer": volunteer.name,
-                    "approval_status": ["in", ["Draft", "Pending Approval"]]
+                    "status": "Draft"  # Now all pending expenses are in Draft status
                 }
             )
             

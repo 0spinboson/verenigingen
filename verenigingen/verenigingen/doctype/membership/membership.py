@@ -469,7 +469,16 @@ class Membership(Document):
                 subscription.start_date = getdate(self.start_date)
             
             # Set company
-            subscription.company = frappe.defaults.get_global_default('company') or '_Test Company'
+            default_company = frappe.defaults.get_global_default('company')
+            if not default_company:
+                # Fallback to first available company if no default is set
+                companies = frappe.get_all("Company", limit=1, fields=["name"])
+                default_company = companies[0].name if companies else None
+            
+            if not default_company:
+                frappe.throw(_("No company configured in the system. Please set a default company in Global Defaults."))
+            
+            subscription.company = default_company
             
             # Set billing details from the subscription plan
             subscription.billing_interval = subscription_plan.billing_interval

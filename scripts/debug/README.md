@@ -2,6 +2,16 @@
 
 Debug and troubleshooting scripts organized by component.
 
+## Expense System Debugging
+
+- **`fix_expense_claim_accounts.py`** - Fix expense claim account configuration issues
+
+## General Debugging
+
+- **`debug_custom_amount.py`** - Debug custom amount functionality
+- **`debug_team_assignment.py`** - Debug team assignment issues
+- **`debug_volunteer_lookup.py`** - Debug volunteer lookup functionality
+
 ## Board Member Debugging (`board/`)
 
 - **`debug_board_addition.py`** - Debug board member addition issues
@@ -21,6 +31,14 @@ Debug and troubleshooting scripts organized by component.
 Run debug scripts to troubleshoot specific issues:
 
 ```bash
+# Fix expense claim accounts
+python scripts/debug/fix_expense_claim_accounts.py
+
+# Debug general functionality
+python scripts/debug/debug_custom_amount.py
+python scripts/debug/debug_team_assignment.py
+python scripts/debug/debug_volunteer_lookup.py
+
 # Debug board member addition
 python scripts/debug/board/debug_board_addition.py
 

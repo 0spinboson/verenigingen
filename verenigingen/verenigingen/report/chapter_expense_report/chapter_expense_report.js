@@ -134,8 +134,8 @@ frappe.query_reports["Chapter Expense Report"] = {
             });
         });
         
-        report.page.add_inner_button(__("Open Approval Dashboard"), function() {
-            frappe.set_route("Form", "Expense Approval Dashboard", "Expense Approval Dashboard");
+        report.page.add_inner_button(__("Open ERPNext Expense Claims"), function() {
+            frappe.set_route("List", "Expense Claim");
         });
     }
 };

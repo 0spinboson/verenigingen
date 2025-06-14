@@ -48,12 +48,12 @@ def get_user_volunteer_record():
     # First try to find by linked member
     member = frappe.db.get_value("Member", {"email": user_email}, "name")
     if member:
-        volunteer = frappe.db.get_value("Volunteer", {"member": member}, ["name", "volunteer_name"], as_dict=True)
+        volunteer = frappe.db.get_value("Volunteer", {"member": member}, ["name", "volunteer_name", "member"], as_dict=True)
         if volunteer:
             return volunteer
     
     # Try to find volunteer directly by email (if volunteer has direct email)
-    volunteer = frappe.db.get_value("Volunteer", {"email": user_email}, ["name", "volunteer_name"], as_dict=True)
+    volunteer = frappe.db.get_value("Volunteer", {"email": user_email}, ["name", "volunteer_name", "member"], as_dict=True)
     if volunteer:
         return volunteer
     
@@ -85,6 +85,8 @@ def debug_volunteer_access():
     result["volunteer_direct"] = volunteer_direct
     
     return result
+
+# Debug functions removed - regression tests added to cover this functionality
 
 @frappe.whitelist()
 def check_workspace_status():
@@ -166,8 +168,8 @@ def update_workspace_links():
             "shortcuts": [
                 {"label": "Member", "link_to": "Member", "type": "DocType", "color": "Grey"},
                 {"label": "Membership", "link_to": "Membership", "type": "DocType", "color": "Grey"},
-                {"label": "Chapter", "link_to": "Chapter", "type": "DocType", "color": "Grey"},
-                {"label": "Users by Team", "link_to": "Users by Team", "type": "Report", "color": "Grey", "report_ref_doctype": "Team"}
+                {"label": "Expense Claims", "link_to": "Expense Claim", "type": "DocType", "color": "Orange", "doc_view": "List"},
+                {"label": "Chapter Expenses", "link_to": "Chapter Expense Report", "type": "Report", "color": "Green"}
             ]
         })
         
@@ -182,12 +184,11 @@ def update_workspace_links():
             {"label": "Membership Termination Request", "link_to": "Membership Termination Request", "link_type": "DocType", "type": "Link"},
             
             # Volunteers section - Card Break first, then links
-            {"label": "Volunteers", "link_count": 5, "link_type": "DocType", "type": "Card Break"},
+            {"label": "Volunteers", "link_count": 4, "link_type": "DocType", "type": "Card Break"},
             {"label": "Volunteer", "link_to": "Volunteer", "link_type": "DocType", "type": "Link", "onboard": 1},
-            {"label": "Volunteer Expense", "link_to": "Volunteer Expense", "link_type": "DocType", "type": "Link"},
             {"label": "Volunteer Activity", "link_to": "Volunteer Activity", "link_type": "DocType", "type": "Link"},
             {"label": "Expense Category", "link_to": "Expense Category", "link_type": "DocType", "type": "Link"},
-            {"label": "Expense Approval Dashboard", "link_to": "Expense Approval Dashboard", "link_type": "DocType", "type": "Link"},
+            {"label": "Expense Claims (ERPNext)", "link_to": "Expense Claim", "link_type": "DocType", "type": "Link"},
             
             # Chapters section - Card Break first, then links
             {"label": "Chapters", "link_count": 2, "link_type": "DocType", "type": "Card Break"},
@@ -330,7 +331,107 @@ def get_expense_categories():
     )
 
 def get_volunteer_expenses(volunteer_name, limit=None):
-    """Get volunteer's recent expenses"""
+    """Get volunteer's recent expenses from ERPNext Expense Claims"""
+    try:
+        # Get volunteer's employee ID
+        volunteer_doc = frappe.get_doc("Volunteer", volunteer_name)
+        if not volunteer_doc.employee_id:
+            return []
+        
+        # Get ERPNext Expense Claims for this employee
+        expense_claims = frappe.get_all("Expense Claim",
+            filters={"employee": volunteer_doc.employee_id},
+            fields=[
+                "name", "title", "total_claimed_amount", "status", "posting_date",
+                "creation", "approval_status", "company", "cost_center"
+            ],
+            order_by="creation desc",
+            limit=limit
+        )
+        
+        expenses = []
+        for claim in expense_claims:
+            # Get expense details from the claim's expense table
+            claim_details = frappe.get_all("Expense Claim Detail",
+                filters={"parent": claim.name},
+                fields=["expense_type", "description", "amount", "expense_date"],
+                order_by="idx"
+            )
+            
+            # Get linked Volunteer Expense record for organization info if it exists
+            volunteer_expense = frappe.db.get_value("Volunteer Expense", 
+                {"expense_claim_id": claim.name}, 
+                ["organization_type", "chapter", "team", "category"], 
+                as_dict=True)
+            
+            for detail in claim_details:
+                expense = frappe._dict({
+                    "name": f"{claim.name}-{detail.get('idx', 1)}",
+                    "expense_claim_id": claim.name,
+                    "description": detail.description or claim.title,
+                    "amount": detail.amount,
+                    "currency": "EUR",  # Default currency
+                    "expense_date": detail.expense_date or claim.posting_date,
+                    "status": map_erpnext_status_to_volunteer_status(claim.status, claim.approval_status),
+                    "creation": claim.creation,
+                    "approved_on": None,  # ERPNext doesn't track approval date directly
+                    
+                    # Organization info from linked Volunteer Expense if available
+                    "organization_type": volunteer_expense.organization_type if volunteer_expense else "Unknown",
+                    "chapter": volunteer_expense.chapter if volunteer_expense else None,
+                    "team": volunteer_expense.team if volunteer_expense else None,
+                    "category": volunteer_expense.category if volunteer_expense else detail.expense_type,
+                })
+                
+                # Get category name
+                if expense.category:
+                    expense.category_name = frappe.db.get_value("Expense Category", expense.category, "category_name") or \
+                                          frappe.db.get_value("Expense Claim Type", expense.category, "expense_type") or \
+                                          expense.category
+                else:
+                    expense.category_name = "Uncategorized"
+                
+                # Get organization name
+                expense.organization_name = expense.chapter or expense.team or "Unknown"
+                
+                # Format dates
+                expense.formatted_date = formatdate(expense.expense_date)
+                expense.formatted_creation = formatdate(expense.creation)
+                
+                # Add status styling
+                expense.status_class = get_status_class(expense.status)
+                
+                expenses.append(expense)
+        
+        return expenses
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting volunteer expenses: {str(e)}", "Volunteer Expenses Error")
+        # Return empty list if ERPNext integration fails
+        return []
+
+
+def map_erpnext_status_to_volunteer_status(erpnext_status, approval_status):
+    """Map ERPNext Expense Claim status to Volunteer Expense status"""
+    if erpnext_status == "Draft":
+        return "Awaiting Approval"
+    elif erpnext_status == "Submitted":
+        if approval_status == "Approved":
+            return "Approved"
+        elif approval_status == "Rejected":
+            return "Rejected"
+        else:
+            return "Submitted"
+    elif erpnext_status == "Paid":
+        return "Reimbursed"
+    elif erpnext_status == "Cancelled":
+        return "Rejected"
+    else:
+        return "Submitted"
+
+
+def get_volunteer_expenses_legacy(volunteer_name, limit=None):
+    """Legacy function to get expenses from Volunteer Expense records"""
     filters = {"volunteer": volunteer_name}
     
     expenses = frappe.get_all("Volunteer Expense",
@@ -366,8 +467,70 @@ def get_volunteer_expenses(volunteer_name, limit=None):
     
     return expenses
 
+
 def get_expense_statistics(volunteer_name):
-    """Get expense statistics for the volunteer"""
+    """Get expense statistics for the volunteer from ERPNext Expense Claims"""
+    from frappe.utils import add_months
+    
+    try:
+        # Get volunteer's employee ID
+        volunteer_doc = frappe.get_doc("Volunteer", volunteer_name)
+        if not volunteer_doc.employee_id:
+            return {"total_submitted": 0, "total_approved": 0, "pending_amount": 0, "pending_count": 0, "approved_count": 0, "total_count": 0}
+        
+        # Get expenses from last 12 months
+        from_date = add_months(today(), -12)
+        
+        # Get ERPNext Expense Claims for this employee
+        expense_claims = frappe.get_all("Expense Claim",
+            filters={
+                "employee": volunteer_doc.employee_id,
+                "posting_date": [">=", from_date],
+                "docstatus": ["!=", 2]  # Not cancelled
+            },
+            fields=["name", "total_claimed_amount", "total_sanctioned_amount", 
+                   "status", "approval_status", "posting_date"]
+        )
+        
+        total_submitted = 0
+        total_approved = 0
+        pending_count = 0
+        approved_count = 0
+        reimbursed_count = 0
+        
+        for claim in expense_claims:
+            amount = flt(claim.total_claimed_amount)
+            status = map_erpnext_status_to_volunteer_status(claim.status, claim.approval_status)
+            
+            if status in ["Submitted", "Approved", "Reimbursed"]:
+                total_submitted += amount
+                
+            if status == "Approved":
+                total_approved += flt(claim.total_sanctioned_amount or amount)
+                approved_count += 1
+            elif status == "Submitted":
+                pending_count += 1
+            elif status == "Reimbursed":
+                total_approved += flt(claim.total_sanctioned_amount or amount)
+                reimbursed_count += 1
+        
+        return {
+            "total_submitted": total_submitted,
+            "total_approved": total_approved,
+            "pending_amount": total_submitted - total_approved,
+            "pending_count": pending_count,
+            "approved_count": approved_count + reimbursed_count,
+            "total_count": len(expense_claims)
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting expense statistics: {str(e)}", "Expense Statistics Error")
+        # Return empty statistics if error occurs
+        return {"total_submitted": 0, "total_approved": 0, "pending_amount": 0, "pending_count": 0, "approved_count": 0, "total_count": 0}
+
+
+def get_expense_statistics_legacy(volunteer_name):
+    """Legacy function to get expense statistics from Volunteer Expense records"""
     from frappe.utils import add_months
     
     # Get expenses from last 12 months
@@ -474,13 +637,17 @@ def submit_expense(expense_data):
         # Enhanced access validation with policy-based national expenses
         if expense_data.get("organization_type") == "Chapter":
             organization_name = expense_data.get("chapter")
-            # For chapter expenses, check direct chapter membership
-            direct_membership = frappe.db.exists("Chapter Member", {
-                "parent": organization_name,
-                "volunteer": volunteer.name
-            })
+            # For chapter expenses, check chapter membership through member record
+            if volunteer.member:
+                direct_membership = frappe.db.exists("Chapter Member", {
+                    "parent": organization_name,
+                    "member": volunteer.member
+                })
+            else:
+                direct_membership = None
+                
             if not direct_membership:
-                frappe.throw(_("Direct chapter membership required for {0}").format(organization_name))
+                frappe.throw(_("Chapter membership required for {0}").format(organization_name))
                 
         elif expense_data.get("organization_type") == "Team":
             organization_name = expense_data.get("team")
@@ -580,7 +747,7 @@ def submit_expense(expense_data):
             "company": default_company,
             "cost_center": cost_center,
             "payable_account": payable_account,
-            "approval_status": "Approved",  # Set approval status for volunteer expenses
+            "approval_status": "Draft",  # Leave approval to appropriate user roles
             "title": f"Volunteer Expense - {expense_data.get('description')[:50]}",
             "remark": expense_data.get("notes"),
             "status": "Draft"
@@ -602,17 +769,12 @@ def submit_expense(expense_data):
                 "file_url": expense_data.get("receipt_attachment")
             })
         
-        # Insert and submit the expense claim
+        # Insert the expense claim as draft (don't submit automatically)
         expense_claim.insert(ignore_permissions=True)
+        frappe.logger().info(f"Successfully created expense claim draft: {expense_claim.name}")
         
-        # Submit the expense claim with error handling
-        try:
-            expense_claim.submit()
-            frappe.logger().info(f"Successfully submitted expense claim: {expense_claim.name}")
-        except Exception as e:
-            frappe.logger().error(f"Error submitting expense claim: {str(e)}")
-            # If submission fails, we can still keep the draft expense claim
-            frappe.log_error(f"Expense claim submission failed: {str(e)}", "Expense Claim Submission Error")
+        # Don't submit automatically - leave for approval workflow
+        # The expense claim will remain in Draft status until approved and submitted by authorized users
         
         # Also create a reference in our Volunteer Expense system for tracking
         volunteer_expense = frappe.get_doc({
@@ -632,10 +794,11 @@ def submit_expense(expense_data):
         })
         
         volunteer_expense.insert(ignore_permissions=True)
-        volunteer_expense.db_set("status", "Submitted")
+        # Keep as Draft status to match ERPNext Expense Claim workflow
+        # Will be updated when the ERPNext expense claim is approved and submitted
         
         # Prepare success message
-        success_message = _("Expense claim submitted successfully")
+        success_message = _("Expense claim saved successfully and awaiting approval")
         if employee_created:
             success_message += _(" (Employee record created for your account)")
         
@@ -675,33 +838,99 @@ def get_organization_options(organization_type, volunteer_name=None):
 
 @frappe.whitelist()
 def get_expense_details(expense_name):
-    """Get details for a specific expense"""
+    """Get details for a specific expense from ERPNext or legacy records"""
     volunteer = get_user_volunteer_record()
     if not volunteer:
         frappe.throw(_("Access denied"))
     
-    # Verify the expense belongs to this volunteer
-    expense = frappe.get_doc("Volunteer Expense", expense_name)
-    if expense.volunteer != volunteer.name:
-        frappe.throw(_("Access denied"))
-    
-    # Get enhanced expense details
-    expense_dict = expense.as_dict()
-    
-    # Add category name
-    if expense.category:
-        expense_dict["category_name"] = frappe.db.get_value("Expense Category", expense.category, "category_name")
-    
-    # Add organization name
-    expense_dict["organization_name"] = expense.chapter or expense.team
-    
-    # Add attachment count
-    expense_dict["attachment_count"] = frappe.db.count("File", {
-        "attached_to_name": expense.name,
-        "attached_to_doctype": "Volunteer Expense"
-    })
-    
-    return expense_dict
+    try:
+        # Check if this is an ERPNext Expense Claim reference
+        if "-" in expense_name:
+            claim_name = expense_name.split("-")[0]
+            
+            # Verify this is an ERPNext Expense Claim for this volunteer
+            volunteer_doc = frappe.get_doc("Volunteer", volunteer.name)
+            if volunteer_doc.employee_id:
+                expense_claim = frappe.get_doc("Expense Claim", claim_name)
+                if expense_claim.employee != volunteer_doc.employee_id:
+                    frappe.throw(_("Access denied"))
+                
+                # Get expense details from ERPNext
+                expense_details = frappe.get_all("Expense Claim Detail",
+                    filters={"parent": claim_name},
+                    fields=["expense_type", "description", "amount", "expense_date"],
+                    order_by="idx"
+                )
+                
+                # Get linked Volunteer Expense record for organization info
+                volunteer_expense = frappe.db.get_value("Volunteer Expense", 
+                    {"expense_claim_id": claim_name}, 
+                    ["organization_type", "chapter", "team", "category"], 
+                    as_dict=True)
+                
+                # Build response from ERPNext data
+                if expense_details:
+                    detail = expense_details[0]  # First detail for now
+                    expense_dict = {
+                        "name": expense_name,
+                        "expense_claim_id": claim_name,
+                        "description": detail.description,
+                        "amount": detail.amount,
+                        "expense_date": detail.expense_date,
+                        "status": map_erpnext_status_to_volunteer_status(expense_claim.status, expense_claim.approval_status),
+                        "organization_type": volunteer_expense.organization_type if volunteer_expense else "Unknown",
+                        "chapter": volunteer_expense.chapter if volunteer_expense else None,
+                        "team": volunteer_expense.team if volunteer_expense else None,
+                        "category": volunteer_expense.category if volunteer_expense else detail.expense_type,
+                    }
+                    
+                    # Add category name
+                    if expense_dict.get("category"):
+                        expense_dict["category_name"] = frappe.db.get_value("Expense Category", expense_dict["category"], "category_name") or \
+                                                      frappe.db.get_value("Expense Claim Type", expense_dict["category"], "expense_type") or \
+                                                      expense_dict["category"]
+                    
+                    # Add organization name
+                    expense_dict["organization_name"] = expense_dict.get("chapter") or expense_dict.get("team") or "Unknown"
+                    
+                    # Add attachment count from ERPNext
+                    expense_dict["attachment_count"] = frappe.db.count("File", {
+                        "attached_to_name": claim_name,
+                        "attached_to_doctype": "Expense Claim"
+                    })
+                    
+                    return expense_dict
+                else:
+                    frappe.throw(_("Expense details not found"))
+            else:
+                frappe.throw(_("Access denied - no employee record"))
+        else:
+            # Legacy Volunteer Expense record
+            expense = frappe.get_doc("Volunteer Expense", expense_name)
+            if expense.volunteer != volunteer.name:
+                frappe.throw(_("Access denied"))
+            
+            # Get enhanced expense details
+            expense_dict = expense.as_dict()
+            
+            # Add category name
+            if expense.category:
+                expense_dict["category_name"] = frappe.db.get_value("Expense Category", expense.category, "category_name")
+            
+            # Add organization name
+            expense_dict["organization_name"] = expense.chapter or expense.team
+            
+            # Add attachment count
+            expense_dict["attachment_count"] = frappe.db.count("File", {
+                "attached_to_name": expense.name,
+                "attached_to_doctype": "Volunteer Expense"
+            })
+            
+            return expense_dict
+            
+    except Exception as e:
+        frappe.log_error(f"Error getting expense details: {str(e)}", "Expense Details Error")
+        frappe.throw(_("Error retrieving expense details"))
 
 @frappe.whitelist()
 def test_employee_creation_only():

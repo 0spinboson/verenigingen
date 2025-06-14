@@ -23,6 +23,9 @@ python scripts/debug/employee/debug_employee_creation.py
 
 # Debug chapter-related issues
 python scripts/debug/chapter/bench_debug_chapter.py
+
+# Fix expense claim account configuration
+python scripts/debug/fix_expense_claim_accounts.py
 ```
 
 ### Test Runners
@@ -35,6 +38,9 @@ python scripts/testing/runners/run_erpnext_expense_tests.py
 
 # Run volunteer portal tests
 python scripts/testing/runners/run_volunteer_portal_tests.py
+
+# Test contact request workflow
+python scripts/testing/runners/test_contact_request_workflow.py
 ```
 
 ### Validation Scripts
@@ -42,6 +48,7 @@ python scripts/testing/runners/run_volunteer_portal_tests.py
 # Validate specific features
 python scripts/validation/features/validate_bank_details.py
 python scripts/validation/features/validate_member_portal.py
+python scripts/validation/features/validate_contact_request_implementation.py
 
 # General validation check
 python scripts/validation/validation_check.py
@@ -54,6 +61,9 @@ python scripts/setup/setup_member_portal_home.py
 
 # Add chapter tracking fields
 python scripts/setup/add_chapter_tracking_fields.py
+
+# Set up policy-covered expense categories
+python scripts/setup/setup_policy_expenses.py
 ```
 
 ### Migration Scripts
