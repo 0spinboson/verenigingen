@@ -91,12 +91,22 @@ def run_chapter_membership_regression_tests():
             if result.failures:
                 print("\n❌ FAILURES:")
                 for test, traceback in result.failures:
-                    print(f"   - {test}: {traceback.split('AssertionError: ')[-1].split('\\n')[0] if 'AssertionError:' in traceback else 'Unknown failure'}")
+                    # Fix f-string backslash issue by extracting the logic
+                    if 'AssertionError:' in traceback:
+                        error_msg = traceback.split('AssertionError: ')[-1].split('\n')[0]
+                    else:
+                        error_msg = 'Unknown failure'
+                    print(f"   - {test}: {error_msg}")
             
             if result.errors:
                 print("\n💥 ERRORS:")
                 for test, traceback in result.errors:
-                    print(f"   - {test}: {traceback.split('\\n')[-2] if '\\n' in traceback else traceback}")
+                    # Fix f-string backslash issue by extracting the logic
+                    if '\n' in traceback:
+                        error_msg = traceback.split('\n')[-2]
+                    else:
+                        error_msg = traceback
+                    print(f"   - {test}: {error_msg}")
         
         print(f"\nCompleted at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("=" * 70)

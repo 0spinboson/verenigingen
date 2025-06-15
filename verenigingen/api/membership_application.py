@@ -547,7 +547,11 @@ def check_overdue_applications_task():
     check_overdue_applications()
 
 
-# Test endpoint
+
+
+
+# Test endpoints
+
 @frappe.whitelist(allow_guest=True)
 def test_submit():
     """Simple test submission function"""

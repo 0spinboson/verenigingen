@@ -17,24 +17,56 @@ class MemberIDManager:
         Get the next available member ID with atomic increment
         Returns: int - the next member ID to use
         """
-        # Use Redis-based counter for thread safety
-        counter_key = "member_id_counter"
-        
-        # Try to get current counter value
-        current_counter = frappe.cache().get(counter_key)
-        
-        if current_counter is None:
-            # Initialize counter from database or settings
-            current_counter = MemberIDManager._initialize_counter()
-            frappe.cache().set(counter_key, current_counter)
-        
-        # Atomic increment
-        next_id = frappe.cache().incr(counter_key)
-        
-        # Also update the display field in a Member document for UI purposes
-        MemberIDManager._update_display_counter(next_id)
-        
-        return next_id
+        # Use database transaction with row locking for better atomicity
+        try:
+            # Start a database transaction
+            with frappe.db.transaction():
+                # Use a dedicated settings table for better concurrency control
+                settings_name = "Verenigingen Settings"
+                
+                # Lock the settings row to prevent concurrent access
+                current_id = frappe.db.sql("""
+                    SELECT last_member_id 
+                    FROM `tabVerenigingen Settings` 
+                    WHERE name = %s
+                    FOR UPDATE
+                """, (settings_name,), as_dict=True)
+                
+                if not current_id or current_id[0].last_member_id is None:
+                    # Initialize from existing data
+                    initialized_id = MemberIDManager._initialize_counter()
+                    frappe.db.sql("""
+                        UPDATE `tabVerenigingen Settings` 
+                        SET last_member_id = %s 
+                        WHERE name = %s
+                    """, (initialized_id, settings_name))
+                    next_id = initialized_id + 1
+                else:
+                    next_id = current_id[0].last_member_id + 1
+                
+                # Update to next value atomically
+                frappe.db.sql("""
+                    UPDATE `tabVerenigingen Settings` 
+                    SET last_member_id = %s 
+                    WHERE name = %s
+                """, (next_id, settings_name))
+                
+                # Ensure the transaction is committed
+                frappe.db.commit()
+                
+                # Update cache for performance (but don't rely on it for atomicity)
+                counter_key = "member_id_counter"
+                frappe.cache().set(counter_key, next_id)
+                
+                return next_id
+                
+        except Exception as e:
+            frappe.log_error(f"Error generating member ID: {str(e)}", "Member ID Generation")
+            # Fallback to timestamp-based ID to avoid blocking user
+            import time
+            fallback_id = int(time.time() * 1000) % 1000000  # Last 6 digits
+            frappe.logger().warning(f"Using fallback member ID: {fallback_id}")
+            return fallback_id
     
     @staticmethod
     def _initialize_counter():

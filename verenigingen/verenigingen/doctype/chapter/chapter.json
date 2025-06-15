@@ -37,8 +37,9 @@
   },
   {
    "fieldname": "region",
-   "fieldtype": "Data",
+   "fieldtype": "Link",
    "label": "Region",
+   "options": "Region",
    "reqd": 1
   },
   {

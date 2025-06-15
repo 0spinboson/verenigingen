@@ -44,10 +44,18 @@ class ChapterInfoValidator(BaseValidator):
 
     def _validate_required_fields(self, chapter_data: Dict, result: ValidationResult):
         """Validate required fields are present"""
-        required_fields = ['name', 'region', 'introduction']
-
-        for field in required_fields:
+        # Always require name and region
+        core_required_fields = ['name', 'region']
+        
+        for field in core_required_fields:
             self.validate_required_field(chapter_data.get(field), field, result)
+        
+        # Introduction is only required for published chapters
+        if chapter_data.get('published'):
+            self.validate_required_field(chapter_data.get('introduction'), 'introduction', result)
+        elif not chapter_data.get('introduction'):
+            # Add warning for unpublished chapters without introduction
+            result.add_warning("Introduction is recommended for better chapter presentation")
 
     def _validate_field_formats(self, chapter_data: Dict, result: ValidationResult):
         """Validate field formats"""

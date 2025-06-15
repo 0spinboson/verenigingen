@@ -557,7 +557,13 @@ class MemberManager(BaseManager):
                     str(member.get('enabled', True)),
                     member.get('leave_reason', '')
                 ]
-                lines.append(",".join(f'"{str(val).replace('"', '""')}"' for val in row))
+                # Fix unterminated string literal by properly escaping quotes
+                escaped_values = []
+                for val in row:
+                    str_val = str(val)
+                    escaped_val = str_val.replace('"', '""')
+                    escaped_values.append(f'"{escaped_val}"')
+                lines.append(",".join(escaped_values))
             
             return "\n".join(lines)
         
