@@ -136,7 +136,7 @@
   },
   {
    "default": "0",
-   "depends_on": "eval:doc.allow_invoicing && doc.send_email",
+   "depends_on": "eval:doc.send_email",
    "fieldname": "send_invoice",
    "fieldtype": "Check",
    "label": "Send Invoice with Email"
@@ -172,7 +172,6 @@
   },
   {
    "default": "0",
-   "depends_on": "eval:doc.allow_invoicing",
    "description": "Auto creates Payment Entry for Sales Invoices created for Membership from web forms.",
    "fieldname": "automate_membership_payment_entries",
    "fieldtype": "Check",
@@ -216,11 +215,9 @@
    "label": "Automate Donation Payment Entries"
   },
   {
-   "depends_on": "eval:doc.allow_invoicing",
    "fieldname": "membership_debit_account",
    "fieldtype": "Link",
-   "label": "Debit Account",
-   "mandatory_depends_on": "eval:doc.allow_invoicing",
+   "label": "Membership Debit Account",
    "options": "Account"
   },
   {

@@ -36,7 +36,7 @@ def test_chapter_membership_fix():
         
         # Set session user to Foppe
         original_user = frappe.session.user
-        frappe.session.user = "fjdh@leden.socialisten.org"
+        frappe.session.user = "test@example.com"
         
         try:
             # Test volunteer lookup

@@ -21,7 +21,7 @@ def test_chapter_membership_final():
         
         # Simulate session as Foppe
         original_user = frappe.session.user
-        frappe.session.user = "fjdh@leden.socialisten.org"
+        frappe.session.user = "test@example.com"
         
         from verenigingen.templates.pages.volunteer.expenses import get_user_volunteer_record
         volunteer_record = get_user_volunteer_record()

@@ -4,11 +4,11 @@ from . import __version__ as app_version
 
 app_name = "verenigingen"
 app_title = "Verenigingen"
-app_publisher = "Foppe de Haan"
+app_publisher = "Verenigingen"
 app_description = "Association Management"
 app_icon = "octicon octicon-organization"
 app_color = "blue"
-app_email = "foppe@veganisme.org"
+app_email = "info@verenigingen.org"
 app_license = "AGPL-3"
 
 # Required apps - Frappe will ensure these are installed before this app
@@ -165,6 +165,21 @@ workflow_action_handlers = {
 # Fixtures
 # --------
 fixtures = [
+    # Donation Types
+    {
+        "doctype": "Donation Type",
+        "filters": [
+            ["name", "in", [
+                "General",
+                "Monthly", 
+                "One-time",
+                "Campaign",
+                "Emergency Relief",
+                "Membership Support"
+            ]]
+        ]
+    },
+    
     # Email Templates
     {
         "doctype": "Email Template", 
