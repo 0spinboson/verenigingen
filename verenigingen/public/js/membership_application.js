@@ -304,16 +304,25 @@ class MembershipApplication {
     bindStepNavigation() {
         // Initialize step navigation
         this.currentStep = 1;
-        this.maxSteps = 5;
+        this.maxSteps = 6;  // Fixed: Match template which has 6 steps
         
         // Show first step
         this.showStep(1);
         
         // Next button
-        $('#next-btn').off('click').on('click', (e) => {
+        $('#next-btn').off('click').on('click', async (e) => {
             e.preventDefault();
             console.log('Next button clicked, current step:', this.currentStep);
-            this.nextStep();
+            
+            // Disable button during validation
+            $('#next-btn').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Validating...');
+            
+            try {
+                await this.nextStep();
+            } finally {
+                // Re-enable button
+                $('#next-btn').prop('disabled', false).html('Next');
+            }
         });
         
         // Previous button  
@@ -331,10 +340,14 @@ class MembershipApplication {
         });
     }
     
-    nextStep() {
-        if (this.validateCurrentStep() && this.currentStep < this.maxSteps) {
+    async nextStep() {
+        // Await validation before proceeding
+        const isValid = await this.validateCurrentStep();
+        if (isValid && this.currentStep < this.maxSteps) {
             this.currentStep++;
             this.showStep(this.currentStep);
+        } else if (!isValid) {
+            console.log('Validation failed for step:', this.currentStep);
         }
     }
     
@@ -380,15 +393,18 @@ class MembershipApplication {
         window.scrollTo(0, 0);
     }
     
-    validateCurrentStep() {
+    async validateCurrentStep() {
         console.log('Validating step:', this.currentStep);
         
         // Try to use step-specific validation if available
         if (this.steps && this.steps[this.currentStep - 1]) {
             try {
-                return this.steps[this.currentStep - 1].validate();
+                // Await async validation
+                const result = await this.steps[this.currentStep - 1].validate();
+                return result;
             } catch (error) {
                 console.warn('Step validation failed:', error);
+                // Continue to fallback validation
             }
         }
         
@@ -399,9 +415,9 @@ class MembershipApplication {
     validateStepBasic(step) {
         let isValid = true;
         
-        // Clear previous errors
-        $('.is-invalid').removeClass('is-invalid');
-        $('.invalid-feedback').hide();
+        // Clear previous errors only for current step
+        $(`.form-step[data-step="${step}"] .is-invalid`).removeClass('is-invalid');
+        $(`.form-step[data-step="${step}"] .invalid-feedback`).hide();
         
         switch(step) {
             case 1: // Personal info
@@ -650,6 +666,119 @@ class MembershipApplication {
             }
         });
         return skills;
+    }
+    
+    bindAgeCalculation() {
+        // Bind age calculation to birth date field
+        $('#birth_date').on('change blur', () => {
+            this.calculateAndShowAge();
+        });
+    }
+    
+    calculateAndShowAge() {
+        const birthDate = $('#birth_date').val();
+        const ageWarning = $('#age-warning');
+        
+        if (!birthDate) {
+            ageWarning.hide();
+            return;
+        }
+        
+        const today = new Date();
+        const birth = new Date(birthDate);
+        let age = today.getFullYear() - birth.getFullYear();
+        const monthDiff = today.getMonth() - birth.getMonth();
+        
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+            age--;
+        }
+        
+        // Show age warnings
+        if (age < 16) {
+            ageWarning.html('<strong>Note:</strong> You must be at least 16 years old to become a member. Please contact us if you have questions.').show();
+        } else if (age < 18) {
+            ageWarning.html('<strong>Note:</strong> You are under 18. Parental consent may be required for membership.').show();
+        } else if (age > 120) {
+            ageWarning.html('<strong>Please check your birth date:</strong> The entered date would make you over 120 years old.').show();
+        } else {
+            ageWarning.hide();
+        }
+        
+        return age;
+    }
+    
+    bindCustomValidationEvents() {
+        // Email validation
+        $('#email').on('blur', () => {
+            this.validateEmail();
+        });
+        
+        // Postal code validation and chapter suggestion
+        $('#postal_code').on('blur', () => {
+            this.validatePostalCodeAndSuggestChapter();
+        });
+        
+        // IBAN validation
+        $('#iban').on('blur', () => {
+            this.validateIBAN();
+        });
+    }
+    
+    validateEmail() {
+        const email = $('#email').val();
+        const emailField = $('#email');
+        
+        if (!email) return;
+        
+        // Basic email regex
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        
+        if (!emailRegex.test(email)) {
+            emailField.addClass('is-invalid');
+            emailField.siblings('.invalid-feedback').remove();
+            emailField.after('<div class="invalid-feedback">Please enter a valid email address</div>');
+        } else {
+            emailField.removeClass('is-invalid').addClass('is-valid');
+            emailField.siblings('.invalid-feedback').hide();
+        }
+    }
+    
+    validatePostalCodeAndSuggestChapter() {
+        const postalCode = $('#postal_code').val();
+        
+        if (!postalCode || postalCode.length < 4) return;
+        
+        // Call API to validate postal code and suggest chapters
+        frappe.call({
+            method: 'verenigingen.api.membership_application.suggest_chapters_for_postal_code',
+            args: { postal_code: postalCode },
+            callback: (r) => {
+                if (r.message && r.message.suggested_chapters && r.message.suggested_chapters.length > 0) {
+                    // Show chapter suggestions
+                    this.showChapterSuggestions(r.message.suggested_chapters);
+                }
+            }
+        });
+    }
+    
+    validateIBAN() {
+        const iban = $('#iban').val();
+        const ibanField = $('#iban');
+        
+        if (!iban) return;
+        
+        // Basic IBAN validation (simplified)
+        const ibanRegex = /^[A-Z]{2}[0-9]{2}[A-Z0-9]{4}[0-9]{7}([A-Z0-9]?){0,16}$/;
+        const cleanIban = iban.replace(/\s/g, '').toUpperCase();
+        
+        if (!ibanRegex.test(cleanIban)) {
+            ibanField.addClass('is-invalid');
+            ibanField.siblings('.invalid-feedback').remove();
+            ibanField.after('<div class="invalid-feedback">Please enter a valid IBAN</div>');
+        } else {
+            ibanField.removeClass('is-invalid').addClass('is-valid');
+            ibanField.siblings('.invalid-feedback').hide();
+        }
     }
     
     // Legacy method for compatibility
@@ -1955,9 +2084,6 @@ class MembershipApplication {
         select.empty();
         
         const fallbackMethods = [
-                processing_time: 'Immediate',
-                requires_mandate: false
-            },
             { 
                 name: 'Bank Transfer', 
                 description: 'One-time bank transfer',
@@ -2606,9 +2732,6 @@ class PaymentStep extends BaseStep {
         select.empty();
         
         const fallbackMethods = [
-                processing_time: 'Immediate',
-                requires_mandate: false
-            },
             { 
                 name: 'Bank Transfer', 
                 description: 'One-time bank transfer',

@@ -500,7 +500,7 @@ class BoardManager(BaseManager):
     def get_board_members(self, include_inactive: bool = False, 
                          role: str = None) -> List[Dict]:
         """
-        Get list of board members with details
+        Get list of board members with details using optimized queries
 
         Args:
             include_inactive: Whether to include inactive members
@@ -511,55 +511,90 @@ class BoardManager(BaseManager):
         """
         self.validate_chapter_doc()
 
-        members = []
+        # Filter board members
+        filtered_members = []
+        volunteer_ids = []
+        
         for board_member in self.chapter_doc.board_members or []:
             if (include_inactive or board_member.is_active) and (not role or board_member.chapter_role == role):
-                # Get the member ID associated with this volunteer
-                member_id = None
+                filtered_members.append(board_member)
                 if board_member.volunteer:
-                    member_id = frappe.db.get_value("Volunteer", board_member.volunteer, "member")
-
-                members.append({
-                    "volunteer": board_member.volunteer,
-                    "volunteer_name": board_member.volunteer_name,
-                    "member": member_id,
-                    "email": board_member.email,
-                    "role": board_member.chapter_role,
-                    "from_date": board_member.from_date,
-                    "to_date": board_member.to_date,
-                    "is_active": board_member.is_active,
-                    "notes": board_member.notes
-                })
+                    volunteer_ids.append(board_member.volunteer)
+        
+        if not filtered_members:
+            return []
+        
+        # Batch query for volunteer-member mapping
+        volunteer_member_map = {}
+        if volunteer_ids:
+            volunteer_data = frappe.get_all("Volunteer",
+                filters={"name": ["in", volunteer_ids]},
+                fields=["name", "member"]
+            )
+            volunteer_member_map = {v.name: v.member for v in volunteer_data if v.member}
+        
+        # Build result list
+        members = []
+        for board_member in filtered_members:
+            member_id = volunteer_member_map.get(board_member.volunteer)
+            
+            members.append({
+                "volunteer": board_member.volunteer,
+                "volunteer_name": board_member.volunteer_name,
+                "member": member_id,
+                "email": board_member.email,
+                "role": board_member.chapter_role,
+                "from_date": board_member.from_date,
+                "to_date": board_member.to_date,
+                "is_active": board_member.is_active,
+                "notes": board_member.notes
+            })
         return members
 
     def get_active_board_roles(self) -> Dict[str, Dict]:
         """
-        Get all active board roles
+        Get all active board roles using optimized queries
 
         Returns:
             Dict mapping role names to board member info
         """
         self.validate_chapter_doc()
 
+        # Get active board members
+        active_members = [m for m in self.chapter_doc.board_members or [] if m.is_active and m.chapter_role]
+        
+        if not active_members:
+            return {}
+        
+        # Batch query for volunteer-member mapping
+        volunteer_ids = [m.volunteer for m in active_members if m.volunteer]
+        volunteer_member_map = {}
+        
+        if volunteer_ids:
+            volunteer_data = frappe.get_all("Volunteer",
+                filters={"name": ["in", volunteer_ids]},
+                fields=["name", "member"]
+            )
+            volunteer_member_map = {v.name: v.member for v in volunteer_data if v.member}
+        
+        # Build roles dict
         roles = {}
-        for member in self.chapter_doc.board_members or []:
-            if member.is_active and member.chapter_role:
-                # Get member ID
-                member_id = frappe.db.get_value("Volunteer", member.volunteer, "member") if member.volunteer else None
-
-                roles[member.chapter_role] = {
-                    "volunteer": member.volunteer,
-                    "volunteer_name": member.volunteer_name,
-                    "member": member_id,
-                    "email": member.email,
-                    "from_date": member.from_date
-                }
+        for member in active_members:
+            member_id = volunteer_member_map.get(member.volunteer)
+            
+            roles[member.chapter_role] = {
+                "volunteer": member.volunteer,
+                "volunteer_name": member.volunteer_name,
+                "member": member_id,
+                "email": member.email,
+                "from_date": member.from_date
+            }
         return roles
 
     def is_board_member(self, member_name: str = None, user: str = None, 
                        volunteer_name: str = None) -> bool:
         """
-        Check if a member/user/volunteer is on the board of this chapter
+        Check if a member/user/volunteer is on the board of this chapter using optimized query
 
         Args:
             member_name: Member name
@@ -571,28 +606,31 @@ class BoardManager(BaseManager):
         """
         self.validate_chapter_doc()
 
+        # Use optimized single query approach
         if not member_name and not user and not volunteer_name:
             user = frappe.session.user
+        
+        if user and not member_name:
             member_name = frappe.db.get_value("Member", {"user": user}, "name")
-
-        # If we have a member but not a volunteer, try to find the associated volunteer
-        if member_name and not volunteer_name:
-            volunteer_name = frappe.db.get_value("Volunteer", {"member": member_name}, "name")
-
+        
+        if member_name:
+            # Single query to check board membership
+            result = frappe.db.sql("""
+                SELECT 1
+                FROM `tabChapter Board Member` cbm
+                JOIN `tabVolunteer` v ON cbm.volunteer = v.name
+                WHERE cbm.parent = %s 
+                AND v.member = %s 
+                AND cbm.is_active = 1
+                LIMIT 1
+            """, (self.chapter_doc.name, member_name))
+            
+            return bool(result)
+        
         if volunteer_name:
-            # Check if this volunteer is on the board
+            # Direct volunteer check
             for board_member in self.chapter_doc.board_members or []:
                 if board_member.volunteer == volunteer_name and board_member.is_active:
-                    return True
-
-        # If we couldn't find by volunteer, and we have a member name, let's try to match board members by their member
-        if member_name:
-            # Get all volunteer IDs associated with this member
-            volunteer_ids = [v.name for v in frappe.get_all("Volunteer", filters={"member": member_name})]
-
-            # Check if any of these volunteers are on the board
-            for board_member in self.chapter_doc.board_members or []:
-                if board_member.volunteer in volunteer_ids and board_member.is_active:
                     return True
 
         return False
@@ -600,7 +638,7 @@ class BoardManager(BaseManager):
     def get_member_role(self, member_name: str = None, user: str = None, 
                        volunteer_name: str = None) -> Optional[str]:
         """
-        Get the board role of a member/user/volunteer
+        Get the board role of a member/user/volunteer using optimized query
 
         Args:
             member_name: Member name
@@ -612,28 +650,31 @@ class BoardManager(BaseManager):
         """
         self.validate_chapter_doc()
 
+        # Use optimized single query approach
         if not member_name and not user and not volunteer_name:
             user = frappe.session.user
+        
+        if user and not member_name:
             member_name = frappe.db.get_value("Member", {"user": user}, "name")
-
-        # If we have a member but not a volunteer, try to find the associated volunteer
-        if member_name and not volunteer_name:
-            volunteer_name = frappe.db.get_value("Volunteer", {"member": member_name}, "name")
-
+        
+        if member_name:
+            # Single query to get board role
+            result = frappe.db.sql("""
+                SELECT cbm.chapter_role
+                FROM `tabChapter Board Member` cbm
+                JOIN `tabVolunteer` v ON cbm.volunteer = v.name
+                WHERE cbm.parent = %s 
+                AND v.member = %s 
+                AND cbm.is_active = 1
+                LIMIT 1
+            """, (self.chapter_doc.name, member_name), as_dict=True)
+            
+            return result[0].chapter_role if result else None
+        
         if volunteer_name:
-            # Check if this volunteer is on the board
+            # Direct volunteer check
             for board_member in self.chapter_doc.board_members or []:
                 if board_member.volunteer == volunteer_name and board_member.is_active:
-                    return board_member.chapter_role
-
-        # If we couldn't find by volunteer, and we have a member name, let's try to match board members by their member
-        if member_name:
-            # Get all volunteer IDs associated with this member
-            volunteer_ids = [v.name for v in frappe.get_all("Volunteer", filters={"member": member_name})]
-
-            # Check if any of these volunteers are on the board
-            for board_member in self.chapter_doc.board_members or []:
-                if board_member.volunteer in volunteer_ids and board_member.is_active:
                     return board_member.chapter_role
 
         return None

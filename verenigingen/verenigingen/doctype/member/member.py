@@ -22,7 +22,7 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
     """
     
     def before_save(self):
-        """Execute before saving the document"""
+        """Execute before saving the document with optimized performance"""
         # Only generate member ID for approved members or non-application members
         if not self.member_id:
             if self.should_have_member_id():
@@ -34,14 +34,32 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         else:
             frappe.logger().debug(f"Member {self.name} already has member_id: {self.member_id}")
         
-        # Update current chapter display
-        self.update_current_chapter_display()
+        # Only update chapter display if chapter-related fields have changed
+        if self._should_update_chapter_display():
+            self.update_current_chapter_display()
         
         if hasattr(self, 'reset_counter_to') and self.reset_counter_to:
             self.reset_counter_to = None
         
         # Set appropriate defaults for application_status
         self.set_application_status_defaults()
+    
+    def _should_update_chapter_display(self):
+        """Check if chapter display needs updating to avoid unnecessary processing"""
+        if self.is_new():
+            return True  # Always update for new records
+        
+        # Check if chapter-related fields have changed
+        chapter_related_fields = ['pincode', 'city', 'state']
+        for field in chapter_related_fields:
+            if hasattr(self, 'has_value_changed') and self.has_value_changed(field):
+                return True
+        
+        # Check if this is being called from chapter assignment process
+        if hasattr(self, '_chapter_assignment_in_progress'):
+            return True
+            
+        return False
     
     def validate_fee_override_permissions(self):
         """Validate that only authorized users can set fee overrides"""
@@ -571,7 +589,7 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         return get_linked_donations(self.name)
     
     def handle_fee_override_changes(self):
-        """Handle changes to membership fee override using amendment system"""
+        """Handle changes to membership fee override using amendment system with better atomicity"""
         # Check permissions for fee override changes
         self.validate_fee_override_permissions()
         
@@ -592,73 +610,58 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
                     self.fee_override_by = frappe.session.user
             return
         
-        # Get current and old values for existing documents
+        # Get current and old values for existing documents with better error handling
         new_amount = self.membership_fee_override
         old_amount = None
         
         try:
-            # Method 1: Use has_value_changed if available
-            if hasattr(self, 'has_value_changed') and self.has_value_changed("membership_fee_override"):
-                old_amount = self.get_db_value("membership_fee_override")
-            # Method 2: Compare with database value directly  
-            else:
-                old_amount = frappe.db.get_value("Member", self.name, "membership_fee_override")
+            # Use database lock to prevent concurrent modifications
+            with frappe.db.transaction():
+                # Get current value from database with row lock
+                db_result = frappe.db.sql("""
+                    SELECT membership_fee_override 
+                    FROM `tabMember` 
+                    WHERE name = %s 
+                    FOR UPDATE
+                """, (self.name,), as_dict=True)
+                
+                if db_result:
+                    old_amount = db_result[0].membership_fee_override
+                
                 # Check if values are actually different
                 if old_amount == new_amount:
                     return  # No change detected
+                
+                # If we reach here, there's an actual change to process
+                frappe.logger().info(f"Processing fee override change for member {self.name}: {old_amount} -> {new_amount}")
+                
+                # Set audit fields when adding or changing override
+                if new_amount and not old_amount:
+                    self.fee_override_date = today()
+                    self.fee_override_by = frappe.session.user
+                    
+                # Validate fee override
+                if new_amount:
+                    if new_amount <= 0:
+                        frappe.throw(_("Membership fee override must be greater than 0"))
+                    if not self.fee_override_reason:
+                        frappe.throw(_("Please provide a reason for the fee override"))
+                
+                # Store change data for deferred processing to avoid save recursion
+                self._pending_fee_change = {
+                    "old_amount": old_amount,
+                    "new_amount": new_amount,
+                    "reason": self.fee_override_reason or "No reason provided",
+                    "change_date": now(),
+                    "changed_by": frappe.session.user
+                }
+                
+                frappe.logger().info(f"Queued fee override change for member {self.name}")
+                
         except Exception as e:
-            # Fallback: Log error but continue processing if new_amount differs from database
-            frappe.logger().error(f"Error detecting fee override changes for member {self.name}: {str(e)}")
+            frappe.logger().error(f"Error processing fee override change for member {self.name}: {str(e)}")
+            # Don't fail the save operation, just log the error
             return
-        
-        # If we reach here, there's an actual change to process for an existing member
-        frappe.logger().info(f"Processing fee override change for existing member {self.name}: {old_amount} -> {new_amount}")
-        
-        # Set audit fields when adding or changing override
-        if new_amount and not old_amount:
-            self.fee_override_date = today()
-            self.fee_override_by = frappe.session.user
-            
-        # Validate fee override
-        if new_amount:
-            if new_amount <= 0:
-                frappe.throw(_("Membership fee override must be greater than 0"))
-            if not self.fee_override_reason:
-                frappe.throw(_("Please provide a reason for the fee override"))
-        
-        # Create amendment request immediately instead of relying on after_save hook
-        frappe.logger().info(f"Creating amendment request immediately for member {self.name}")
-        
-        try:
-            from verenigingen.verenigingen.doctype.contribution_amendment_request.contribution_amendment_request import create_fee_change_amendment
-            
-            amendment = create_fee_change_amendment(
-                member_name=self.name,
-                new_amount=new_amount,
-                reason=self.fee_override_reason or "No reason provided"
-            )
-            
-            frappe.logger().info(f"Successfully created amendment request {amendment.name} for member {self.name}")
-            
-            # Store amendment reference for UI display
-            self._amendment_id = amendment.name
-            
-            # Note: Fee change history will be recorded via the after_save hook to avoid recursive saves
-            
-        except Exception as e:
-            frappe.logger().error(f"Error creating amendment request for member {self.name}: {str(e)}")
-            import traceback
-            frappe.logger().error(f"Full traceback: {traceback.format_exc()}")
-            
-            # Fall back to the pending amendment approach
-            self._pending_amendment = {
-                "old_amount": old_amount,
-                "new_amount": new_amount,
-                "reason": self.fee_override_reason or "No reason provided",
-                "change_date": now(),
-                "changed_by": frappe.session.user
-            }
-            frappe.logger().info(f"Set pending amendment as fallback for member {self.name}: {self._pending_amendment}")
     
     
     def record_fee_change(self, change_data):
@@ -907,55 +910,41 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             frappe.log_error(f"Error updating subscription history for {subscription_name}: {str(e)}")
     
     def update_active_subscriptions(self):
-        """Update existing subscription plans based on current fee override"""
+        """Update existing subscription plans based on current fee override with better atomicity"""
         if not self.customer:
             return {"message": "No customer linked to member"}
         
         try:
-            current_fee = self.get_current_membership_fee()
-            
-            if current_fee["amount"] <= 0:
-                return {"message": "No fee amount set, skipping subscription update"}
-            
-            # Find existing active subscriptions
-            active_subscriptions = frappe.get_all(
-                "Subscription",
-                filters={
-                    "party": self.customer,
-                    "party_type": "Customer", 
-                    "status": "Active",
-                    "docstatus": 1
-                }
-            )
-            
-            updated_subscriptions = []
-            
-            # Instead of modifying submitted subscriptions, cancel them and create new ones
-            for sub_data in active_subscriptions:
-                try:
-                    subscription = frappe.get_doc("Subscription", sub_data.name)
-                    
-                    # Cancel the existing subscription
-                    subscription.cancel()
-                    print(f"Cancelled subscription {subscription.name}")
-                    
-                    # Create a new subscription with the updated fee
-                    active_membership = self.get_active_membership()
-                    if active_membership:
-                        new_subscription = self.get_or_create_subscription_for_membership(
-                            active_membership, current_fee["amount"]
-                        )
-                        if new_subscription:
-                            updated_subscriptions.append(new_subscription.name)
-                            print(f"Created new subscription {new_subscription.name} with fee {current_fee['amount']}")
-                            
-                            # Update subscription history
-                            self.update_subscription_history_entry(new_subscription.name, "created")
-                    
-                except Exception as e:
-                    print(f"Error replacing subscription {sub_data.name}: {str(e)}")
-                    # If cancellation fails due to membership link, just create a new one
+            # Use database transaction for atomicity
+            with frappe.db.transaction():
+                current_fee = self.get_current_membership_fee()
+                
+                if current_fee["amount"] <= 0:
+                    return {"message": "No fee amount set, skipping subscription update"}
+                
+                # Find existing active subscriptions with row lock
+                active_subscriptions = frappe.db.sql("""
+                    SELECT name, status 
+                    FROM `tabSubscription` 
+                    WHERE party = %s 
+                    AND party_type = 'Customer' 
+                    AND status = 'Active' 
+                    AND docstatus = 1
+                    FOR UPDATE
+                """, (self.customer,), as_dict=True)
+                
+                updated_subscriptions = []
+                
+                # Process each subscription atomically
+                for sub_data in active_subscriptions:
                     try:
+                        subscription = frappe.get_doc("Subscription", sub_data.name)
+                        
+                        # Cancel the existing subscription
+                        subscription.cancel()
+                        frappe.logger().info(f"Cancelled subscription {subscription.name}")
+                        
+                        # Create a new subscription with the updated fee
                         active_membership = self.get_active_membership()
                         if active_membership:
                             new_subscription = self.get_or_create_subscription_for_membership(
@@ -963,34 +952,43 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
                             )
                             if new_subscription:
                                 updated_subscriptions.append(new_subscription.name)
-                                print(f"Created additional subscription {new_subscription.name} with fee {current_fee['amount']}")
+                                frappe.logger().info(f"Created new subscription {new_subscription.name} with fee {current_fee['amount']}")
+                                
+                                # Update subscription history
                                 self.update_subscription_history_entry(new_subscription.name, "created")
-                    except Exception as e2:
-                        print(f"Error creating new subscription: {str(e2)}")
-            
-            # If no active subscriptions exist, create one
-            if not active_subscriptions:
-                active_membership = self.get_active_membership()
-                if active_membership:
-                    new_subscription = self.get_or_create_subscription_for_membership(
-                        active_membership, current_fee["amount"]
-                    )
-                    
-                    if new_subscription:
-                        updated_subscriptions.append(new_subscription.name)
-                        self.update_subscription_history_entry(new_subscription.name, "created")
-                        return {
-                            "message": f"Created new subscription {new_subscription.name}",
-                            "updated_subscriptions": updated_subscriptions
-                        }
-            
-            return {
-                "message": f"Updated {len(updated_subscriptions)} subscription(s)",
-                "updated_subscriptions": updated_subscriptions
-            }
+                        
+                    except Exception as e:
+                        frappe.logger().error(f"Error replacing subscription {sub_data.name}: {str(e)}")
+                        # Continue with other subscriptions
+                        continue
                 
+                # If no active subscriptions exist, create one
+                if not active_subscriptions:
+                    active_membership = self.get_active_membership()
+                    if active_membership:
+                        new_subscription = self.get_or_create_subscription_for_membership(
+                            active_membership, current_fee["amount"]
+                        )
+                        
+                        if new_subscription:
+                            updated_subscriptions.append(new_subscription.name)
+                            self.update_subscription_history_entry(new_subscription.name, "created")
+                            return {
+                                "message": f"Created new subscription {new_subscription.name}",
+                                "updated_subscriptions": updated_subscriptions
+                            }
+                
+                # Commit the transaction
+                frappe.db.commit()
+                
+                return {
+                    "message": f"Updated {len(updated_subscriptions)} subscription(s)",
+                    "updated_subscriptions": updated_subscriptions
+                }
+                    
         except Exception as e:
-            print(f"Error in update_active_subscriptions for member {self.name}: {str(e)}")
+            frappe.logger().error(f"Error in update_active_subscriptions for member {self.name}: {str(e)}")
+            frappe.db.rollback()
             return {"error": str(e)}
     
     def get_or_create_subscription_for_membership(self, membership, fee_amount):
@@ -1092,9 +1090,9 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             return None
 
     def update_current_chapter_display(self):
-        """Update the current chapter display field based on Chapter Member relationships"""
+        """Update the current chapter display field based on Chapter Member relationships with optimized queries"""
         try:
-            chapters = self.get_current_chapters()
+            chapters = self.get_current_chapters_optimized()
             
             if not chapters:
                 # Use the custom field until the main field is fixed
@@ -1102,14 +1100,13 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
                 setattr(self, field_name, '<p style="color: #888;"><em>No chapter assignment</em></p>')
                 return
             
-            html_parts = []
-            html_parts.append('<div class="member-chapters">')
+            # Build HTML using more efficient string operations
+            html_items = ['<div class="member-chapters">']
             
             for chapter in chapters:
-                chapter_info = frappe.get_value("Chapter", chapter['chapter'], ['region'], as_dict=True)
                 chapter_display = chapter['chapter']
-                if chapter_info and chapter_info.region:
-                    chapter_display += f" ({chapter_info.region})"
+                if chapter.get('region'):
+                    chapter_display += f" ({chapter['region']})"
                 
                 status_badges = []
                 if chapter.get('is_primary'):
@@ -1121,24 +1118,64 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
                 
                 badges_html = ' '.join(status_badges) if status_badges else ''
                 
-                html_parts.append(f'''
+                html_items.append(f'''
                     <div class="chapter-item" style="margin-bottom: 8px; padding: 8px; border-left: 3px solid #007bff; background-color: #f8f9fa;">
                         <strong>{chapter_display}</strong>
                         {f'<br>{badges_html}' if badges_html else ''}
                     </div>
                 ''')
             
-            html_parts.append('</div>')
+            html_items.append('</div>')
+            
             # Use the custom field until the main field is fixed
             field_name = 'current_chapter_display_temp' if hasattr(self, 'current_chapter_display_temp') else 'current_chapter_display'
-            setattr(self, field_name, ''.join(html_parts))
+            setattr(self, field_name, ''.join(html_items))
             
         except Exception as e:
             frappe.log_error(f"Error updating chapter display: {str(e)}", "Member Chapter Display")
             self.current_chapter_display = '<p style="color: #dc3545;">Error loading chapter information</p>'
 
+    def get_current_chapters_optimized(self):
+        """Get current chapter memberships with optimized single query"""
+        if not self.name:
+            return []
+        
+        try:
+            # Single optimized query to get all chapter information at once
+            chapters_data = frappe.db.sql("""
+                SELECT 
+                    cm.parent as chapter,
+                    cm.chapter_join_date,
+                    c.region,
+                    cbm.volunteer as board_volunteer,
+                    cbm.is_active as is_board_member
+                FROM `tabChapter Member` cm
+                LEFT JOIN `tabChapter` c ON cm.parent = c.name
+                LEFT JOIN `tabVolunteer` v ON v.member = %s
+                LEFT JOIN `tabChapter Board Member` cbm ON cbm.parent = cm.parent AND cbm.volunteer = v.name AND cbm.is_active = 1
+                WHERE cm.member = %s AND cm.enabled = 1
+                ORDER BY cm.chapter_join_date DESC
+            """, (self.name, self.name), as_dict=True)
+            
+            chapters = []
+            for idx, chapter_data in enumerate(chapters_data):
+                chapters.append({
+                    "chapter": chapter_data.chapter,
+                    "chapter_join_date": chapter_data.chapter_join_date,
+                    "region": chapter_data.region,
+                    "is_primary": idx == 0,  # First one is primary
+                    "is_board": bool(chapter_data.is_board_member)
+                })
+            
+            return chapters
+            
+        except Exception as e:
+            frappe.log_error(f"Error getting current chapters optimized: {str(e)}", "Member Chapter Query")
+            # Fallback to original method
+            return self.get_current_chapters()
+    
     def get_current_chapters(self):
-        """Get current chapter memberships from Chapter Member child table"""
+        """Get current chapter memberships from Chapter Member child table (fallback method)"""
         if not self.name:
             return []
         
@@ -1273,60 +1310,76 @@ def get_member_chapter_display_html(member_name):
         return '<p style="color: #dc3545;">Error loading chapter information</p>'
 
 def handle_fee_override_after_save(doc, method=None):
-    """Hook function to handle fee override changes after save using amendment system"""
+    """Hook function to handle fee override changes after save with improved atomicity"""
     frappe.logger().info(f"handle_fee_override_after_save called for member {doc.name}, method={method}")
     
-    # Handle any remaining _pending_amendment that wasn't processed during validation
-    if hasattr(doc, '_pending_amendment'):
+    # Handle deferred fee changes
+    if hasattr(doc, '_pending_fee_change'):
         try:
-            frappe.logger().info(f"Processing remaining pending amendment for member {doc.name}")
+            frappe.logger().info(f"Processing pending fee change for member {doc.name}")
             
-            # Create amendment request
-            from verenigingen.verenigingen.doctype.contribution_amendment_request.contribution_amendment_request import create_fee_change_amendment
-            
-            amendment = create_fee_change_amendment(
-                member_name=doc.name,
-                new_amount=doc._pending_amendment["new_amount"],
-                reason=doc._pending_amendment["reason"]
-            )
-            
-            # Record the change in history for audit trail (without saving again)
-            doc.append("fee_change_history", {
-                "change_date": doc._pending_amendment["change_date"],
-                "old_amount": doc._pending_amendment["old_amount"],
-                "new_amount": doc._pending_amendment["new_amount"],
-                "reason": doc._pending_amendment["reason"],
-                "changed_by": doc._pending_amendment["changed_by"],
-                "subscription_action": f"Amendment request created: {amendment.name}"
-            })
-            # Save the history separately to avoid recursion
-            frappe.db.sql("""
-                UPDATE `tabMember` 
-                SET fee_change_history = %s 
-                WHERE name = %s
-            """, (frappe.as_json(doc.fee_change_history), doc.name))
-            frappe.db.commit()
-            
-            delattr(doc, '_pending_amendment')
-            frappe.logger().info(f"Successfully created fallback amendment request {amendment.name} for member {doc.name}")
-            
-        except Exception as e:
-            frappe.logger().error(f"Error creating fallback amendment request for member {doc.name}: {str(e)}")
-            # Don't re-raise to avoid blocking the save operation
-    
-    # Legacy support: handle old _pending_fee_change if it exists
-    elif hasattr(doc, '_pending_fee_change'):
-        try:
-            frappe.logger().info(f"Processing legacy fee change for member {doc.name}")
-            # Record change without triggering another save
-            doc.append("fee_change_history", doc._pending_fee_change)
-            doc.update_active_subscriptions()
+            # Use separate database transaction for fee change processing
+            with frappe.db.transaction():
+                # Create amendment request
+                try:
+                    from verenigingen.verenigingen.doctype.contribution_amendment_request.contribution_amendment_request import create_fee_change_amendment
+                    
+                    amendment = create_fee_change_amendment(
+                        member_name=doc.name,
+                        new_amount=doc._pending_fee_change["new_amount"],
+                        reason=doc._pending_fee_change["reason"]
+                    )
+                    
+                    subscription_action = f"Amendment request created: {amendment.name}"
+                    
+                except Exception as e:
+                    frappe.logger().warning(f"Could not create amendment request: {str(e)}")
+                    subscription_action = "Amendment creation failed, direct subscription update"
+                
+                # Record the change in history (using direct SQL to avoid recursion)
+                history_entry = {
+                    "change_date": doc._pending_fee_change["change_date"],
+                    "old_amount": doc._pending_fee_change["old_amount"],
+                    "new_amount": doc._pending_fee_change["new_amount"],
+                    "reason": doc._pending_fee_change["reason"],
+                    "changed_by": doc._pending_fee_change["changed_by"],
+                    "subscription_action": subscription_action
+                }
+                
+                # Get current fee change history
+                current_history = frappe.db.get_value("Member", doc.name, "fee_change_history") or "[]"
+                history_list = frappe.parse_json(current_history) if current_history != "[]" else []
+                history_list.append(history_entry)
+                
+                # Update history directly in database
+                frappe.db.sql("""
+                    UPDATE `tabMember` 
+                    SET fee_change_history = %s 
+                    WHERE name = %s
+                """, (frappe.as_json(history_list), doc.name))
+                
+                # Update subscriptions if needed
+                try:
+                    # Create a temporary member object to avoid modifying the original
+                    temp_member = frappe.get_doc("Member", doc.name)
+                    result = temp_member.update_active_subscriptions()
+                    frappe.logger().info(f"Subscription update result: {result}")
+                except Exception as e:
+                    frappe.logger().error(f"Error updating subscriptions: {str(e)}")
+                
+                # Commit the transaction
+                frappe.db.commit()
+                
             delattr(doc, '_pending_fee_change')
-            frappe.logger().info(f"Successfully processed legacy fee override change for member {doc.name}")
+            frappe.logger().info(f"Successfully processed fee override change for member {doc.name}")
+            
         except Exception as e:
-            frappe.logger().error(f"Error processing legacy fee override for member {doc.name}: {str(e)}")
+            frappe.logger().error(f"Error processing fee override for member {doc.name}: {str(e)}")
+            # Clean up the pending change to avoid repeated processing
+            if hasattr(doc, '_pending_fee_change'):
+                delattr(doc, '_pending_fee_change')
     else:
-        frappe.logger().debug(f"No pending fee change or amendment found for member {doc.name}")
+        frappe.logger().debug(f"No pending fee change found for member {doc.name}")
 
 @frappe.whitelist()
 def get_current_subscription_details(member):
