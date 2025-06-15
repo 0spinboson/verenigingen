@@ -5,13 +5,14 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "section_break_27",
-  "member_id_start",
-  "last_member_id",
   "chapter_settings_section",
   "national_board_chapter",
   "organization_email_domain",
   "member_contact_email",
+  "enable_chapter_management",
+  "section_break_27",
+  "member_id_start",
+  "last_member_id",
   "financial_settings_section",
   "company_iban",
   "company_bic",
@@ -24,8 +25,6 @@
   "kor_exemption_applied",
   "membership_webhook_secret",
   "column_break_6",
-  "allow_invoicing",
-  "automate_membership_invoicing",
   "automate_membership_payment_entries",
   "company",
   "membership_debit_account",
@@ -38,12 +37,18 @@
   "email_template",
   "donation_settings_section",
   "donation_company",
-  "default_donor_type",
+  "default_donation_type",
   "donation_webhook_secret",
   "column_break_22",
   "automate_donation_payment_entries",
   "donation_debit_account",
-  "donation_payment_account"
+  "donation_payment_account",
+  "billing_cycle",
+  "automation_section",
+  "auto_cancel_sepa_mandates",
+  "auto_end_board_positions",
+  "column_break_term_2",
+  "send_termination_notifications"
  ],
  "fields": [
   {
@@ -71,62 +76,63 @@
    "reqd": 1
   },
   {
+   "default": "1",
+   "description": "When enabled, allows assigning members to chapters and using chapter-based features",
    "fieldname": "enable_chapter_management",
    "fieldtype": "Check",
-   "label": "Enable Chapter Management",
-   "default": 1,
-   "description": "When enabled, allows assigning members to chapters and using chapter-based features"
+   "label": "Enable Chapter Management"
   },
   {
-  "fieldname": "dutch_btw_section",
-  "fieldtype": "Section Break",
-  "label": "Dutch BTW (VAT) Settings"
+   "fieldname": "dutch_btw_section",
+   "fieldtype": "Section Break",
+   "label": "Dutch BTW (VAT) Settings"
   },
   {
-  "default": "0",
-  "fieldname": "tax_exempt_for_contributions",
-  "fieldtype": "Check",
-  "label": "Tax Exempt for Contributions and Donations",
-  "description": "When enabled, BTW exemption codes will be applied according to Dutch tax regulations"
+   "default": "0",
+   "description": "When enabled, BTW exemption codes will be applied according to Dutch tax regulations",
+   "fieldname": "tax_exempt_for_contributions",
+   "fieldtype": "Check",
+   "label": "Tax Exempt for Contributions and Donations"
   },
   {
-  "fieldname": "company_iban",
-  "fieldtype": "Data",
-  "label": "Company IBAN",
-  "description": "IBAN for direct debit collections"
+   "description": "IBAN for direct debit collections",
+   "fieldname": "company_iban",
+   "fieldtype": "Data",
+   "label": "Company IBAN"
   },
   {
-  "fieldname": "company_bic",
-  "fieldtype": "Data",
-  "label": "Company BIC/SWIFT",
-  "description": "BIC code for company's bank"
+   "description": "BIC code for company's bank",
+   "fieldname": "company_bic",
+   "fieldtype": "Data",
+   "label": "Company BIC/SWIFT"
   },
   {
-  "fieldname": "creditor_id",
-  "fieldtype": "Data",
-  "label": "Creditor ID",
-  "description": "Dutch Incassant ID for direct debit collections"
+   "description": "Dutch Incassant ID for direct debit collections",
+   "fieldname": "creditor_id",
+   "fieldtype": "Data",
+   "label": "Creditor ID"
   },
   {
-  "fieldname": "default_tax_exemption_type",
-  "fieldtype": "Select",
-  "label": "Default Tax Exemption Type",
-  "options": "\nEXEMPT_NONPROFIT\nEXEMPT_MEMBERSHIP\nEXEMPT_FUNDRAISING\nEXEMPT_SMALL_BUSINESS\nOUTSIDE_SCOPE\nEXEMPT_WITH_INPUT\nEXEMPT_NO_INPUT",
-  "default": "EXEMPT_MEMBERSHIP",
-  "depends_on": "eval:doc.tax_exempt_for_contributions"
+   "default": "EXEMPT_MEMBERSHIP",
+   "depends_on": "eval:doc.tax_exempt_for_contributions",
+   "fieldname": "default_tax_exemption_type",
+   "fieldtype": "Select",
+   "label": "Default Tax Exemption Type",
+   "options": "\nEXEMPT_NONPROFIT\nEXEMPT_MEMBERSHIP\nEXEMPT_FUNDRAISING\nEXEMPT_SMALL_BUSINESS\nOUTSIDE_SCOPE\nEXEMPT_WITH_INPUT\nEXEMPT_NO_INPUT"
   },
   {
-  "fieldname": "default_tax_template",
-  "fieldtype": "Link",
-  "label": "Default Tax Template",
-  "options": "Sales Taxes and Charges Template",
-  "depends_on": "eval:doc.tax_exempt_for_contributions"
+   "depends_on": "eval:doc.tax_exempt_for_contributions",
+   "fieldname": "default_tax_template",
+   "fieldtype": "Link",
+   "label": "Default Tax Template",
+   "options": "Sales Taxes and Charges Template"
   },
   {
-  "fieldname": "kor_exemption_applied",
-  "fieldtype": "Check",
-  "label": "Small Business Scheme (KOR) Applied",
-  "description": "Check if your organization has applied for the KOR exemption"
+   "default": "0",
+   "description": "Check if your organization has applied for the KOR exemption",
+   "fieldname": "kor_exemption_applied",
+   "fieldtype": "Check",
+   "label": "Small Business Scheme (KOR) Applied"
   },
   {
    "default": "0",
@@ -163,21 +169,6 @@
    "label": "Email Template",
    "mandatory_depends_on": "eval:doc.send_email",
    "options": "Email Template"
-  },
-  {
-   "default": "0",
-   "fieldname": "allow_invoicing",
-   "fieldtype": "Check",
-   "label": "Allow Invoicing for Memberships",
-   "mandatory_depends_on": "eval:doc.send_invoice || doc.make_payment_entry"
-  },
-  {
-   "default": "0",
-   "depends_on": "eval:doc.allow_invoicing",
-   "description": "Automatically create an invoice when payment is authorized from a web form entry",
-   "fieldname": "automate_membership_invoicing",
-   "fieldtype": "Check",
-   "label": "Automate Invoicing for Web Forms"
   },
   {
    "default": "0",
@@ -259,15 +250,6 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "This Donor Type will be set for the Donor created via Donation web form entry.",
-   "fieldname": "default_donor_type",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Default Donor Type",
-   "options": "Donation Type",
-   "reqd": 1
-  },
-  {
    "fieldname": "section_break_27",
    "fieldtype": "Section Break",
    "label": "Membership ID counter"
@@ -293,15 +275,15 @@
    "label": "Member ID Starting Number"
   },
   {
+   "description": "Automatically updated when new member IDs are assigned",
    "fieldname": "last_member_id",
    "fieldtype": "Int",
    "label": "Last Assigned Member ID",
-   "description": "Automatically updated when new member IDs are assigned",
    "read_only": 1
   },
   {
    "default": "0",
-   "description": "When enabled, a 0% VAT/BTW tax rate will be used for contributions and donations",
+   "description": "When enabled, BTW exemption codes will be applied according to Dutch tax regulations",
    "fieldname": "tax_exempt_for_contributions",
    "fieldtype": "Check",
    "label": "Tax Exempt for Contributions and Donations"
@@ -332,100 +314,50 @@
    "options": "Email"
   },
   {
-   "fieldname": "termination_system_section",
-   "fieldtype": "Section Break",
-   "label": "Termination System Settings",
-   "collapsible": 1,
-   "insert_after": "company"
-  },
-  {
-   "fieldname": "enable_termination_system",
-   "fieldtype": "Check",
-   "label": "Enable Termination System",
-   "default": "0",
-   "insert_after": "termination_system_section"
-  },
-  {
-   "fieldname": "require_secondary_approval",
-   "fieldtype": "Check", 
-   "label": "Require Secondary Approval for Disciplinary Actions",
-   "default": "1",
-   "insert_after": "enable_termination_system",
-   "depends_on": "eval:doc.enable_termination_system"
-  },
-  {
-   "fieldname": "column_break_term_1",
-   "fieldtype": "Column Break",
-   "insert_after": "require_secondary_approval"
-  },
-  {
-   "fieldname": "appeal_deadline_days",
-   "fieldtype": "Int",
-   "label": "Appeal Deadline (Days)",
-   "default": "30",
-   "description": "Number of days after termination to file an appeal",
-   "insert_after": "column_break_term_1",
-   "depends_on": "eval:doc.enable_termination_system"
-  },
-  {
-   "fieldname": "appeal_review_days", 
-   "fieldtype": "Int",
-   "label": "Appeal Review Period (Days)",
-   "default": "60",
-   "description": "Maximum days to complete appeal review",
-   "insert_after": "appeal_deadline_days",
-   "depends_on": "eval:doc.enable_termination_system"
-  },
-  {
-   "fieldname": "termination_grace_period_days",
-   "fieldtype": "Int",
-   "label": "Grace Period (Days)",
-   "default": "30", 
-   "description": "Grace period before termination takes effect",
-   "insert_after": "appeal_review_days",
-   "depends_on": "eval:doc.enable_termination_system"
-  },
-  {
+   "depends_on": "eval:doc.enable_termination_system",
    "fieldname": "automation_section",
    "fieldtype": "Section Break",
-   "label": "Automation Settings",
-   "insert_after": "termination_grace_period_days",
-   "depends_on": "eval:doc.enable_termination_system"
+   "label": "Automation Settings"
   },
   {
-   "fieldname": "auto_cancel_sepa_mandates",
-   "fieldtype": "Check",
-   "label": "Auto-Cancel SEPA Mandates",
    "default": "1",
    "description": "Automatically cancel SEPA mandates when terminating",
-   "insert_after": "automation_section"
+   "fieldname": "auto_cancel_sepa_mandates",
+   "fieldtype": "Check",
+   "label": "Auto-Cancel SEPA Mandates"
   },
   {
-   "fieldname": "auto_end_board_positions",
-   "fieldtype": "Check", 
-   "label": "Auto-End Board Positions",
    "default": "1",
    "description": "Automatically end board/committee positions",
-   "insert_after": "auto_cancel_sepa_mandates"
+   "fieldname": "auto_end_board_positions",
+   "fieldtype": "Check",
+   "label": "Auto-End Board Positions"
   },
   {
    "fieldname": "column_break_term_2",
-   "fieldtype": "Column Break",
-   "insert_after": "auto_end_board_positions"
+   "fieldtype": "Column Break"
   },
   {
-   "fieldname": "send_termination_notifications",
-   "fieldtype": "Check",
-   "label": "Send Notifications",
    "default": "1",
    "description": "Send email notifications for termination events",
-   "insert_after": "column_break_term_2"
+   "fieldname": "send_termination_notifications",
+   "fieldtype": "Check",
+   "label": "Send Notifications"
+  },
+  {
+   "description": "This Donation Type will be set for the Donation created via Donation web form entry.",
+   "fieldname": "default_donation_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Default Donation Type",
+   "options": "Donation Type",
+   "reqd": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-05-08 21:22:21.633697",
+ "modified": "2025-06-15 18:20:11.058906",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Verenigingen Settings",
