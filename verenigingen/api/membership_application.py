@@ -139,7 +139,6 @@ def get_application_form_data():
                 {"name": "France"}, {"name": "United Kingdom"}, {"name": "Other"}
             ],
             "payment_methods": [
-                {"name": "Credit Card", "description": "Visa, Mastercard, American Express"},
                 {"name": "Bank Transfer", "description": "One-time bank transfer"},
                 {"name": "Direct Debit", "description": "SEPA Direct Debit (recurring)"}
             ]

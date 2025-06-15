@@ -152,7 +152,6 @@ def get_payment_methods():
         # Add descriptions for common methods
         method_descriptions = {
             "Bank Transfer": "Direct bank transfer (SEPA)",
-            "Credit Card": "Credit or debit card payment",
             "PayPal": "PayPal payment",
             "iDEAL": "iDEAL (Netherlands)",
             "Cash": "Cash payment (in-person only)"
