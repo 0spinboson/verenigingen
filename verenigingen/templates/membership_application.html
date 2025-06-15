@@ -155,7 +155,6 @@
                             <option value="">{{ _("Select...") }}</option>
                             <option value="Bank Transfer">{{ _("Bank Transfer") }}</option>
                             <option value="Direct Debit">{{ _("Direct Debit (SEPA)") }}</option>
-                            <option value="Credit Card">{{ _("Credit Card") }}</option>
                         </select>
                     </div>
                 </div>
@@ -183,19 +182,6 @@
                     </div>
                 </div>
                 
-                <!-- Credit Card Fields -->
-                <div id="credit-card-fields" style="display: none;">
-                    <div class="alert alert-info">
-                        {{ _("We only store the last 4 digits of your credit card for verification purposes. Full payment processing is handled securely through our payment provider.") }}
-                    </div>
-                    <div class="row">
-                        <div class="col-md-12 mb-3">
-                            <label for="credit_card_number">{{ _("Credit Card Number (Last 4 digits only)") }}</label>
-                            <input type="text" class="form-control" id="credit_card_number" name="credit_card_number" maxlength="4" pattern="[0-9]{4}" placeholder="1234">
-                            <small class="form-text text-muted">{{ _("Enter only the last 4 digits for verification purposes") }}</small>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
         
@@ -340,19 +326,14 @@ $(document).ready(function() {
         
         // Hide all payment method specific fields first
         $('#direct-debit-fields').hide();
-        $('#credit-card-fields').hide();
         
         // Remove all payment method field requirements
         $('#iban').prop('required', false);
-        $('#credit_card_number').prop('required', false);
         
         // Show relevant fields based on selection
         if (paymentMethod === 'Direct Debit') {
             $('#direct-debit-fields').show();
             $('#iban').prop('required', true);
-        } else if (paymentMethod === 'Credit Card') {
-            $('#credit-card-fields').show();
-            $('#credit_card_number').prop('required', true);
         }
     });
     

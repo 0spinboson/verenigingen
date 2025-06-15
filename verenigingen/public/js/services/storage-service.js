@@ -375,7 +375,6 @@ class StorageService {
         
         if (this.options.encryptSensitive) {
             // Remove or encrypt sensitive fields
-            delete sanitized.creditCard;
             delete sanitized.bankAccount;
             delete sanitized.ssn;
         }

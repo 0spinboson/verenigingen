@@ -100,7 +100,7 @@ def get_member_activity(member_name):
     
     for payment in payments:
         activities.append({
-            "icon": "fa-credit-card",
+            "icon": "fa-money",
             "description": _("Payment of {0} received").format(
                 frappe.format_value(payment.paid_amount, {"fieldtype": "Currency"})
             ),
@@ -184,7 +184,7 @@ def get_quick_actions(member, membership, volunteer):
             "title": _("Set Up Bank Details"),
             "route": "/bank_details",
             "class": "btn-primary",
-            "icon": "fa-credit-card"
+            "icon": "fa-university"
         })
     elif member.payment_method != "Direct Debit":
         actions.append({

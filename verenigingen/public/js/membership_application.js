@@ -602,12 +602,6 @@ class MembershipApplication {
             // Step 5: Payment Details
             payment_method: $('input[name="payment_method_selection"]:checked').val() || $('#payment_method').val() || '',
             
-            // Credit Card Details
-            card_number: $('#card_number').val() || '',
-            card_holder_name: $('#card_holder_name').val() || '',
-            expiry_month: $('#expiry_month').val() || '',
-            expiry_year: $('#expiry_year').val() || '',
-            cvv: $('#cvv').val() || '',
             
             // Bank Account Details (Direct Debit)
             iban: $('#iban').val() || '',
@@ -1139,7 +1133,7 @@ class MembershipApplication {
             console.log('SetupPaymentStep: Checking for existing elements');
             console.log('SetupPaymentStep: Payment method radios found:', $('input[name="payment_method_selection"]').length);
             console.log('SetupPaymentStep: Payment method options found:', $('.payment-method-option').length);
-            console.log('SetupPaymentStep: Credit card details section found:', $('#credit-card-details').length);
+            console.log('SetupPaymentStep: Bank account details section found:', $('#bank-account-details').length);
             console.log('SetupPaymentStep: Bank account details section found:', $('#bank-account-details').length);
             console.log('SetupPaymentStep: Bank transfer notice section found:', $('#bank-transfer-notice').length);
             console.log('SetupPaymentStep: Bank transfer details section found:', $('#bank-transfer-details').length);
@@ -1377,10 +1371,6 @@ class MembershipApplication {
                 }
             }
             
-            // Show credit card info for Credit Card
-            if (data.payment_method === 'Credit Card' && data.credit_card_number) {
-                content += `<p><strong>Card (last 4 digits):</strong> ****${data.credit_card_number}</p>`;
-            }
         } else {
             content += `<p><em>No payment method selected</em></p>`;
         }
@@ -1520,10 +1510,7 @@ class MembershipApplication {
             content += `<p><strong>Payment Method:</strong> ${data.payment_method}</p>`;
             
             // Show relevant payment details (masked for security)
-            if (data.payment_method === 'Credit Card' && data.card_number) {
-                const maskedCard = '**** **** **** ' + data.card_number.slice(-4);
-                content += `<p><strong>Card:</strong> ${maskedCard}</p>`;
-            } else if (data.payment_method === 'Direct Debit' && data.iban) {
+            if (data.payment_method === 'Direct Debit' && data.iban) {
                 const maskedIban = data.iban.slice(0, 4) + ' **** **** ' + data.iban.slice(-4);
                 content += `<p><strong>IBAN:</strong> ${maskedIban}</p>`;
             }
@@ -1619,7 +1606,7 @@ class MembershipApplication {
         let methodCardHTML = '<div class="payment-method-option" data-method="' + method.name + '">';
         methodCardHTML += '<div class="d-flex align-items-center">';
         methodCardHTML += '<div class="payment-method-icon">';
-        methodCardHTML += '<i class="fa ' + (method.icon || 'fa-credit-card') + '"></i>';
+        methodCardHTML += '<i class="fa ' + (method.icon || 'fa-university') + '"></i>';
         methodCardHTML += '</div>';
         methodCardHTML += '<div class="payment-method-info flex-grow-1">';
         methodCardHTML += '<h6>' + method.name + '</h6>';
@@ -1924,47 +1911,36 @@ class MembershipApplication {
     // Implement payment method field switching similar to member doctype UIUtils.handle_payment_method_change
     handlePaymentMethodChange(methodName) {
         const is_direct_debit = methodName === 'Direct Debit';
-        const is_credit_card = methodName === 'Credit Card';
         const is_bank_transfer = methodName === 'Bank Transfer';
         const show_bank_details = ['Direct Debit', 'Bank Transfer'].includes(methodName);
         
         console.log('Main app: Handling payment method change to:', methodName);
-        console.log('Main app: is_direct_debit:', is_direct_debit, 'is_credit_card:', is_credit_card, 'is_bank_transfer:', is_bank_transfer);
+        console.log('Main app: is_direct_debit:', is_direct_debit, 'is_bank_transfer:', is_bank_transfer);
         
         // Hide all payment detail sections first
-        $('#credit-card-details').hide();
         $('#bank-account-details').hide();
         $('#bank-transfer-notice').hide();
         $('#bank-transfer-details').hide();
         
         // Show appropriate section based on payment method
-        if (is_credit_card) {
-            console.log('Main app: Showing credit card details');
-            $('#credit-card-details').show();
-            
-            // Set required attributes for credit card fields
-            $('#card_number, #card_holder_name, #expiry_month, #expiry_year, #cvv').prop('required', true);
-            $('#iban, #bank_account_name').prop('required', false);
-        } else if (is_direct_debit) {
+        if (is_direct_debit) {
             console.log('Main app: Showing bank account details for Direct Debit');
             $('#bank-account-details').show();
             
             // Set required attributes for bank account fields
             $('#iban, #bank_account_name').prop('required', true);
             $('#bic').prop('required', false); // BIC is optional
-            $('#card_number, #card_holder_name, #expiry_month, #expiry_year, #cvv').prop('required', false);
         } else if (is_bank_transfer) {
             console.log('Main app: Showing bank transfer details with account fields');
             $('#bank-transfer-details').show();
             
             // Bank transfer fields are optional (for payment matching purposes)
-            $('#card_number, #card_holder_name, #expiry_month, #expiry_year, #cvv').prop('required', false);
             $('#iban, #bank_account_name, #bic').prop('required', false);
             $('#transfer_iban, #transfer_account_name, #transfer_bic').prop('required', false);
         }
         
         // Clear validation errors when switching payment methods
-        $('#credit-card-details input, #bank-account-details input, #bank-transfer-details input').removeClass('is-invalid is-valid');
+        $('#bank-account-details input, #bank-transfer-details input').removeClass('is-invalid is-valid');
         $('.invalid-feedback').hide();
     }
     
@@ -1979,10 +1955,6 @@ class MembershipApplication {
         select.empty();
         
         const fallbackMethods = [
-            { 
-                name: 'Credit Card', 
-                description: 'Visa, Mastercard, American Express',
-                icon: 'fa-credit-card',
                 processing_time: 'Immediate',
                 requires_mandate: false
             },
@@ -2592,7 +2564,7 @@ class PaymentStep extends BaseStep {
         let methodCardHTML = '<div class="payment-method-option" data-method="' + method.name + '">';
         methodCardHTML += '<div class="d-flex align-items-center">';
         methodCardHTML += '<div class="payment-method-icon">';
-        methodCardHTML += '<i class="fa ' + (method.icon || 'fa-credit-card') + '"></i>';
+        methodCardHTML += '<i class="fa ' + (method.icon || 'fa-university') + '"></i>';
         methodCardHTML += '</div>';
         methodCardHTML += '<div class="payment-method-info flex-grow-1">';
         methodCardHTML += '<h6>' + method.name + '</h6>';
@@ -2634,10 +2606,6 @@ class PaymentStep extends BaseStep {
         select.empty();
         
         const fallbackMethods = [
-            { 
-                name: 'Credit Card', 
-                description: 'Visa, Mastercard, American Express',
-                icon: 'fa-credit-card',
                 processing_time: 'Immediate',
                 requires_mandate: false
             },
@@ -2736,15 +2704,12 @@ class PaymentStep extends BaseStep {
         } else {
             // Fallback for standalone operation
             console.log('PaymentStep: Fallback - showing fields for payment method:', methodName);
-            $('#credit-card-details').hide();
+            // Payment method sections hidden by default
             $('#bank-account-details').hide();
             $('#bank-transfer-notice').hide();
             $('#bank-transfer-details').hide();
             
-            if (methodName === 'Credit Card') {
-                console.log('PaymentStep: Showing credit card fields');
-                $('#credit-card-details').show();
-            } else if (methodName === 'Direct Debit') {
+            if (methodName === 'Direct Debit') {
                 console.log('PaymentStep: Showing bank account fields');
                 $('#bank-account-details').show();
             } else if (methodName === 'Bank Transfer') {
@@ -2861,47 +2826,7 @@ class PaymentStep extends BaseStep {
             valid = false;
         } else {
             // Validate payment-specific fields based on selected method
-            if (paymentMethod === 'Credit Card') {
-                // Credit card validation
-                if (!$('#card_number').val()) {
-                    $('#card_number').addClass('is-invalid');
-                    $('#card_number').after('<div class="invalid-feedback">Card number is required</div>');
-                    valid = false;
-                }
-                
-                if (!$('#card_holder_name').val()) {
-                    $('#card_holder_name').addClass('is-invalid');
-                    $('#card_holder_name').after('<div class="invalid-feedback">Cardholder name is required</div>');
-                    valid = false;
-                }
-                
-                if (!$('#expiry_month').val()) {
-                    $('#expiry_month').addClass('is-invalid');
-                    $('#expiry_month').after('<div class="invalid-feedback">Expiry month is required</div>');
-                    valid = false;
-                }
-                
-                if (!$('#expiry_year').val()) {
-                    $('#expiry_year').addClass('is-invalid');
-                    $('#expiry_year').after('<div class="invalid-feedback">Expiry year is required</div>');
-                    valid = false;
-                }
-                
-                if (!$('#cvv').val()) {
-                    $('#cvv').addClass('is-invalid');
-                    $('#cvv').after('<div class="invalid-feedback">CVV is required</div>');
-                    valid = false;
-                }
-                
-                // Basic card number validation (length and digits only)
-                const cardNumber = $('#card_number').val().replace(/\s/g, '');
-                if (cardNumber && (cardNumber.length < 13 || cardNumber.length > 19 || !/^\d+$/.test(cardNumber))) {
-                    $('#card_number').addClass('is-invalid');
-                    $('#card_number').after('<div class="invalid-feedback">Please enter a valid card number</div>');
-                    valid = false;
-                }
-                
-            } else if (paymentMethod === 'Direct Debit') {
+            if (paymentMethod === 'Direct Debit') {
                 // Bank account validation
                 if (!$('#iban').val()) {
                     $('#iban').addClass('is-invalid');
