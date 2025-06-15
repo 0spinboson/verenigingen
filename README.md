@@ -45,8 +45,13 @@ This app is designed to be installed in a Frappe/ERPNext environment:
 The app requires:
 - ERPNext to be installed and configured
 - Payments app for financial transactions
+<<<<<<< HEAD
 - HRMS installed
 - CRM installed
+=======
+- CRM app
+- HRMS app
+>>>>>>> refs/remotes/origin/uitzetten
 - Proper site configuration for association settings
 
 ## Development
@@ -55,6 +60,4 @@ For development setup, ensure you have a working Frappe development environment 
 
 ## License
 
-Copyright (c) 2025, Frappe Technologies Pvt. Ltd. and contributors.
-
-This app is part of the Verenigingen association management system.
+agpl-3.0
