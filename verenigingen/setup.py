@@ -529,6 +529,9 @@ def setup_membership_application_system():
         # Create web pages configuration
         setup_application_web_pages()
         
+        # Create default donation types
+        create_default_donation_types()
+        
         print("✅ Membership application system setup completed")
         
     except Exception as e:
@@ -962,5 +965,85 @@ def setup_workspace_manual():
     try:
         setup_workspace()
         return {"success": True, "message": "Workspace setup completed"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+def create_default_donation_types():
+    """Create default donation types if they don't exist"""
+    print("   💰 Setting up default donation types...")
+    
+    default_types = [
+        "General",
+        "Monthly",
+        "One-time", 
+        "Campaign",
+        "Emergency Relief",
+        "Membership Support"
+    ]
+    
+    created_count = 0
+    
+    for donation_type in default_types:
+        if not frappe.db.exists("Donation Type", donation_type):
+            try:
+                doc = frappe.get_doc({
+                    "doctype": "Donation Type",
+                    "donation_type": donation_type
+                })
+                doc.insert(ignore_permissions=True)
+                created_count += 1
+                print(f"   ✓ Created donation type: {donation_type}")
+            except Exception as e:
+                print(f"   ⚠️ Could not create donation type '{donation_type}': {str(e)}")
+        else:
+            print(f"   ✓ Donation type already exists: {donation_type}")
+    
+    if created_count > 0:
+        frappe.db.commit()
+        print(f"   💰 Created {created_count} default donation types")
+        
+        # Set default donation type in settings if not already set
+        try:
+            settings = frappe.get_single("Verenigingen Settings")
+            if not settings.get("default_donation_type"):
+                settings.default_donation_type = "General"
+                settings.save(ignore_permissions=True)
+                print("   ✓ Set 'General' as default donation type in settings")
+        except Exception as e:
+            print(f"   ⚠️ Could not set default donation type: {str(e)}")
+    
+    return created_count
+
+@frappe.whitelist()
+def create_donation_types_manual():
+    """Manual endpoint to create donation types"""
+    try:
+        count = create_default_donation_types()
+        return {
+            "success": True, 
+            "message": f"Created {count} donation types",
+            "count": count
+        }
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@frappe.whitelist()
+def verify_donation_type_setup():
+    """Verify donation types are properly set up"""
+    try:
+        # Check donation types
+        donation_types = frappe.get_all("Donation Type", fields=["name", "donation_type"])
+        
+        # Check settings
+        settings = frappe.get_single("Verenigingen Settings")
+        default_type = settings.get("default_donation_type")
+        
+        return {
+            "success": True,
+            "donation_types": donation_types,
+            "total_count": len(donation_types),
+            "default_donation_type": default_type,
+            "message": f"Found {len(donation_types)} donation types, default: {default_type}"
+        }
     except Exception as e:
         return {"success": False, "message": str(e)}
