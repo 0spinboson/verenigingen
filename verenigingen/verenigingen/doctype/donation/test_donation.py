@@ -4,7 +4,7 @@ import unittest
 
 import frappe
 
-from verenigingen.verenigingen.doctype.donation.donation import create_razorpay_donation
+from verenigingen.verenigingen.doctype.donation.donation import create_donation_from_bank_transfer
 
 
 class TestDonation(unittest.TestCase):
@@ -24,19 +24,13 @@ class TestDonation(unittest.TestCase):
 	def test_payment_entry_for_donations(self):
 		donor = create_donor()
 		create_mode_of_payment()
-		payment = frappe._dict({
-			'amount': 100,
-			'method': 'Debit Card',
-			'id': 'pay_MeXAmsgeKOhq7O'
-		})
-		donation = create_razorpay_donation(donor, payment)
+		donation = create_donation_from_bank_transfer(
+			donor.name, 100, frappe.utils.today(), 'TEST-BANK-REF-001'
+		)
 
 		self.assertTrue(donation.name)
 
-		# Naive test to check if at all payment entry is generated
-		# This method is actually triggered from Payment Gateway
-		# In any case if details were missing, this would throw an error
-		donation.on_payment_authorized(status='Completed')
+		# Test payment entry generation
 		donation.reload()
 
 		self.assertEqual(donation.paid, 1)
