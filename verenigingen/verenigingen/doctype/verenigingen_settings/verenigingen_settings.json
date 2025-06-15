@@ -38,11 +38,16 @@
   "donation_settings_section",
   "donation_company",
   "default_donation_type",
-  "donation_webhook_secret",
   "column_break_22",
   "automate_donation_payment_entries",
   "donation_debit_account",
   "donation_payment_account",
+  "anbi_donation_settings_section",
+  "default_donor_type",
+  "anbi_minimum_reportable_amount",
+  "column_break_anbi_donation",
+  "campaign_donation_account",
+  "restricted_donation_account",
   "billing_cycle",
   "automation_section",
   "auto_cancel_sepa_mandates",
@@ -193,12 +198,6 @@
    "read_only": 1
   },
   {
-   "fieldname": "donation_webhook_secret",
-   "fieldtype": "Password",
-   "label": "Donation Webhook Secret",
-   "read_only": 1
-  },
-  {
    "depends_on": "automate_donation_payment_entries",
    "description": "Account for accepting donation payments",
    "fieldname": "donation_payment_account",
@@ -209,7 +208,7 @@
   },
   {
    "default": "0",
-   "description": "Auto creates Payment Entry for Donations created from web forms.",
+   "description": "Auto creates Payment Entry for Donations when marked as paid.",
    "fieldname": "automate_donation_payment_entries",
    "fieldtype": "Check",
    "label": "Automate Donation Payment Entries"
@@ -229,7 +228,7 @@
    "options": "Account"
   },
   {
-   "description": "This company will be set for the Donations created via webhook.",
+   "description": "This company will be set for donations created in the system.",
    "fieldname": "donation_company",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -349,6 +348,44 @@
    "label": "Default Donation Type",
    "options": "Donation Type",
    "reqd": 1
+  },
+  {
+   "fieldname": "anbi_donation_settings_section",
+   "fieldtype": "Section Break",
+   "label": "ANBI & Earmarked Donation Settings"
+  },
+  {
+   "default": "Individual",
+   "description": "Default donor type for new donors created through donation forms",
+   "fieldname": "default_donor_type",
+   "fieldtype": "Select",
+   "label": "Default Donor Type",
+   "options": "\nIndividual\nOrganization"
+  },
+  {
+   "default": "500",
+   "description": "Minimum donation amount to automatically mark as reportable to Belastingdienst",
+   "fieldname": "anbi_minimum_reportable_amount",
+   "fieldtype": "Currency",
+   "label": "ANBI Minimum Reportable Amount"
+  },
+  {
+   "fieldname": "column_break_anbi_donation",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Account for donations earmarked for specific campaigns",
+   "fieldname": "campaign_donation_account",
+   "fieldtype": "Link",
+   "label": "Campaign Donation Account",
+   "options": "Account"
+  },
+  {
+   "description": "Account for donations earmarked for specific goals (restricted funds)",
+   "fieldname": "restricted_donation_account",
+   "fieldtype": "Link",
+   "label": "Restricted Donation Account",
+   "options": "Account"
   }
  ],
  "index_web_pages_for_search": 1,
