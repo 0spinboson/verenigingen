@@ -227,7 +227,7 @@ def get_user_chapter_access():
     user = frappe.session.user
     
     # Admin roles see all chapters
-    admin_roles = ["System Manager", "Verenigingen Manager", "Membership Manager"]
+    admin_roles = ["System Manager", "Verenigingen Administrator", "Membership Manager"]
     if any(role in frappe.get_roles(user) for role in admin_roles):
         return {
             "restrict_to_chapters": False,
@@ -295,7 +295,7 @@ def has_approval_permission(member):
         return True
     
     # Association/Membership managers have permission
-    if any(role in frappe.get_roles(user) for role in ["Verenigingen Manager", "Membership Manager"]):
+    if any(role in frappe.get_roles(user) for role in ["Verenigingen Administrator", "Membership Manager"]):
         return True
     
     # Check if user is a board member of the member's chapter
@@ -429,7 +429,7 @@ def get_pending_applications(chapter=None, days_overdue=None):
     
     # Check user permissions
     user = frappe.session.user
-    if not any(role in frappe.get_roles(user) for role in ["System Manager", "Verenigingen Manager", "Membership Manager"]):
+    if not any(role in frappe.get_roles(user) for role in ["System Manager", "Verenigingen Administrator", "Membership Manager"]):
         # Regular users can only see applications for their chapter
         user_member = frappe.db.get_value("Member", {"user": user}, "name")
         if user_member:
@@ -656,7 +656,7 @@ def fix_backend_member_statuses():
 def get_application_stats():
     """Get statistics for membership applications"""
     # Check permissions
-    if not any(role in frappe.get_roles() for role in ["System Manager", "Verenigingen Manager", "Membership Manager"]):
+    if not any(role in frappe.get_roles() for role in ["System Manager", "Verenigingen Administrator", "Membership Manager"]):
         frappe.throw(_("Insufficient permissions"))
     
     stats = {}
@@ -722,8 +722,8 @@ def migrate_active_application_status():
     """Migrate members with 'Active' application_status to 'Approved'"""
     try:
         # Check if user has permission
-        if not any(role in frappe.get_roles() for role in ["System Manager", "Verenigingen Manager"]):
-            frappe.throw(_("Only System Managers and Verenigingen Managers can run this migration"))
+        if not any(role in frappe.get_roles() for role in ["System Manager", "Verenigingen Administrator"]):
+            frappe.throw(_("Only System Managers and Verenigingen Administrators can run this migration"))
         
         # Find all members with 'Active' application_status
         members_to_migrate = frappe.get_all(
@@ -1119,7 +1119,7 @@ def notify_managers_of_overdue_applications(applications):
     # Get all association managers
     managers = frappe.get_all(
         "Has Role",
-        filters={"role": "Verenigingen Manager"},
+        filters={"role": "Verenigingen Administrator"},
         pluck="parent"
     )
     

@@ -87,7 +87,7 @@ def can_assign_member_to_chapter(member_name, chapter_name):
     user = frappe.session.user
     
     # System managers and Association/Membership managers can assign anyone
-    admin_roles = ["System Manager", "Verenigingen Manager", "Membership Manager"]
+    admin_roles = ["System Manager", "Verenigingen Administrator", "Membership Manager"]
     if any(role in frappe.get_roles(user) for role in admin_roles):
         return True
     
@@ -202,7 +202,7 @@ def can_view_members_without_chapter():
     user = frappe.session.user
     
     # System managers and Association/Membership managers can view
-    admin_roles = ["System Manager", "Verenigingen Manager", "Membership Manager"]
+    admin_roles = ["System Manager", "Verenigingen Administrator", "Membership Manager"]
     if any(role in frappe.get_roles(user) for role in admin_roles):
         return True
     

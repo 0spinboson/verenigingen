@@ -61,6 +61,8 @@
   "campaign_reference",
   "chapter_reference",
   "specific_goal_description",
+  "accounting_section",
+  "sales_invoice",
   "amended_from"
  ],
  "fields": [
@@ -380,6 +382,20 @@
    "in_standard_filter": 1,
    "label": "Email",
    "read_only": 1
+  },
+  {
+   "fieldname": "accounting_section",
+   "fieldtype": "Section Break",
+   "label": "Accounting Integration",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "label": "Sales Invoice",
+   "options": "Sales Invoice",
+   "read_only": 1,
+   "description": "Auto-created Sales Invoice for standard ERPNext accounting flow"
   }
  ],
  "index_web_pages_for_search": 1,
@@ -414,7 +430,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Verenigingen Manager",
+   "role": "Verenigingen Administrator",
    "select": 1,
    "share": 1,
    "submit": 1,

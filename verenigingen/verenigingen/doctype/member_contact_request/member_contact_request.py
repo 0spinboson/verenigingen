@@ -136,9 +136,9 @@ class MemberContactRequest(Document):
 		"""Determine who should be notified based on request type and urgency"""
 		recipients = []
 		
-		# Get users with Verenigingen Manager role
+		# Get users with Verenigingen Administrator role
 		managers = frappe.get_all("Has Role", 
-			filters={"role": "Verenigingen Manager", "parenttype": "User"},
+			filters={"role": "Verenigingen Administrator", "parenttype": "User"},
 			fields=["parent"]
 		)
 		recipients.extend([m.parent for m in managers])

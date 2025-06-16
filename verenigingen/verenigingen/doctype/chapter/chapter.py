@@ -375,7 +375,7 @@ class Chapter(WebsiteGenerator):
             user_roles = frappe.get_roles(user)
             
             is_system_manager = "System Manager" in user_roles
-            is_verenigingen_manager = "Verenigingen Manager" in user_roles
+            is_verenigingen_manager = "Verenigingen Administrator" in user_roles
             
             if is_system_manager or is_verenigingen_manager:
                 return {
@@ -552,9 +552,9 @@ def validate_chapter_access(doc, method=None):
         
         if doc.name == settings.national_board_chapter:
             user_roles = frappe.get_roles()
-            if ("Verenigingen Manager" in user_roles and 
+            if ("Verenigingen Administrator" in user_roles and 
                 "System Manager" not in user_roles):
-                frappe.throw(_("Verenigingen Managers cannot edit the National Board chapter. Please contact an administrator."))
+                frappe.throw(_("Verenigingen Administrators cannot edit the National Board chapter. Please contact an administrator."))
                 
     except Exception as e:
         frappe.log_error(f"Error validating chapter access for {doc.name}: {str(e)}")
@@ -575,7 +575,7 @@ def get_chapter_permission_query_conditions(user=None):
         if not user:
             user = frappe.session.user
             
-        if "System Manager" in frappe.get_roles(user) or "Verenigingen Manager" in frappe.get_roles(user):
+        if "System Manager" in frappe.get_roles(user) or "Verenigingen Administrator" in frappe.get_roles(user):
             return ""
         
         # Use single optimized query to get accessible chapters
@@ -647,8 +647,8 @@ def get_board_memberships(member_name):
         current_user = frappe.session.user
         user_roles = frappe.get_roles(current_user)
         
-        # Allow if user is System Manager or Verenigingen Manager
-        if "System Manager" in user_roles or "Verenigingen Manager" in user_roles:
+        # Allow if user is System Manager or Verenigingen Administrator
+        if "System Manager" in user_roles or "Verenigingen Administrator" in user_roles:
             pass  # Full access
         else:
             # Check if user is requesting their own board memberships
@@ -720,8 +720,8 @@ def get_chapter_board_history(chapter_name):
         current_user = frappe.session.user
         user_roles = frappe.get_roles(current_user)
         
-        # Allow if user is System Manager or Verenigingen Manager
-        if "System Manager" in user_roles or "Verenigingen Manager" in user_roles:
+        # Allow if user is System Manager or Verenigingen Administrator
+        if "System Manager" in user_roles or "Verenigingen Administrator" in user_roles:
             pass  # Full access
         else:
             # Check if user is a board member of this chapter

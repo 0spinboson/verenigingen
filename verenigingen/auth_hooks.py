@@ -180,7 +180,7 @@ def has_system_access(user):
         user_roles = frappe.get_roles(user)
         system_roles = [
             "System Manager", 
-            "Verenigingen Manager", 
+            "Verenigingen Administrator", 
             "Membership Manager",
             "Chapter Manager",
             "Governance Auditor"

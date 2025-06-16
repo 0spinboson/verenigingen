@@ -245,7 +245,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Verenigingen Manager",
+   "role": "Verenigingen Administrator",
    "share": 1,
    "write": 1
   },
@@ -271,7 +271,7 @@
   },
   {
    "read": 1,
-   "role": "Member"
+   "role": "Verenigingen Member"
   }
  ],
  "sort_field": "modified",

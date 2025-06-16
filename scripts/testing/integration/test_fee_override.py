@@ -39,7 +39,7 @@ def test_fee_override():
         print("Save completed successfully")
         
         # Check for amendments
-        amendments = frappe.get_all("Membership Amendment Request", 
+        amendments = frappe.get_all("Contribution Amendment Request", 
                                    filters={"member": member.name},
                                    fields=["name", "status", "amendment_type", "requested_amount", "creation"])
         print(f"\nAmendments created: {len(amendments)}")

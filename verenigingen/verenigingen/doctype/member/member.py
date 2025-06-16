@@ -75,7 +75,7 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         
         # Check user permissions for fee override
         user_roles = frappe.get_roles(frappe.session.user)
-        authorized_roles = ["System Manager", "Membership Manager", "Verenigingen Manager"]
+        authorized_roles = ["System Manager", "Membership Manager", "Verenigingen Administrator"]
         
         if not any(role in user_roles for role in authorized_roles):
             frappe.throw(
@@ -1865,14 +1865,9 @@ def add_member_roles_to_user(user_name):
     try:
         # Define the roles that members need for portal access
         member_roles = [
-            "Member Portal User",  # Custom role for member portal access
-            "Verenigingen Member"  # Custom role for members
+            "Verenigingen Member"  # Primary member role for all member access
         ]
         
-        # Check if Member Portal User role exists, create if not
-        if not frappe.db.exists("Role", "Member Portal User"):
-            create_member_portal_role()
-            
         # Check if Verenigingen Member role exists, create if not
         if not frappe.db.exists("Role", "Verenigingen Member"):
             create_verenigingen_member_role()
@@ -1893,28 +1888,10 @@ def add_member_roles_to_user(user_name):
     except Exception as e:
         frappe.log_error(f"Error adding roles to user {user_name}: {str(e)}")
 
-def create_member_portal_role():
-    """Create the Member Portal User role with appropriate permissions"""
-    try:
-        role = frappe.new_doc("Role")
-        role.role_name = "Member Portal User"
-        role.desk_access = 0  # Portal users don't need desk access
-        role.is_custom = 1
-        role.insert(ignore_permissions=True)
-        
-        # Add permissions for portal pages access
-        # These permissions would be added via Role Permissions manager
-        # or through custom permission logic in the portal pages
-        
-        frappe.logger().info("Created Member Portal User role")
-        return role.name
-        
-    except Exception as e:
-        frappe.log_error(f"Error creating Member Portal User role: {str(e)}")
-        return None
+# Removed create_member_portal_role - consolidated into Verenigingen Member
 
 def create_verenigingen_member_role():
-    """Create the Verenigingen Member role for member access"""
+    """Create the Verenigingen Member role for consolidated member access"""
     try:
         role = frappe.new_doc("Role")
         role.role_name = "Verenigingen Member"
@@ -1922,7 +1899,7 @@ def create_verenigingen_member_role():
         role.is_custom = 1  # This is a custom role for the app
         role.insert(ignore_permissions=True)
         
-        frappe.logger().info("Created Verenigingen Member role")
+        frappe.logger().info("Created Verenigingen Member role (consolidated from Member Portal User and Member)")
         return role.name
         
     except Exception as e:

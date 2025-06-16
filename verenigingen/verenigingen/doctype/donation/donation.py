@@ -132,35 +132,24 @@ class Donation(Document):
 		else:
 			return self.donation_category or 'Unspecified'
 
-	def create_payment_entry(self, date=None):
-		settings = frappe.get_doc('Verenigingen Settings')
-		if not settings.automate_donation_payment_entries:
+	def create_payment_entry_for_sales_invoice(self, date=None):
+		"""Create payment entry for the Sales Invoice (if donation is marked as paid)"""
+		if not self.paid or not hasattr(self, 'sales_invoice') or not self.sales_invoice:
 			return
-
-		if not settings.donation_payment_account:
-			frappe.throw(_('You need to set <b>Payment Account</b> for Donation in {0}').format(
-				get_link_to_form('Verenigingen Settings', 'Verenigingen Settings')))
-
-		from verenigingen.verenigingen.custom_doctype.payment_entry import get_donation_payment_entry
-
-		frappe.flags.ignore_account_permission = True
-		pe = get_donation_payment_entry(dt=self.doctype, dn=self.name)
-		frappe.flags.ignore_account_permission = False
 		
-		# Use purpose-specific account mapping
-		debit_account, credit_account = self.get_accounting_accounts()
-		pe.paid_from = debit_account
-		pe.paid_to = credit_account
+		# Use standard ERPNext payment entry creation
+		from erpnext.accounts.doctype.payment_entry.payment_entry import get_payment_entry
 		
+		pe = get_payment_entry("Sales Invoice", self.sales_invoice)
 		pe.posting_date = date or getdate()
-		pe.reference_no = self.name
+		pe.reference_no = f"Donation-{self.name}"
 		pe.reference_date = date or getdate()
+		
 		pe.flags.ignore_mandatory = True
 		pe.insert()
 		pe.submit()
 		
-		# Create additional journal entry for earmarked donations if needed
-		self.create_earmarking_journal_entry(date)
+		return pe
 	
 	def get_accounting_accounts(self):
 		"""Get appropriate debit and credit accounts based on donation purpose"""
@@ -244,8 +233,81 @@ class Donation(Document):
 		
 		return from_account, to_account
 
+	def create_sales_invoice(self):
+		"""Create Sales Invoice from donation for standard ERPNext accounting flow"""
+		# Convert donor to customer if needed
+		customer = self.get_or_create_customer_from_donor()
+		
+		# Create Sales Invoice
+		sales_invoice = frappe.new_doc("Sales Invoice")
+		sales_invoice.customer = customer
+		sales_invoice.company = self.company
+		sales_invoice.posting_date = self.date
+		sales_invoice.due_date = self.date  # Donations are immediate
+		sales_invoice.currency = frappe.get_cached_value("Company", self.company, "default_currency")
+		
+		# Add donation item
+		sales_invoice.append("items", {
+			"item_code": "DONATION",
+			"item_name": "Donation",
+			"description": f"Donation: {self.get_earmarking_summary()}",
+			"qty": 1,
+			"rate": self.amount,
+			"amount": self.amount
+		})
+		
+		# Apply tax exemption for nonprofit donations
+		sales_invoice.exempt_from_tax = 1
+		sales_invoice.btw_exemption_type = "EXEMPT_NONPROFIT"
+		sales_invoice.btw_exemption_reason = "Donation to nonprofit organization - exempt under Dutch tax law"
+		
+		# Link back to donation
+		sales_invoice.custom_source_donation = self.name
+		
+		sales_invoice.flags.ignore_mandatory = True
+		sales_invoice.insert()
+		sales_invoice.submit()
+		
+		# Link Sales Invoice back to donation
+		self.db_set("sales_invoice", sales_invoice.name, update_modified=False)
+		
+		return sales_invoice
+	
+	def get_or_create_customer_from_donor(self):
+		"""Convert donor to customer for standard ERPNext flow"""
+		donor_doc = frappe.get_doc("Donor", self.donor)
+		
+		# Check if customer already exists for this donor
+		existing_customer = frappe.db.get_value("Customer", 
+			filters={"custom_donor_reference": self.donor})
+		
+		if existing_customer:
+			return existing_customer
+		
+		# Create new customer from donor
+		customer = frappe.new_doc("Customer")
+		customer.customer_name = getattr(donor_doc, 'donor_name', f"Donor {self.donor}")
+		customer.customer_type = "Individual"
+		customer.territory = frappe.db.get_single_value("Selling Settings", "territory") or "All Territories"
+		customer.customer_group = "Donors"
+		
+		# Link back to donor
+		customer.custom_donor_reference = self.donor
+		
+		# Copy contact information
+		if hasattr(donor_doc, 'donor_email') and donor_doc.donor_email:
+			customer.email_id = donor_doc.donor_email
+		
+		customer.flags.ignore_mandatory = True
+		customer.insert()
+		
+		return customer.name
+
 	def on_submit(self):
 		"""Called when donation is submitted"""
+		# Create Sales Invoice for standard ERPNext integration
+		self.create_sales_invoice()
+		
 		# Send confirmation email
 		from verenigingen.utils.donation_emails import send_donation_confirmation
 		frappe.enqueue(
@@ -257,8 +319,11 @@ class Donation(Document):
 	
 	def on_update_after_submit(self):
 		"""Called when submitted donation is updated"""
-		# Send payment confirmation if marked as paid
+		# Create payment entry if marked as paid
 		if self.paid and self.has_value_changed("paid"):
+			self.create_payment_entry_for_sales_invoice()
+			
+			# Send payment confirmation
 			from verenigingen.utils.donation_emails import send_payment_confirmation
 			frappe.enqueue(
 				send_payment_confirmation,
@@ -301,7 +366,7 @@ def create_donation_from_bank_transfer(donor, amount, date, bank_reference, dona
 	}).insert()
 
 	donation.submit()
-	donation.create_payment_entry()
+	# Payment entry will be created automatically when marked as paid
 	return donation
 
 

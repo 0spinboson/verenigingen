@@ -7,7 +7,25 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 def make_custom_records():
     records = [
         {'doctype': "Party Type", "party_type": "Member", "account_type": "Receivable"},
-        {'doctype': "Party Type", "party_type": "Donor", "account_type": "Receivable"},
+        # Customer Group for donors
+        {
+            'doctype': "Customer Group",
+            'customer_group_name': "Donors",
+            'parent_customer_group': "All Customer Groups",
+            'is_group': 0
+        },
+        # Donation item for Sales Invoice integration
+        {
+            'doctype': "Item",
+            'item_code': "DONATION",
+            'item_name': "Donation",
+            'item_group': "Services",
+            'stock_uom': "Nos",
+            'is_stock_item': 0,
+            'is_sales_item': 1,
+            'is_service_item': 1,
+            'description': "Standard donation item for nonprofit operations"
+        }
     ]
     make_records(records)
 
@@ -59,6 +77,16 @@ def get_custom_fields():
             dict(fieldname='verenigingen_section', label='Verenigingen Settings',
                  fieldtype='Section Break', insert_after='asset_received_but_not_billed', collapsible=1)
         ],
+        'Customer': [
+            {
+                "fieldname": "custom_donor_reference",
+                "label": "Donor Reference",
+                "fieldtype": "Link",
+                "options": "Donor",
+                "insert_after": "customer_group",
+                "description": "Link to original donor record for nonprofit operations"
+            }
+        ],
         'Sales Invoice': [
             dict(
                 fieldname='exempt_from_tax',
@@ -92,6 +120,22 @@ def get_custom_fields():
                 "translatable": 0,
                 "read_only": 1,
                 "depends_on": "eval:doc.btw_exemption_type"
+            },
+            # Donation tracking fields
+            {
+                "fieldname": "custom_donation_section",
+                "label": "Donation Information",
+                "fieldtype": "Section Break",
+                "insert_after": "btw_reporting_category",
+                "collapsible": 1
+            },
+            {
+                "fieldname": "custom_source_donation",
+                "label": "Source Donation",
+                "fieldtype": "Link",
+                "options": "Donation",
+                "insert_after": "custom_donation_section",
+                "description": "Original donation record that created this invoice"
             }
         ],
         'Membership': [
@@ -269,7 +313,7 @@ def setup_termination_system_integration():
         setup_termination_settings()
         
         # Step 2: Setup workflows (using separate workflow setup module)
-        from verenigingen.corrected_workflow_setup import setup_workflows_corrected
+        from verenigingen.setup.workflow_setup import setup_workflows_corrected
         workflow_success = setup_workflows_corrected()
         
         if workflow_success:
@@ -331,7 +375,7 @@ def setup_termination_workflows_and_templates():
     
     try:
         # Try to import and run the workflow setup
-        from verenigingen.corrected_workflow_setup import setup_workflows_corrected
+        from verenigingen.setup.workflow_setup import setup_workflows_corrected
 
         success = setup_workflows_corrected()        
                 
@@ -352,7 +396,7 @@ def setup_termination_roles_and_permissions():
         # Create required roles
         required_roles = [
             {
-                "role_name": "Verenigingen Manager",
+                "role_name": "Verenigingen Administrator",
                 "desk_access": 1,
                 "is_custom": 1
             }
@@ -417,7 +461,7 @@ def check_termination_system_status():
         status["workflows_exist"] = workflow_count > 0
         
         # Check roles
-        status["roles_exist"] = frappe.db.exists("Role", "Verenigingen Manager")
+        status["roles_exist"] = frappe.db.exists("Role", "Verenigingen Administrator")
         
         return {"success": True, "status": status}
         
@@ -453,10 +497,10 @@ def run_termination_diagnostics():
     print("\n2. ROLE CHECK")
     print("-" * 12)
     
-    if frappe.db.exists("Role", "Verenigingen Manager"):
-        print("   ✅ Verenigingen Manager")
+    if frappe.db.exists("Role", "Verenigingen Administrator"):
+        print("   ✅ Verenigingen Administrator")
     else:
-        print("   ❌ Verenigingen Manager - MISSING")
+        print("   ❌ Verenigingen Administrator - MISSING")
         all_good = False
     
     # 3. Check workflows

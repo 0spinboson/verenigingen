@@ -8,12 +8,12 @@ def check_amendment_records():
     
     try:
         # Check if table exists
-        count = frappe.db.count('Membership Amendment Request')
-        print(f'Total Membership Amendment Request records: {count}')
+        count = frappe.db.count('Contribution Amendment Request')
+        print(f'Total Contribution Amendment Request records: {count}')
         
         # Get sample records
         if count > 0:
-            records = frappe.db.get_all('Membership Amendment Request', 
+            records = frappe.db.get_all('Contribution Amendment Request', 
                                       fields=['name', 'status', 'member', 'amendment_type'],
                                       limit=5)
             print('Sample records:')
@@ -23,7 +23,7 @@ def check_amendment_records():
             print('No records found')
             
         # Check table structure
-        desc = frappe.db.sql('DESCRIBE `tabMembership Amendment Request`', as_dict=True)
+        desc = frappe.db.sql('DESCRIBE `tabContribution Amendment Request`', as_dict=True)
         print(f'\nTable structure - {len(desc)} columns found:')
         for col in desc[:10]:  # Show first 10 columns
             print(f'  {col.Field}: {col.Type}')

@@ -427,7 +427,7 @@ class ContributionAmendmentRequest(Document):
 def process_pending_amendments():
     """Process all approved amendments that are ready to be applied"""
     amendments = frappe.get_all(
-        "Membership Amendment Request",
+        "Contribution Amendment Request",
         filters={
             "status": "Approved",
             "effective_date": ["<=", today()]
@@ -440,7 +440,7 @@ def process_pending_amendments():
     
     for amendment_data in amendments:
         try:
-            amendment = frappe.get_doc("Membership Amendment Request", amendment_data.name)
+            amendment = frappe.get_doc("Contribution Amendment Request", amendment_data.name)
             amendment.apply_amendment()
             processed_count += 1
         except Exception as e:
@@ -479,7 +479,7 @@ def create_fee_change_amendment(member_name, new_amount, reason, effective_date=
     
     # Create amendment request
     amendment = frappe.get_doc({
-        "doctype": "Membership Amendment Request",
+        "doctype": "Contribution Amendment Request",
         "membership": membership.name,
         "member": member.name,
         "amendment_type": "Fee Change",
@@ -499,10 +499,10 @@ def create_fee_change_amendment(member_name, new_amount, reason, effective_date=
     return amendment
 
 @frappe.whitelist()
-def get_member_pending_amendments(member_name):
-    """Get pending amendments for a member"""
+def get_member_pending_contribution_amendments(member_name):
+    """Get pending contribution amendments for a member"""
     amendments = frappe.get_all(
-        "Membership Amendment Request",
+        "Contribution Amendment Request",
         filters={
             "member": member_name,
             "status": ["in", ["Draft", "Pending Approval", "Approved"]]

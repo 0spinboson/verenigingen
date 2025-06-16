@@ -123,7 +123,7 @@ def send_application_notifications(member):
     # Notify association managers
     managers = frappe.get_all(
         "Has Role",
-        filters={"role": "Verenigingen Manager"},
+        filters={"role": "Verenigingen Administrator"},
         fields=["parent as user"]
     )
     recipients.extend([m.user for m in managers])

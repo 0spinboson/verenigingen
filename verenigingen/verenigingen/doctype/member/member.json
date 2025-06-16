@@ -333,7 +333,7 @@
    "fieldname": "first_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Roepnaam",
+   "label": "Preferred Name",
    "reqd": 1
   },
   {
@@ -848,7 +848,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Verenigingen Manager",
+   "role": "Verenigingen Administrator",
    "share": 1,
    "write": 1
   },
@@ -867,7 +867,7 @@
   {
    "permlevel": 1,
    "read": 1,
-   "role": "Verenigingen Manager",
+   "role": "Verenigingen Administrator",
    "write": 1
   }
  ],
