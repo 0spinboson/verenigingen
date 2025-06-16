@@ -238,12 +238,12 @@ function handle_region_change(frm) {
 function handle_published_change(frm) {
     if (frm.doc.published) {
         frappe.show_alert({
-            message: __('Chapter is now published and visible to members'),
+            message: __('Chapter is now public and visible to members'),
             indicator: 'green'
         }, 5);
     } else {
         frappe.show_alert({
-            message: __('Chapter is now unpublished and hidden from members'),
+            message: __('Chapter is now private and hidden from members'),
             indicator: 'orange'
         }, 5);
     }

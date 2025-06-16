@@ -313,9 +313,10 @@ on_logout = "verenigingen.auth_hooks.on_logout"
 # -----------------------
 # Override core ERPNext doctypes with custom functionality
 
-override_doctype_class = {
-	"Payment Entry": "verenigingen.overrides.payment_entry.PaymentEntry"
-}
+# override_doctype_class = {
+#	"Payment Entry": "verenigingen.overrides.payment_entry.PaymentEntry"
+# }
+# Note: Payment Entry override removed - now using standard Sales Invoice flow for donations
 
 # User Data Protection
 # --------------------
