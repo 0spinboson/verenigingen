@@ -8,18 +8,18 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Verenigingen brand colors - Blood Red, Pine Green, Royal Purple
+        // Verenigingen brand colors - RSP Red, Pine Green, Royal Purple
         primary: {
           50: '#fef2f2',
           100: '#fee2e2',
           200: '#fecaca',
           300: '#fca5a5',
           400: '#f87171',
-          500: '#8B0000',  // Blood Red - Main brand color
-          600: '#7A0000',
-          700: '#660000',
-          800: '#520000',
-          900: '#3D0000',
+          500: '#cf3131',  // RSP Red - Main brand color
+          600: '#b82828',
+          700: '#a01f1f',
+          800: '#891717',
+          900: '#721212',
         },
         secondary: {
           50: '#f0f9f0',
@@ -75,8 +75,11 @@ module.exports = {
           200: '#fecaca',
           300: '#fca5a5',
           400: '#f87171',
-          500: '#8B0000',  // Blood Red for danger
-          600: '#7A0000',
+          500: '#cf3131',  // RSP Red for danger
+          600: '#b82828',
+          700: '#a01f1f',
+          800: '#891717',
+          900: '#721212',
         }
       },
       fontFamily: {

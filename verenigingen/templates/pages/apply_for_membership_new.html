@@ -7,7 +7,7 @@
 {% endblock %}
 
 {% block page_content %}
-<div class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
+<div class="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 py-8">
     <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         
         <!-- Organization Logo & Header -->
@@ -907,10 +907,10 @@ class MembershipApplicationTailwind {
                         try {
                             const age = this.calculateAge(field.value);
                             
-                            if (age < 16) {
+                            if (age < 14) {
                                 isValid = false;
-                                errorMessage = 'You must be at least 16 years old to apply for membership';
-                            } else if (age > 120) {
+                                errorMessage = 'You must be at least 14 years old to apply for membership';
+                            } else if (age > 98) {
                                 isValid = false;
                                 errorMessage = 'Please enter a valid birth date';
                             }
@@ -1016,13 +1016,7 @@ class MembershipApplicationTailwind {
             birthDateField.parentElement.appendChild(ageInfo);
         }
         
-        // Suggest appropriate membership type based on age
-        let suggestion = '';
-        if (age <= 25) {
-            suggestion = ' (Consider our Student Member option if you\'re a student!)';
-        }
-        
-        ageInfo.textContent = `Age: ${age} years${suggestion}`;
+        ageInfo.textContent = `Age: ${age} years`;
     }
     
     nextStep(e) {

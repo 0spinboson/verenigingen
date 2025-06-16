@@ -7,11 +7,11 @@
   --color-primary-200: #fecaca;
   --color-primary-300: #fca5a5;
   --color-primary-400: #f87171;
-  --color-primary-500: #8B0000;  /* Blood Red */
-  --color-primary-600: #7A0000;
-  --color-primary-700: #660000;
-  --color-primary-800: #520000;
-  --color-primary-900: #3D0000;
+  --color-primary-500: #cf3131;  /* RSP Red */
+  --color-primary-600: #b82828;
+  --color-primary-700: #a01f1f;
+  --color-primary-800: #891717;
+  --color-primary-900: #721212;
   
   --color-secondary-50: #f0f9f0;
   --color-secondary-100: #dcf2dc;
@@ -51,11 +51,11 @@
   --color-danger-200: #fecaca;
   --color-danger-300: #fca5a5;
   --color-danger-400: #f87171;
-  --color-danger-500: #8B0000;  /* Blood Red */
-  --color-danger-600: #7A0000;
-  --color-danger-700: #660000;
-  --color-danger-800: #520000;
-  --color-danger-900: #3D0000;
+  --color-danger-500: #cf3131;  /* RSP Red */
+  --color-danger-600: #b82828;
+  --color-danger-700: #a01f1f;
+  --color-danger-800: #891717;
+  --color-danger-900: #721212;
   
   --color-warning-50: #fffbeb;
   --color-warning-100: #fef3c7;
@@ -82,7 +82,8 @@
   }
   
   .form-header h3 {
-    @apply text-white text-lg font-semibold mb-0;
+    @apply text-white text-xl font-bold mb-0 tracking-wide;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
   }
   
   .form-body {
