@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "app": "verenigingen",
  "autoname": "field:donation_type",
  "creation": "2017-09-19 16:19:16.639635",
  "doctype": "DocType",
@@ -41,7 +42,6 @@
   }
  ],
  "quick_entry": 1,
- "restrict_to_domain": "Verenigingen",
  "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",

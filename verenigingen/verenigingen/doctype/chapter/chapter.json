@@ -2,11 +2,14 @@
  "actions": [],
  "allow_guest_to_view": 1,
  "allow_rename": 1,
+ "app": "verenigingen",
  "autoname": "prompt",
  "creation": "2017-09-14 13:36:03.904702",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
+ "has_web_view": 1,
+ "is_published_field": "published",
  "field_order": [
   "chapter_head",
   "column_break_3",
@@ -17,8 +20,6 @@
   "introduction",
   "meetup_embed_html",
   "address",
-  "route",
-  "published",
   "chapter_members",
   "members"
  ],
@@ -104,8 +105,6 @@
    "permlevel": 1
   }
  ],
- "has_web_view": 1,
- "is_published_field": "published",
  "links": [],
  "modified": "2025-06-14 18:25:15.774344",
  "modified_by": "Administrator",
@@ -153,7 +152,6 @@
   }
  ],
  "quick_entry": 1,
- "restrict_to_domain": "Verenigingen",
  "route": "chapters",
  "row_format": "Dynamic",
  "sort_field": "modified",

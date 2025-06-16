@@ -1,6 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
+ "app": "verenigingen",
  "autoname": "naming_series:",
  "creation": "2017-09-19 16:20:27.510196",
  "doctype": "DocType",
@@ -319,7 +320,6 @@
    "write": 1
   }
  ],
- "restrict_to_domain": "Verenigingen",
  "show_name_in_global_search": 1,
  "show_preview_popup": 1,
  "show_title_field_in_link": 1,
