@@ -23,7 +23,7 @@ frappe.ui.form.on('Volunteer Expense', {
 		}
 		
 		// Add reimbursed button for approved expenses
-		if (frm.doc.status === 'Approved' && frappe.user.has_role(['Verenigingen Manager', 'Chapter Board Member'])) {
+		if (frm.doc.status === 'Approved' && frappe.user.has_role(['Verenigingen Administrator', 'Chapter Board Member'])) {
 			frm.add_custom_button(__('Mark as Reimbursed'), function() {
 				mark_reimbursed(frm);
 			}, __('Actions'));

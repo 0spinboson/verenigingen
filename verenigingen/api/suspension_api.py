@@ -108,7 +108,7 @@ def _can_suspend_member_fallback(member_name):
     user = frappe.session.user
     
     # System managers and Association managers always can
-    admin_roles = ["System Manager", "Verenigingen Manager"]
+    admin_roles = ["System Manager", "Verenigingen Administrator"]
     user_roles = frappe.get_roles(user)
     if any(role in user_roles for role in admin_roles):
         return True

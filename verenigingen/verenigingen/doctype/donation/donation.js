@@ -12,7 +12,7 @@ frappe.ui.form.on('Donation', {
 
 	make_payment_entry: function(frm) {
 		return frappe.call({
-			method: 'verenigingen.verenigingen.custom_doctype.payment_entry.get_donation_payment_entry',
+			method: 'verenigingen.utils.payment_utils.get_donation_payment_entry',
 			args: {
 				'dt': frm.doc.doctype,
 				'dn': frm.doc.name

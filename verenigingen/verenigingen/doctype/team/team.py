@@ -432,7 +432,7 @@ def get_team_permission_query_conditions(user=None):
         if not user:
             user = frappe.session.user
             
-        if "System Manager" in frappe.get_roles(user) or "Verenigingen Manager" in frappe.get_roles(user):
+        if "System Manager" in frappe.get_roles(user) or "Verenigingen Administrator" in frappe.get_roles(user):
             return ""
             
         # Get member record for the user

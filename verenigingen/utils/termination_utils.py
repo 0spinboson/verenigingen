@@ -287,7 +287,7 @@ def generate_weekly_termination_report():
         
         # Send report to administrators
         administrators = frappe.get_all("User", 
-            filters={"role_profile_name": ["like", "%Verenigingen Manager%"]},
+            filters={"role_profile_name": ["like", "%Verenigingen Administrator%"]},
             fields=["email"]
         )
         

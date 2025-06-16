@@ -228,10 +228,10 @@ fixtures = [
         "doctype": "Role",
         "filters": [
             ["name", "in", [
-                "Verenigingen Manager",
-                "Governance Auditor",
+                "Verenigingen Administrator",
+                "Governance Auditor", 
                 "Chapter Board Member",
-                "Member Portal User"
+                "Verenigingen Member"
             ]]
         ]
     },
@@ -308,6 +308,14 @@ on_logout = "verenigingen.auth_hooks.on_logout"
 # Exempt linked doctypes from being automatically cancelled
 #
 # auto_cancel_exempted_doctypes = ["Auto Repeat"]
+
+# DocType Class Overrides
+# -----------------------
+# Override core ERPNext doctypes with custom functionality
+
+override_doctype_class = {
+	"Payment Entry": "verenigingen.overrides.payment_entry.PaymentEntry"
+}
 
 # User Data Protection
 # --------------------

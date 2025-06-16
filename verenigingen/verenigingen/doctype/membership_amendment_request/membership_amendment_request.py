@@ -499,16 +499,21 @@ def create_fee_change_amendment(member_name, new_amount, reason, effective_date=
     return amendment
 
 @frappe.whitelist()
-def get_member_pending_amendments(member_name):
-    """Get pending amendments for a member"""
-    amendments = frappe.get_all(
-        "Membership Amendment Request",
-        filters={
-            "member": member_name,
-            "status": ["in", ["Draft", "Pending Approval", "Approved"]]
-        },
-        fields=["name", "amendment_type", "status", "requested_amount", "effective_date", "reason"],
-        order_by="creation desc"
-    )
-    
-    return amendments
+def get_member_pending_contribution_amendments(member_name):
+    """Get pending contribution amendments for a member"""
+    try:
+        amendments = frappe.get_all(
+            "Contribution Amendment Request",
+            filters={
+                "member": member_name,
+                "status": ["in", ["Draft", "Pending Approval", "Approved"]]
+            },
+            fields=["name", "amendment_type", "status", "requested_amount", "effective_date", "reason"],
+            order_by="creation desc"
+        )
+        
+        return amendments
+    except Exception as e:
+        # Handle case where Contribution Amendment Request doctype doesn't exist
+        frappe.log_error(f"Error getting member amendments: {str(e)}", "Contribution Amendment Request Error")
+        return []

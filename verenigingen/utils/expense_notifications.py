@@ -248,7 +248,7 @@ class ExpenseNotificationManager:
     def _get_association_manager_emails(self):
         """Get association manager email addresses"""
         managers = frappe.get_all("Has Role",
-            filters={"role": "Verenigingen Manager"},
+            filters={"role": "Verenigingen Administrator"},
             fields=["parent"]
         )
         return [frappe.db.get_value("User", m.parent, "email") for m in managers 

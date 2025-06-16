@@ -204,7 +204,7 @@ function can_approve_request(frm) {
     }
     
     // Association managers can approve disciplinary terminations
-    if (user_roles.includes('Verenigingen Manager') && frm.doc.requires_secondary_approval) {
+    if (user_roles.includes('Verenigingen Administrator') && frm.doc.requires_secondary_approval) {
         return true;
     }
     

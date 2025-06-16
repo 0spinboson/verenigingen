@@ -33,21 +33,21 @@ def create_termination_workflow_corrected():
         workflow_doc.append("states", {
             "state": "Pending",
             "doc_status": "0", 
-            "allow_edit": "Verenigingen Manager"  # Corrected role name
+            "allow_edit": "Verenigingen Administrator"  # Corrected role name
         })
         
         # State 3: Approved
         workflow_doc.append("states", {
             "state": "Approved",
             "doc_status": "0",
-            "allow_edit": "Verenigingen Manager"  # Corrected role name
+            "allow_edit": "Verenigingen Administrator"  # Corrected role name
         })
         
         # State 4: Rejected
         workflow_doc.append("states", {
             "state": "Rejected",
             "doc_status": "0",
-            "allow_edit": "Verenigingen Manager"  # Corrected role name
+            "allow_edit": "Verenigingen Administrator"  # Corrected role name
         })
         
         # State 5: Executed
@@ -60,12 +60,12 @@ def create_termination_workflow_corrected():
         # Add transitions with SINGLE roles only
         # We'll create multiple transitions for different roles if needed
         
-        # Draft -> Pending (Submit) - for Verenigingen Manager
+        # Draft -> Pending (Submit) - for Verenigingen Administrator
         workflow_doc.append("transitions", {
             "state": "Draft",
             "action": "Submit",
             "next_state": "Pending",
-            "allowed": "Verenigingen Manager"  # Corrected role name
+            "allowed": "Verenigingen Administrator"  # Corrected role name
         })
         
         # Draft -> Pending (Submit) - for System Manager  
@@ -81,7 +81,7 @@ def create_termination_workflow_corrected():
             "state": "Pending",
             "action": "Approve",
             "next_state": "Approved",
-            "allowed": "Verenigingen Manager"  # Corrected role name
+            "allowed": "Verenigingen Administrator"  # Corrected role name
         })
         
         # Pending -> Approved (Approve) - for System Manager
@@ -97,7 +97,7 @@ def create_termination_workflow_corrected():
             "state": "Pending",
             "action": "Reject",
             "next_state": "Rejected",
-            "allowed": "Verenigingen Manager"  # Corrected role name
+            "allowed": "Verenigingen Administrator"  # Corrected role name
         })
         
         # Pending -> Rejected (Reject) - for System Manager
@@ -113,7 +113,7 @@ def create_termination_workflow_corrected():
             "state": "Approved",
             "action": "Execute",
             "next_state": "Executed",
-            "allowed": "Verenigingen Manager"  # Corrected role name
+            "allowed": "Verenigingen Administrator"  # Corrected role name
         })
         
         # Approved -> Executed (Execute) - for System Manager
@@ -129,7 +129,7 @@ def create_termination_workflow_corrected():
             "state": "Draft",
             "action": "Approve",
             "next_state": "Approved",
-            "allowed": "Verenigingen Manager"  # Corrected role name
+            "allowed": "Verenigingen Administrator"  # Corrected role name
         })
         
         # Direct Draft -> Approved for simple cases - System Manager
@@ -187,7 +187,7 @@ def create_appeals_workflow_corrected():
         workflow_doc.append("states", {
             "state": "Pending",
             "doc_status": "0",
-            "allow_edit": "Verenigingen Manager"  # Corrected role name
+            "allow_edit": "Verenigingen Administrator"  # Corrected role name
         })
         
         workflow_doc.append("states", {
@@ -218,7 +218,7 @@ def create_appeals_workflow_corrected():
             "state": "Draft",
             "action": "Submit",
             "next_state": "Pending",
-            "allowed": "Verenigingen Manager"  # Corrected role name
+            "allowed": "Verenigingen Administrator"  # Corrected role name
         })
         
         # Pending -> Approved (Approve) - Association Manager
@@ -226,7 +226,7 @@ def create_appeals_workflow_corrected():
             "state": "Pending",
             "action": "Approve",
             "next_state": "Approved",
-            "allowed": "Verenigingen Manager"  # Corrected role name
+            "allowed": "Verenigingen Administrator"  # Corrected role name
         })
         
         # Pending -> Approved (Approve) - System Manager
@@ -242,7 +242,7 @@ def create_appeals_workflow_corrected():
             "state": "Pending",
             "action": "Reject",
             "next_state": "Rejected",
-            "allowed": "Verenigingen Manager"  # Corrected role name
+            "allowed": "Verenigingen Administrator"  # Corrected role name
         })
         
         # Pending -> Rejected (Reject) - System Manager
@@ -335,7 +335,7 @@ def validate_prerequisites():
             issues.append(f"Missing DocType: {doctype}")
     
     # Check required roles exist - use correct role names
-    required_roles = ["System Manager", "Verenigingen Manager"]
+    required_roles = ["System Manager", "Verenigingen Administrator"]
     for role in required_roles:
         if not frappe.db.exists("Role", role):
             issues.append(f"Missing Role: {role}")

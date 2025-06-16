@@ -78,7 +78,7 @@ frappe.ui.form.on('Member', {
         add_member_id_buttons(frm);
         
         // Button to manually refresh fee section visibility
-        if (frappe.user.has_role(['System Manager', 'Membership Manager', 'Verenigingen Manager'])) {
+        if (frappe.user.has_role(['System Manager', 'Membership Manager', 'Verenigingen Administrator'])) {
             frm.add_custom_button(__('Refresh Fee Section'), function() {
                 ensure_fee_management_section_visibility(frm);
                 frappe.show_alert('Fee section visibility refreshed', 3);
@@ -643,7 +643,7 @@ function add_fee_management_buttons(frm) {
         }, __('Fee Management'));
         
         // Add button to change fee if user has permission
-        if (frappe.user.has_role(['System Manager', 'Membership Manager', 'Verenigingen Manager'])) {
+        if (frappe.user.has_role(['System Manager', 'Membership Manager', 'Verenigingen Administrator'])) {
             frm.add_custom_button(__('Override Membership Fee'), function() {
                 show_fee_override_dialog(frm);
             }, __('Fee Management'));
@@ -665,7 +665,7 @@ function add_fee_management_buttons(frm) {
 
 function ensure_fee_management_section_visibility(frm) {
     // Ensure fee management section is visible for authorized users
-    const hasRequiredRole = frappe.user.has_role(['System Manager', 'Membership Manager', 'Verenigingen Manager']);
+    const hasRequiredRole = frappe.user.has_role(['System Manager', 'Membership Manager', 'Verenigingen Administrator']);
     const shouldShow = !frm.doc.__islocal && hasRequiredRole;
     
     if (shouldShow) {
@@ -1334,7 +1334,7 @@ function display_amendment_status(frm) {
     if (!frm.doc.name) return;
     
     frappe.call({
-        method: 'verenigingen.verenigingen.doctype.membership_amendment_request.membership_amendment_request.get_member_pending_amendments',
+        method: 'verenigingen.verenigingen.doctype.membership_amendment_request.membership_amendment_request.get_member_pending_contribution_amendments',
         args: {
             member_name: frm.doc.name
         },

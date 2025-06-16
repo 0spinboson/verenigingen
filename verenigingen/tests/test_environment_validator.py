@@ -149,7 +149,7 @@ class TestEnvironmentValidator:
             "Member", "Membership", "Membership Type", "Chapter",
             "Volunteer", "Volunteer Expense", "Team", "SEPA Mandate",
             "Direct Debit Batch", "Donation", "Donor",
-            "Membership Termination Request", "Membership Amendment Request"
+            "Membership Termination Request", "Contribution Amendment Request"
         ]
         
         missing_doctypes = []

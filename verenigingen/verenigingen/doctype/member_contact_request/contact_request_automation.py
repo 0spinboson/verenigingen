@@ -120,7 +120,7 @@ def escalate_contact_request(request, overdue_days):
     
     # Get managers to escalate to
     managers = frappe.get_all("Has Role", 
-        filters={"role": "Verenigingen Manager", "parenttype": "User"},
+        filters={"role": "Verenigingen Administrator", "parenttype": "User"},
         fields=["parent"]
     )
     

@@ -236,7 +236,7 @@ frappe.listview_settings['Member'] = {
         });
         
         // Add fix for backend members showing as pending
-        if (frappe.user.has_role(['System Manager', 'Verenigingen Manager'])) {
+        if (frappe.user.has_role(['System Manager', 'Verenigingen Administrator'])) {
             listview.page.add_menu_item(__('Fix Backend Member Status'), function() {
                 frappe.confirm(
                     __('This will fix backend-created members that are incorrectly showing as "Pending". Continue?'),

@@ -3,7 +3,7 @@ frappe.ui.form.on('Member', {
         // Add application review buttons if member is pending
         if (frm.doc.application_status === 'Pending' && frm.doc.status === 'Pending') {
             // Check if user has appropriate permissions
-            if (frappe.user.has_role(['Verenigingen Manager', 'Membership Manager']) || 
+            if (frappe.user.has_role(['Verenigingen Administrator', 'Membership Manager']) || 
                 is_chapter_board_member_with_permissions(frm)) {
                 
                 // Add review section

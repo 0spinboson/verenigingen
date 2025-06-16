@@ -320,7 +320,7 @@ def get_user_accessible_chapters():
     user = frappe.session.user
     
     # System managers and Association managers see all
-    admin_roles = ["System Manager", "Verenigingen Manager"]
+    admin_roles = ["System Manager", "Verenigingen Administrator"]
     if any(role in frappe.get_roles(user) for role in admin_roles):
         return None  # No filter - see all
     

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Test script to analyze the filtering logic in get_member_pending_amendments
+Test script to analyze the filtering logic in get_member_pending_contribution_amendments
 """
 
 import sys
@@ -9,10 +9,10 @@ import sys
 def analyze_filtering_logic():
     """Analyze the filtering logic without database dependencies"""
     
-    print("=== Membership Amendment Request Filtering Analysis ===\n")
+    print("=== Contribution Amendment Request Filtering Analysis ===\n")
     
     # Show the current filtering logic
-    print("Current filtering logic in get_member_pending_amendments:")
+    print("Current filtering logic in get_member_pending_contribution_amendments:")
     print("filters = {")
     print('    "member": member_name,')
     print('    "status": ["in", ["Draft", "Pending Approval", "Approved"]]')
@@ -20,8 +20,8 @@ def analyze_filtering_logic():
     print()
     
     print("Field verification from doctype JSON:")
-    print("✓ member field exists (line 62-66 in JSON)")
-    print("✓ status field exists (line 89-96 in JSON)")
+    print("✓ member field exists (in Contribution Amendment Request JSON)")
+    print("✓ status field exists (in Contribution Amendment Request JSON)")
     print("✓ Status options include all filtered values:")
     print("  - Draft")
     print("  - Pending Approval") 
@@ -47,10 +47,10 @@ def analyze_filtering_logic():
     
     print("Debugging recommendations:")
     print("1. Check if table exists: SHOW TABLES LIKE '%Amendment%'")
-    print("2. Check table structure: DESCRIBE `tabMembership Amendment Request`")
-    print("3. Check for any records: SELECT COUNT(*) FROM `tabMembership Amendment Request`")
-    print("4. Verify member names: SELECT DISTINCT member FROM `tabMembership Amendment Request`")
-    print("5. Test without member filter: SELECT * FROM `tabMembership Amendment Request` WHERE status IN ('Draft', 'Pending Approval', 'Approved')")
+    print("2. Check table structure: DESCRIBE `tabContribution Amendment Request`")
+    print("3. Check for any records: SELECT COUNT(*) FROM `tabContribution Amendment Request`")
+    print("4. Verify member names: SELECT DISTINCT member FROM `tabContribution Amendment Request`")
+    print("5. Test without member filter: SELECT * FROM `tabContribution Amendment Request` WHERE status IN ('Draft', 'Pending Approval', 'Approved')")
     print()
     
     print("Filter logic validation:")

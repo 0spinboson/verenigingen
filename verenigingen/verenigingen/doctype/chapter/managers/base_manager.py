@@ -161,7 +161,7 @@ class BaseManager(ABC):
             return True
 
         # Association managers can manage chapters
-        if "Verenigingen Manager" in frappe.get_roles(user):
+        if "Verenigingen Administrator" in frappe.get_roles(user):
             return True
 
         # Check if user is a board member of this chapter

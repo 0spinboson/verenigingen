@@ -13,7 +13,7 @@ def run_pre_setup_diagnostics():
     print("\n1. ROLE VERIFICATION")
     print("-" * 20)
     
-    required_roles = ["System Manager", "Verenigingen Manager"]
+    required_roles = ["System Manager", "Verenigingen Administrator"]
     existing_roles = [r.name for r in frappe.get_all("Role", fields=["name"])]
     
     for role in required_roles:
@@ -236,18 +236,18 @@ def fix_common_issues():
     
     fixes_applied = 0
     
-    # Fix 1: Create Verenigingen Manager role
-    if not frappe.db.exists("Role", "Verenigingen Manager"):
-        print("🔧 Creating Verenigingen Manager role...")
+    # Fix 1: Create Verenigingen Administrator role
+    if not frappe.db.exists("Role", "Verenigingen Administrator"):
+        print("🔧 Creating Verenigingen Administrator role...")
         try:
             role = frappe.get_doc({
                 "doctype": "Role",
-                "role_name": "Verenigingen Manager",
+                "role_name": "Verenigingen Administrator",
                 "desk_access": 1,
                 "is_custom": 1
             })
             role.insert(ignore_permissions=True)
-            print("   ✅ Verenigingen Manager role created")
+            print("   ✅ Verenigingen Administrator role created")
             fixes_applied += 1
         except Exception as e:
             print(f"   ❌ Could not create role: {str(e)}")

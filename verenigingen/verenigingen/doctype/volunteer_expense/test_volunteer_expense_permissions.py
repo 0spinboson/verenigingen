@@ -124,8 +124,8 @@ class TestVolunteerExpensePermissions(unittest.TestCase):
 		# Verenigingen manager
 		cls.manager_user = cls.create_test_user(
 			"manager@test.com",
-			"Verenigingen Manager",
-			["Verenigingen Manager"],
+			"Verenigingen Administrator",
+			["Verenigingen Administrator"],
 			None
 		)
 		
@@ -277,7 +277,7 @@ class TestVolunteerExpensePermissions(unittest.TestCase):
 		expense.delete()
 	
 	def test_can_approve_expense_verenigingen_manager(self):
-		"""Test Verenigingen Manager can approve any expense"""
+		"""Test Verenigingen Administrator can approve any expense"""
 		from verenigingen.verenigingen.doctype.volunteer_expense.volunteer_expense import can_approve_expense
 		
 		# Create test expense
@@ -289,7 +289,7 @@ class TestVolunteerExpensePermissions(unittest.TestCase):
 		
 		# Test with manager user
 		with patch('frappe.session.user', self.manager_user["user"].email):
-			with patch('frappe.get_roles', return_value=["Verenigingen Manager"]):
+			with patch('frappe.get_roles', return_value=["Verenigingen Administrator"]):
 				can_approve = can_approve_expense(expense)
 				self.assertTrue(can_approve)
 		

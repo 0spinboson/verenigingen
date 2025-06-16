@@ -459,7 +459,7 @@ export class MemberManager {
     
     canManageMembers() {
         // Check if user has permission to manage members
-        return frappe.user_roles.includes('Verenigingen Manager') || 
+        return frappe.user_roles.includes('Verenigingen Administrator') || 
                frappe.user_roles.includes('System Manager');
     }
     

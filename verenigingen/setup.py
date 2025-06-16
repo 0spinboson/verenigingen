@@ -352,7 +352,7 @@ def setup_termination_roles_and_permissions():
         # Create required roles
         required_roles = [
             {
-                "role_name": "Verenigingen Manager",
+                "role_name": "Verenigingen Administrator",
                 "desk_access": 1,
                 "is_custom": 1
             }
@@ -417,7 +417,7 @@ def check_termination_system_status():
         status["workflows_exist"] = workflow_count > 0
         
         # Check roles
-        status["roles_exist"] = frappe.db.exists("Role", "Verenigingen Manager")
+        status["roles_exist"] = frappe.db.exists("Role", "Verenigingen Administrator")
         
         return {"success": True, "status": status}
         
@@ -453,10 +453,10 @@ def run_termination_diagnostics():
     print("\n2. ROLE CHECK")
     print("-" * 12)
     
-    if frappe.db.exists("Role", "Verenigingen Manager"):
-        print("   ✅ Verenigingen Manager")
+    if frappe.db.exists("Role", "Verenigingen Administrator"):
+        print("   ✅ Verenigingen Administrator")
     else:
-        print("   ❌ Verenigingen Manager - MISSING")
+        print("   ❌ Verenigingen Administrator - MISSING")
         all_good = False
     
     # 3. Check workflows

@@ -148,11 +148,11 @@ export const ChapterConfig = {
             notes: 2000
         },
         requiredPermissions: {
-            board_management: ['Verenigingen Manager', 'System Manager'],
-            member_management: ['Verenigingen Manager', 'System Manager', 'Chapter Board Member'],
-            communication: ['Verenigingen Manager', 'System Manager', 'Chapter Board Member'],
-            statistics: ['Verenigingen Manager', 'System Manager', 'Chapter Board Member'],
-            export_data: ['Verenigingen Manager', 'System Manager']
+            board_management: ['Verenigingen Administrator', 'System Manager'],
+            member_management: ['Verenigingen Administrator', 'System Manager', 'Chapter Board Member'],
+            communication: ['Verenigingen Administrator', 'System Manager', 'Chapter Board Member'],
+            statistics: ['Verenigingen Administrator', 'System Manager', 'Chapter Board Member'],
+            export_data: ['Verenigingen Administrator', 'System Manager']
         }
     },
     
@@ -261,12 +261,12 @@ export const ChapterConfig = {
     workflows: {
         boardAppointment: {
             requireApproval: true,
-            approvers: ['Verenigingen Manager'],
+            approvers: ['Verenigingen Administrator'],
             notificationTemplate: 'board_appointment_approval'
         },
         memberTermination: {
             requireApproval: true,
-            approvers: ['Verenigingen Manager', 'System Manager'],
+            approvers: ['Verenigingen Administrator', 'System Manager'],
             gracePeriodDays: 30
         }
     },

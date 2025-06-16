@@ -141,7 +141,7 @@ class Donation(Document):
 			frappe.throw(_('You need to set <b>Payment Account</b> for Donation in {0}').format(
 				get_link_to_form('Verenigingen Settings', 'Verenigingen Settings')))
 
-		from verenigingen.verenigingen.custom_doctype.payment_entry import get_donation_payment_entry
+		from verenigingen.utils.payment_utils import get_donation_payment_entry
 
 		frappe.flags.ignore_account_permission = True
 		pe = get_donation_payment_entry(dt=self.doctype, dn=self.name)

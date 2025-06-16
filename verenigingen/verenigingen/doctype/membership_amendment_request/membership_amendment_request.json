@@ -1,7 +1,7 @@
 {
  "actions": [],
- 
- "app": "verenigingen","autoname": "format:AMEND-{YYYY}-{#####}",
+ "app": "verenigingen",
+ "autoname": "format:AMEND-{YYYY}-{#####}",
  "creation": "2025-06-11 13:36:00",
  "doctype": "DocType",
  "engine": "InnoDB",

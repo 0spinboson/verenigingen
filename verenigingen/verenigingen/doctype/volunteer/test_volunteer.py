@@ -807,7 +807,7 @@ class TestVolunteer(VereningingenTestCase):
         test_users = [
             "Administrator",
             "System Manager", 
-            "Verenigingen Manager",
+            "Verenigingen Administrator",
             "Member"
         ]
         
