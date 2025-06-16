@@ -16,7 +16,7 @@ required_apps = ["erpnext", "payments", "hrms"]
 
 # Includes in <head>
 # ------------------
-on_app_init = ["verenigingen.subscription_override.setup_subscription_override"]
+on_app_init = ["verenigingen.setup.doctype_overrides.setup_subscription_override"]
 app_include_css = [
     "/assets/verenigingen/css/verenigingen_custom.css",
     "/assets/verenigingen/css/volunteer_portal.css"
@@ -97,7 +97,7 @@ scheduler_events = {
         "verenigingen.verenigingen.doctype.membership.scheduler.process_expired_memberships",
         "verenigingen.verenigingen.doctype.membership.scheduler.send_renewal_reminders",
         "verenigingen.verenigingen.doctype.membership.scheduler.process_auto_renewals",
-        "verenigingen.subscription_handler.process_all_subscriptions",
+        "verenigingen.utils.subscription_processing.process_all_subscriptions",
         "verenigingen.verenigingen.doctype.membership.scheduler.notify_about_orphaned_records",
         "verenigingen.api.membership_application_review.send_overdue_notifications",
         

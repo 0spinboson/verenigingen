@@ -269,7 +269,7 @@ def setup_termination_system_integration():
         setup_termination_settings()
         
         # Step 2: Setup workflows (using separate workflow setup module)
-        from verenigingen.corrected_workflow_setup import setup_workflows_corrected
+        from verenigingen.setup.workflow_setup import setup_workflows_corrected
         workflow_success = setup_workflows_corrected()
         
         if workflow_success:
@@ -331,7 +331,7 @@ def setup_termination_workflows_and_templates():
     
     try:
         # Try to import and run the workflow setup
-        from verenigingen.corrected_workflow_setup import setup_workflows_corrected
+        from verenigingen.setup.workflow_setup import setup_workflows_corrected
 
         success = setup_workflows_corrected()        
                 
