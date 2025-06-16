@@ -42,7 +42,6 @@
   }
  ],
  "quick_entry": 1,
- "restrict_to_domain": "Verenigingen",
  "row_format": "Dynamic",
  "sort_field": "modified",
  "sort_order": "DESC",

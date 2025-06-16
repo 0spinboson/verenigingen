@@ -821,3 +821,284 @@ def test_direct_url_access():
 		results["meta_test"] = f"Error: {str(e)}"
 	
 	return results
+
+
+@frappe.whitelist()
+def debug_doctype_routing():
+	"""Debug the doctype routing issue in detail"""
+	
+	results = {"debug_info": [], "routing_test": ""}
+	
+	doctypes_to_test = ['Chapter', 'Donor', 'Donation Type', 'Donation']
+	
+	for doctype_name in doctypes_to_test:
+		debug_info = {"doctype": doctype_name, "checks": []}
+		
+		try:
+			# Check 1: Does the doctype exist in tabDocType?
+			dt_exists = frappe.db.exists("DocType", doctype_name)
+			debug_info["checks"].append(f"DocType exists: {dt_exists}")
+			
+			# Check 2: What is the app assignment?
+			dt_info = frappe.db.get_value("DocType", doctype_name, ["app", "module", "istable", "issingle"], as_dict=True)
+			debug_info["checks"].append(f"App info: {dt_info}")
+			
+			# Check 3: Does frappe.get_meta work?
+			try:
+				meta = frappe.get_meta(doctype_name)
+				debug_info["checks"].append(f"Meta accessible: True, module={meta.module}")
+			except Exception as e:
+				debug_info["checks"].append(f"Meta error: {str(e)}")
+			
+			# Check 4: What happens with desk.page routing?
+			try:
+				# This is what happens when you click a workspace link
+				from frappe.desk.desk_page import get_desk_page
+				# The error suggests it's looking for a Page, let's see what happens
+				page_name = doctype_name.lower()
+				page_exists = frappe.db.exists("Page", page_name)
+				debug_info["checks"].append(f"Page '{page_name}' exists: {page_exists}")
+				
+				# Check the actual URL that would be generated
+				url_name = doctype_name.lower().replace(' ', '-')
+				debug_info["checks"].append(f"Expected URL: /app/{url_name}")
+				
+			except Exception as e:
+				debug_info["checks"].append(f"Desk page error: {str(e)}")
+			
+			# Check 5: Test the actual workspace link
+			try:
+				workspace_link = frappe.db.get_value("Workspace Link", 
+					{"parent": "Verenigingen", "link_to": doctype_name}, 
+					["link_type", "link_to", "label"], as_dict=True)
+				debug_info["checks"].append(f"Workspace link: {workspace_link}")
+			except Exception as e:
+				debug_info["checks"].append(f"Workspace link error: {str(e)}")
+				
+		except Exception as e:
+			debug_info["checks"].append(f"General error: {str(e)}")
+		
+		results["debug_info"].append(debug_info)
+	
+	# Test the routing system more directly
+	try:
+		# Check what pages actually exist in the system
+		existing_pages = frappe.db.sql("""
+			SELECT name, page_name, title, module 
+			FROM tabPage 
+			WHERE name IN ('chapter', 'donor', 'donation-type', 'donation')
+			OR page_name IN ('chapter', 'donor', 'donation-type', 'donation')
+		""", as_dict=True)
+		
+		results["existing_pages"] = existing_pages
+		
+		# Check how Frappe resolves URLs
+		test_urls = ['/app/chapter', '/app/donor', '/app/donation-type', '/app/donation']
+		results["url_resolution"] = []
+		
+		for url in test_urls:
+			try:
+				# This is a simplified version of what Frappe does internally
+				path_parts = url.strip('/').split('/')
+				if len(path_parts) >= 2 and path_parts[0] == 'app':
+					route_name = path_parts[1]
+					
+					# Check if it's a Page first (this might be the issue)
+					page_exists = frappe.db.exists("Page", route_name)
+					
+					# Check if it matches a DocType
+					doctype_candidates = frappe.db.sql("""
+						SELECT name FROM tabDocType 
+						WHERE LOWER(REPLACE(name, ' ', '-')) = %s
+						AND istable = 0 AND issingle = 0
+					""", route_name, as_dict=True)
+					
+					results["url_resolution"].append({
+						"url": url,
+						"route_name": route_name,
+						"page_exists": page_exists,
+						"doctype_candidates": doctype_candidates
+					})
+			except Exception as e:
+				results["url_resolution"].append({
+					"url": url,
+					"error": str(e)
+				})
+		
+	except Exception as e:
+		results["routing_test"] = f"Error: {str(e)}"
+	
+	return results
+
+
+@frappe.whitelist()
+def force_doctype_sync():
+	"""Force sync doctypes to ensure they're properly registered"""
+	
+	results = {"sync_results": [], "errors": []}
+	
+	doctypes_to_sync = ['Chapter', 'Donor', 'Donation Type', 'Donation']
+	
+	try:
+		# First, let's try to force sync these doctypes
+		for doctype_name in doctypes_to_sync:
+			try:
+				# Get the doctype document and force reload it
+				doc = frappe.get_doc("DocType", doctype_name)
+				
+				# Force reload the meta
+				frappe.clear_cache(doctype=doctype_name)
+				
+				# Re-register the doctype
+				from frappe.model.sync import sync_for
+				sync_for(doc.app)
+				
+				results["sync_results"].append(f"✓ Synced {doctype_name}")
+				
+			except Exception as e:
+				results["errors"].append(f"✗ Failed to sync {doctype_name}: {str(e)}")
+		
+		# Try to recreate the list view settings
+		frappe.clear_cache()
+		
+		# Force reload all doctypes for the app
+		from frappe.modules.import_file import import_files
+		app_path = frappe.get_app_path("verenigingen")
+		
+		results["sync_results"].append(f"✓ Cleared all caches")
+		results["sync_results"].append(f"✓ App path: {app_path}")
+		
+	except Exception as e:
+		results["errors"].append(f"General sync error: {str(e)}")
+	
+	# Test if the sync worked
+	try:
+		for doctype_name in doctypes_to_sync:
+			# Test if we can access it now
+			meta = frappe.get_meta(doctype_name)
+			count = frappe.db.count(doctype_name)
+			results["sync_results"].append(f"✓ {doctype_name}: meta OK, {count} records")
+			
+	except Exception as e:
+		results["errors"].append(f"Post-sync test error: {str(e)}")
+	
+	return results
+
+
+@frappe.whitelist()
+def test_workspace_links():
+	"""Test what happens when we simulate clicking workspace links"""
+	
+	results = {"tests": []}
+	
+	# Test all verenigingen workspace links
+	workspace_links = frappe.get_all("Workspace Link", 
+		filters={"parent": "Verenigingen", "link_type": "DocType"},
+		fields=["link_to", "label", "type"]
+	)
+	
+	for link in workspace_links:
+		test_result = {"doctype": link.link_to, "label": link.label}
+		
+		try:
+			# This simulates what happens when clicking a workspace link
+			# The frontend makes a call to get the doctype list
+			
+			# Test 1: Can we get the list?
+			records = frappe.get_list(link.link_to, limit=1)
+			test_result["get_list"] = f"✓ Success ({len(records)} found)"
+			
+			# Test 2: Can we get the meta?
+			meta = frappe.get_meta(link.link_to)
+			test_result["get_meta"] = f"✓ Success (module: {meta.module})"
+			
+			# Test 3: Check if it has web view enabled
+			dt_info = frappe.db.get_value("DocType", link.link_to, 
+				["has_web_view", "allow_guest_to_view"], as_dict=True)
+			test_result["web_view"] = f"has_web_view: {dt_info.has_web_view}, allow_guest: {dt_info.allow_guest_to_view}"
+			
+			# Test 4: Check permissions
+			has_read = frappe.has_permission(link.link_to, "read")
+			test_result["permissions"] = f"read: {has_read}"
+			
+		except Exception as e:
+			test_result["error"] = str(e)
+		
+		results["tests"].append(test_result)
+	
+	return results
+
+
+@frappe.whitelist()
+def debug_frontend_routing():
+	"""Debug what the frontend is actually requesting"""
+	
+	results = {"debug_info": {}}
+	
+	# Check current state after our fixes
+	doctypes_to_check = ['Chapter', 'Donor', 'Donation Type', 'Donation']
+	
+	for doctype_name in doctypes_to_check:
+		info = {"doctype": doctype_name}
+		
+		try:
+			# Get current doctype settings
+			dt_info = frappe.db.get_value("DocType", doctype_name, [
+				"has_web_view", "allow_guest_to_view", "route", "published"
+			], as_dict=True)
+			
+			info["settings"] = dt_info
+			
+			# Check if route field exists and has value
+			if hasattr(frappe.get_meta(doctype_name), 'has_field'):
+				meta = frappe.get_meta(doctype_name)
+				has_route_field = bool([f for f in meta.fields if f.fieldname == 'route'])
+				info["has_route_field"] = has_route_field
+				
+				# If it has route field, check if any records have routes set
+				if has_route_field:
+					routes_count = frappe.db.count(doctype_name, {"route": ["!=", ""]})
+					info["records_with_routes"] = routes_count
+			
+			# Check URL patterns that might conflict
+			expected_url = doctype_name.lower().replace(' ', '-')
+			info["expected_url"] = f"/app/{expected_url}"
+			
+			# Test the exact error condition
+			try:
+				# This is what's failing - trying to get a Page
+				page_exists = frappe.db.exists("Page", expected_url)
+				info["conflicting_page"] = page_exists
+			except Exception as e:
+				info["page_check_error"] = str(e)
+				
+		except Exception as e:
+			info["error"] = str(e)
+		
+		results["debug_info"][doctype_name] = info
+	
+	# Check if there are any cached routes that might conflict
+	try:
+		# Check website route rules that might conflict
+		website_routes = frappe.db.sql("""
+			SELECT name, route, ref_doctype 
+			FROM `tabWebsite Route` 
+			WHERE route IN ('chapter', 'donor', 'donation-type', 'donation')
+		""", as_dict=True)
+		
+		results["website_routes"] = website_routes
+		
+	except Exception as e:
+		results["website_routes_error"] = str(e)
+	
+	# Provide debugging instructions for browser console
+	results["browser_debug_instructions"] = {
+		"step1": "Open browser dev console (F12)",
+		"step2": "Go to Network tab",
+		"step3": "Click on Chapter workspace link",
+		"step4": "Look for the failing request in Network tab",
+		"step5": "Check the request URL and response",
+		"javascript_debug": "In console, run: frappe.route_options = {}; frappe.set_route('List', 'Chapter');"
+	}
+	
+	return results
