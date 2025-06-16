@@ -1,6 +1,7 @@
 {
  "actions": [],
- "allow_rename": 1,
+ 
+ "app": "verenigingen","allow_rename": 1,
  "autoname": "naming_series:",
  "creation": "2025-01-14 10:30:00.000000",
  "doctype": "DocType",

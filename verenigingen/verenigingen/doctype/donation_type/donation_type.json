@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "app": "verenigingen",
  "autoname": "field:donation_type",
  "creation": "2017-09-19 16:19:16.639635",
  "doctype": "DocType",

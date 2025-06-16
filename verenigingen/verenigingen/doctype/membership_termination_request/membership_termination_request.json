@@ -1,6 +1,7 @@
 {
  "actions": [],
- "autoname": "format:TERM-REQ-{YY}-{MM}-{####}",
+ 
+ "app": "verenigingen","autoname": "format:TERM-REQ-{YY}-{MM}-{####}",
  "creation": "2025-01-20 00:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",

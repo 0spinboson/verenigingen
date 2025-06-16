@@ -1,6 +1,7 @@
 {
  "actions": [],
- "creation": "2020-03-29 12:57:03.005120",
+ 
+ "app": "verenigingen","creation": "2020-03-29 12:57:03.005120",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",

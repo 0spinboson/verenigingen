@@ -1,6 +1,7 @@
 {
  "actions": [],
- "allow_rename": 1,
+ 
+ "app": "verenigingen","allow_rename": 1,
  "autoname": "field:region_name",
  "creation": "2025-06-15 16:30:00.000000",
  "doctype": "DocType",
