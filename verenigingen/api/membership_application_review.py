@@ -114,6 +114,16 @@ def approve_membership_application(member_name, membership_type=None, chapter=No
     # Create user account for portal access
     user_creation_result = create_user_account_for_member(member)
     
+    # Force refresh user document to sync roles if user was created/linked
+    if user_creation_result.get("success") and user_creation_result.get("user"):
+        frappe.db.commit()  # Ensure all changes are committed
+        try:
+            # Force reload user document to ensure role changes are reflected
+            user_doc = frappe.get_doc("User", user_creation_result["user"])
+            user_doc.reload()
+        except Exception as e:
+            frappe.log_error(f"Error reloading user after role assignment: {str(e)}")
+    
     # Send approval email with payment link
     send_approval_notification(member, invoice, membership_type_doc)
     

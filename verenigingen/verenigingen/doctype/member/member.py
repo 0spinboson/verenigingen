@@ -1883,10 +1883,16 @@ def add_member_roles_to_user(user_name):
                 user.append("roles", {"role": role})
         
         user.save(ignore_permissions=True)
+        frappe.db.commit()  # Force immediate commit
         frappe.logger().info(f"Added member roles to user {user_name}")
+        
+        # Force reload to ensure consistency
+        user.reload()
+        return user.name
         
     except Exception as e:
         frappe.log_error(f"Error adding roles to user {user_name}: {str(e)}")
+        return None
 
 # Removed create_member_portal_role - consolidated into Verenigingen Member
 

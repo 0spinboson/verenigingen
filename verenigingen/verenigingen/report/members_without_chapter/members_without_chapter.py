@@ -127,7 +127,7 @@ def get_data(filters):
         "Member",
         filters=member_filters,
         fields=[
-            "name", "full_name", "email", "contact_number", "phone",
+            "name", "full_name", "email", "contact_number",
             "primary_address", "status", "creation"
         ],
         order_by="creation desc"
@@ -179,7 +179,7 @@ def get_data(filters):
             "member_name": member.name,
             "member_full_name": member.full_name,
             "member_email": member.email,
-            "mobile_no": member.contact_number or member.phone,
+            "mobile_no": member.contact_number,
             "city": address_info.get("city", ""),
             "postal_code": address_info.get("pincode", ""),
             "country": address_info.get("country", ""),
