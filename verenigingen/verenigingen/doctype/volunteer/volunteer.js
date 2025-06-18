@@ -112,11 +112,20 @@ frappe.ui.form.on('Volunteer', {
                                         ? r.message.organization_email_domain 
                                         : 'example.org';
                                     
-                                    // Generate organization email based on full name
-                                    // Replace spaces with dots and convert to lowercase
-                                    const nameForEmail = member.full_name 
-                                        ? member.full_name.replace(/\s+/g, '.').toLowerCase()
-                                        : '';
+                                    // Generate organization email based on full name including middle names/particles
+                                    // This should match the Python logic in volunteer.py
+                                    let nameForEmail = '';
+                                    if (member.full_name) {
+                                        // Replace spaces with dots and convert to lowercase
+                                        nameForEmail = member.full_name.replace(/\s+/g, '.').toLowerCase();
+                                        
+                                        // Clean up special characters but preserve name particles (van, de, etc.)
+                                        // Remove special characters except dots and letters, but keep the name particles
+                                        nameForEmail = nameForEmail.replace(/[^a-z\.]/g, '');
+                                        
+                                        // Clean up multiple consecutive dots and trim dots from ends
+                                        nameForEmail = nameForEmail.replace(/\.+/g, '.').replace(/^\.+|\.+$/g, '');
+                                    }
                                     
                                     // Construct organization email
                                     const orgEmail = nameForEmail ? `${nameForEmail}@${domain}` : '';

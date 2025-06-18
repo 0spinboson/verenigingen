@@ -5,6 +5,7 @@ from frappe.utils import getdate, today, add_days
 from typing import Dict, List, Optional, Any, Tuple
 import json
 from .base_manager import BaseManager
+from verenigingen.utils.chapter_membership_history_manager import ChapterMembershipHistoryManager
 class BoardManager(BaseManager):
     """Manager for chapter board member operations"""
 
@@ -65,6 +66,16 @@ class BoardManager(BaseManager):
 
             # Add to volunteer assignment history
             self.add_volunteer_assignment_history(volunteer, role, from_date)
+            
+            # Add to chapter membership history for the associated member
+            if member_doc:
+                ChapterMembershipHistoryManager.add_membership_history(
+                    member_id=member_doc.name,
+                    chapter_name=self.chapter_name,
+                    assignment_type="Board Member",
+                    start_date=from_date,
+                    reason=f"Appointed as {role} in {self.chapter_name}"
+                )
 
             # Create audit comment
             self.create_comment(
@@ -158,6 +169,21 @@ class BoardManager(BaseManager):
                 board_member_data['from_date'],
                 end_date
             )
+            
+            # Update chapter membership history for the associated member
+            try:
+                volunteer_doc = frappe.get_doc("Volunteer", board_member_data['volunteer'])
+                if volunteer_doc.member:
+                    ChapterMembershipHistoryManager.complete_membership_history(
+                        member_id=volunteer_doc.member,
+                        chapter_name=self.chapter_name,
+                        assignment_type="Board Member",
+                        start_date=board_member_data['from_date'],
+                        end_date=end_date,
+                        reason=reason or f"Removed from {board_member_data['chapter_role']} role"
+                    )
+            except Exception as e:
+                frappe.log_error(f"Error updating chapter membership history: {str(e)}")
 
             # Create audit comment
             self.create_comment(

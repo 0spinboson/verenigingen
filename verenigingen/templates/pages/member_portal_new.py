@@ -1,5 +1,5 @@
 """
-Member Portal Landing Page
+Member Portal Landing Page - TailwindCSS Version
 Provides an overview and easy access to all member portal pages
 """
 

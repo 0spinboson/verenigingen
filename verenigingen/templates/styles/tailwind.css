@@ -283,6 +283,28 @@
   #sepa-details {
     @apply border border-gray-200 rounded-lg p-4 bg-gray-50;
   }
+
+  /* Portal Link Components */
+  .portal-link-card {
+    @apply block p-4 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors duration-200 text-gray-800;
+  }
+
+  .portal-link-card:hover {
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .portal-link-icon {
+    @apply w-10 h-10 bg-white rounded-lg flex items-center justify-center mr-4 shadow-sm;
+  }
+
+  .portal-link-title {
+    @apply font-semibold text-gray-900 mb-1;
+  }
+
+  .portal-link-description {
+    @apply text-sm text-gray-600;
+  }
 }
 
 /* Custom keyframes */

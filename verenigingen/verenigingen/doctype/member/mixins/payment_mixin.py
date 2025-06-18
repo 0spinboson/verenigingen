@@ -373,7 +373,7 @@ class PaymentMixin:
         self.save()
         
         settings = frappe.get_single("Verenigingen Settings")
-        if settings.automate_membership_payment_entries:
+        if not settings.automate_membership_payment_entries:
             self.create_payment_entry(payment_date, amount)
         
         return True
@@ -438,3 +438,34 @@ class PaymentMixin:
             return frappe.db.get_single_value("Verenigingen Settings", "enable_chapter_management") == 1
         except:
             return True
+    
+    @frappe.whitelist()
+    def refresh_financial_history(self):
+        """
+        Comprehensive financial history refresh.
+        This is the method called by the "Refresh Financial History" button and scheduled tasks.
+        """
+        try:
+            # 1. Load payment history (invoices, payments, etc.)
+            self.load_payment_history()
+            
+            # 2. Refresh subscription history if the method exists
+            if hasattr(self, 'refresh_subscription_history'):
+                self.refresh_subscription_history()
+            
+            # 3. Update current subscription details if the method exists
+            if hasattr(self, 'get_current_subscription_details'):
+                self.get_current_subscription_details()
+            
+            return {
+                "success": True,
+                "message": f"Financial history refreshed for member {self.name}",
+                "payment_history_count": len(self.payment_history) if hasattr(self, 'payment_history') else 0
+            }
+            
+        except Exception as e:
+            frappe.logger().error(f"Error refreshing financial history for member {self.name}: {str(e)}")
+            return {
+                "success": False,
+                "message": f"Error refreshing financial history: {str(e)}"
+            }

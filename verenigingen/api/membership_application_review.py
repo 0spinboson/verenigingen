@@ -488,6 +488,34 @@ def get_pending_applications(chapter=None, days_overdue=None):
     return applications
 
 @frappe.whitelist()
+def get_pending_reviews_for_member(member_name):
+    """Get pending membership application reviews for a specific member"""
+    try:
+        # Check if there are any pending reviews for this member
+        # Since this is for membership applications, we check if the member
+        # has a pending application status that needs review
+        member = frappe.get_doc("Member", member_name)
+        
+        reviews = []
+        
+        # If member has pending application status, they need review
+        if member.application_status == "Pending":
+            reviews.append({
+                "name": member.name,
+                "member": member.name,
+                "member_name": member.full_name,
+                "application_status": member.application_status,
+                "application_date": getattr(member, 'application_date', None),
+                "review_type": "Membership Application"
+            })
+        
+        return reviews
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting pending reviews for member {member_name}: {str(e)}")
+        return []
+
+@frappe.whitelist()
 def debug_and_fix_member_approval(member_name):
     """Debug and fix member approval issues"""
     try:

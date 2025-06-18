@@ -1089,6 +1089,55 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             frappe.log_error(f"Error creating membership item: {str(e)}")
             return None
 
+    @frappe.whitelist()
+    def force_update_chapter_display(self):
+        """Force update chapter display - useful for fixing display issues"""
+        self._chapter_assignment_in_progress = True
+        self.update_current_chapter_display()
+        self.save(ignore_permissions=True)
+        return {
+            "success": True,
+            "message": "Chapter display updated",
+            "current_chapter_display": getattr(self, 'current_chapter_display', 'Not set')
+        }
+
+    @frappe.whitelist()
+    def debug_chapter_assignment(self):
+        """Debug chapter assignment for this member"""
+        # Check chapter memberships in Chapter Member table
+        chapter_members = frappe.get_all(
+            "Chapter Member",
+            filters={"member": self.name, "enabled": 1},
+            fields=["parent as chapter", "chapter_join_date", "enabled"],
+            order_by="chapter_join_date desc"
+        )
+        
+        # Check board memberships
+        board_members = frappe.get_all(
+            "Chapter Board Member", 
+            filters={"member": self.name, "is_active": 1},
+            fields=["parent as chapter", "chapter_role", "is_active"]
+        )
+        
+        # Check current chapter display
+        current_chapter_display = getattr(self, 'current_chapter_display', 'Not set')
+        
+        # Get optimized chapters
+        try:
+            optimized_chapters = self.get_current_chapters_optimized()
+        except Exception as e:
+            optimized_chapters = f"Error: {str(e)}"
+        
+        return {
+            "member_name": self.full_name,
+            "member_id": self.name,
+            "chapter_members": chapter_members,
+            "board_members": board_members,
+            "current_chapter_display": current_chapter_display,
+            "optimized_chapters": optimized_chapters,
+            "chapter_management_enabled": frappe.db.get_single_value("Verenigingen Settings", "enable_chapter_management")
+        }
+
     def update_current_chapter_display(self):
         """Update the current chapter display field based on Chapter Member relationships with optimized queries"""
         try:
@@ -1941,3 +1990,118 @@ def set_member_user_modules(user_name):
         
     except Exception as e:
         frappe.log_error(f"Error setting module restrictions for user {user_name}: {str(e)}")
+
+@frappe.whitelist()
+def check_donor_exists(member_name):
+    """Check if a donor record exists for this member"""
+    try:
+        member = frappe.get_doc("Member", member_name)
+        
+        # Check if donor record exists with matching email or member link
+        existing_donor = frappe.db.get_value(
+            "Donor", 
+            {"email": member.email}, 
+            ["name", "donor_name"]
+        )
+        
+        if existing_donor:
+            return {
+                "exists": True,
+                "donor_name": existing_donor[0],
+                "donor_display_name": existing_donor[1]
+            }
+        
+        # Also check if member is linked to any donor record
+        linked_donor = frappe.db.get_value("Donor", {"member": member_name}, "name")
+        if linked_donor:
+            return {
+                "exists": True,
+                "donor_name": linked_donor
+            }
+        
+        return {
+            "exists": False
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error checking donor existence for member {member_name}: {str(e)}")
+        return {
+            "exists": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
+def create_donor_from_member(member_name):
+    """Create a donor record from member information"""
+    try:
+        member = frappe.get_doc("Member", member_name)
+        
+        # Check if donor already exists
+        existing_check = check_donor_exists(member_name)
+        if existing_check.get("exists"):
+            return {
+                "success": False,
+                "message": _("Donor record already exists for this member"),
+                "donor_name": existing_check.get("donor_name")
+            }
+        
+        # Create donor record
+        donor = frappe.new_doc("Donor")
+        
+        # Copy basic information from member
+        donor.donor_name = member.full_name
+        donor.email = member.email
+        donor.member = member_name  # Link back to member
+        
+        # Copy address information if available
+        if member.primary_address:
+            try:
+                address_doc = frappe.get_doc("Address", member.primary_address)
+                donor.address_line_1 = address_doc.address_line1
+                donor.address_line_2 = address_doc.address_line2 or ""
+                donor.city = address_doc.city
+                donor.state = address_doc.state
+                donor.pincode = address_doc.pincode
+                donor.country = address_doc.country
+            except Exception as addr_e:
+                frappe.logger().warning(f"Could not copy address from member {member_name}: {str(addr_e)}")
+        
+        # Set other fields
+        donor.donor_type = "Individual"
+        donor.pan_number = ""  # Can be filled manually later
+        
+        # Copy phone numbers if available
+        if hasattr(member, 'mobile_no') and member.mobile_no:
+            donor.mobile_no = member.mobile_no
+        if hasattr(member, 'phone') and member.phone:
+            donor.phone = member.phone
+        
+        # Insert the donor record
+        donor.insert(ignore_permissions=True)
+        
+        # Link the customer record if it exists
+        if member.customer:
+            try:
+                # Update customer record to link to donor
+                customer_doc = frappe.get_doc("Customer", member.customer)
+                if hasattr(customer_doc, 'donor'):
+                    customer_doc.donor = donor.name
+                    customer_doc.save(ignore_permissions=True)
+            except Exception as cust_e:
+                frappe.logger().warning(f"Could not link customer to donor: {str(cust_e)}")
+        
+        frappe.logger().info(f"Created donor record {donor.name} for member {member.name}")
+        
+        return {
+            "success": True,
+            "message": _("Donor record created successfully. Member can now receive donation receipts."),
+            "donor_name": donor.name
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error creating donor from member {member_name}: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": _("Failed to create donor record: {0}").format(str(e))
+        }

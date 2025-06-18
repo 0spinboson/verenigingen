@@ -717,14 +717,15 @@ def create_volunteer_from_member(member_doc):
                 frappe.msgprint(_("Reactivated existing volunteer record for {0}").format(member_doc.full_name))
                 return existing_vol
         
-        # Generate organization email based on full name
+        # Generate organization email based on full name including middle names/particles
         domain = frappe.db.get_single_value("Verenigingen Settings", "organization_email_domain") or "example.org"
         name_for_email = member_doc.full_name.replace(" ", ".").lower() if member_doc.full_name else ""
         
-        # Remove Dutch particles and special characters for cleaner email
+        # Clean up special characters but preserve name particles (van, de, etc.)
         import re
-        name_for_email = re.sub(r'\b(van|de|der|den|het|het)\b', '', name_for_email)
+        # Remove special characters except dots and letters, but keep the name particles
         name_for_email = re.sub(r'[^a-z\.]', '', name_for_email)
+        # Clean up multiple consecutive dots and trim dots from ends
         name_for_email = re.sub(r'\.+', '.', name_for_email).strip('.')
         
         org_email = f"{name_for_email}@{domain}" if name_for_email else ""

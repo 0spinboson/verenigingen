@@ -884,6 +884,11 @@ def assign_member_to_chapter(member, chapter, note=None):
     member_doc.chapter_change_reason = note or f"Assigned to {chapter}"
     member_doc.chapter_assigned_date = frappe.utils.now()
     member_doc.chapter_assigned_by = frappe.session.user
+    
+    # Force update chapter display
+    member_doc._chapter_assignment_in_progress = True
+    member_doc.update_current_chapter_display()
+    
     member_doc.save(ignore_permissions=True)
     
     if note:

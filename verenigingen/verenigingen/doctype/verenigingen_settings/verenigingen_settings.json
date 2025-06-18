@@ -14,6 +14,7 @@
   "section_break_27",
   "member_id_start",
   "last_member_id",
+  "last_member_history_refresh",
   "financial_settings_section",
   "company_iban",
   "company_bic",
@@ -178,10 +179,10 @@
   },
   {
    "default": "0",
-   "description": "Auto creates Payment Entry for Sales Invoices created for Membership from web forms.",
+   "description": "Skip automatic Payment Entry creation for Membership payments. Warning: May cause accounting issues.",
    "fieldname": "automate_membership_payment_entries",
    "fieldtype": "Check",
-   "label": "Automate Payment Entry Creation"
+   "label": "Skip Automatic Membership Payment Entries"
   },
   {
    "depends_on": "eval:doc.automate_membership_payment_entries",
@@ -209,10 +210,10 @@
   },
   {
    "default": "0",
-   "description": "Auto creates Payment Entry for Donations when marked as paid.",
+   "description": "Skip automatic Payment Entry creation for Donations when marked as paid. Warning: May cause accounting issues.",
    "fieldname": "automate_donation_payment_entries",
    "fieldtype": "Check",
-   "label": "Automate Donation Payment Entries"
+   "label": "Skip Automatic Donation Payment Entries"
   },
   {
    "fieldname": "membership_debit_account",
@@ -276,6 +277,13 @@
    "fieldname": "last_member_id",
    "fieldtype": "Int",
    "label": "Last Assigned Member ID",
+   "read_only": 1
+  },
+  {
+   "description": "Automatically updated when the scheduled member history refresh runs",
+   "fieldname": "last_member_history_refresh",
+   "fieldtype": "Datetime",
+   "label": "Last Member History Refresh",
    "read_only": 1
   },
   {

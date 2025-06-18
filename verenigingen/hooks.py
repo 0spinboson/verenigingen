@@ -93,6 +93,8 @@ doc_events = {
 # ---------------
 scheduler_events = {
     "daily": [
+        # Member financial history refresh - runs once daily
+        "verenigingen.verenigingen.doctype.member.scheduler.refresh_all_member_financial_histories",
         # Core membership system
         "verenigingen.verenigingen.doctype.membership.scheduler.process_expired_memberships",
         "verenigingen.verenigingen.doctype.membership.scheduler.send_renewal_reminders",
