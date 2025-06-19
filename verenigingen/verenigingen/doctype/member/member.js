@@ -173,7 +173,7 @@ frappe.ui.form.on('Member', {
         // No real-time processing needed here
         
         // Still show basic UI updates after save
-        if (frm.doc.payment_method === 'Direct Debit' && frm.doc.iban && !frm.doc.__islocal) {
+        if ((frm.doc.payment_method === 'Direct Debit' || frm.doc.payment_method === 'SEPA DD') && frm.doc.iban && !frm.doc.__islocal) {
             // Just update the UI to show current SEPA status
             check_sepa_mandate_status_debounced(frm);
         }
@@ -1705,7 +1705,7 @@ function check_sepa_mandate_status_debounced(frm) {
     
     // Set a new timeout to check SEPA status after 300ms of inactivity
     sepa_check_timeout = setTimeout(function() {
-        if (frm.doc.payment_method === 'Direct Debit' && frm.doc.iban) {
+        if ((frm.doc.payment_method === 'Direct Debit' || frm.doc.payment_method === 'SEPA DD') && frm.doc.iban) {
             SepaUtils.check_sepa_mandate_status(frm);
         } else {
             // Clear SEPA UI if conditions aren't met
@@ -1720,7 +1720,7 @@ function check_sepa_mandate_and_prompt_creation(frm, context = 'general') {
     // Simplified function - only update UI, no more real-time prompting
     // SEPA mandate discrepancy checking is now handled by scheduled task
     
-    if (!frm.doc.iban || frm.doc.payment_method !== 'Direct Debit') {
+    if (!frm.doc.iban || (frm.doc.payment_method !== 'Direct Debit' && frm.doc.payment_method !== 'SEPA DD')) {
         return;
     }
     
