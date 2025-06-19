@@ -1,5 +1,5 @@
 """
-Member Portal Landing Page
+Member Portal Landing Page - TailwindCSS Version
 Provides an overview and easy access to all member portal pages
 """
 
@@ -14,11 +14,8 @@ def get_context(context):
     if frappe.session.user == "Guest":
         frappe.throw(_("Please login to access the member portal"), frappe.PermissionError)
     
-    # Add enhanced sidebar
-    from verenigingen.utils.portal_menu_enhancer import add_enhanced_sidebar_to_context
-    add_enhanced_sidebar_to_context(context)
-    
     context.no_cache = 1
+    context.show_sidebar = True
     context.title = _("Member Portal")
     
     # Get member record

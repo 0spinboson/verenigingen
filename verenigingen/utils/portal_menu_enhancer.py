@@ -4,58 +4,84 @@ Portal menu enhancer to add submenu items
 
 import frappe
 
+@frappe.whitelist()
+def debug_portal_settings():
+    """Debug portal settings to see what menu items are available"""
+    try:
+        portal_settings = frappe.get_single("Portal Settings")
+        
+        menu_items = []
+        for idx, item in enumerate(portal_settings.menu):
+            menu_items.append({
+                "idx": idx + 1,
+                "title": item.title,
+                "route": item.route,
+                "enabled": item.enabled,
+                "role": getattr(item, 'role', None),
+                "reference_doctype": getattr(item, 'reference_doctype', None)
+            })
+        
+        return {
+            "success": True,
+            "total_items": len(portal_settings.menu),
+            "menu_items": menu_items
+        }
+        
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
 def get_enhanced_portal_menu_items():
     """Get portal menu items with submenus for member portal"""
     
-    # Get standard portal menu items
-    portal_settings = frappe.get_single("Portal Settings")
+    # Start with custom member-specific items that may not be in Portal Settings
     enhanced_menu = []
     
-    for item in portal_settings.menu:
-        if not item.enabled:
-            continue
-            
-        menu_item = {
-            "title": item.title,
-            "route": item.route,
-            "reference_doctype": item.reference_doctype,
-            "role": item.role,
-            "target": getattr(item, 'target', None)
-        }
-        
-        # Add submenu items for Member Portal
-        if item.title == "Member Portal":
-            menu_item["submenu"] = [
-                {
-                    "title": "Dashboard Overview",
-                    "description": "View your membership status and key information",
-                    "icon": "fa fa-dashboard"
-                },
-                {
-                    "title": "Personal Information", 
-                    "description": "Update your contact details and preferences",
-                    "icon": "fa fa-user"
-                },
-                {
-                    "title": "Membership Details",
-                    "description": "View membership type, fees, and renewal dates", 
-                    "icon": "fa fa-id-card"
-                },
-                {
-                    "title": "Payment History",
-                    "description": "Review your payment records and invoices",
-                    "icon": "fa fa-credit-card"
-                },
-                {
-                    "title": "Chapter Information",
-                    "description": "View your chapter membership and activities",
-                    "icon": "fa fa-users"
-                }
-            ]
-        
-        # Add submenu for Volunteer Portal if user has volunteer role
-        elif item.title == "Volunteer Portal" and item.role == "Volunteer":
-            menu_item["submenu"] = [
+    # Add Member Portal (custom item)
+    enhanced_menu.append({
+        "title": "Member Portal",
+        "route": "/member_portal",
+        "reference_doctype": None,
+        "role": None,
+        "target": None,
+        "submenu": [
+            {
+                "title": "Dashboard Overview",
+                "description": "View your membership status and key information",
+                "icon": "fa fa-dashboard"
+            },
+            {
+                "title": "Personal Information", 
+                "description": "Update your contact details and preferences",
+                "icon": "fa fa-user"
+            },
+            {
+                "title": "Membership Details",
+                "description": "View membership type, fees, and renewal dates", 
+                "icon": "fa fa-id-card"
+            },
+            {
+                "title": "Payment History",
+                "description": "Review your payment records and invoices",
+                "icon": "fa fa-credit-card"
+            },
+            {
+                "title": "Chapter Information",
+                "description": "View your chapter membership and activities",
+                "icon": "fa fa-users"
+            }
+        ]
+    })
+    
+    # Check if user is a volunteer and add Volunteer Portal
+    user_roles = frappe.get_roles(frappe.session.user)
+    if "Volunteer" in user_roles or frappe.db.exists("Volunteer", {"member": frappe.db.get_value("Member", {"email": frappe.session.user})}):
+        enhanced_menu.append({
+            "title": "Volunteer Portal",
+            "route": "/volunteer/dashboard",
+            "reference_doctype": None,
+            "role": "Volunteer",
+            "target": None,
+            "submenu": [
                 {
                     "title": "Volunteer Activities",
                     "description": "View your current and past volunteer assignments",
@@ -77,24 +103,89 @@ def get_enhanced_portal_menu_items():
                     "icon": "fa fa-history"
                 }
             ]
+        })
+    
+    # Add Contact Us (custom item)
+    enhanced_menu.append({
+        "title": "Contact Us",
+        "route": "/contact_request",
+        "reference_doctype": None,
+        "role": None,
+        "target": None,
+        "submenu": [
+            {
+                "title": "General Inquiry",
+                "description": "Ask questions about our organization",
+                "icon": "fa fa-question-circle"
+            },
+            {
+                "title": "Membership Support",
+                "description": "Get help with your membership",
+                "icon": "fa fa-id-card"
+            },
+            {
+                "title": "Technical Support",
+                "description": "Report website or portal issues",
+                "icon": "fa fa-cog"
+            }
+        ]
+    })
+    
+    # Now add relevant items from Portal Settings
+    member_relevant_items = [
+        "Issues & Support", "Addresses"
+    ]
+    
+    portal_settings = frappe.get_single("Portal Settings")
+    
+    for item in portal_settings.menu:
+        if not item.enabled:
+            continue
             
-        # Add submenu for Projects if user has projects role
-        elif item.title == "Projects" and item.role == "Projects User":
+        # Skip items that are not relevant for members
+        if item.title not in member_relevant_items:
+            continue
+            
+        menu_item = {
+            "title": item.title,
+            "route": item.route,
+            "reference_doctype": item.reference_doctype,
+            "role": item.role,
+            "target": getattr(item, 'target', None)
+        }
+        
+        # Add submenu for Issues & Support
+        if item.title in ["Issues", "Issues & Support"]:
             menu_item["submenu"] = [
                 {
-                    "title": "Active Projects",
-                    "description": "View projects you're currently involved in",
-                    "icon": "fa fa-project-diagram"
+                    "title": "Report an Issue",
+                    "description": "Submit a new issue or support request",
+                    "icon": "fa fa-plus-circle"
                 },
                 {
-                    "title": "Project Tasks",
-                    "description": "Manage your assigned project tasks",
-                    "icon": "fa fa-tasks"
+                    "title": "My Support Tickets",
+                    "description": "View your submitted issues and their status",
+                    "icon": "fa fa-list"
                 },
                 {
-                    "title": "Project Timeline",
-                    "description": "View project schedules and milestones",
-                    "icon": "fa fa-calendar-alt"
+                    "title": "Contact Support",
+                    "description": "Get help with your membership or account",
+                    "icon": "fa fa-envelope"
+                }
+            ]
+            
+        # Add submenu for Addresses
+        elif item.title == "Addresses":
+            menu_item["submenu"] = [
+                {
+                    "title": "My Addresses",
+                    "description": "View and manage your saved addresses",
+                    "icon": "fa fa-map-marker"
+                },
+                {
+                    "title": "Update Address",
+                    "description": "Change your primary mailing address",
+                    "icon": "fa fa-edit"
                 }
             ]
         
