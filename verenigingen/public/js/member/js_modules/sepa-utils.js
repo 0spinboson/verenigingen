@@ -106,7 +106,7 @@ function create_sepa_mandate_with_dialog(frm, message = null) {
                         fieldname: 'update_payment_method',
                         fieldtype: 'Check',
                         label: __('Update Member Payment Method to Direct Debit'),
-                        default: frm.doc.payment_method !== 'Direct Debit' ? 1 : 0
+                        default: (frm.doc.payment_method !== 'Direct Debit' && frm.doc.payment_method !== 'SEPA DD') ? 1 : 0
                     },
                     {
                         fieldname: 'notes',
@@ -197,8 +197,8 @@ function create_mandate_with_values(frm, values, dialog) {
                         }, 7);
                         
                         // Update payment method if requested
-                        if (values.update_payment_method && frm.doc.payment_method !== 'Direct Debit') {
-                            frm.set_value('payment_method', 'Direct Debit');
+                        if (values.update_payment_method && frm.doc.payment_method !== 'Direct Debit' && frm.doc.payment_method !== 'SEPA DD') {
+                            frm.set_value('payment_method', 'SEPA DD');
                             frappe.show_alert({
                                 message: __('Payment method updated to Direct Debit'),
                                 indicator: 'blue'
@@ -282,7 +282,7 @@ function check_sepa_mandate_status(frm) {
                 
             } else {
                 // No active mandate found
-                if (frm.doc.iban && frm.doc.payment_method === 'Direct Debit') {
+                if (frm.doc.iban && (frm.doc.payment_method === 'Direct Debit' || frm.doc.payment_method === 'SEPA DD')) {
                     frm.dashboard.add_indicator(__("No SEPA Mandate"), "red");
                     
                     frm.add_custom_button(__('Create SEPA Mandate'), function() {

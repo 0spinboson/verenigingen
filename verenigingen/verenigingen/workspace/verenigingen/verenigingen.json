@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[\n                {\"id\":\"NFcjh9I8BH\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Members/Memberships</b></span>\",\"col\":12}},\n                {\"id\":\"oIk2CrSoAH\",\"type\":\"card\",\"data\":{\"card_name\":\"Memberships\",\"col\":4}},\n                {\"id\":\"sxzInK1PHL\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Member\",\"col\":3}},\n                {\"id\":\"q6OM4R0OUa\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Membership\",\"col\":3}},\n                {\"id\":\"zGoLYG0xRM\",\"type\":\"spacer\",\"data\":{\"col\":12}},\n                {\"id\":\"jMy1CTqEJS\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Volunteering</b></span>\",\"col\":12}},\n                {\"id\":\"2vHgUjgQcL\",\"type\":\"card\",\"data\":{\"card_name\":\"Volunteers\",\"col\":4}},\n                {\"id\":\"zGoLYG0xRM2\",\"type\":\"spacer\",\"data\":{\"col\":12}},\n                {\"id\":\"jMy1CTqEJS2\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Chapters/Teams</b></span>\",\"col\":12}},\n                {\"id\":\"S8Mi0T41U7\",\"type\":\"card\",\"data\":{\"card_name\":\"Chapters\",\"col\":4}},\n                {\"id\":\"XXEhdaTHF_\",\"type\":\"card\",\"data\":{\"card_name\":\"Teams and Commissions\",\"col\":4}},\n                {\"id\":\"zGoLYG0xRM3\",\"type\":\"spacer\",\"data\":{\"col\":12}},\n                {\"id\":\"jMy1CTqEJS3\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Financial</b></span>\",\"col\":12}},\n                {\"id\":\"ZvroSYo9F3\",\"type\":\"card\",\"data\":{\"card_name\":\"Donations\",\"col\":4}},\n                {\"id\":\"PaymentCard\",\"type\":\"card\",\"data\":{\"card_name\":\"Payment Processing\",\"col\":4}},\n                {\"id\":\"zGoLYG0xRM4\",\"type\":\"spacer\",\"data\":{\"col\":12}},\n                {\"id\":\"jMy1CTqEJS4\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Reports</b></span>\",\"col\":12}},\n                {\"id\":\"ReportsCard\",\"type\":\"card\",\"data\":{\"card_name\":\"Reports\",\"col\":8}},\n                {\"id\":\"zGoLYG0xRM5\",\"type\":\"spacer\",\"data\":{\"col\":12}},\n                {\"id\":\"SettingsHeader\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Settings</b></span>\",\"col\":12}},\n                {\"id\":\"RKkllDSemd\",\"type\":\"card\",\"data\":{\"card_name\":\"Module Settings\",\"col\":4}}\n            ]",
+ "content": "[{\"id\":\"NFcjh9I8BH\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Members/Memberships</b></span>\",\"col\":12}},{\"id\":\"oIk2CrSoAH\",\"type\":\"card\",\"data\":{\"card_name\":\"Memberships\",\"col\":4}},{\"id\":\"ZvroSYo9F3\",\"type\":\"card\",\"data\":{\"card_name\":\"Donations\",\"col\":4}},{\"id\":\"zGoLYG0xRM\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"jMy1CTqEJS\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Volunteering</b></span>\",\"col\":12}},{\"id\":\"2vHgUjgQcL\",\"type\":\"card\",\"data\":{\"card_name\":\"Volunteers\",\"col\":4}},{\"id\":\"zGoLYG0xRM2\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"jMy1CTqEJS2\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Chapters/Teams</b></span>\",\"col\":12}},{\"id\":\"S8Mi0T41U7\",\"type\":\"card\",\"data\":{\"card_name\":\"Chapters\",\"col\":4}},{\"id\":\"XXEhdaTHF_\",\"type\":\"card\",\"data\":{\"card_name\":\"Teams and Commissions\",\"col\":4}},{\"id\":\"zGoLYG0xRM3\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"jMy1CTqEJS3\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Financial</b></span>\",\"col\":12}},{\"id\":\"PaymentCard\",\"type\":\"card\",\"data\":{\"card_name\":\"Payment Processing\",\"col\":4}},{\"id\":\"lYnozqzRgf\",\"type\":\"card\",\"data\":{\"card_name\":\"Banking\",\"col\":4}},{\"id\":\"VN3xecH16c\",\"type\":\"card\",\"data\":{\"card_name\":\"Accounting (Misc.)\",\"col\":4}},{\"id\":\"zGoLYG0xRM4\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"jMy1CTqEJS4\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Reports</b></span>\",\"col\":12}},{\"id\":\"ReportsCard\",\"type\":\"card\",\"data\":{\"card_name\":\"Reports\",\"col\":8}},{\"id\":\"zGoLYG0xRM5\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"SettingsHeader\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\"><b>Settings</b></span>\",\"col\":12}},{\"id\":\"RKkllDSemd\",\"type\":\"card\",\"data\":{\"card_name\":\"Module Settings\",\"col\":4}}]",
  "creation": "2025-06-14 18:47:02.994675",
  "custom_blocks": [],
  "docstatus": 0,
@@ -12,65 +12,6 @@
  "is_hidden": 0,
  "label": "Verenigingen",
  "links": [
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Memberships",
-   "link_count": 5,
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Member",
-   "link_count": 0,
-   "link_to": "Member",
-   "link_type": "DocType",
-   "onboard": 1,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Membership",
-   "link_count": 0,
-   "link_to": "Membership",
-   "link_type": "DocType",
-   "onboard": 1,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Membership Type",
-   "link_count": 0,
-   "link_to": "Membership Type",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Contribution Amendment Request",
-   "link_count": 0,
-   "link_to": "Contribution Amendment Request",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Membership Termination Request",
-   "link_count": 0,
-   "link_to": "Membership Termination Request",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
   {
    "hidden": 0,
    "is_query_report": 0,
@@ -210,35 +151,6 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Payment Processing",
-   "link_count": 2,
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "SEPA Mandate",
-   "link_count": 0,
-   "link_to": "SEPA Mandate",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Direct Debit Batch",
-   "link_count": 0,
-   "link_to": "Direct Debit Batch",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
    "label": "Reports",
    "link_count": 9,
    "link_type": "Report",
@@ -328,8 +240,384 @@
   {
    "hidden": 0,
    "is_query_report": 0,
+   "label": "Email Templates",
+   "link_count": 0,
+   "link_to": "Email Template",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Bank Transaction",
+   "link_count": 0,
+   "link_to": "Bank Transaction",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Bank Reconciliation Tool",
+   "link_count": 0,
+   "link_to": "Bank Reconciliation Tool",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Bank Statement Import",
+   "link_count": 0,
+   "link_to": "Bank Statement Import",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Bank Account",
+   "link_count": 0,
+   "link_to": "Bank Account",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Bank Guarantee",
+   "link_count": 0,
+   "link_to": "Bank Guarantee",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Payment Entry",
+   "link_count": 0,
+   "link_to": "Payment Entry",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Payment Request",
+   "link_count": 0,
+   "link_to": "Payment Request",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Payment Order",
+   "link_count": 0,
+   "link_to": "Payment Order",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Sales Invoice",
+   "link_count": 0,
+   "link_to": "Sales Invoice",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Purchase Invoice",
+   "link_count": 0,
+   "link_to": "Purchase Invoice",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Journal Entry",
+   "link_count": 0,
+   "link_to": "Journal Entry",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Account",
+   "link_count": 0,
+   "link_to": "Account",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Accounting Dimension",
+   "link_count": 0,
+   "link_to": "Accounting Dimension",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Memberships",
+   "link_count": 5,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Member",
+   "link_count": 0,
+   "link_to": "Member",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Membership",
+   "link_count": 0,
+   "link_to": "Membership",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Membership Type",
+   "link_count": 0,
+   "link_to": "Membership Type",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Contribution Amendment Request",
+   "link_count": 0,
+   "link_to": "Contribution Amendment Request",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Membership Termination Request",
+   "link_count": 0,
+   "link_to": "Membership Termination Request",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Payment Processing",
+   "link_count": 5,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "SEPA Mandate",
+   "link_count": 0,
+   "link_to": "SEPA Mandate",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Direct Debit Batch",
+   "link_count": 0,
+   "link_to": "Direct Debit Batch",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Transaction Reconciliation",
+   "link_count": 0,
+   "link_to": "Bank Reconciliation Tool",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Bank Statement Import",
+   "link_count": 0,
+   "link_to": "Bank Statement Import",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Bank Transactions",
+   "link_count": 0,
+   "link_to": "Bank Transaction",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Banking",
+   "link_count": 5,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Bank Accounts",
+   "link_count": 0,
+   "link_to": "Bank Account",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Bank Guarantees",
+   "link_count": 0,
+   "link_to": "Bank Guarantee",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Payment Entry",
+   "link_count": 0,
+   "link_to": "Payment Entry",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Payment Request",
+   "link_count": 0,
+   "link_to": "Payment Request",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Accounts",
+   "link_count": 0,
+   "link_to": "Account",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Accounting (Misc.)",
+   "link_count": 5,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Sales Invoice",
+   "link_count": 0,
+   "link_to": "Sales Invoice",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Purchase Invoice",
+   "link_count": 0,
+   "link_to": "Purchase Invoice",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Journal Entry",
+   "link_count": 0,
+   "link_to": "Journal Entry",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Accounting Dimension",
+   "link_count": 0,
+   "link_to": "Accounting Dimension",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Payment Order",
+   "link_count": 0,
+   "link_to": "Payment Order",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
    "label": "Module Settings",
-   "link_count": 1,
+   "link_count": 2,
    "link_type": "DocType",
    "onboard": 0,
    "type": "Card Break"
@@ -355,7 +643,7 @@
    "type": "Link"
   }
  ],
- "modified": "2025-06-19 08:24:03.000978",
+ "modified": "2025-06-19 19:15:09.040215",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Verenigingen",
@@ -365,43 +653,6 @@
  "quick_lists": [],
  "roles": [],
  "sequence_id": 0.0,
- "shortcuts": [
-  {
-   "color": "Grey",
-   "doc_view": "",
-   "label": "Member",
-   "link_to": "Member",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "",
-   "label": "Membership",
-   "link_to": "Membership",
-   "type": "DocType"
-  },
-  {
-   "color": "Orange",
-   "doc_view": "List",
-   "label": "Expense Claims",
-   "link_to": "Expense Claim",
-   "type": "DocType"
-  },
-  {
-   "color": "Green",
-   "doc_view": "",
-   "label": "Chapter Expenses",
-   "link_to": "Chapter Expense Report",
-   "report_ref_doctype": "Volunteer Expense",
-   "type": "Report"
-  },
-  {
-   "color": "Purple",
-   "doc_view": "",
-   "label": "Email Templates",
-   "link_to": "Email Template",
-   "type": "DocType"
-  }
- ],
+ "shortcuts": [],
  "title": "Verenigingen"
 }

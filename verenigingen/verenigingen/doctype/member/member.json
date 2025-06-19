@@ -167,13 +167,13 @@
    "fieldtype": "Data",
    "label": "IBAN",
    "length": 34,
-   "mandatory_depends_on": "eval:doc.payment_method=='Direct Debit'"
+   "mandatory_depends_on": "eval:doc.payment_method=='Direct Debit' || doc.payment_method=='SEPA DD'"
   },
   {
    "fieldname": "payment_method",
    "fieldtype": "Select",
    "label": "Payment Method",
-   "options": "Bank Transfer\nDirect Debit\nCredit Card\nCash\nOther"
+   "options": "Bank Transfer\nDirect Debit\nSEPA DD\nCredit Card\nCash\nOther"
   },
   {
    "collapsible": 1,

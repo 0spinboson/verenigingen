@@ -214,7 +214,7 @@ class PaymentMixin:
             )
             
             for membership in memberships:
-                if membership.payment_method == "Direct Debit":
+                if membership.payment_method in ["Direct Debit", "SEPA DD"]:
                     default_mandate = self.get_default_sepa_mandate()
                     if not default_mandate:
                         frappe.msgprint(
@@ -233,7 +233,7 @@ class PaymentMixin:
     
     def validate_bank_details(self):
         """Validate bank details if payment method is Direct Debit"""
-        if getattr(self, 'payment_method', None) == "Direct Debit":
+        if getattr(self, 'payment_method', None) in ["Direct Debit", "SEPA DD"]:
             if self.iban:
                 self.iban = self.validate_iban_format(self.iban)
             
@@ -315,7 +315,7 @@ class PaymentMixin:
         if payment_method:
             self.payment_method = payment_method
         
-        if self.payment_method == "Direct Debit":
+        if self.payment_method in ["Direct Debit", "SEPA DD"]:
             batch = self.add_to_direct_debit_batch()
             self.payment_status = "Pending"
             self.db_set('payment_status', 'Pending')
