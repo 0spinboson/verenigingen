@@ -14,7 +14,7 @@ class TestDonation(unittest.TestCase):
 		settings.company = '_Test Company'
 		settings.donation_company = '_Test Company'
 		settings.default_donor_type = '_Test Donor'
-		settings.automate_donation_payment_entries = 1
+		settings.automate_donation_payment_entries = 0
 		settings.donation_debit_account = 'Debtors - _TC'
 		settings.donation_payment_account =  'Cash - _TC'
 		settings.creation_user = 'Administrator'

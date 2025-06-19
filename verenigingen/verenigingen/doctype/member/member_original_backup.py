@@ -904,7 +904,7 @@ class Member(Document):
         
         # Create payment entry if configured
         settings = frappe.get_single("Verenigingen Settings")
-        if settings.automate_membership_payment_entries:
+        if not settings.automate_membership_payment_entries:
             self.create_payment_entry(payment_date, amount)
         
         return True

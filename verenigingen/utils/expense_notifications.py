@@ -255,7 +255,27 @@ class ExpenseNotificationManager:
                 if frappe.db.get_value("User", m.parent, "enabled")]
     
     def _render_template(self, template_name, context):
-        """Render email template with context"""
+        """Render email template with context using Email Template system"""
+        from verenigingen.api.email_template_manager import get_email_template
+        
+        # Map internal names to Email Template names
+        template_mapping = {
+            "expense_approval_request": "expense_approval_request",
+            "expense_approved": "expense_approved", 
+            "expense_rejected": "expense_rejected",
+            "expense_escalated": "expense_escalated",
+            "expense_overdue_reminder": "expense_overdue_reminder"
+        }
+        
+        email_template_name = template_mapping.get(template_name)
+        if email_template_name:
+            try:
+                template = get_email_template(email_template_name, context)
+                return template["message"]
+            except Exception as e:
+                frappe.log_error(f"Error using Email Template '{email_template_name}': {str(e)}")
+        
+        # Fallback to hardcoded templates if Email Template fails
         templates = {
             "expense_approval_request": self._get_approval_request_template(),
             "expense_approved": self._get_approval_confirmation_template(),

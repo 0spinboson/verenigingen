@@ -49,8 +49,14 @@ def approve_membership_application(member_name, membership_type=None, chapter=No
         frappe.throw(_("Please select a membership type"))
     
     # Update chapter if provided
-    if chapter and chapter != member.current_chapter_display:
-        member.current_chapter_display = chapter
+    if chapter:
+        current_chapter = getattr(member, 'current_chapter_display', None) or ""
+        if chapter != current_chapter:
+            try:
+                member.current_chapter_display = chapter
+            except AttributeError:
+                # Field might not exist in database yet, log but continue
+                frappe.logger().warning(f"Could not set current_chapter_display field on member {member.name}")
     
     # Update member status
     member.application_status = "Approved"  # Application is approved
@@ -114,6 +120,16 @@ def approve_membership_application(member_name, membership_type=None, chapter=No
     # Create user account for portal access
     user_creation_result = create_user_account_for_member(member)
     
+    # Force refresh user document to sync roles if user was created/linked
+    if user_creation_result.get("success") and user_creation_result.get("user"):
+        frappe.db.commit()  # Ensure all changes are committed
+        try:
+            # Force reload user document to ensure role changes are reflected
+            user_doc = frappe.get_doc("User", user_creation_result["user"])
+            user_doc.reload()
+        except Exception as e:
+            frappe.log_error(f"Error reloading user after role assignment: {str(e)}")
+    
     # Send approval email with payment link
     send_approval_notification(member, invoice, membership_type_doc)
     
@@ -171,8 +187,8 @@ def activate_volunteer_record(member):
         frappe.log_error(f"Error activating volunteer record for member {member.name}: {str(e)}")
 
 @frappe.whitelist()
-def reject_membership_application(member_name, reason, process_refund=False):
-    """Reject a membership application"""
+def reject_membership_application(member_name, reason, email_template=None, rejection_category=None, internal_notes=None, process_refund=False):
+    """Reject a membership application with enhanced template support"""
     member = frappe.get_doc("Member", member_name)
     
     # Validate application can be rejected
@@ -183,12 +199,19 @@ def reject_membership_application(member_name, reason, process_refund=False):
     if not has_approval_permission(member):
         frappe.throw(_("You don't have permission to reject this application"))
     
+    # Build comprehensive review notes
+    review_notes = f"Rejection Category: {rejection_category or 'Not specified'}\n"
+    review_notes += f"Reason: {reason}\n"
+    if internal_notes:
+        review_notes += f"Internal Notes: {internal_notes}\n"
+    review_notes += f"Email Template Used: {email_template or 'Default'}"
+    
     # Update member status
     member.application_status = "Rejected"
     member.status = "Rejected"
     member.reviewed_by = frappe.session.user
     member.review_date = now_datetime()
-    member.review_notes = reason
+    member.review_notes = review_notes
     member.save()
     
     # Process refund if payment was made
@@ -212,8 +235,8 @@ def reject_membership_application(member_name, reason, process_refund=False):
         lead.status = "Do Not Contact"
         lead.save()
     
-    # Send rejection notification
-    send_rejection_notification(member, reason)
+    # Send rejection notification with specified template
+    send_rejection_notification(member, reason, email_template, rejection_category)
     
     return {
         "success": True,
@@ -299,7 +322,7 @@ def has_approval_permission(member):
         return True
     
     # Check if user is a board member of the member's chapter
-    chapter = member.current_chapter_display or getattr(member, 'suggested_chapter', None)
+    chapter = getattr(member, 'current_chapter_display', None) or getattr(member, 'suggested_chapter', None)
     if chapter:
         # Get user's member record
         user_member = frappe.db.get_value("Member", {"user": user}, "name")
@@ -371,15 +394,30 @@ def send_approval_notification(member, invoice, membership_type):
             now=True
         )
 
-def send_rejection_notification(member, reason):
-    """Send rejection notification to applicant"""
+def send_rejection_notification(member, reason, email_template=None, rejection_category=None):
+    """Send rejection notification to applicant using specified template"""
     args = {
         "member": member,
         "reason": reason,
-        "company": frappe.defaults.get_global_default('company')
+        "rejection_category": rejection_category or "Not specified",
+        "company": frappe.defaults.get_global_default('company'),
+        "member_name": member.full_name,
+        "first_name": member.first_name,
+        "application_id": getattr(member, 'application_id', member.name)
     }
     
-    if frappe.db.exists("Email Template", "membership_application_rejected"):
+    # Use specified email template if provided and exists
+    template_to_use = email_template
+    if template_to_use and frappe.db.exists("Email Template", template_to_use):
+        frappe.sendmail(
+            recipients=[member.email],
+            subject=_("Membership Application Update"),
+            template=template_to_use,
+            args=args,
+            now=True
+        )
+    elif frappe.db.exists("Email Template", "membership_application_rejected"):
+        # Fallback to default rejection template
         frappe.sendmail(
             recipients=[member.email],
             subject=_("Membership Application Update"),
@@ -388,7 +426,7 @@ def send_rejection_notification(member, reason):
             now=True
         )
     else:
-        # Simple rejection email
+        # Simple rejection email if no templates exist
         message = f"""
         <p>Dear {member.first_name},</p>
         
@@ -476,6 +514,34 @@ def get_pending_applications(chapter=None, days_overdue=None):
             app["membership_currency"] = mt.currency
     
     return applications
+
+@frappe.whitelist()
+def get_pending_reviews_for_member(member_name):
+    """Get pending membership application reviews for a specific member"""
+    try:
+        # Check if there are any pending reviews for this member
+        # Since this is for membership applications, we check if the member
+        # has a pending application status that needs review
+        member = frappe.get_doc("Member", member_name)
+        
+        reviews = []
+        
+        # If member has pending application status, they need review
+        if member.application_status == "Pending":
+            reviews.append({
+                "name": member.name,
+                "member": member.name,
+                "member_name": member.full_name,
+                "application_status": member.application_status,
+                "application_date": getattr(member, 'application_date', None),
+                "review_type": "Membership Application"
+            })
+        
+        return reviews
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting pending reviews for member {member_name}: {str(e)}")
+        return []
 
 @frappe.whitelist()
 def debug_and_fix_member_approval(member_name):
@@ -1153,4 +1219,179 @@ def notify_managers_of_overdue_applications(applications):
                 """,
                 now=True
             )
+
+
+@frappe.whitelist()
+def create_default_email_templates():
+    """Create default email templates for membership application management"""
+    if not frappe.has_permission("Email Template", "create"):
+        frappe.throw(_("You don't have permission to create email templates"))
+    
+    templates = []
+    
+    # 1. General rejection template
+    if not frappe.db.exists("Email Template", "membership_application_rejected"):
+        rejection_template = frappe.get_doc({
+            "doctype": "Email Template",
+            "name": "membership_application_rejected",
+            "subject": "Membership Application Update - {{ member_name }}",
+            "response": """
+<h3>Membership Application Update</h3>
+
+<p>Dear {{ first_name }},</p>
+
+<p>Thank you for your interest in joining our association.</p>
+
+<p>After careful review, we regret to inform you that your membership application has not been approved at this time.</p>
+
+<div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 15px 0;">
+    <p><strong>Application ID:</strong> {{ application_id }}</p>
+    <p><strong>Reason:</strong> {{ reason }}</p>
+</div>
+
+<p>If you have any questions or would like to discuss this decision, please don't hesitate to contact us.</p>
+
+<p>Best regards,<br>The Membership Team<br>{{ company }}</p>
+            """.strip()
+        })
+        rejection_template.insert()
+        templates.append("membership_application_rejected")
+    
+    # 2. Incomplete information rejection
+    if not frappe.db.exists("Email Template", "membership_rejection_incomplete"):
+        incomplete_template = frappe.get_doc({
+            "doctype": "Email Template", 
+            "name": "membership_rejection_incomplete",
+            "subject": "Membership Application - Additional Information Required - {{ member_name }}",
+            "response": """
+<h3>Membership Application - Additional Information Required</h3>
+
+<p>Dear {{ first_name }},</p>
+
+<p>Thank you for your interest in joining our association.</p>
+
+<p>We have reviewed your membership application, but unfortunately we need additional information to proceed with your application.</p>
+
+<div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 15px 0;">
+    <p><strong>Application ID:</strong> {{ application_id }}</p>
+    <p><strong>Missing Information:</strong> {{ reason }}</p>
+</div>
+
+<p>You are welcome to submit a new application with the complete information at any time. We encourage you to reapply once you have the required documentation or details.</p>
+
+<p>If you have any questions about what information is needed, please don't hesitate to contact us.</p>
+
+<p>Best regards,<br>The Membership Team<br>{{ company }}</p>
+            """.strip()
+        })
+        incomplete_template.insert()
+        templates.append("membership_rejection_incomplete")
+    
+    # 3. Ineligible rejection
+    if not frappe.db.exists("Email Template", "membership_rejection_ineligible"):
+        ineligible_template = frappe.get_doc({
+            "doctype": "Email Template",
+            "name": "membership_rejection_ineligible", 
+            "subject": "Membership Application Update - {{ member_name }}",
+            "response": """
+<h3>Membership Application Update</h3>
+
+<p>Dear {{ first_name }},</p>
+
+<p>Thank you for your interest in joining our association.</p>
+
+<p>After careful review of your application, we regret to inform you that you do not currently meet the eligibility requirements for membership.</p>
+
+<div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 15px 0;">
+    <p><strong>Application ID:</strong> {{ application_id }}</p>
+    <p><strong>Details:</strong> {{ reason }}</p>
+</div>
+
+<p>We encourage you to review our membership requirements and consider reapplying in the future if your circumstances change.</p>
+
+<p>If you have any questions about our membership criteria, please don't hesitate to contact us.</p>
+
+<p>Best regards,<br>The Membership Team<br>{{ company }}</p>
+            """.strip()
+        })
+        ineligible_template.insert()
+        templates.append("membership_rejection_ineligible")
+    
+    # 4. Duplicate application rejection
+    if not frappe.db.exists("Email Template", "membership_rejection_duplicate"):
+        duplicate_template = frappe.get_doc({
+            "doctype": "Email Template",
+            "name": "membership_rejection_duplicate",
+            "subject": "Membership Application - Duplicate Detected - {{ member_name }}",
+            "response": """
+<h3>Membership Application - Duplicate Application</h3>
+
+<p>Dear {{ first_name }},</p>
+
+<p>Thank you for your interest in joining our association.</p>
+
+<p>We have detected that you have already submitted a membership application or are already a member of our association.</p>
+
+<div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 15px 0;">
+    <p><strong>Application ID:</strong> {{ application_id }}</p>
+    <p><strong>Details:</strong> {{ reason }}</p>
+</div>
+
+<p>If you believe this is an error or if you need assistance with your existing membership, please contact us immediately.</p>
+
+<p>If you have any questions, please don't hesitate to reach out.</p>
+
+<p>Best regards,<br>The Membership Team<br>{{ company }}</p>
+            """.strip()
+        })
+        duplicate_template.insert()
+        templates.append("membership_rejection_duplicate")
+    
+    # Also create approval template if it doesn't exist
+    if not frappe.db.exists("Email Template", "membership_application_approved"):
+        approval_template = frappe.get_doc({
+            "doctype": "Email Template",
+            "name": "membership_application_approved",
+            "subject": "Membership Application Approved - Payment Required - {{ member_name }}",
+            "response": """
+<h2>🎉 Membership Application Approved!</h2>
+
+<p>Dear {{ first_name }},</p>
+
+<p>Congratulations! Your membership application has been approved.</p>
+
+<div style="background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 5px; margin: 15px 0;">
+    <h4>Application Details:</h4>
+    <ul>
+        <li><strong>Application ID:</strong> {{ application_id }}</li>
+        <li><strong>Membership Type:</strong> {{ membership_type.membership_type_name }}</li>
+        <li><strong>Fee Amount:</strong> {{ payment_amount }}</li>
+    </ul>
+</div>
+
+<p>To complete your membership, please pay the membership fee using the link below:</p>
+
+<div style="text-align: center; margin: 20px 0;">
+    <a href="{{ payment_url }}" style="background-color: #4CAF50; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
+        Pay Membership Fee
+    </a>
+</div>
+
+<p>Your membership will be activated immediately after payment confirmation.</p>
+
+<p>If you have any questions, please don't hesitate to contact us.</p>
+
+<p>Best regards,<br>The Membership Team<br>{{ company }}</p>
+            """.strip()
+        })
+        approval_template.insert()
+        templates.append("membership_application_approved")
+    
+    frappe.db.commit()
+    
+    return {
+        "success": True,
+        "message": f"Created {len(templates)} email templates",
+        "templates": templates
+    }
     

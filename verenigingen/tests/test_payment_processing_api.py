@@ -30,7 +30,7 @@ class TestPaymentProcessingAPI(unittest.TestCase):
         
         self.sample_overdue_data = [self.sample_payment_info]
 
-    @patch('verenigingen.api.payment_processing.get_data')
+    @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_data')
     @patch('verenigingen.api.payment_processing.send_payment_reminder_email')
     def test_send_overdue_payment_reminders_success(self, mock_send_email, mock_get_data):
         """Test successful payment reminder sending"""
@@ -55,7 +55,7 @@ class TestPaymentProcessingAPI(unittest.TestCase):
         self.assertEqual(call_args['reminder_type'], 'Friendly Reminder')
         self.assertTrue(call_args['include_payment_link'])
 
-    @patch('verenigingen.api.payment_processing.get_data')
+    @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_data')
     def test_send_overdue_payment_reminders_no_data(self, mock_get_data):
         """Test payment reminders with no overdue data"""
         mock_get_data.return_value = []
@@ -67,7 +67,7 @@ class TestPaymentProcessingAPI(unittest.TestCase):
         self.assertEqual(result['count'], 0)
         self.assertIn('No overdue payments found', result['message'])
 
-    @patch('verenigingen.api.payment_processing.get_data')
+    @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_data')
     @patch('verenigingen.api.payment_processing.send_payment_reminder_email')
     def test_send_overdue_payment_reminders_with_chapter_notification(self, mock_send_email, mock_get_data):
         """Test payment reminders with chapter notifications"""
@@ -88,7 +88,7 @@ class TestPaymentProcessingAPI(unittest.TestCase):
             self.assertEqual(call_args['chapter'], 'Amsterdam')
             self.assertEqual(call_args['member_name'], 'MEM-001')
 
-    @patch('verenigingen.api.payment_processing.get_data')
+    @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_data')
     @patch('verenigingen.api.payment_processing.send_payment_reminder_email')
     def test_send_overdue_payment_reminders_partial_failure(self, mock_send_email, mock_get_data):
         """Test payment reminders with some failures"""
@@ -117,7 +117,7 @@ class TestPaymentProcessingAPI(unittest.TestCase):
         self.assertTrue(result['success'])
         self.assertEqual(result['count'], 1)
 
-    @patch('verenigingen.api.payment_processing.get_data')
+    @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_data')
     def test_export_overdue_payments_success(self, mock_get_data):
         """Test successful payment data export"""
         mock_get_data.return_value = self.sample_overdue_data
@@ -143,7 +143,7 @@ class TestPaymentProcessingAPI(unittest.TestCase):
                     # Verify CSV writer was used
                     mock_csv_writer.assert_called_once()
 
-    @patch('verenigingen.api.payment_processing.get_data')
+    @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_data')
     def test_export_overdue_payments_no_data(self, mock_get_data):
         """Test export with no data"""
         mock_get_data.return_value = []
@@ -155,19 +155,20 @@ class TestPaymentProcessingAPI(unittest.TestCase):
         self.assertEqual(result['count'], 0)
         self.assertIn('No data to export', result['message'])
 
-    @patch('verenigingen.api.payment_processing.get_data')
+    @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_data')
     def test_export_overdue_payments_file_error(self, mock_get_data):
         """Test export with file creation error"""
         mock_get_data.return_value = self.sample_overdue_data
         
         with patch('builtins.open', side_effect=Exception("File error")):
-            result = export_overdue_payments()
-            
-            # Verify error response
-            self.assertFalse(result['success'])
-            self.assertIn('Export failed', result['message'])
+            with patch('frappe.logger') as mock_logger:
+                result = export_overdue_payments()
+                
+                # Verify error response
+                self.assertFalse(result['success'])
+                self.assertIn('Export failed', result['message'])
 
-    @patch('verenigingen.api.payment_processing.get_data')
+    @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_data')
     @patch('verenigingen.api.payment_processing.send_payment_reminder_email')
     def test_execute_bulk_payment_action_send_reminders(self, mock_send_email, mock_get_data):
         """Test bulk action: send reminders"""
@@ -187,7 +188,7 @@ class TestPaymentProcessingAPI(unittest.TestCase):
         # Verify reminder was sent
         mock_send_email.assert_called_once()
 
-    @patch('verenigingen.api.payment_processing.get_data')
+    @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_data')
     @patch('verenigingen.api.payment_processing.suspend_member_for_nonpayment')
     def test_execute_bulk_payment_action_suspend_memberships(self, mock_suspend, mock_get_data):
         """Test bulk action: suspend memberships"""
@@ -207,7 +208,7 @@ class TestPaymentProcessingAPI(unittest.TestCase):
         # Verify suspension was called
         mock_suspend.assert_called_once_with('MEM-001')
 
-    @patch('verenigingen.api.payment_processing.get_data')
+    @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_data')
     def test_execute_bulk_payment_action_filters(self, mock_get_data):
         """Test bulk action filter application"""
         mock_get_data.return_value = []
@@ -327,7 +328,7 @@ class TestPaymentProcessingAPI(unittest.TestCase):
         self.assertIn('45', html)   # Days overdue
         self.assertIn('Please contact us immediately', html)
 
-    @patch('verenigingen.api.payment_processing.suspend_member_safe')
+    @patch('verenigingen.utils.termination_integration.suspend_member_safe')
     def test_suspend_member_for_nonpayment(self, mock_suspend):
         """Test member suspension for non-payment"""
         from verenigingen.api.payment_processing import suspend_member_for_nonpayment
@@ -350,7 +351,7 @@ class TestPaymentProcessingAPI(unittest.TestCase):
         filters_dict = {'chapter': 'Amsterdam', 'days_overdue': 30}
         filters_json = json.dumps(filters_dict)
         
-        with patch('verenigingen.api.payment_processing.get_data') as mock_get_data:
+        with patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_data') as mock_get_data:
             mock_get_data.return_value = []
             
             # Test with JSON string

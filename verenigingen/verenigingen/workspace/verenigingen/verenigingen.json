@@ -308,16 +308,6 @@
   {
    "hidden": 0,
    "is_query_report": 1,
-   "label": "Governance Compliance Report",
-   "link_count": 0,
-   "link_to": "Governance Compliance Report",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
    "label": "Termination Compliance Report",
    "link_count": 0,
    "link_to": "Termination Compliance Report",
@@ -353,9 +343,19 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Email Templates",
+   "link_count": 0,
+   "link_to": "Email Template",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2025-06-14 18:47:02.994675",
+ "modified": "2025-06-19 08:24:03.000978",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Verenigingen",
@@ -371,20 +371,6 @@
    "doc_view": "",
    "label": "Member",
    "link_to": "Member",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "",
-   "label": "Member",
-   "link_to": "Member",
-   "type": "DocType"
-  },
-  {
-   "color": "Grey",
-   "doc_view": "",
-   "label": "Membership",
-   "link_to": "Membership",
    "type": "DocType"
   },
   {
@@ -408,6 +394,13 @@
    "link_to": "Chapter Expense Report",
    "report_ref_doctype": "Volunteer Expense",
    "type": "Report"
+  },
+  {
+   "color": "Purple",
+   "doc_view": "",
+   "label": "Email Templates",
+   "link_to": "Email Template",
+   "type": "DocType"
   }
  ],
  "title": "Verenigingen"

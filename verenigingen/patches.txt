@@ -6,3 +6,4 @@
 # Patches added in this section will be executed after doctypes are migrated
 verenigingen.patches.migrate_contribution_amendment_request
 verenigingen.patches.migrate_contribution_amendment_request_v2
+verenigingen.patches.v1_0.cleanup_workspaces

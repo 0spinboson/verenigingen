@@ -6,6 +6,7 @@ from frappe.utils import today, now
 from typing import Dict, List, Optional, Any
 import json
 from .base_manager import BaseManager
+from verenigingen.utils.chapter_membership_history_manager import ChapterMembershipHistoryManager
 
 
 class MemberManager(BaseManager):
@@ -87,13 +88,20 @@ class MemberManager(BaseManager):
                 "enabled": enabled
             })
             
-            # Set as primary chapter if member doesn't have one
-            if not member_doc.primary_chapter:
-                member_doc.primary_chapter = self.chapter_name
-                member_doc.save(ignore_permissions=True)
+            # Note: Primary chapter concept is handled through Chapter Member ordering
+            # The first (most recent) chapter membership is considered primary
             
             # Save chapter
             self.chapter_doc.save()
+            
+            # Add membership history tracking
+            ChapterMembershipHistoryManager.add_membership_history(
+                member_id=member_id,
+                chapter_name=self.chapter_name,
+                assignment_type="Member",
+                start_date=today(),
+                reason=f"Added to {self.chapter_name} chapter"
+            )
             
             # Create audit comment
             self.create_comment(
@@ -175,14 +183,32 @@ class MemberManager(BaseManager):
                 action = "disabled"
                 message = _("Member disabled")
             
-            # Clear primary chapter if this was it
-            member_doc = frappe.get_doc("Member", member_id)
-            if member_doc.primary_chapter == self.chapter_name:
-                member_doc.primary_chapter = None
-                member_doc.save(ignore_permissions=True)
+            # Note: Primary chapter is determined by Chapter Member ordering
+            # No need to clear a specific primary_chapter field
             
             # Save chapter
             self.chapter_doc.save()
+            
+            # Update membership history tracking
+            if permanent:
+                # Complete the membership history for permanent removal
+                ChapterMembershipHistoryManager.complete_membership_history(
+                    member_id=member_id,
+                    chapter_name=self.chapter_name,
+                    assignment_type="Member",
+                    start_date=today(),  # We'll find the actual start date
+                    end_date=today(),
+                    reason=leave_reason or f"Permanently removed from {self.chapter_name}"
+                )
+            else:
+                # Terminate the membership history for disabled member
+                ChapterMembershipHistoryManager.terminate_membership_history(
+                    member_id=member_id,
+                    chapter_name=self.chapter_name,
+                    assignment_type="Member",
+                    end_date=today(),
+                    reason=leave_reason or f"Disabled in {self.chapter_name}"
+                )
             
             # Create audit comment
             self.create_comment(
@@ -429,8 +455,7 @@ class MemberManager(BaseManager):
                         member_data.update({
                             "email": member_doc.email,
                             "status": member_doc.status,
-                            "member_since": member_doc.member_since,
-                            "primary_chapter": member_doc.primary_chapter
+                            "member_since": member_doc.member_since
                         })
                     except Exception:
                         # Handle case where member might have been deleted
@@ -458,11 +483,19 @@ class MemberManager(BaseManager):
         with_website = len([m for m in enabled_members if m.website_url])
         
         # Get primary vs secondary members
+        # Primary members are determined by Chapter Member ordering (first entry is primary)
         primary_members = 0
         try:
             for member in enabled_members:
-                member_doc = frappe.get_doc("Member", member.member)
-                if member_doc.primary_chapter == self.chapter_name:
+                # Check if this is the member's primary chapter (first/most recent)
+                member_chapters = frappe.get_all(
+                    "Chapter Member",
+                    filters={"member": member.member, "enabled": 1},
+                    fields=["parent"],
+                    order_by="chapter_join_date desc",
+                    limit=1
+                )
+                if member_chapters and member_chapters[0].parent == self.chapter_name:
                     primary_members += 1
         except Exception:
             pass

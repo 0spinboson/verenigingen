@@ -209,8 +209,9 @@ def update_member_address(address_data):
         # Log the change
         frappe.logger().info(f"Address {action} for member {member_name}: {address_doc.name}")
         
-        # Prepare response with formatted address
-        new_address_display = format_address_display(address_doc)
+        # Prepare response with formatted address using Dutch conventions
+        from verenigingen.utils.address_formatter import format_address_for_country
+        new_address_display = format_address_for_country(address_doc)
         
         return {
             "success": True,
@@ -224,35 +225,7 @@ def update_member_address(address_data):
         frappe.log_error(f"Error updating address for member {member_name}: {str(e)}")
         frappe.throw(_("An error occurred while updating your address. Please try again."))
 
-def format_address_display(address_doc):
-    """Format address for display"""
-    lines = []
-    
-    if address_doc.address_line1:
-        lines.append(address_doc.address_line1)
-    if address_doc.address_line2:
-        lines.append(address_doc.address_line2)
-    
-    city_line = []
-    if address_doc.city:
-        city_line.append(address_doc.city)
-    if address_doc.state and address_doc.city:
-        city_line.append(address_doc.state)
-    elif address_doc.state:
-        city_line.append(address_doc.state)
-    
-    if city_line:
-        city_str = ", ".join(city_line)
-        if address_doc.pincode:
-            city_str += f" - {address_doc.pincode}"
-        lines.append(city_str)
-    elif address_doc.pincode:
-        lines.append(address_doc.pincode)
-    
-    if address_doc.country:
-        lines.append(address_doc.country)
-    
-    return "<br>".join(lines)
+# Address formatting moved to verenigingen.utils.address_formatter
 
 @frappe.whitelist()
 def get_current_address():

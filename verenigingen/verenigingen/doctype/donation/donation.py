@@ -52,7 +52,10 @@ class Donation(Document):
 	def on_payment_authorized(self, *args, **kwargs):
 		self.db_set("paid", 1)
 		self.load_from_db()
-		self.create_payment_entry()
+		# Create payment entry unless disabled in settings
+		settings = frappe.get_single("Verenigingen Settings")
+		if not settings.automate_donation_payment_entries:
+			self.create_payment_entry()
 	
 	def validate_payment_method(self):
 		"""Validate payment method specific requirements"""
@@ -321,7 +324,10 @@ class Donation(Document):
 		"""Called when submitted donation is updated"""
 		# Create payment entry if marked as paid
 		if self.paid and self.has_value_changed("paid"):
-			self.create_payment_entry_for_sales_invoice()
+			# Create payment entry unless disabled in settings
+			settings = frappe.get_single("Verenigingen Settings")
+			if not settings.automate_donation_payment_entries:
+				self.create_payment_entry_for_sales_invoice()
 			
 			# Send payment confirmation
 			from verenigingen.utils.donation_emails import send_payment_confirmation

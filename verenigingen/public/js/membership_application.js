@@ -621,13 +621,11 @@ class MembershipApplication {
             
             // Bank Account Details (Direct Debit)
             iban: $('#iban').val() || '',
-            bic: $('#bic').val() || '',
             bank_account_name: $('#bank_account_name').val() || '',
             
             // Bank Transfer Account Details (for payment matching)
             // Note: These should map to the member IBAN fields when payment_method is 'Bank Transfer'
             transfer_iban: $('#transfer_iban').val() || '',
-            transfer_bic: $('#transfer_bic').val() || '',
             transfer_account_name: $('#transfer_account_name').val() || '',
             
             // Step 6: Final Confirmation
@@ -1479,9 +1477,6 @@ class MembershipApplication {
                 if (data.bank_account_name) {
                     content += `<p><strong>Account Holder:</strong> ${data.bank_account_name}</p>`;
                 }
-                if (data.bic) {
-                    content += `<p><strong>BIC:</strong> ${data.bic}</p>`;
-                }
             }
             
             // Show bank transfer account details for Bank Transfer
@@ -1491,9 +1486,6 @@ class MembershipApplication {
                 }
                 if (data.transfer_account_name) {
                     content += `<p><strong>Account Holder:</strong> ${data.transfer_account_name}</p>`;
-                }
-                if (data.transfer_bic) {
-                    content += `<p><strong>BIC:</strong> ${data.transfer_bic}</p>`;
                 }
                 if (!data.transfer_iban && !data.transfer_account_name) {
                     content += `<p><em>Account details will be provided via email</em></p>`;
@@ -1531,26 +1523,11 @@ class MembershipApplication {
             $(this).val(formattedValue);
         });
         
-        // Format IBAN inputs (for both direct debit and bank transfer) and auto-derive BIC
+        // Format IBAN inputs (for both direct debit and bank transfer)
         $('#iban, #transfer_iban').off('input').on('input', function() {
             let value = $(this).val().replace(/\s+/g, '').toUpperCase();
             let formattedValue = value.match(/.{1,4}/g)?.join(' ') || value;
             $(this).val(formattedValue);
-            
-            // Auto-derive BIC from IBAN
-            const bicField = $(this).attr('id') === 'iban' ? '#bic' : '#transfer_bic';
-            const derivedBic = getBicFromIban(value);
-            if (derivedBic) {
-                $(bicField).val(derivedBic);
-            }
-        });
-        
-        // Format BIC inputs
-        $('#bic, #transfer_bic').off('input').on('input', function() {
-            let value = $(this).val().replace(/[^A-Z0-9]/gi, '').toUpperCase();
-            if (value.length <= 11) {
-                $(this).val(value);
-            }
         });
     }
     
@@ -2058,14 +2035,13 @@ class MembershipApplication {
             
             // Set required attributes for bank account fields
             $('#iban, #bank_account_name').prop('required', true);
-            $('#bic').prop('required', false); // BIC is optional
         } else if (is_bank_transfer) {
             console.log('Main app: Showing bank transfer details with account fields');
             $('#bank-transfer-details').show();
             
             // Bank transfer fields are optional (for payment matching purposes)
-            $('#iban, #bank_account_name, #bic').prop('required', false);
-            $('#transfer_iban, #transfer_account_name, #transfer_bic').prop('required', false);
+            $('#iban, #bank_account_name').prop('required', false);
+            $('#transfer_iban, #transfer_account_name').prop('required', false);
         }
         
         // Clear validation errors when switching payment methods
@@ -2121,48 +2097,6 @@ class MembershipApplication {
     }
 }
 
-// ===================================
-// BIC DERIVATION UTILITY FUNCTION
-// ===================================
-
-function getBicFromIban(iban) {
-    /**
-     * Derive BIC from IBAN using the same logic as the backend
-     * This matches the get_bic_from_iban() function in direct_debit_batch.py
-     */
-    if (!iban || iban.length < 8) {
-        return null;
-    }
-    
-    try {
-        // Remove spaces and convert to uppercase
-        iban = iban.replace(/\s+/g, '').toUpperCase();
-        
-        // Dutch IBAN - extract bank code
-        if (iban.startsWith('NL')) {
-            const bankCode = iban.substring(4, 8);
-            
-            // Common Dutch bank codes (matching backend)
-            const bankCodes = {
-                'INGB': 'INGBNL2A',  // ING Bank
-                'ABNA': 'ABNANL2A',  // ABN AMRO
-                'RABO': 'RABONL2U',  // Rabobank
-                'TRIO': 'TRIONL2U',  // Triodos Bank
-                'SNSB': 'SNSBNL2A',  // SNS Bank
-                'ASNB': 'ASNBNL21',  // ASN Bank
-                'KNAB': 'KNABNL2H'   // Knab
-            };
-            
-            return bankCodes[bankCode] || null;
-        }
-        
-        // For other countries, we would need a more extensive mapping
-        return null;
-    } catch (error) {
-        console.error('Error determining BIC from IBAN:', iban, error);
-        return null;
-    }
-}
 
 // ===================================
 // 2. STATE MANAGEMENT (LEGACY COMPATIBILITY)

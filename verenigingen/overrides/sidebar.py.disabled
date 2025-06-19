@@ -1,0 +1,19 @@
+"""
+Permanent sidebar configuration overrides
+"""
+
+import frappe
+from frappe.desk.desktop import get_workspace_sidebar_items as _get_workspace_sidebar_items
+from verenigingen.utils.module_restrictions import filter_workspace_pages
+
+def get_workspace_sidebar_items():
+    """Override sidebar items to hide unwanted modules based on user permissions"""
+    
+    # Get the original sidebar items
+    result = _get_workspace_sidebar_items()
+    
+    if isinstance(result, dict) and "pages" in result:
+        # Use the permission-based filtering
+        result["pages"] = filter_workspace_pages(result["pages"])
+    
+    return result

@@ -50,20 +50,35 @@ def get_context(context):
     context.membership_type = membership_type
     
     # Calculate minimum fee (could be based on membership type, student status, etc.)
-    minimum_fee = get_minimum_fee(context.member, membership_type)
+    minimum_fee = get_minimum_fee(context.member, membership_type, membership)
     context.minimum_fee = minimum_fee
     
-    # Get current effective fee
-    current_fee = context.member.get_current_membership_fee()
+    # Get current effective fee with billing frequency consideration
+    current_fee = get_effective_fee_for_member(context.member, membership)
     context.current_fee = current_fee
+    
+    # Determine billing frequency for display
+    billing_frequency = "Monthly"
+    if membership:
+        if "kwartaal" in membership.membership_type.lower() or "quarter" in membership.membership_type.lower():
+            billing_frequency = "Quarterly"
+        elif "jaar" in membership.membership_type.lower() or "annual" in membership.membership_type.lower():
+            billing_frequency = "Annually"
+    context.billing_frequency = billing_frequency
     
     # Get fee adjustment settings
     settings = get_fee_adjustment_settings()
     context.settings = settings
     
-    # Get member contact email from settings
+    # Get member contact email and calculator settings from settings
     verenigingen_settings = frappe.get_single("Verenigingen Settings")
     context.member_contact_email = getattr(verenigingen_settings, 'member_contact_email', 'ledenadministratie@veganisme.org')
+    
+    # Get calculator settings for the infobox
+    context.enable_income_calculator = getattr(verenigingen_settings, 'enable_income_calculator', 0)
+    context.income_percentage_rate = getattr(verenigingen_settings, 'income_percentage_rate', 0.5)
+    context.calculator_description = getattr(verenigingen_settings, 'calculator_description', 
+        'Our suggested contribution is 0.5% of your monthly net income. This helps ensure fair and equitable contributions based on your financial capacity.')
     
     # Check if member can adjust their fee
     context.can_adjust_fee = can_member_adjust_fee(context.member, settings)
@@ -92,9 +107,39 @@ def get_context(context):
     
     return context
 
-def get_minimum_fee(member, membership_type):
-    """Calculate minimum fee for a member"""
-    base_minimum = flt(membership_type.amount * 0.3)  # 30% of standard fee as absolute minimum
+def get_effective_fee_for_member(member, membership):
+    """Get the actual effective fee considering billing frequency and custom amounts"""
+    try:
+        # First try to get the fee from the membership record if it uses custom amount
+        if membership:
+            membership_doc = frappe.get_doc("Membership", membership.name)
+            if getattr(membership_doc, 'uses_custom_amount', False):
+                custom_amount = getattr(membership_doc, 'custom_amount', 0)
+                if custom_amount:
+                    return {
+                        "amount": custom_amount,
+                        "source": "custom_membership_amount",
+                        "reason": "Custom amount from membership record"
+                    }
+        
+        # Fall back to member's get_current_membership_fee method
+        return member.get_current_membership_fee()
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting effective fee for member {member.name}: {str(e)}", "Fee Calculation Error")
+        return {"amount": 0, "source": "error"}
+
+def get_minimum_fee(member, membership_type, membership=None):
+    """Calculate minimum fee for a member considering billing frequency"""
+    # Get the base amount from membership type
+    base_amount = membership_type.amount
+    
+    # For quarterly memberships, we need to consider the quarterly amount
+    if membership and ("kwartaal" in membership.membership_type.lower() or "quarter" in membership.membership_type.lower()):
+        # For quarterly members, use a reasonable quarterly minimum
+        base_minimum = flt(base_amount * 0.5)  # 50% of standard quarterly fee
+    else:
+        base_minimum = flt(base_amount * 0.3)  # 30% of standard fee as absolute minimum
     
     # Student discount
     if getattr(member, 'student_status', False):

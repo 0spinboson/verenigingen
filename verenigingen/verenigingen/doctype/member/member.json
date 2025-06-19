@@ -1,7 +1,7 @@
 {
  "actions": [],
- 
- "app": "verenigingen","autoname": "format:Assoc-Member-{YYYY}-{MM}-{####}",
+ "app": "verenigingen",
+ "autoname": "format:Assoc-Member-{YYYY}-{MM}-{####}",
  "creation": "2023-01-01 00:00:00",
  "doctype": "DocType",
  "engine": "InnoDB",
@@ -63,6 +63,17 @@
   "payment_history_tab",
   "payment_history_section",
   "payment_history",
+  "chapter_data_tab",
+  "chapter_and_volunteer_activity_section",
+  "current_chapter_display",
+  "chapter_assigned_date",
+  "chapter_assigned_by",
+  "previous_chapter",
+  "chapter_change_reason",
+  "chapter_membership_history_section",
+  "chapter_membership_history",
+  "volunteer_details_section",
+  "volunteer_details_html",
   "administration_tab",
   "application_section",
   "application_id",
@@ -99,16 +110,7 @@
   "annual_income",
   "tax_residence",
   "student_status",
-  "donation_interest",
-  "volunteer_data_tab",
-  "chapter_and_volunteer_activity_section",
-  "current_chapter_display",
-  "chapter_assigned_date",
-  "chapter_assigned_by",
-  "previous_chapter",
-  "chapter_change_reason",
-  "volunteer_details_section",
-  "volunteer_details_html"
+  "donation_interest"
  ],
  "fields": [
   {
@@ -280,40 +282,53 @@
    "label": "Member Details"
   },
   {
+   "description": "Displays member's current chapter membership(s) based on Chapter Member relationships",
    "fieldname": "current_chapter_display",
    "fieldtype": "HTML",
    "label": "Current Chapter(s)",
-   "read_only": 1,
-   "description": "Displays member's current chapter membership(s) based on Chapter Member relationships"
+   "read_only": 1
   },
   {
+   "description": "Date when member was assigned to current chapter",
    "fieldname": "chapter_assigned_date",
    "fieldtype": "Datetime",
    "label": "Chapter Assigned Date",
-   "read_only": 1,
-   "description": "Date when member was assigned to current chapter"
+   "read_only": 1
   },
   {
+   "description": "User who assigned member to current chapter",
    "fieldname": "chapter_assigned_by",
    "fieldtype": "Link",
    "label": "Chapter Assigned By",
    "options": "User",
-   "read_only": 1,
-   "description": "User who assigned member to current chapter"
+   "read_only": 1
   },
   {
+   "description": "Member's previous chapter before current assignment",
    "fieldname": "previous_chapter",
    "fieldtype": "Link",
    "label": "Previous Chapter",
    "options": "Chapter",
-   "read_only": 1,
-   "description": "Member's previous chapter before current assignment"
+   "read_only": 1
   },
   {
+   "description": "Reason for chapter assignment/change",
    "fieldname": "chapter_change_reason",
    "fieldtype": "Small Text",
-   "label": "Chapter Change Reason",
-   "description": "Reason for chapter assignment/change"
+   "label": "Chapter Change Reason"
+  },
+  {
+   "depends_on": "eval:doc.name",
+   "fieldname": "chapter_membership_history_section",
+   "fieldtype": "Section Break",
+   "label": "Chapter Membership History"
+  },
+  {
+   "description": "Historical record of all chapter memberships and board positions",
+   "fieldname": "chapter_membership_history",
+   "fieldtype": "Table",
+   "label": "Chapter Membership History",
+   "options": "Chapter Membership History"
   },
   {
    "default": "Board Only",
@@ -356,10 +371,10 @@
    "read_only": 1
   },
   {
+   "description": "Preferred pronouns (e.g., She/her, He/him, They/them, or specify your own)",
    "fieldname": "pronouns",
    "fieldtype": "Data",
-   "label": "Pronouns",
-   "description": "Preferred pronouns (e.g., She/her, He/him, They/them, or specify your own)"
+   "label": "Pronouns"
   },
   {
    "fieldname": "birth_date",
@@ -650,15 +665,13 @@
    "description": "Override the standard membership fee with a custom amount",
    "fieldname": "membership_fee_override",
    "fieldtype": "Currency",
-   "label": "Custom Membership Fee",
-   "permlevel": 0
+   "label": "Custom Membership Fee"
   },
   {
    "depends_on": "eval:doc.membership_fee_override",
    "fieldname": "fee_override_reason",
    "fieldtype": "Small Text",
-   "label": "Reason for Fee Override",
-   "permlevel": 0
+   "label": "Reason for Fee Override"
   },
   {
    "fieldname": "column_break_fee",
@@ -669,8 +682,7 @@
    "fieldname": "fee_override_date",
    "fieldtype": "Date",
    "label": "Override Date",
-   "read_only": 1,
-   "permlevel": 0
+   "read_only": 1
   },
   {
    "depends_on": "eval:doc.membership_fee_override",
@@ -678,8 +690,7 @@
    "fieldtype": "Link",
    "label": "Override Set By",
    "options": "User",
-   "read_only": 1,
-   "permlevel": 0
+   "read_only": 1
   },
   {
    "depends_on": "eval:doc.fee_change_history && doc.fee_change_history.length > 0",
@@ -725,9 +736,9 @@
    "label": "Payment history"
   },
   {
-   "fieldname": "volunteer_data_tab",
+   "fieldname": "chapter_data_tab",
    "fieldtype": "Tab Break",
-   "label": "Volunteer Data"
+   "label": "Chapter data"
   }
  ],
  "links": [
@@ -763,11 +774,6 @@
    "link_fieldname": "member"
   },
   {
-   "group": "Financial",
-   "link_doctype": "Direct Debit Batch Entry",
-   "link_fieldname": "member"
-  },
-  {
    "group": "Volunteer",
    "link_doctype": "Volunteer",
    "link_fieldname": "member"
@@ -775,35 +781,25 @@
   {
    "group": "Volunteer",
    "link_doctype": "Volunteer Activity",
-   "link_fieldname": "volunteer",
-   "custom_link_field": "member"
-  },
-  {
-   "group": "Volunteer",
-   "link_doctype": "Volunteer Assignment",
-   "link_fieldname": "volunteer",
-   "custom_link_field": "member"
+   "link_fieldname": "volunteer"
   },
   {
    "group": "Volunteer",
    "link_doctype": "Volunteer Expense",
-   "link_fieldname": "volunteer",
-   "custom_link_field": "member"
+   "link_fieldname": "volunteer"
   },
   {
    "group": "Administration",
    "link_doctype": "User",
-   "link_fieldname": "name",
-   "custom_link_field": "user"
+   "link_fieldname": "name"
   },
   {
    "group": "Administration",
    "link_doctype": "Customer",
-   "link_fieldname": "name",
-   "custom_link_field": "customer"
+   "link_fieldname": "name"
   }
  ],
- "modified": "2025-06-07 22:42:45.646332",
+ "modified": "2025-06-18 06:46:06.258176",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
@@ -869,6 +865,15 @@
    "read": 1,
    "role": "Verenigingen Administrator",
    "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Chapter Board Member",
+   "share": 1
   }
  ],
  "row_format": "Dynamic",

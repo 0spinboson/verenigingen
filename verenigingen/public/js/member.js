@@ -1,7 +1,4 @@
-// Load member application review functionality
-frappe.require([
-    '/assets/verenigingen/js/member_application_review.js'
-]);
+// Member form utilities - review functionality integrated into main member.js
 
 // Define minimal UIUtils to prevent errors
 window.UIUtils = window.UIUtils || {
@@ -682,10 +679,7 @@ verenigingen.member_form = {
             console.log('Not calling refresh_chapter_display - doc name:', frm.doc.name, 'islocal:', frm.doc.__islocal);
         }
         
-        // Show application review interface for pending applications
-        if (frm.doc.application_status === 'Pending' && frm.doc.status === 'Pending') {
-            this.setup_application_review(frm);
-        }
+        // Application review is now handled in the main member.js file
         
         // Set up buttons immediately without clearing (to prevent disappearing)
         this.setup_all_buttons(frm);
@@ -806,89 +800,6 @@ verenigingen.member_form = {
         });
     },
     
-    setup_application_review: function(frm) {
-        // Check user permissions
-        if (!frappe.user.has_role(['Verenigingen Administrator', 'Membership Manager'])) {
-            return;
-        }
-        
-        // Add Approve and Reject buttons
-        frm.add_custom_button(__('Approve Application'), function() {
-            frappe.confirm(
-                __('Are you sure you want to approve this membership application?'),
-                function() {
-                    frappe.call({
-                        method: 'verenigingen.api.membership_application_review.approve_membership_application',
-                        args: {
-                            member_name: frm.doc.name
-                        },
-                        callback: function(r) {
-                            if (r.message) {
-                                frappe.show_alert({
-                                    message: __('Application approved successfully'),
-                                    indicator: 'green'
-                                }, 5);
-                                frm.reload_doc();
-                            }
-                        }
-                    });
-                }
-            );
-        }, __('Review'));
-        
-        frm.add_custom_button(__('Reject Application'), function() {
-            let d = new frappe.ui.Dialog({
-                title: __('Reject Application'),
-                fields: [
-                    {
-                        fieldname: 'rejection_reason',
-                        fieldtype: 'Select',
-                        label: __('Rejection Reason'),
-                        options: 'Incomplete Information\nIneligible\nDuplicate Application\nOther',
-                        reqd: 1
-                    },
-                    {
-                        fieldname: 'rejection_notes',
-                        fieldtype: 'Text',
-                        label: __('Additional Notes')
-                    }
-                ],
-                primary_action_label: __('Reject Application'),
-                primary_action: function(values) {
-                    frappe.call({
-                        method: 'verenigingen.api.membership_application_review.reject_membership_application',
-                        args: {
-                            member_name: frm.doc.name,
-                            reason: values.rejection_reason + (values.rejection_notes ? ': ' + values.rejection_notes : '')
-                        },
-                        callback: function(r) {
-                            if (r.message) {
-                                d.hide();
-                                frappe.show_alert({
-                                    message: __('Application rejected'),
-                                    indicator: 'red'
-                                }, 5);
-                                frm.reload_doc();
-                            }
-                        }
-                    });
-                }
-            });
-            d.show();
-        }, __('Review'));
-        
-        // Add review status indicator
-        let review_html = `
-            <div class="alert alert-info" style="margin: 15px;">
-                <h4><i class="fa fa-clock-o"></i> Pending Application Review</h4>
-                <p>This membership application is pending review. Use the buttons above to approve or reject.</p>
-                <p><strong>Applied:</strong> ${frappe.datetime.str_to_user(frm.doc.creation)}</p>
-                <p><strong>Applicant:</strong> ${frm.doc.full_name}</p>
-            </div>
-        `;
-        
-        $(frm.fields_dict.notes.wrapper).before(review_html);
-    },
     
     initialize_member_form_basic: function(frm) {
         // Basic initialization without utilities

@@ -9,6 +9,7 @@ console.log('Member.js file is loading - v2025-01-13-001');
 frappe.require([
     '/assets/verenigingen/js/member/js_modules/payment-utils.js',
     '/assets/verenigingen/js/member/js_modules/chapter-utils.js',
+    '/assets/verenigingen/js/member/js_modules/chapter-history-utils.js',
     '/assets/verenigingen/js/member/js_modules/sepa-utils.js',
     '/assets/verenigingen/js/member/js_modules/termination-utils.js',
     '/assets/verenigingen/js/member/js_modules/volunteer-utils.js',
@@ -28,31 +29,11 @@ frappe.ui.form.on('Member', {
         UIUtils.setup_payment_history_grid(frm);
         UIUtils.setup_member_id_display(frm);
         
-        // Add action buttons for submitted documents
-        if (frm.doc.docstatus === 1) {
-            add_payment_buttons(frm);
-        }
+        // Add all action buttons with proper consolidation
+        add_consolidated_action_buttons(frm);
         
-        // Add customer creation button if not exists
-        add_customer_buttons(frm);
-        
-        // Add user account management buttons
-        add_user_account_buttons(frm);
-        
-        // Add chapter management buttons
-        add_chapter_buttons(frm);
-        
-        // Add view buttons for related records
-        add_view_buttons(frm);
-        
-        // Add volunteer-related buttons
-        add_volunteer_buttons(frm);
-        
-        // Add termination buttons and status display
-        add_termination_buttons(frm);
-        
-        // Add suspension buttons
-        add_suspension_buttons(frm);
+        // Add all view buttons in consolidated menu
+        add_consolidated_view_buttons(frm);
         
         // Display termination status
         display_termination_status(frm);
@@ -74,17 +55,8 @@ frappe.ui.form.on('Member', {
             ensure_fee_management_section_visibility(frm);
         }, 500);
         
-        // Add member ID management buttons
-        add_member_id_buttons(frm);
-        
-        // Button to manually refresh fee section visibility
-        if (frappe.user.has_role(['System Manager', 'Membership Manager', 'Verenigingen Administrator'])) {
-            frm.add_custom_button(__('Refresh Fee Section'), function() {
-                ensure_fee_management_section_visibility(frm);
-                frappe.show_alert('Fee section visibility refreshed', 3);
-            }, __('Fee Management'));
-            
-        }
+        // Add administrative buttons for authorized users
+        add_administrative_buttons(frm);
         
         // Check SEPA mandate status (debounced to avoid multiple rapid calls)
         check_sepa_mandate_status_debounced(frm);
@@ -94,6 +66,14 @@ frappe.ui.form.on('Member', {
         
         // Show board memberships if any
         UIUtils.show_board_memberships(frm);
+        
+        // Setup chapter membership history display and utilities (with delay for async loading)
+        setTimeout(() => {
+            if (window.ChapterHistoryUtils) {
+                ChapterHistoryUtils.setup_chapter_history_display(frm);
+                ChapterHistoryUtils.add_chapter_history_insights(frm);
+            }
+        }, 1000);
         
         // Load and display current subscription details
         load_subscription_summary(frm);
@@ -218,21 +198,15 @@ frappe.ui.form.on('Member Payment History', {
     }
 });
 
-// ==================== BUTTON SETUP FUNCTIONS ====================
+// ==================== CONSOLIDATED BUTTON SETUP FUNCTIONS ====================
 
-function add_payment_buttons(frm) {
-    if (frm.doc.payment_status !== 'Paid') {
-        frm.add_custom_button(__('Process Payment'), function() {
-            PaymentUtils.process_payment(frm);
-        }, __('Actions'));
-        
-        frm.add_custom_button(__('Mark as Paid'), function() {
-            PaymentUtils.mark_as_paid(frm);
-        }, __('Actions'));
-    }
-}
-
-function add_customer_buttons(frm) {
+function add_consolidated_action_buttons(frm) {
+    // Clear existing custom buttons to avoid duplicates
+    frm.clear_custom_buttons();
+    
+    // === PRIMARY ACTIONS GROUP ===
+    
+    // Customer and donor creation
     if (!frm.doc.customer) {
         frm.add_custom_button(__('Create Customer'), function() {
             frm.call({
@@ -244,127 +218,241 @@ function add_customer_buttons(frm) {
                     }
                 }
             });
-        }, __('Actions'));
-    }
-}
-
-function add_user_account_buttons(frm) {
-    // Only show user account buttons for members with email addresses
-    if (!frm.doc.email) {
-        return;
+        }, __('Create'));
     }
     
-    if (!frm.doc.user) {
-        // Show create user account button if no user exists
-        frm.add_custom_button(__('Create User Account'), function() {
-            frappe.confirm(
-                __('Create a user account for {0} to access member portal pages?', [frm.doc.full_name]),
-                function() {
-                    frappe.call({
-                        method: 'verenigingen.verenigingen.doctype.member.member.create_member_user_account',
-                        args: {
-                            member_name: frm.doc.name,
-                            send_welcome_email: true
-                        },
-                        callback: function(r) {
-                            if (r.message) {
-                                if (r.message.success) {
-                                    frappe.show_alert({
-                                        message: r.message.message,
-                                        indicator: 'green'
-                                    }, 5);
-                                    frm.refresh();
-                                } else {
-                                    frappe.msgprint({
-                                        message: r.message.error || r.message.message,
-                                        indicator: 'red'
-                                    });
-                                }
-                            }
-                        }
-                    });
-                }
-            );
-        }, __('Actions'));
-    } else {
-        // Show user account info if user exists
-        frm.add_custom_button(__('View User Account'), function() {
-            frappe.set_route('Form', 'User', frm.doc.user);
-        }, __('View'));
+    // Add donor creation button
+    add_donor_creation_button(frm);
+    
+    // User account creation/management
+    if (frm.doc.email) {
+        if (!frm.doc.user) {
+            frm.add_custom_button(__('Create User Account'), function() {
+                create_user_account_dialog(frm);
+            }, __('Create'));
+        }
+    }
+    
+    // Volunteer profile creation
+    check_and_add_volunteer_creation_button(frm);
+    
+    // === MEMBER ACTIONS GROUP ===
+    
+    // Payment actions for submitted documents
+    if (frm.doc.docstatus === 1 && frm.doc.payment_status !== 'Paid') {
+        frm.add_custom_button(__('Process Payment'), function() {
+            PaymentUtils.process_payment(frm);
+        }, __('Member Actions'));
         
-        // Add dashboard indicator for user account
-        frm.dashboard.add_indicator(__("Has User Account"), "green");
+        frm.add_custom_button(__('Mark as Paid'), function() {
+            PaymentUtils.mark_as_paid(frm);
+        }, __('Member Actions'));
+    }
+    
+    // Chapter assignment
+    add_chapter_assignment_button(frm);
+    
+    // Termination and suspension actions
+    add_member_status_actions(frm);
+    
+    // === REVIEW ACTIONS GROUP ===
+    
+    // Membership review button (improved loading)
+    add_membership_review_button(frm);
+    
+    // Financial actions
+    if (frm.doc.customer) {
+        frm.add_custom_button(__('Refresh Financial History'), function() {
+            PaymentUtils.refresh_financial_history(frm);
+        }, __('Review Actions'));
     }
 }
 
-function add_chapter_buttons(frm) {
+function add_consolidated_view_buttons(frm) {
+    // Customer record
+    if (frm.doc.customer) {
+        frm.add_custom_button(__('Customer Record'), function() {
+            frappe.set_route('Form', 'Customer', frm.doc.customer);
+        }, __('View'));
+    }
+    
+    // User account
+    if (frm.doc.user) {
+        frm.add_custom_button(__('User Account'), function() {
+            frappe.set_route('Form', 'User', frm.doc.user);
+        }, __('View'));
+    }
+    
+    // Chapter record
+    if (frm.doc.current_chapter_display) {
+        frm.add_custom_button(__('Chapter'), function() {
+            frappe.set_route('Form', 'Chapter', frm.doc.current_chapter_display);
+        }, __('View'));
+    }
+    
+    // Volunteer profile and activities
+    add_volunteer_view_buttons(frm);
+    
+    // Donations view
+    if (frm.doc.customer) {
+        frm.add_custom_button(__('Donations'), function() {
+            view_donations(frm);
+        }, __('View'));
+    }
+    
+    // Termination history
+    frm.add_custom_button(__('Termination History'), function() {
+        TerminationUtils.show_termination_history(frm.doc.name);
+    }, __('View'));
+}
+
+function add_administrative_buttons(frm) {
+    const hasAdminRole = frappe.user.has_role(['System Manager', 'Membership Manager', 'Verenigingen Administrator']);
+    const isSystemManager = frappe.user.has_role(['System Manager']);
+    
+    if (!hasAdminRole) return;
+    
+    // Fee management
+    if (frm.doc.docstatus === 1) {
+        frm.add_custom_button(__('View Fee Details'), function() {
+            show_fee_details_dialog(frm);
+        }, __('Fee Management'));
+        
+        frm.add_custom_button(__('Override Membership Fee'), function() {
+            show_fee_override_dialog(frm);
+        }, __('Fee Management'));
+        
+        if (frm.doc.customer) {
+            frm.add_custom_button(__('Refresh Subscription History'), function() {
+                refresh_subscription_history(frm);
+            }, __('Fee Management'));
+            
+            frm.add_custom_button(__('Refresh Subscription Summary'), function() {
+                load_subscription_summary(frm);
+            }, __('Fee Management'));
+        }
+        
+        frm.add_custom_button(__('Refresh Fee Section'), function() {
+            ensure_fee_management_section_visibility(frm);
+            frappe.show_alert('Fee section visibility refreshed', 3);
+        }, __('Fee Management'));
+    }
+    
+    // Member ID management
+    add_member_id_management_buttons(frm);
+    
+    // Debug tools for System Managers
+    if (isSystemManager && frappe.boot.developer_mode) {
+        // Debug tools can be added here as needed
+    }
+    
+    // Ensure fee management section visibility
+    ensure_fee_management_section_visibility(frm);
+}
+
+function add_donor_creation_button(frm) {
+    // Check if donor record already exists
     frappe.call({
-        method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
+        method: 'verenigingen.verenigingen.doctype.member.member.check_donor_exists',
+        args: {
+            member_name: frm.doc.name
+        },
         callback: function(r) {
-            if (r.message) {
-                if (frm.doc.current_chapter_display) {
-                    frm.add_custom_button(__('View Chapter'), function() {
-                        frappe.set_route('Form', 'Chapter', frm.doc.current_chapter_display);
-                    }, __('View'));
-                }
-                
-                frm.add_custom_button(__('Assign Chapter'), function() {
-                    frm.set_value('current_chapter_display', '');
-                    frm.refresh_field('current_chapter_display');
-                }, __('Actions'));
-                
-                // Add simple chapter suggestion when no chapter is assigned
-                add_simple_chapter_suggestion(frm);
-                
-                // Add visual indicator for chapter membership
-                if (frm.doc.current_chapter_display && !frm.doc.__unsaved) {
-                    frm.dashboard.add_indicator(__("Member of {0}", [frm.doc.current_chapter_display]), "blue");
-                }
-                
-                // Add debug button for postal code matching (development only)
-                if (frappe.boot.developer_mode) {
-                    frm.add_custom_button(__('Debug Postal Code'), function() {
-                        UIUtils.show_debug_postal_code_info(frm);
-                    }, __('Debug'));
-                }
+            if (r.message && !r.message.exists) {
+                frm.add_custom_button(__('Create Donor Record'), function() {
+                    create_donor_from_member(frm);
+                }, __('Create'));
+            } else if (r.message && r.message.exists) {
+                // Show view donor button instead
+                frm.add_custom_button(__('Donor Record'), function() {
+                    frappe.set_route('Form', 'Donor', r.message.donor_name);
+                }, __('View'));
             }
         }
     });
 }
 
-function add_view_buttons(frm) {
-    if (frm.doc.customer) {
-        frm.add_custom_button(__('Customer'), function() {
-            frappe.set_route('Form', 'Customer', frm.doc.customer);
-        }, __('View'));
-        
-        frm.add_custom_button(__('Refresh Financial History'), function() {
-            PaymentUtils.refresh_financial_history(frm);
-        }, __('Actions'));
-        
-        frm.add_custom_button(__('View Donations'), function() {
+function create_donor_from_member(frm) {
+    frappe.confirm(
+        __('Create a donor record for {0}? This will enable donation tracking and receipts.', [frm.doc.full_name]),
+        function() {
             frappe.call({
-                method: "verenigingen.verenigingen.doctype.member.member.get_linked_donations",
+                method: 'verenigingen.verenigingen.doctype.member.member.create_donor_from_member',
                 args: {
-                    "member": frm.doc.name
+                    member_name: frm.doc.name
                 },
                 callback: function(r) {
-                    if (r.message && r.message.donor) {
-                        frappe.route_options = {
-                            "donor": r.message.donor
-                        };
-                        frappe.set_route("List", "Donation");
+                    if (r.message && r.message.success) {
+                        frappe.show_alert({
+                            message: r.message.message,
+                            indicator: 'green'
+                        }, 5);
+                        frm.refresh(); // Refresh to update buttons
+                        
+                        // Optionally open the new donor record
+                        if (r.message.donor_name) {
+                            frappe.set_route('Form', 'Donor', r.message.donor_name);
+                        }
                     } else {
-                        frappe.msgprint(__("No donor record linked to this member."));
+                        frappe.msgprint({
+                            message: r.message.error || r.message.message,
+                            indicator: 'red'
+                        });
                     }
                 }
             });
-        }, __('View'));
+        }
+    );
+}
+
+function add_membership_review_button(frm) {
+    // Add application review buttons if member is pending
+    if (frm.doc.application_status === 'Pending' && frm.doc.status === 'Pending') {
+        // Check if user has appropriate permissions
+        if (frappe.user.has_role(['Verenigingen Administrator', 'Membership Manager']) || 
+            is_chapter_board_member_with_permissions(frm)) {
+            
+            // Add approve button
+            frm.add_custom_button(__('Approve Application'), function() {
+                show_approval_dialog(frm);
+            }, __('Review Actions'));
+            
+            // Add reject button
+            frm.add_custom_button(__('Reject Application'), function() {
+                show_rejection_dialog(frm);
+            }, __('Review Actions'));
+            
+            // Add request more info button
+            frm.add_custom_button(__('Request More Info'), function() {
+                request_more_info(frm);
+            }, __('Review Actions'));
+            
+            // Add dashboard indicator
+            frm.dashboard.add_indicator(__('Pending Review'), 'orange');
+        }
     }
 }
 
-function add_volunteer_buttons(frm) {
-    // Check if volunteer profile exists
+function check_and_add_volunteer_creation_button(frm) {
+    frappe.call({
+        method: 'frappe.client.get_list',
+        args: {
+            doctype: 'Volunteer',
+            filters: {
+                'member': frm.doc.name
+            }
+        },
+        callback: function(r) {
+            if (!r.message || r.message.length === 0) {
+                frm.add_custom_button(__('Create Volunteer Profile'), function() {
+                    VolunteerUtils.create_volunteer_from_member(frm);
+                }, __('Create'));
+            }
+        }
+    });
+}
+
+function add_volunteer_view_buttons(frm) {
     frappe.call({
         method: 'frappe.client.get_list',
         args: {
@@ -377,7 +465,7 @@ function add_volunteer_buttons(frm) {
             if (r.message && r.message.length > 0) {
                 const volunteer = r.message[0];
                 
-                frm.add_custom_button(__('View Volunteer Profile'), function() {
+                frm.add_custom_button(__('Volunteer Profile'), function() {
                     frappe.set_route('Form', 'Volunteer', volunteer.name);
                 }, __('View'));
                 
@@ -388,62 +476,212 @@ function add_volunteer_buttons(frm) {
                 frm.add_custom_button(__('Volunteer Assignments'), function() {
                     VolunteerUtils.show_volunteer_assignments(volunteer.name);
                 }, __('View'));
-            } else {
-                frm.add_custom_button(__('Create Volunteer Profile'), function() {
-                    VolunteerUtils.create_volunteer_from_member(frm);
-                }, __('Actions'));
             }
         }
     });
 }
 
-function add_termination_buttons(frm) {
-    // Check termination status and permissions first
+function add_chapter_assignment_button(frm) {
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled',
+        callback: function(r) {
+            if (r.message) {
+                frm.add_custom_button(__('Assign Chapter'), function() {
+                    ChapterUtils.suggest_chapter_for_member(frm);
+                }, __('Member Actions'));
+                
+                // Add simple chapter suggestion when no chapter is assigned
+                add_simple_chapter_suggestion(frm);
+                
+                // Add visual indicator for chapter membership
+                if (frm.doc.current_chapter_display && !frm.doc.__unsaved) {
+                    frm.dashboard.add_indicator(__("Member of {0}", [frm.doc.current_chapter_display]), "blue");
+                }
+            }
+        }
+    });
+}
+
+function add_member_status_actions(frm) {
+    // Check permissions and add termination/suspension buttons
     frappe.call({
         method: 'verenigingen.permissions.can_terminate_member_api',
         args: {
             member_name: frm.doc.name
         },
         callback: function(perm_result) {
-            const can_terminate = perm_result.message;
-            
-            if (!can_terminate) {
-                // User doesn't have permission, don't show termination buttons
-                return;
+            if (perm_result.message) {
+                // Add termination actions
+                add_termination_action_button(frm);
             }
-            
-            // User has permission, check termination status
+        }
+    });
+    
+    // Check suspension permissions
+    frappe.call({
+        method: 'verenigingen.api.suspension_api.can_suspend_member',
+        args: {
+            member_name: frm.doc.name
+        },
+        callback: function(perm_result) {
+            if (perm_result.message) {
+                add_suspension_action_button(frm);
+            }
+        }
+    });
+}
+
+function add_termination_action_button(frm) {
+    frappe.call({
+        method: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_member_termination_status',
+        args: {
+            member: frm.doc.name
+        },
+        callback: function(r) {
+            if (r.message && !r.message.has_active_termination) {
+                let btn = frm.add_custom_button(__('Terminate Membership'), function() {
+                    TerminationUtils.show_termination_dialog(frm.doc.name, frm.doc.full_name);
+                }, __('Member Actions'));
+                
+                if (btn && btn.addClass) {
+                    btn.addClass('btn-danger termination-button');
+                }
+            }
+        }
+    });
+}
+
+function add_suspension_action_button(frm) {
+    frappe.call({
+        method: 'verenigingen.api.suspension_api.get_suspension_status',
+        args: {
+            member_name: frm.doc.name
+        },
+        callback: function(status_result) {
+            if (status_result.message) {
+                const status = status_result.message;
+                
+                if (status.is_suspended) {
+                    let btn = frm.add_custom_button(__('Unsuspend Member'), function() {
+                        show_unsuspension_dialog(frm);
+                    }, __('Member Actions'));
+                    
+                    if (btn && btn.addClass) {
+                        btn.addClass('btn-success suspension-button');
+                    }
+                } else {
+                    let btn = frm.add_custom_button(__('Suspend Member'), function() {
+                        show_suspension_dialog(frm);
+                    }, __('Member Actions'));
+                    
+                    if (btn && btn.addClass) {
+                        btn.addClass('btn-warning suspension-button');
+                    }
+                }
+            }
+        }
+    });
+}
+
+function add_member_id_management_buttons(frm) {
+    const user_roles = frappe.user_roles || [];
+    const can_manage_member_ids = user_roles.includes('System Manager') || user_roles.includes('Membership Manager');
+    
+    if (!can_manage_member_ids) return;
+    
+    if (!frm.doc.member_id) {
+        frm.add_custom_button(__('Assign Member ID'), function() {
+            assign_member_id_dialog(frm);
+        }, __('Member ID'));
+    }
+    
+    if (user_roles.includes('System Manager')) {
+        frm.add_custom_button(__('Member ID Statistics'), function() {
+            show_member_id_statistics_dialog();
+        }, __('Member ID'));
+        
+        frm.add_custom_button(__('Preview Next ID'), function() {
             frappe.call({
-                method: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.get_member_termination_status',
-                args: {
-                    member: frm.doc.name
-                },
+                method: 'verenigingen.verenigingen.doctype.member.member_id_manager.get_next_member_id_preview',
                 callback: function(r) {
                     if (r.message) {
-                        const status = r.message;
-                        
-                        // Add terminate button if no active termination
-                        if (!status.has_active_termination) {
-                            let button_class = 'btn-danger';
-                            let button_text = __('Terminate Membership');
-                            
-                            let btn = frm.add_custom_button(button_text, function() {
-                                TerminationUtils.show_termination_dialog(frm.doc.name, frm.doc.full_name);
-                            }, __('Actions'));
-                            
-                            if (btn && btn.addClass) {
-                                btn.addClass(button_class + ' termination-button');
-                            }
-                        }
-                        
-                        
-                        // Add view termination history button
-                        frm.add_custom_button(__('Termination History'), function() {
-                            TerminationUtils.show_termination_history(frm.doc.name);
-                        }, __('View'));
+                        frappe.msgprint(__('Next member ID that will be assigned: {0}', [r.message.next_id]));
                     }
                 }
             });
+        }, __('Member ID'));
+    }
+}
+
+function create_user_account_dialog(frm) {
+    frappe.confirm(
+        __('Create a user account for {0} to access member portal pages?', [frm.doc.full_name]),
+        function() {
+            frappe.call({
+                method: 'verenigingen.verenigingen.doctype.member.member.create_member_user_account',
+                args: {
+                    member_name: frm.doc.name,
+                    send_welcome_email: true
+                },
+                callback: function(r) {
+                    if (r.message) {
+                        if (r.message.success) {
+                            frappe.show_alert({
+                                message: r.message.message,
+                                indicator: 'green'
+                            }, 5);
+                            frm.refresh();
+                        } else {
+                            frappe.msgprint({
+                                message: r.message.error || r.message.message,
+                                indicator: 'red'
+                            });
+                        }
+                    }
+                }
+            });
+        }
+    );
+}
+
+function assign_member_id_dialog(frm) {
+    frappe.confirm(
+        __('Are you sure you want to assign a member ID to {0}?', [frm.doc.full_name]),
+        function() {
+            frm.call({
+                method: 'ensure_member_id',
+                doc: frm.doc,
+                callback: function(r) {
+                    if (r.message && r.message.success) {
+                        frm.reload_doc();
+                        frappe.show_alert({
+                            message: r.message.message,
+                            indicator: 'green'
+                        }, 5);
+                    } else if (r.message && r.message.message) {
+                        frappe.msgprint(r.message.message);
+                    }
+                }
+            });
+        }
+    );
+}
+
+function view_donations(frm) {
+    frappe.call({
+        method: "verenigingen.verenigingen.doctype.member.member.get_linked_donations",
+        args: {
+            "member": frm.doc.name
+        },
+        callback: function(r) {
+            if (r.message && r.message.donor) {
+                frappe.route_options = {
+                    "donor": r.message.donor
+                };
+                frappe.set_route("List", "Donation");
+            } else {
+                frappe.msgprint(__("No donor record linked to this member."));
+            }
         }
     });
 }
@@ -1366,7 +1604,7 @@ function display_amendment_status(frm) {
                                 <div class="col-md-4 text-right">
                                     <span class="badge badge-${status_color} badge-lg" style="font-size: 12px; padding: 4px 8px;">${amendment.status}</span>
                                     <br><small style="color: #666;">Effective: ${frappe.datetime.str_to_user(amendment.effective_date)}</small>
-                                    <br><a href="/app/membership-amendment-request/${amendment.name}" class="btn btn-xs btn-default" style="margin-top: 5px;">
+                                    <br><a href="/app/contribution-amendment-request/${amendment.name}" class="btn btn-xs btn-default" style="margin-top: 5px;">
                                         View Amendment
                                     </a>
                                 </div>
@@ -1490,4 +1728,267 @@ function check_sepa_mandate_and_prompt_creation(frm, context = 'general') {
     if (window.SepaUtils && window.SepaUtils.check_sepa_mandate_status) {
         SepaUtils.check_sepa_mandate_status(frm);
     }
+}
+
+// ==================== APPLICATION REVIEW FUNCTIONS ====================
+
+function show_approval_dialog(frm) {
+    // Get membership types
+    frappe.call({
+        method: 'frappe.client.get_list',
+        args: {
+            doctype: 'Membership Type',
+            filters: { is_active: 1 },
+            fields: ['name', 'amount', 'membership_type_name']
+        },
+        callback: function(r) {
+            var membership_types = r.message || [];
+            
+            var d = new frappe.ui.Dialog({
+                title: __('Approve Membership Application'),
+                fields: [
+                    {
+                        fieldname: 'membership_type',
+                        fieldtype: 'Select',
+                        label: __('Membership Type'),
+                        options: membership_types.map(t => t.name).join('\n'),
+                        reqd: 1,
+                        default: frm.doc.selected_membership_type || ''
+                    },
+                    {
+                        fieldname: 'create_invoice',
+                        fieldtype: 'Check',
+                        label: __('Create Invoice'),
+                        default: 1,
+                        description: __('Generate an invoice for the first membership fee')
+                    },
+                    {
+                        fieldname: 'assign_chapter',
+                        fieldtype: 'Link',
+                        label: __('Assign to Chapter'),
+                        options: 'Chapter',
+                        default: frm.doc.suggested_chapter
+                    },
+                    {
+                        fieldname: 'welcome_message',
+                        fieldtype: 'Small Text',
+                        label: __('Additional Welcome Message'),
+                        description: __('Optional personalized message to include in welcome email')
+                    }
+                ],
+                primary_action_label: __('Approve'),
+                primary_action: function(values) {
+                    // Update chapter if changed
+                    if (values.assign_chapter && values.assign_chapter !== frm.doc.primary_chapter) {
+                        frappe.model.set_value(frm.doctype, frm.docname, 'primary_chapter', values.assign_chapter);
+                    }
+                    
+                    // Call comprehensive approval method
+                    frappe.call({
+                        method: 'verenigingen.api.membership_application_review.approve_membership_application',
+                        args: {
+                            member_name: frm.doc.name,
+                            create_invoice: values.create_invoice,
+                            membership_type: values.membership_type,
+                            chapter: values.assign_chapter,
+                            notes: values.welcome_message
+                        },
+                        freeze: true,
+                        freeze_message: __('Approving application...'),
+                        callback: function(r) {
+                            if (r.message && r.message.success) {
+                                frappe.show_alert({
+                                    message: __('Application approved successfully!'),
+                                    indicator: 'green'
+                                }, 5);
+                                d.hide();
+                                frm.reload_doc();
+                            }
+                        }
+                    });
+                }
+            });
+            
+            d.show();
+        }
+    });
+}
+
+function show_rejection_dialog(frm) {
+    var d = new frappe.ui.Dialog({
+        title: __('Reject Membership Application'),
+        fields: [
+            {
+                fieldname: 'rejection_category',
+                fieldtype: 'Select',
+                label: __('Rejection Category'),
+                options: [
+                    'Incomplete Information',
+                    'Ineligible for Membership', 
+                    'Duplicate Application',
+                    'Failed Verification',
+                    'Does Not Meet Requirements',
+                    'Application Withdrawn',
+                    'Other'
+                ].join('\n'),
+                reqd: 1,
+                description: __('Select the primary reason for rejection')
+            },
+            {
+                fieldname: 'email_template',
+                fieldtype: 'Link',
+                label: __('Email Template'),
+                options: 'Email Template',
+                filters: {
+                    'name': ['like', '%rejection%']
+                },
+                reqd: 1,
+                description: __('Email template to use for rejection notification')
+            },
+            {
+                fieldname: 'additional_details',
+                fieldtype: 'Small Text',
+                label: __('Additional Details'),
+                description: __('Specific details to include in the rejection email (optional)')
+            },
+            {
+                fieldname: 'internal_notes',
+                fieldtype: 'Small Text',
+                label: __('Internal Notes'),
+                description: __('For internal use only, not sent to applicant')
+            }
+        ],
+        primary_action_label: __('Reject Application'),
+        primary_action: function(values) {
+            // Combine category and additional details for the reason
+            let reason = values.rejection_category;
+            if (values.additional_details) {
+                reason += ': ' + values.additional_details;
+            }
+            
+            frappe.call({
+                method: 'verenigingen.api.membership_application_review.reject_membership_application',
+                args: {
+                    member_name: frm.doc.name,
+                    reason: reason,
+                    email_template: values.email_template,
+                    rejection_category: values.rejection_category,
+                    internal_notes: values.internal_notes,
+                    process_refund: false
+                },
+                freeze: true,
+                freeze_message: __('Rejecting application...'),
+                callback: function(r) {
+                    if (r.message && r.message.success) {
+                        frappe.show_alert({
+                            message: __('Application rejected successfully'),
+                            indicator: 'red'
+                        }, 5);
+                        d.hide();
+                        frm.reload_doc();
+                    }
+                }
+            });
+        }
+    });
+    
+    // Load available email templates and set default
+    frappe.call({
+        method: 'frappe.client.get_list',
+        args: {
+            doctype: 'Email Template',
+            filters: {
+                'name': ['like', '%rejection%']
+            },
+            fields: ['name', 'subject']
+        },
+        callback: function(r) {
+            if (r.message && r.message.length > 0) {
+                // Set the first available rejection template as default
+                d.set_value('email_template', r.message[0].name);
+            } else {
+                // If no templates exist, show message and create default ones
+                frappe.confirm(
+                    __('No rejection email templates found. Would you like to create default templates?'),
+                    function() {
+                        create_default_email_templates().then(() => {
+                            frappe.msgprint(__('Default email templates created. Please try again.'));
+                            d.hide();
+                        });
+                    }
+                );
+            }
+        }
+    });
+    
+    d.show();
+}
+
+function request_more_info(frm) {
+    var d = new frappe.ui.Dialog({
+        title: __('Request More Information'),
+        fields: [
+            {
+                fieldname: 'info_needed',
+                fieldtype: 'Small Text',
+                label: __('Information Needed'),
+                reqd: 1,
+                description: __('Describe what additional information you need from the applicant')
+            }
+        ],
+        primary_action_label: __('Send Request'),
+        primary_action: function(values) {
+            // Update status to "Under Review"
+            frappe.model.set_value(frm.doctype, frm.docname, 'application_status', 'Under Review');
+            
+            // Send email to applicant
+            frappe.call({
+                method: 'frappe.core.doctype.communication.email.make',
+                args: {
+                    recipients: frm.doc.email,
+                    subject: __('Additional Information Required for Your Membership Application'),
+                    content: `
+                        <p>Dear ${frm.doc.first_name},</p>
+                        <p>Thank you for your membership application. We need some additional information to process your application:</p>
+                        <p><strong>${values.info_needed}</strong></p>
+                        <p>Please reply to this email with the requested information.</p>
+                        <p>Best regards,<br>The Membership Team</p>
+                    `,
+                    doctype: frm.doctype,
+                    name: frm.docname,
+                    send_email: 1
+                },
+                callback: function(r) {
+                    if (!r.exc) {
+                        frappe.show_alert({
+                            message: __('Request sent to applicant'),
+                            indicator: 'blue'
+                        }, 5);
+                        d.hide();
+                        frm.save();
+                    }
+                }
+            });
+        }
+    });
+    
+    d.show();
+}
+
+function is_chapter_board_member_with_permissions(frm) {
+    // Check if current user is a board member of the suggested chapter with appropriate permissions
+    if (!frm.doc.suggested_chapter) return false;
+    
+    // This would need a server call to check properly
+    // For now, returning false - you'd implement the actual check
+    return false;
+}
+
+function create_default_email_templates() {
+    // Create default email templates for membership application management
+    return frappe.call({
+        method: 'verenigingen.api.membership_application_review.create_default_email_templates',
+        freeze: true,
+        freeze_message: __('Creating default email templates...')
+    });
 }

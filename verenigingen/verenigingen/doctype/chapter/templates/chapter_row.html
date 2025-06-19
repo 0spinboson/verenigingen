@@ -1,32 +1,63 @@
 {% if doc.published %}
-	<div style="margin-bottom: 30px; max-width: 600px" class="with-border clickable">
-		<a href={{ doc.route }}>
-			<h3>{{ doc.name }}</h3>
-			<p>
-				<span class="label"> Chapter Head : 
-				{% if chapter_head %}
-					{% set head_doc = frappe.get_doc('Member', chapter_head) %}
-					{{ head_doc.full_name }}
-				{% else %}
-					Not Assigned
-				{% endif %}
-				</span>
-				<span class="label">
-					{% if members %}
-						{% set index = [] %}
-						{% for member in members %}
-							{% if member.enabled == 1 %}
-								{% set __ = index.append(1) %}
+	<div class="mb-6 max-w-4xl bg-white border border-gray-200 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 overflow-hidden">
+		<a href="{{ doc.route }}" class="block no-underline text-inherit hover:no-underline hover:text-inherit">
+			<!-- Chapter Header -->
+			<div class="bg-gradient-to-r from-gray-50 to-gray-100 px-6 py-5 border-b border-gray-200">
+				<h3 class="text-xl font-semibold text-gray-900 mb-3">{{ doc.name }}</h3>
+				<div class="flex flex-wrap gap-4">
+					<!-- Members Count -->
+					<div class="flex items-center gap-2 bg-white px-3 py-2 rounded-full border border-gray-300 text-sm">
+						<i class="fa fa-users text-gray-500 text-xs"></i>
+						<span class="text-gray-600 font-medium">Members in this chapter: </span>
+						<span class="text-gray-900 font-semibold">
+							{% if doc.members %}
+								{{ doc.members | selectattr("enabled", "equalto", 1) | list | length }}
+							{% else %}
+								0
 							{% endif %}
-						{% endfor %}
-						Members: {{ index|length }}
+						</span>
+					</div>
+					<!-- Board Count -->
+					<div class="flex items-center gap-2 bg-white px-3 py-2 rounded-full border border-gray-300 text-sm">
+						<i class="fa fa-star text-gray-500 text-xs"></i>
+						<span class="text-gray-600 font-medium">Board members: </span>
+						<span class="text-gray-900 font-semibold">
+							{% if doc.board_members %}
+								{{ doc.board_members | selectattr("is_active", "equalto", 1) | list | length }}
+							{% else %}
+								0
+							{% endif %}
+						</span>
+					</div>
+				</div>
+			</div>
+			
+			<!-- Chapter Details -->
+			<div class="p-6">
+				<!-- Chapter Head Info -->
+				<div class="flex items-center gap-2 mb-4 text-sm">
+					<i class="fa fa-user-circle text-gray-500"></i>
+					<span class="text-gray-600 font-medium">Chapter Head: </span>
+					{% if doc.chapter_head %}
+						{% set head_doc = frappe.get_doc('Member', doc.chapter_head) %}
+						<span class="text-gray-900 font-semibold">{{ head_doc.full_name }}</span>
 					{% else %}
-						Members: 0
+						<span class="text-gray-500 italic">Not Assigned</span>
 					{% endif %}
-					</span>
-				<!-- Assignment of value to global variable not working in jinja -->
-			</p>
-			<p>{{ html2text(doc.introduction) | truncate (200) }}</p>
+				</div>
+				
+				<!-- Chapter Introduction -->
+				<div class="border-t border-gray-100 pt-4">
+					<div class="text-xs text-gray-500 font-medium uppercase tracking-wide mb-2">About this Chapter</div>
+					<div class="text-gray-700 text-sm leading-relaxed">
+						{% if doc.introduction %}
+							{{ doc.introduction | striptags | truncate(180) }}
+						{% else %}
+							<span class="text-gray-500 italic">No description available</span>
+						{% endif %}
+					</div>
+				</div>
+			</div>
 		</a>
 	</div>
 {% endif %}

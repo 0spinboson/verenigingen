@@ -1,0 +1,110 @@
+"""
+Permanent module and doctype restrictions for clean UX
+"""
+
+import frappe
+from frappe.permissions import has_permission as _has_permission
+
+# Doctypes that should be restricted from regular users
+RESTRICTED_DOCTYPES = [
+    "Quotation", "Sales Order", "Purchase Order", "Delivery Note", 
+    "Purchase Receipt", "Stock Entry", "Material Request", "Timesheet",
+    "Project", "Newsletter", "Lead", "Opportunity", 
+    "Supplier", "Item", "Warehouse", "BOM", "Work Order"
+]
+
+# Modules that should be hidden
+HIDDEN_MODULES = [
+    "Buying", "Selling", "Stock", "Manufacturing", "CRM", "Assets", 
+    "Support", "Quality", "Marketplace", "Education", "Healthcare", 
+    "Agriculture", "Loan Management", "Payroll", "Recruitment",
+    "Performance", "Employee Lifecycle", "Shift & Attendance"
+]
+
+def has_permission(doctype, ptype="read", doc=None, user=None):
+    """
+    Override permission check to restrict access to unwanted doctypes
+    """
+    
+    # Allow administrators full access
+    if user == "Administrator" or frappe.session.user == "Administrator":
+        return _has_permission(doctype, ptype, doc, user)
+    
+    # Check if user has System Manager role
+    user_roles = frappe.get_roles(user or frappe.session.user)
+    if "System Manager" in user_roles:
+        return _has_permission(doctype, ptype, doc, user)
+    
+    # Restrict access to unwanted doctypes for regular users
+    if doctype in RESTRICTED_DOCTYPES:
+        return False
+    
+    # Use default permission logic for everything else
+    return _has_permission(doctype, ptype, doc, user)
+
+def get_permitted_modules(user=None):
+    """
+    Return list of modules the user should see
+    """
+    user = user or frappe.session.user
+    
+    # Administrators see everything
+    if user == "Administrator":
+        return None  # No restrictions
+    
+    # Check roles
+    user_roles = frappe.get_roles(user)
+    
+    # System Managers see most things
+    if "System Manager" in user_roles:
+        return ["Verenigingen", "Home", "Accounting", "HR"]
+    
+    # Regular users see only association modules
+    return ["Verenigingen", "Home"]
+
+def filter_workspace_pages(pages):
+    """
+    Filter workspace pages based on user permissions
+    """
+    if not pages:
+        return pages
+    
+    user = frappe.session.user
+    permitted_modules = get_permitted_modules(user)
+    
+    # If no restrictions (admin), return all
+    if permitted_modules is None:
+        return pages
+    
+    # Filter pages
+    filtered_pages = []
+    for page in pages:
+        page_name = page.get("name", "")
+        page_title = page.get("title", "")
+        
+        # Include if page name is in permitted modules
+        if page_name in permitted_modules or page_title in permitted_modules:
+            filtered_pages.append(page)
+        # Also check if it's a subpage of permitted module
+        elif any(permitted in page_name for permitted in permitted_modules):
+            filtered_pages.append(page)
+    
+    return filtered_pages
+
+def is_doctype_restricted(doctype, user=None):
+    """
+    Check if a doctype is restricted for the user
+    """
+    user = user or frappe.session.user
+    
+    # No restrictions for administrators
+    if user == "Administrator":
+        return False
+    
+    # Check user roles
+    user_roles = frappe.get_roles(user)
+    if "System Manager" in user_roles:
+        return False
+    
+    # Check if doctype is in restricted list
+    return doctype in RESTRICTED_DOCTYPES
