@@ -20,6 +20,10 @@
   "company_bic",
   "creditor_id",
   "creation_user",
+  "application_settings_section",
+  "enable_income_calculator",
+  "income_percentage_rate",
+  "calculator_description",
   "dutch_btw_section",
   "tax_exempt_for_contributions",
   "default_tax_exemption_type",
@@ -395,6 +399,34 @@
    "fieldtype": "Link",
    "label": "Restricted Donation Account",
    "options": "Account"
+  },
+  {
+   "fieldname": "application_settings_section",
+   "fieldtype": "Section Break",
+   "label": "Membership Application Settings"
+  },
+  {
+   "default": "0",
+   "description": "When enabled, membership application forms will show an income-based contribution calculator",
+   "fieldname": "enable_income_calculator",
+   "fieldtype": "Check",
+   "label": "Enable Income-Based Calculator"
+  },
+  {
+   "default": "0.5",
+   "depends_on": "eval:doc.enable_income_calculator",
+   "description": "Percentage of monthly income to suggest as contribution (default: 0.5%)",
+   "fieldname": "income_percentage_rate",
+   "fieldtype": "Percent",
+   "label": "Income Percentage Rate"
+  },
+  {
+   "depends_on": "eval:doc.enable_income_calculator",
+   "description": "Text to display with the calculator explaining how contributions are calculated",
+   "fieldname": "calculator_description",
+   "fieldtype": "Text",
+   "label": "Calculator Description",
+   "default": "Our suggested contribution is 0.5% of your monthly net income. This helps ensure fair and equitable contributions based on your financial capacity."
   }
  ],
  "index_web_pages_for_search": 1,

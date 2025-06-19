@@ -68,6 +68,68 @@
         </div>
         {% endif %}
 
+        <!-- Payment Status Section -->
+        {% if payment_status %}
+        <div class="form-card hover:shadow-lg transition-shadow duration-300 mb-8">
+            <div class="form-header">
+                <h3 class="flex items-center">
+                    <span class="text-2xl mr-3">💳</span>{{ _("Contribution & Payment Status") }}
+                </h3>
+            </div>
+            <div class="form-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <h4 class="text-lg font-semibold mb-4 text-gray-800">{{ _("Current Contribution") }}</h4>
+                        <div class="space-y-2">
+                            <p><span class="font-medium">{{ _("Amount") }}:</span> {{ frappe.format_value(payment_status.current_fee, {"fieldtype": "Currency"}) }} {{ _(payment_status.billing_frequency.lower()) }}</p>
+                            <p><span class="font-medium">{{ _("Billing") }}:</span> {{ _(payment_status.billing_frequency) }}</p>
+                            {% if payment_status.next_billing_date %}
+                            <p><span class="font-medium">{{ _("Next Payment") }}:</span> {{ frappe.utils.formatdate(payment_status.next_billing_date) }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-lg font-semibold mb-4 text-gray-800">{{ _("Payment Status") }}</h4>
+                        {% if payment_status.payment_up_to_date %}
+                        <div class="inline-flex items-center px-4 py-2 bg-success-100 text-success-800 rounded-full text-sm font-semibold mb-3">
+                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+                            </svg>
+                            {{ _("Payments Up to Date") }}
+                        </div>
+                        {% else %}
+                        <div class="inline-flex items-center px-4 py-2 {% if payment_status.has_overdue %}bg-danger-100 text-danger-800{% else %}bg-warning-100 text-warning-800{% endif %} rounded-full text-sm font-semibold mb-3">
+                            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                            </svg>
+                            {{ _("Outstanding: {0}").format(frappe.format_value(payment_status.outstanding_amount, {"fieldtype": "Currency"})) }}
+                        </div>
+                        {% endif %}
+                        
+                        {% if payment_status.outstanding_invoices %}
+                        <div class="mt-4">
+                            <h5 class="font-medium text-gray-700 mb-2">{{ _("Outstanding Invoices") }}:</h5>
+                            <div class="space-y-2">
+                                {% for invoice in payment_status.outstanding_invoices %}
+                                <div class="p-3 bg-gray-50 rounded-lg text-sm">
+                                    <div class="flex justify-between items-center">
+                                        <span>{{ frappe.utils.formatdate(invoice.due_date) if invoice.due_date else _("No due date") }}</span>
+                                        <span class="font-medium">{{ frappe.format_value(invoice.outstanding, {"fieldtype": "Currency"}) }}</span>
+                                    </div>
+                                    {% if invoice.is_overdue %}
+                                    <div class="text-danger-600 font-medium mt-1">{{ _("(Overdue)") }}</div>
+                                    {% endif %}
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Portal Sections -->
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
             
@@ -289,6 +351,20 @@
                                 </div>
                             </div>
                         </a>
+                        
+                        {% if user_teams %}
+                        <a href="/my_teams" class="portal-link-card">
+                            <div class="flex items-center">
+                                <div class="portal-link-icon">
+                                    <i class="fa fa-group text-warning-600"></i>
+                                </div>
+                                <div class="flex-1">
+                                    <div class="portal-link-title">{{ _("My Teams") }}</div>
+                                    <div class="portal-link-description">{{ _("View and manage your team memberships") }}</div>
+                                </div>
+                            </div>
+                        </a>
+                        {% endif %}
                         
                         <a href="/resources" class="portal-link-card">
                             <div class="flex items-center">

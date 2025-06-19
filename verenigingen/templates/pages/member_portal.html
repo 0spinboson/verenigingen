@@ -327,6 +327,59 @@
     </div>
     {% endif %}
 
+    <!-- Payment Status Section -->
+    {% if payment_status %}
+    <div class="portal-section">
+        <div class="section-header">
+            <h3>
+                <span class="icon">💳</span>{{ _("Contribution & Payment Status") }}
+            </h3>
+        </div>
+        <div class="section-content">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>{{ _("Current Contribution") }}</h5>
+                    <p><strong>{{ _("Amount") }}:</strong> {{ frappe.format_value(payment_status.current_fee, {"fieldtype": "Currency"}) }} {{ _(payment_status.billing_frequency.lower()) }}</p>
+                    <p><strong>{{ _("Billing") }}:</strong> {{ _(payment_status.billing_frequency) }}</p>
+                    {% if payment_status.next_billing_date %}
+                    <p><strong>{{ _("Next Payment") }}:</strong> {{ frappe.utils.formatdate(payment_status.next_billing_date) }}</p>
+                    {% endif %}
+                </div>
+                <div class="col-md-6">
+                    <h5>{{ _("Payment Status") }}</h5>
+                    {% if payment_status.payment_up_to_date %}
+                    <div class="status-badge status-active">
+                        <i class="fa fa-check-circle"></i> {{ _("Payments Up to Date") }}
+                    </div>
+                    {% else %}
+                    <div class="status-badge {% if payment_status.has_overdue %}status-inactive{% else %}status-pending{% endif %}">
+                        <i class="fa fa-exclamation-triangle"></i> 
+                        {{ _("Outstanding: {0}").format(frappe.format_value(payment_status.outstanding_amount, {"fieldtype": "Currency"})) }}
+                    </div>
+                    {% endif %}
+                    
+                    {% if payment_status.outstanding_invoices %}
+                    <div style="margin-top: 10px;">
+                        <strong>{{ _("Outstanding Invoices") }}:</strong>
+                        {% for invoice in payment_status.outstanding_invoices %}
+                        <div style="margin: 5px 0; padding: 5px; background: #f8f9fa; border-radius: 3px;">
+                            <small>
+                                {{ frappe.utils.formatdate(invoice.due_date) if invoice.due_date else _("No due date") }} - 
+                                {{ frappe.format_value(invoice.outstanding, {"fieldtype": "Currency"}) }}
+                                {% if invoice.is_overdue %}
+                                <span style="color: #dc3545;">{{ _("(Overdue)") }}</span>
+                                {% endif %}
+                            </small>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="portal-sections">
         <!-- Account Management -->
         <div class="portal-section">
@@ -500,6 +553,17 @@
                             </div>
                         </a>
                     </li>
+                    {% if user_teams %}
+                    <li>
+                        <a href="/my_teams" class="portal-link">
+                            <span class="link-icon"><i class="fa fa-group"></i></span>
+                            <div>
+                                <div class="link-title">{{ _("My Teams") }}</div>
+                                <div class="link-description">{{ _("View and manage your team memberships") }}</div>
+                            </div>
+                        </a>
+                    </li>
+                    {% endif %}
                     <li>
                         <a href="/resources" class="portal-link">
                             <span class="link-icon"><i class="fa fa-book"></i></span>

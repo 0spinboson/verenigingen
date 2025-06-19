@@ -198,9 +198,17 @@ def get_email_context(donation, donor):
 
 def get_donation_email_template():
     """Get donation confirmation email template"""
+    from verenigingen.api.email_template_manager import get_email_template
+    
+    # Try to get template using new template manager
+    try:
+        return get_email_template("donation_confirmation")
+    except Exception:
+        pass
+    
     # Try to get custom template from Email Template doctype
     try:
-        template_doc = frappe.get_doc("Email Template", "Donation Confirmation")
+        template_doc = frappe.get_doc("Email Template", "donation_confirmation")
         return {
             "subject": template_doc.subject,
             "message": template_doc.response
@@ -261,8 +269,16 @@ def get_donation_email_template():
 
 def get_payment_confirmation_template():
     """Get payment confirmation email template"""
+    from verenigingen.api.email_template_manager import get_email_template
+    
+    # Try to get template using new template manager
     try:
-        template_doc = frappe.get_doc("Email Template", "Donation Payment Confirmation")
+        return get_email_template("donation_payment_confirmation")
+    except Exception:
+        pass
+    
+    try:
+        template_doc = frappe.get_doc("Email Template", "donation_payment_confirmation")
         return {
             "subject": template_doc.subject,
             "message": template_doc.response
@@ -315,8 +331,16 @@ def get_payment_confirmation_template():
 
 def get_anbi_receipt_template():
     """Get ANBI tax deduction receipt template"""
+    from verenigingen.api.email_template_manager import get_email_template
+    
+    # Try to get template using new template manager
     try:
-        template_doc = frappe.get_doc("Email Template", "ANBI Tax Receipt")
+        return get_email_template("anbi_tax_receipt")
+    except Exception:
+        pass
+    
+    try:
+        template_doc = frappe.get_doc("Email Template", "anbi_tax_receipt")
         return {
             "subject": template_doc.subject,
             "message": template_doc.response

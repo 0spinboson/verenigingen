@@ -26,8 +26,9 @@
   "donor_category",
   "column_break_3lr0r",
   "preferred_communication_method",
-  "section_break_sscxg",
+  "donation_history_tab",
   "donor_history",
+  "section_break_sscxg",
   "pledge_history",
   "notes_and_communications_section",
   "notes",
@@ -175,11 +176,16 @@
    "options": "\nEmail\nPhone\nMail\nSMS"
   },
   {
+   "fieldname": "donation_history_tab",
+   "fieldtype": "Tab Break",
+   "label": "Donation History"
+  },
+  {
    "fieldname": "donor_history",
    "fieldtype": "Table",
-   "hidden": 1,
-   "label": "Donor History",
-   "options": "Donation History"
+   "label": "Historical Donations",
+   "options": "Donation History",
+   "description": "Automatically populated from donation records"
   },
   {
    "fieldname": "section_break_sscxg",
@@ -298,6 +304,10 @@
   {
    "link_doctype": "Donation",
    "link_fieldname": "donor"
+  },
+  {
+   "link_doctype": "Member",
+   "link_fieldname": "member_id"
   }
  ],
  "modified": "2023-06-21 06:35:12.181793",

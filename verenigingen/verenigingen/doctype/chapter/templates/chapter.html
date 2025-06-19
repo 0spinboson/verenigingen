@@ -133,13 +133,17 @@
     <p>You are currently serving as {{ board_role }} for this chapter.</p>
     
     <div class="btn-group">
-        <a href="/app/member?primary_chapter={{ name }}" class="btn btn-default">
+        <a href="/app/query-report/Chapter%20Members?chapter={{ name }}" class="btn btn-default">
             View Chapter Members
         </a>
         
         {% if can_write_chapter %}
         <a href="/app/chapter/{{ name }}" class="btn btn-primary">
             Manage Chapter
+        </a>
+        {% else %}
+        <a href="/app/chapter/{{ name }}" class="btn btn-secondary">
+            View Chapter Details
         </a>
         {% endif %}
     </div>

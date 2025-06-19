@@ -169,10 +169,6 @@
                             <label for="iban">{{ _("IBAN") }}</label>
                             <input type="text" class="form-control" id="iban" name="iban" maxlength="34">
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="bic">{{ _("BIC/SWIFT") }}</label>
-                            <input type="text" class="form-control" id="bic" name="bic" maxlength="11">
-                        </div>
                     </div>
                     <div class="row">
                         <div class="col-md-12 mb-3">
@@ -238,6 +234,49 @@
                             <option value="{{ country.name }}">{{ country.name }}</option>
                             {% endfor %}
                         </select>
+                    </div>
+                </div>
+                
+                <!-- Income Calculator -->
+                <div id="income-calculator-section" style="display: none;">
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <div class="card bg-light">
+                                <div class="card-header">
+                                    <h5 class="mb-0">{{ _("Contribution Calculator") }}</h5>
+                                    <small class="text-muted">{{ calculator_description or _("Our suggested contribution is 0.5% of your monthly net income. This helps ensure fair and equitable contributions based on your financial capacity.") }}</small>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="monthly_income">{{ _("Monthly Gross Income (€)") }}</label>
+                                            <input type="number" class="form-control" id="monthly_income" name="monthly_income" 
+                                                   placeholder="3500" min="0" step="0.01">
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="payment_interval">{{ _("Payment Interval") }}</label>
+                                            <select class="form-control" id="payment_interval" name="payment_interval">
+                                                <option value="monthly">{{ _("Monthly") }}</option>
+                                                <option value="quarterly">{{ _("Quarterly") }}</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-12">
+                                            <div id="calculator-result" class="alert alert-info" style="display: none;">
+                                                <strong>{{ _("Suggested Contribution:") }}</strong>
+                                                <span id="suggested-amount"></span>
+                                                <span id="payment-frequency"></span>
+                                                <br>
+                                                <small class="text-muted">
+                                                    {{ _("Based on") }} <span id="income-percentage">0.5%</span> {{ _("of your monthly income") }}
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="row">
@@ -320,6 +359,53 @@
 
 <script>
 $(document).ready(function() {
+    // Initialize calculator visibility and settings
+    var calculatorSettings = {
+        enabled: {{ enable_income_calculator|default(false)|lower }},
+        percentage: {{ income_percentage_rate|default(0.5) }},
+        description: "{{ calculator_description|default('Our suggested contribution is 0.5% of your monthly net income. This helps ensure fair and equitable contributions based on your financial capacity.')|e }}"
+    };
+    
+    // Show income calculator if enabled
+    if (calculatorSettings.enabled) {
+        $('#income-calculator-section').show();
+        $('#income-percentage').text(calculatorSettings.percentage + '%');
+    }
+    
+    // Income calculator functionality
+    function calculateContribution() {
+        var monthlyIncome = parseFloat($('#monthly_income').val()) || 0;
+        var paymentInterval = $('#payment_interval').val();
+        
+        if (monthlyIncome <= 0) {
+            $('#calculator-result').hide();
+            return;
+        }
+        
+        // Calculate 0.5% (or configured percentage) of monthly income
+        var monthlyContribution = monthlyIncome * (calculatorSettings.percentage / 100);
+        var displayAmount, displayFrequency;
+        
+        if (paymentInterval === 'quarterly') {
+            displayAmount = monthlyContribution * 3; // 3 months worth
+            displayFrequency = '{{ _("per quarter") }}';
+        } else {
+            displayAmount = monthlyContribution;
+            displayFrequency = '{{ _("per month") }}';
+        }
+        
+        // Format currency
+        var formattedAmount = '€' + displayAmount.toFixed(2);
+        
+        // Update display
+        $('#suggested-amount').text(formattedAmount);
+        $('#payment-frequency').text(' ' + displayFrequency);
+        $('#calculator-result').show();
+    }
+    
+    // Bind calculator events
+    $('#monthly_income, #payment_interval').on('input change', calculateContribution);
+    
     // Show/hide payment method specific fields
     $('#payment_method').change(function() {
         var paymentMethod = $(this).val();

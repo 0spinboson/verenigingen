@@ -18,6 +18,7 @@ required_apps = ["erpnext", "payments", "hrms"]
 # ------------------
 on_app_init = ["verenigingen.setup.doctype_overrides.setup_subscription_override"]
 app_include_css = [
+    "/assets/verenigingen/css/tailwind.css",
     "/assets/verenigingen/css/verenigingen_custom.css",
     "/assets/verenigingen/css/volunteer_portal.css"
 ]
@@ -87,6 +88,15 @@ doc_events = {
         "before_save": "verenigingen.verenigingen.doctype.member.member_utils.update_termination_status_display",
         "after_save": "verenigingen.verenigingen.doctype.member.member.handle_fee_override_after_save"
     },
+    
+    # Donation history tracking
+    "Donation": {
+        "after_insert": "verenigingen.utils.donation_history_manager.on_donation_insert",
+        "on_update": "verenigingen.utils.donation_history_manager.on_donation_update",
+        "on_submit": "verenigingen.utils.donation_history_manager.on_donation_submit",
+        "on_cancel": "verenigingen.utils.donation_history_manager.on_donation_cancel",
+        "on_trash": "verenigingen.utils.donation_history_manager.on_donation_delete"
+    },
 }
 
 # Scheduled Tasks
@@ -115,6 +125,9 @@ scheduler_events = {
         
         # Contact request automation
         "verenigingen.verenigingen.doctype.member_contact_request.contact_request_automation.process_contact_request_automation",
+        
+        # Board member role cleanup
+        "verenigingen.utils.board_member_role_cleanup.cleanup_expired_board_member_roles",
     ],
     "weekly": [
         # Termination reports and reviews
@@ -133,9 +146,26 @@ jinja = {
     ]
 }
 
+# Portal Configuration
+# --------------------
+# Custom portal menu items for association members (overrides ERPNext defaults)
+standard_portal_menu_items = [
+    {"title": "Member Portal", "route": "/member_portal", "reference_doctype": "", "role": "Verenigingen Member"},
+    {"title": "Volunteer Portal", "route": "/volunteer_portal", "reference_doctype": "", "role": "Volunteer"}
+]
+
+# Override functions removed - only affecting website/portal, not desk
+
+# Portal context processors
+website_context = {
+    "get_member_context": "verenigingen.utils.portal_customization.get_member_context"
+}
+
 # Installation
 # ------------
-after_install = "verenigingen.setup.execute_after_install"
+after_install = [
+    "verenigingen.setup.execute_after_install"
+]
 
 # Permissions
 # -----------
@@ -146,12 +176,14 @@ permission_query_conditions = {
     "Chapter Member": "verenigingen.permissions.get_chapter_member_permission_query",
     "Team": "verenigingen.verenigingen.doctype.team.team.get_team_permission_query_conditions",
     "Membership Termination Request": "verenigingen.permissions.get_termination_permission_query",
-    "Volunteer": "verenigingen.permissions.get_volunteer_permission_query"
+    "Volunteer": "verenigingen.permissions.get_volunteer_permission_query",
+    "Address": "verenigingen.permissions.get_address_permission_query"
 }
 
 has_permission = {
     "Member": "verenigingen.permissions.has_member_permission",
-    "Membership": "verenigingen.permissions.has_membership_permission",
+    "Membership": "verenigingen.permissions.has_membership_permission", 
+    "Address": "verenigingen.permissions.has_address_permission",
 }
 
 # Workflow Action Handlers
@@ -163,6 +195,8 @@ workflow_action_handlers = {
         "Reject": "verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.on_workflow_action"
     }
 }
+
+# Domain setting removed - was hiding desk modules
 
 # Fixtures
 # --------
@@ -187,6 +221,21 @@ fixtures = [
         "doctype": "Email Template", 
         "filters": [
             ["name", "like", "membership_%"]
+        ]
+    },
+    {
+        "doctype": "Email Template",
+        "filters": [
+            ["name", "in", [
+                "expense_approval_request",
+                "expense_approved", 
+                "expense_rejected",
+                "donation_confirmation",
+                "donation_payment_confirmation",
+                "anbi_tax_receipt",
+                "termination_overdue_notification",
+                "member_contact_request_received"
+            ]]
         ]
     },
     {

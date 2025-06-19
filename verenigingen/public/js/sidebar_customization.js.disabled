@@ -1,0 +1,100 @@
+/**
+ * Verenigingen App - Clean sidebar experience
+ * This ensures only association-relevant modules are visible
+ */
+
+(function() {
+    'use strict';
+    
+    // Configuration: Items that should never appear for association users
+    const RESTRICTED_ITEMS = [
+        'Newsletter', 'Projects', 'Quotations', 'Orders', 'Invoices', 
+        'Shipments', 'Timesheets', 'Material Request', 'Stock',
+        'Manufacturing', 'CRM', 'Assets', 'Support', 'Quality',
+        'Buying', 'Selling', 'Payroll', 'Recruitment', 'Performance',
+        'Employee Lifecycle', 'Shift & Attendance', 'Issues & Support'
+    ];
+    
+    // Check if user should see restricted items (admins only)
+    function shouldShowRestrictedItems() {
+        return frappe.user.has_role('System Manager') || frappe.session.user === 'Administrator';
+    }
+    
+    // Clean sidebar function
+    function cleanSidebar() {
+        if (shouldShowRestrictedItems()) {
+            return; // Don't hide anything for admins
+        }
+        
+        RESTRICTED_ITEMS.forEach(item => {
+            // Remove from sidebar navigation
+            $(`.sidebar-item[data-label="${item}"], .sidebar-item[title="${item}"]`).remove();
+            
+            // Remove from workspace sidebar
+            $(`.workspace-sidebar-item:contains("${item}")`).remove();
+            
+            // Remove from any navigation menus
+            $(`a[href*="${item.toLowerCase().replace(/\s+/g, '-')}"]`).closest('li').remove();
+            
+            // Remove from module cards/links
+            $(`.module-link[data-name="${item}"], .module-card[data-name="${item}"]`).remove();
+            
+            // Remove from search suggestions
+            $(`.search-item:contains("${item}")`).remove();
+        });
+        
+        // Also hide specific patterns
+        $('[href*="/app/quotation"], [href*="/app/sales-order"], [href*="/app/purchase-order"]').closest('li').remove();
+        $('[href*="/app/delivery-note"], [href*="/app/stock-entry"], [href*="/app/material-request"]').closest('li').remove();
+        $('[href*="/app/timesheet"], [href*="/app/project"], [href*="/app/newsletter"]').closest('li').remove();
+    }
+    
+    // Override frappe's sidebar generation if possible
+    if (typeof frappe !== 'undefined') {
+        // Hook into frappe's navigation rendering
+        const originalRender = frappe.ui && frappe.ui.Sidebar && frappe.ui.Sidebar.prototype.render;
+        if (originalRender) {
+            frappe.ui.Sidebar.prototype.render = function() {
+                const result = originalRender.apply(this, arguments);
+                setTimeout(cleanSidebar, 100); // Clean after render
+                return result;
+            };
+        }
+        
+        // Also hook into workspace rendering
+        $(document).on('workspace:loaded', cleanSidebar);
+        $(document).on('page:load', cleanSidebar);
+        $(document).on('frappe:ready', cleanSidebar);
+    }
+    
+    // Initial cleanup when DOM is ready
+    $(document).ready(function() {
+        cleanSidebar();
+        
+        // Set up mutation observer for dynamic content
+        if (window.MutationObserver) {
+            const observer = new MutationObserver(function(mutations) {
+                let needsCleanup = false;
+                mutations.forEach(function(mutation) {
+                    if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                        needsCleanup = true;
+                    }
+                });
+                
+                if (needsCleanup) {
+                    setTimeout(cleanSidebar, 50);
+                }
+            });
+            
+            // Observe the main navigation areas
+            const sidebar = document.querySelector('.layout-side-section, .sidebar, .desk-sidebar');
+            if (sidebar) {
+                observer.observe(sidebar, { childList: true, subtree: true });
+            }
+        }
+        
+        // Periodic cleanup for dynamic content
+        setInterval(cleanSidebar, 5000); // Every 5 seconds
+    });
+    
+})();

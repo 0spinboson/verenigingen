@@ -88,7 +88,8 @@
    "fieldname": "team_lead",
    "fieldtype": "Link",
    "label": "Team Lead",
-   "options": "User"
+   "options": "User",
+   "read_only": 1
   },
   {
    "fieldname": "team_members_section",

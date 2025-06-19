@@ -109,12 +109,6 @@
                     </div>
                     <div class="col-md-6">
                         <p><strong>{{ _("Minimum Allowed") }}:</strong> {{ frappe.format_value(minimum_fee, {"fieldtype": "Currency"}) }}</p>
-                        <p><strong>{{ _("Fee Source") }}:</strong> 
-                            {% if current_fee.source == "custom_override" %}
-                                {{ _("Custom Amount") }}
-                            {% else %}
-                                {{ _("Standard Rate") }}
-                            {% endif %}
                         </p>
                     </div>
                 </div>
@@ -165,7 +159,7 @@
 
                 <form id="fee-adjustment-form">
                     <div class="fee-input-group">
-                        <label for="new-fee-amount">{{ _("New Monthly Fee Amount") }}</label>
+                        <label for="new-fee-amount">{{ _("New {0} Fee Amount").format(_(billing_frequency)) }}</label>
                         <input type="range" 
                                id="fee-slider" 
                                class="fee-slider"
@@ -226,6 +220,42 @@
                 </ul>
             </div>
 
+            <!-- Income Calculator -->
+            {% if enable_income_calculator %}
+            <div class="fee-card">
+                <h5>{{ _("Contribution Calculator") }}</h5>
+                <p class="small text-muted">{{ calculator_description }}</p>
+                
+                <div class="form-group">
+                    <label for="calc-monthly-income" class="small">{{ _("Monthly Gross Income (€)") }}</label>
+                    <input type="number" class="form-control form-control-sm" id="calc-monthly-income" 
+                           placeholder="3500" min="0" step="0.01">
+                </div>
+                
+                <div class="form-group">
+                    <label for="calc-payment-interval" class="small">{{ _("Payment Interval") }}</label>
+                    <select class="form-control form-control-sm" id="calc-payment-interval">
+                        <option value="monthly">{{ _("Monthly") }}</option>
+                        <option value="quarterly">{{ _("Quarterly") }}</option>
+                    </select>
+                </div>
+                
+                <div id="calc-result" class="alert alert-info" style="display: none;">
+                    <strong class="small">{{ _("Suggested Contribution:") }}</strong><br>
+                    <span id="calc-suggested-amount" class="font-weight-bold"></span>
+                    <span id="calc-payment-frequency"></span>
+                    <br>
+                    <small class="text-muted">
+                        {{ _("Based on") }} <span id="calc-income-percentage">{{ income_percentage_rate }}%</span> {{ _("of your monthly income") }}
+                    </small>
+                </div>
+                
+                <button type="button" class="btn btn-outline-secondary btn-sm btn-block" id="apply-calculated-fee" style="display: none;">
+                    {{ _("Use This Amount") }}
+                </button>
+            </div>
+            {% endif %}
+
             <div class="fee-card">
                 <h5>{{ _("Need Help?") }}</h5>
                 <p>{{ _("If you have questions about fee adjustments or need financial assistance, please contact us.") }}</p>
@@ -249,6 +279,13 @@ $(document).ready(function() {
     const feeDisplay = $('#fee-display');
     const form = $('#fee-adjustment-form');
     const submitBtn = $('#submit-btn');
+    
+    // Income calculator variables
+    const calculatorSettings = {
+        enabled: {{ enable_income_calculator|default(false)|lower }},
+        percentage: {{ income_percentage_rate|default(0.5) }}
+    };
+    let calculatedAmount = 0;
     
     // Sync slider and input
     feeSlider.on('input', function() {
@@ -281,6 +318,59 @@ $(document).ready(function() {
             submitBtn.text('{{ _("Submit Fee Adjustment") }}');
             submitBtn.removeAttr('title');
         }
+    }
+    
+    // Income calculator functionality
+    if (calculatorSettings.enabled) {
+        function calculateContribution() {
+            const monthlyIncome = parseFloat($('#calc-monthly-income').val()) || 0;
+            const paymentInterval = $('#calc-payment-interval').val();
+            
+            if (monthlyIncome <= 0) {
+                $('#calc-result').hide();
+                $('#apply-calculated-fee').hide();
+                calculatedAmount = 0;
+                return;
+            }
+            
+            // Calculate based on percentage of monthly income
+            const monthlyContribution = monthlyIncome * (calculatorSettings.percentage / 100);
+            let displayAmount, displayFrequency;
+            
+            if (paymentInterval === 'quarterly') {
+                displayAmount = monthlyContribution * 3; // 3 months worth
+                displayFrequency = '{{ _("per quarter") }}';
+            } else {
+                displayAmount = monthlyContribution;
+                displayFrequency = '{{ _("per month") }}';
+            }
+            
+            calculatedAmount = displayAmount;
+            
+            // Format currency
+            const formattedAmount = '€' + displayAmount.toFixed(2);
+            
+            // Update display
+            $('#calc-suggested-amount').text(formattedAmount);
+            $('#calc-payment-frequency').text(' ' + displayFrequency);
+            $('#calc-result').show();
+            $('#apply-calculated-fee').show();
+        }
+        
+        // Bind calculator events
+        $('#calc-monthly-income, #calc-payment-interval').on('input change', calculateContribution);
+        
+        // Apply calculated fee to main form
+        $('#apply-calculated-fee').on('click', function() {
+            if (calculatedAmount > 0) {
+                feeInput.val(calculatedAmount.toFixed(2));
+                feeSlider.val(calculatedAmount.toFixed(2));
+                updateFeeDisplay(calculatedAmount);
+                
+                // Show confirmation message
+                showMessage('{{ _("Calculated amount applied to fee adjustment form") }}', 'info');
+            }
+        });
     }
     
     // Form submission

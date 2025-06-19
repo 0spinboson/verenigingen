@@ -1,0 +1,14 @@
+{% extends "templates/web.html" %}
+
+{% block head_include %}
+{{ super() }}
+<style>
+.portal-container {
+    min-height: 400px;
+}
+</style>
+{% endblock %}
+
+{% block sidebar %}
+{% include "templates/includes/web_sidebar_enhanced.html" %}
+{% endblock %}

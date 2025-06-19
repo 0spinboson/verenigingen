@@ -66,6 +66,15 @@ def get_context(context):
     # Get recent activity
     context.recent_activity = get_member_activity(member)
     
+    # Get user teams if volunteer exists
+    if context.volunteer:
+        context.user_teams = get_user_teams(context.volunteer.name)
+    else:
+        context.user_teams = []
+    
+    # Get payment status information
+    context.payment_status = get_payment_status(context.member, membership)
+    
     # Get quick actions based on member status
     context.quick_actions = get_quick_actions(context.member, membership, context.volunteer)
     
@@ -272,3 +281,101 @@ def get_quick_actions(member, membership, volunteer):
     })
     
     return actions
+
+def get_payment_status(member, membership):
+    """Get comprehensive payment status for member"""
+    if not member:
+        return None
+    
+    try:
+        # Get current fee information
+        current_fee_info = member.get_current_membership_fee()
+        
+        # Get membership billing frequency
+        billing_frequency = "Monthly"  # Default
+        if membership:
+            membership_doc = frappe.get_doc("Membership", membership.name)
+            if "kwartaal" in membership.membership_type.lower() or "quarter" in membership.membership_type.lower():
+                billing_frequency = "Quarterly"
+            elif "jaar" in membership.membership_type.lower() or "annual" in membership.membership_type.lower():
+                billing_frequency = "Annually"
+        
+        # Get outstanding invoices
+        customer = frappe.db.get_value("Member", member.name, "customer")
+        outstanding_invoices = []
+        total_outstanding = 0
+        
+        if customer:
+            invoices = frappe.db.sql("""
+                SELECT name, posting_date, due_date, grand_total, outstanding_amount, status
+                FROM `tabSales Invoice`
+                WHERE customer = %(customer)s 
+                AND outstanding_amount > 0
+                AND docstatus = 1
+                ORDER BY due_date ASC
+            """, {"customer": customer}, as_dict=True)
+            
+            for invoice in invoices:
+                outstanding_invoices.append({
+                    "name": invoice.name,
+                    "posting_date": invoice.posting_date,
+                    "due_date": invoice.due_date,
+                    "amount": invoice.grand_total,
+                    "outstanding": invoice.outstanding_amount,
+                    "status": invoice.status,
+                    "is_overdue": getdate(invoice.due_date) < getdate(today()) if invoice.due_date else False
+                })
+                total_outstanding += invoice.outstanding_amount
+        
+        # Get next billing date
+        next_billing = None
+        if membership:
+            next_billing = getattr(membership, 'next_billing_date', None)
+            if not next_billing and hasattr(membership, 'renewal_date'):
+                next_billing = membership.renewal_date
+        
+        # Determine current fee amount based on billing frequency
+        current_fee_amount = current_fee_info.get("amount", 0)
+        if billing_frequency == "Quarterly" and current_fee_amount:
+            # If we have a quarterly membership but the override is showing monthly, 
+            # we need to get the actual quarterly amount from the membership
+            if membership:
+                membership_doc = frappe.get_doc("Membership", membership.name)
+                if getattr(membership_doc, 'uses_custom_amount', False):
+                    current_fee_amount = getattr(membership_doc, 'custom_amount', current_fee_amount)
+        
+        return {
+            "current_fee": current_fee_amount,
+            "billing_frequency": billing_frequency,
+            "fee_source": current_fee_info.get("source", "unknown"),
+            "outstanding_amount": total_outstanding,
+            "outstanding_invoices": outstanding_invoices,
+            "next_billing_date": next_billing,
+            "payment_up_to_date": total_outstanding == 0,
+            "has_overdue": any(inv["is_overdue"] for inv in outstanding_invoices)
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting payment status for member {member.name}: {str(e)}", "Payment Status Error")
+        return None
+
+def get_user_teams(volunteer_name):
+    """Get teams where user is a member"""
+    teams = frappe.db.sql("""
+        SELECT DISTINCT 
+            t.name,
+            t.team_name,
+            t.team_type,
+            t.status,
+            tm.role_type,
+            tm.role,
+            tm.status as member_status
+        FROM `tabTeam` t
+        INNER JOIN `tabTeam Member` tm ON t.name = tm.parent
+        WHERE tm.volunteer = %(volunteer)s
+        AND tm.is_active = 1
+        AND t.status = 'Active'
+        ORDER BY t.team_name
+    """, {"volunteer": volunteer_name}, as_dict=True)
+    
+    return teams

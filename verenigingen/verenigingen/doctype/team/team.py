@@ -10,6 +10,7 @@ class Team(Document):
     def validate(self):
         self.validate_dates()
         self.validate_team_members()
+        self.update_team_lead()
     
     def validate_dates(self):
         """Validate start and end dates"""
@@ -27,6 +28,25 @@ class Team(Document):
                 
         if not has_leader and self.status == "Active" and self.team_members:
             frappe.msgprint(_("Warning: Active team should have at least one active team leader"))
+    
+    def update_team_lead(self):
+        """Auto-populate team_lead field from active Team Leader"""
+        current_leader = None
+        
+        # Find the first active Team Leader
+        for member in self.team_members or []:
+            if member.role_type == "Team Leader" and member.is_active:
+                # Get the user associated with this volunteer
+                if member.volunteer:
+                    volunteer_doc = frappe.get_doc("Volunteer", member.volunteer)
+                    if volunteer_doc.member:
+                        user = frappe.db.get_value("Member", volunteer_doc.member, "user")
+                        if user:
+                            current_leader = user
+                            break
+        
+        # Update the team_lead field
+        self.team_lead = current_leader
     
     def before_save(self):
         """Store document state before save for comparison"""

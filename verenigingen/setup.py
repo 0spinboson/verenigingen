@@ -580,6 +580,14 @@ def setup_membership_application_system():
         # Create email templates
         create_application_email_templates()
         
+        # Create enhanced rejection email templates
+        from verenigingen.api.membership_application_review import create_default_email_templates
+        create_default_email_templates()
+        
+        # Create comprehensive email templates for all notifications
+        from verenigingen.api.email_template_manager import create_comprehensive_email_templates
+        create_comprehensive_email_templates()
+        
         # Create web pages configuration
         setup_application_web_pages()
         

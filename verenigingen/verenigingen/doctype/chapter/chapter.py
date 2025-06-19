@@ -905,49 +905,30 @@ def assign_member_to_chapter(member, chapter, note=None):
 @frappe.whitelist()
 def join_chapter(member_name, chapter_name, introduction=None, website_url=None):
     """Web method for a member to join a chapter via portal"""
-    if not frappe.db.exists("Member", member_name):
-        frappe.throw(_("Invalid member"))
-        
-    member = frappe.get_doc("Member", member_name)
+    # Use centralized chapter membership manager for consistency
+    from verenigingen.utils.chapter_membership_manager import ChapterMembershipManager
     
-    user_email = frappe.session.user
-    if user_email != "Administrator" and user_email != member.email:
-        frappe.throw(_("You don't have permission to perform this action"))
-    
-    chapter = frappe.get_doc("Chapter", chapter_name)
-    result = chapter.member_manager.add_member(member_name, introduction, website_url)
-    
-    # Update chapter tracking fields if member was successfully added
-    if result.get('success'):
-        frappe.db.set_value("Member", member_name, {
-            "chapter_change_reason": "Joined via member portal",
-            "chapter_assigned_date": frappe.utils.now(),
-            "chapter_assigned_by": frappe.session.user
-        })
+    result = ChapterMembershipManager.join_chapter(
+        member_id=member_name,
+        chapter_name=chapter_name,
+        introduction=introduction,
+        website_url=website_url,
+        user_email=frappe.session.user
+    )
     
     return {"success": result.get('success', False), "added": result.get('action') == 'added'}
 
 @frappe.whitelist()
 def leave_chapter(member_name, chapter_name, leave_reason=None):
     """Web method for a member to leave a chapter via portal"""
-    if not frappe.db.exists("Member", member_name):
-        frappe.throw(_("Invalid member"))
-        
-    member = frappe.get_doc("Member", member_name)
+    # Use centralized chapter membership manager for consistency
+    from verenigingen.utils.chapter_membership_manager import ChapterMembershipManager
     
-    user_email = frappe.session.user
-    if user_email != "Administrator" and user_email != member.email:
-        frappe.throw(_("You don't have permission to perform this action"))
-    
-    chapter = frappe.get_doc("Chapter", chapter_name)
-    result = chapter.member_manager.remove_member(member_name, leave_reason)
-    
-    # Update chapter tracking fields if member was successfully removed
-    if result.get('success'):
-        frappe.db.set_value("Member", member_name, {
-            "chapter_change_reason": f"Left chapter: {leave_reason or 'No reason provided'}",
-            "chapter_assigned_date": frappe.utils.now(),
-            "chapter_assigned_by": frappe.session.user
-        })
+    result = ChapterMembershipManager.leave_chapter(
+        member_id=member_name,
+        chapter_name=chapter_name,
+        leave_reason=leave_reason,
+        user_email=frappe.session.user
+    )
     
     return {"success": result.get('success', False), "removed": result.get('action') in ['removed', 'disabled']}

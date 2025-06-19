@@ -6,27 +6,13 @@ from frappe import _
 
 @frappe.whitelist()
 def assign_member_to_chapter(member_name, chapter_name):
-    """Assign a member to a specific chapter"""
+    """Assign a member to a specific chapter using centralized manager"""
     try:
         # Validate inputs
         if not member_name or not chapter_name:
             return {
                 "success": False,
                 "error": "Member name and chapter name are required"
-            }
-        
-        # Check if member exists
-        if not frappe.db.exists("Member", member_name):
-            return {
-                "success": False,
-                "error": f"Member {member_name} not found"
-            }
-        
-        # Check if chapter exists
-        if not frappe.db.exists("Chapter", chapter_name):
-            return {
-                "success": False,
-                "error": f"Chapter {chapter_name} not found"
             }
         
         # Check permissions
@@ -36,44 +22,25 @@ def assign_member_to_chapter(member_name, chapter_name):
                 "error": "You don't have permission to assign members to this chapter"
             }
         
-        # Check if member is already assigned to this chapter
-        existing_assignment = frappe.db.exists("Chapter Member", {
-            "parent": chapter_name,
-            "member": member_name,
-            "enabled": 1
-        })
+        # Use centralized chapter membership manager for proper history tracking
+        from verenigingen.utils.chapter_membership_manager import ChapterMembershipManager
         
-        if existing_assignment:
-            return {
-                "success": True,
-                "message": f"Member {member_name} is already assigned to {chapter_name}",
-                "new_chapter": chapter_name
-            }
-        
-        # Update tracking fields on member record using ORM
-        member_doc = frappe.get_doc("Member", member_name)
-        member_doc.chapter_change_reason = "Assigned via admin interface"
-        member_doc.chapter_assigned_date = frappe.utils.now()
-        member_doc.chapter_assigned_by = frappe.session.user
-        member_doc.save(ignore_permissions=True)
-        
-        # Add member to chapter's member roster
-        add_member_to_chapter_roster(member_name, chapter_name)
-        
-        # Commit the transaction
-        frappe.db.commit()
-        
-        # Log the change
-        frappe.log_error(
-            f"Member {member_name} assigned to chapter '{chapter_name}' by {frappe.session.user}",
-            "Member Chapter Assignment"
+        result = ChapterMembershipManager.assign_member_to_chapter(
+            member_id=member_name,
+            chapter_name=chapter_name,
+            reason="Assigned via admin interface",
+            assigned_by=frappe.session.user
         )
         
-        return {
-            "success": True,
-            "message": f"Member {member_name} has been assigned to {chapter_name}",
-            "new_chapter": chapter_name
-        }
+        # Adapt result format for backward compatibility
+        if result.get('success'):
+            return {
+                "success": True,
+                "message": f"Member {member_name} has been assigned to {chapter_name}",
+                "new_chapter": chapter_name
+            }
+        else:
+            return result
         
     except Exception as e:
         frappe.log_error(f"Error assigning member to chapter: {str(e)}", "Member Assignment Error")
@@ -178,8 +145,7 @@ def get_members_without_chapter():
             "Member",
             filters=member_filters,
             fields=[
-                "name", "full_name", "email", "city", "postal_code", 
-                "country", "status", "creation"
+                "name", "full_name", "email", "status", "creation"
             ],
             order_by="creation desc"
         )
@@ -286,37 +252,21 @@ def bulk_assign_members_to_chapters(assignments):
         }
 
 def add_member_to_chapter_roster(member_name, new_chapter):
-    """Add member to chapter's member roster"""
+    """Add member to chapter's member roster using centralized manager"""
     try:
-        # Add to new chapter roster
         if new_chapter:
-            # Check if member already exists in roster
-            existing_member = frappe.db.exists("Chapter Member", {
-                "parent": new_chapter,
-                "member": member_name
-            })
+            # Use centralized chapter membership manager for proper history tracking
+            from verenigingen.utils.chapter_membership_manager import ChapterMembershipManager
             
-            if not existing_member:
-                # Get member's full name for the roster
-                member_full_name = frappe.db.get_value("Member", member_name, "full_name")
-                
-                # Add member to chapter roster
-                new_chapter_doc = frappe.get_doc("Chapter", new_chapter)
-                new_chapter_doc.append("members", {
-                    "member": member_name,
-                    "member_name": member_full_name,
-                    "chapter_join_date": frappe.utils.today(),
-                    "enabled": 1
-                })
-                new_chapter_doc.save()
-            else:
-                # Member already exists, just ensure they're enabled and set join date if missing
-                existing_data = frappe.db.get_value("Chapter Member", existing_member, 
-                                                  ["enabled", "chapter_join_date"], as_dict=True)
-                updates = {"enabled": 1}
-                if not existing_data.chapter_join_date:
-                    updates["chapter_join_date"] = frappe.utils.today()
-                frappe.db.set_value("Chapter Member", existing_member, updates)
+            result = ChapterMembershipManager.assign_member_to_chapter(
+                member_id=member_name,
+                chapter_name=new_chapter,
+                reason="Administrative assignment",
+                assigned_by=frappe.session.user
+            )
+            
+            if not result.get('success'):
+                frappe.log_error(f"Failed to add member {member_name} to chapter {new_chapter}: {result.get('error')}", "Chapter Roster Update Error")
         
     except Exception as e:
         frappe.log_error(f"Error updating chapter roster: {str(e)}", "Chapter Roster Update Error")

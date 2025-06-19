@@ -17,6 +17,9 @@ class TestChapterMembershipValidationEdgeCases(unittest.TestCase):
         """Set up test data for edge cases"""
         frappe.set_user("Administrator")
         
+        # Clean up any existing test data first
+        cls._cleanup_test_data()
+        
         # Create multiple test scenarios
         cls.test_data = {}
         
@@ -33,7 +36,6 @@ class TestChapterMembershipValidationEdgeCases(unittest.TestCase):
         
         cls.test_data['volunteer_1'] = frappe.get_doc({
             "doctype": "Volunteer",
-            "name": "EDGE-VOLUNTEER-1",
             "volunteer_name": "Edge Case Volunteer 1",
             "email": "edge1@example.com",
             "member": "EDGE-MEMBER-1",
@@ -45,7 +47,6 @@ class TestChapterMembershipValidationEdgeCases(unittest.TestCase):
         # Scenario 2: Volunteer without member link
         cls.test_data['volunteer_2'] = frappe.get_doc({
             "doctype": "Volunteer", 
-            "name": "EDGE-VOLUNTEER-2",
             "volunteer_name": "Edge Case Volunteer 2",
             "email": "edge2@example.com",
             "status": "Active",
@@ -64,18 +65,20 @@ class TestChapterMembershipValidationEdgeCases(unittest.TestCase):
         })
         cls.test_data['member_3'].insert(ignore_permissions=True)
         
-        # Create test chapters
+        # Create test chapters with required region field
         cls.test_data['chapter_1'] = frappe.get_doc({
             "doctype": "Chapter",
             "name": "EDGE-CHAPTER-1",
-            "chapter_name": "Edge Case Chapter 1"
+            "chapter_name": "Edge Case Chapter 1",
+            "region": "Test Region 1"
         })
         cls.test_data['chapter_1'].insert(ignore_permissions=True)
         
         cls.test_data['chapter_2'] = frappe.get_doc({
             "doctype": "Chapter", 
             "name": "EDGE-CHAPTER-2",
-            "chapter_name": "Edge Case Chapter 2"
+            "chapter_name": "Edge Case Chapter 2",
+            "region": "Test Region 2"
         })
         cls.test_data['chapter_2'].insert(ignore_permissions=True)
         
@@ -189,7 +192,8 @@ class TestChapterMembershipValidationEdgeCases(unittest.TestCase):
         test_chapter = frappe.get_doc({
             "doctype": "Chapter",
             "name": "EDGE-CHAPTER-DISABLED",
-            "chapter_name": "Edge Case Disabled Chapter"
+            "chapter_name": "Edge Case Disabled Chapter",
+            "region": "Test Region Disabled"
         })
         test_chapter.insert(ignore_permissions=True)
         
@@ -290,7 +294,6 @@ class TestChapterMembershipValidationEdgeCases(unittest.TestCase):
         # Create volunteer with empty string member field
         volunteer_empty = frappe.get_doc({
             "doctype": "Volunteer",
-            "name": "EDGE-VOLUNTEER-EMPTY",
             "volunteer_name": "Edge Case Empty Member",
             "email": "empty@example.com",
             "member": "",  # Empty string instead of None
@@ -308,23 +311,22 @@ class TestChapterMembershipValidationEdgeCases(unittest.TestCase):
                 # The field should be there, even if empty
                 
         finally:
-            frappe.delete_doc("Volunteer", "EDGE-VOLUNTEER-EMPTY", ignore_permissions=True)
+            frappe.delete_doc("Volunteer", "Edge Case Empty Member", ignore_permissions=True)
 
-    @classmethod
-    def tearDownClass(cls):
+    @classmethod 
+    def _cleanup_test_data(cls):
         """Clean up test data"""
         try:
             # Clean up in reverse dependency order
             frappe.db.delete("Expense Claim", {"employee": [
-                cls.test_data['volunteer_1'].employee_id if hasattr(cls.test_data['volunteer_1'], 'employee_id') else None,
-                cls.test_data['volunteer_2'].employee_id if hasattr(cls.test_data['volunteer_2'], 'employee_id') else None
+                "Edge Case Volunteer 1", "Edge Case Volunteer 2"
             ]})
-            frappe.db.delete("Volunteer Expense", {"volunteer": ["EDGE-VOLUNTEER-1", "EDGE-VOLUNTEER-2"]})
+            frappe.db.delete("Volunteer Expense", {"volunteer": ["Edge Case Volunteer 1", "Edge Case Volunteer 2"]})
             
             for doc_type, names in [
-                ("Chapter", ["EDGE-CHAPTER-1", "EDGE-CHAPTER-2"]),
+                ("Chapter", ["EDGE-CHAPTER-1", "EDGE-CHAPTER-2", "EDGE-CHAPTER-DISABLED"]),
                 ("Expense Category", ["EDGE-CATEGORY"]),
-                ("Volunteer", ["EDGE-VOLUNTEER-1", "EDGE-VOLUNTEER-2"]),
+                ("Volunteer", ["Edge Case Volunteer 1", "Edge Case Volunteer 2", "Edge Case Empty Member"]),
                 ("Member", ["EDGE-MEMBER-1", "EDGE-MEMBER-3"])
             ]:
                 for name in names:
@@ -333,7 +335,12 @@ class TestChapterMembershipValidationEdgeCases(unittest.TestCase):
             
             frappe.db.commit()
         except Exception as e:
-            frappe.logger().error(f"Error cleaning up edge case test data: {str(e)}")
+            pass  # Ignore cleanup errors during setup
+    
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up test data"""
+        cls._cleanup_test_data()
 
 
 if __name__ == "__main__":

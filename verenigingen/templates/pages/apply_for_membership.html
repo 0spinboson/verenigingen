@@ -409,13 +409,6 @@
                                 <small class="form-text text-muted">{{ _("International Bank Account Number") }}</small>
                                 <div class="invalid-feedback"></div>
                             </div>
-                            <div class="col-md-6 mb-3" style="display: none;">
-                                <label for="bic">{{ _("BIC/SWIFT Code") }} <small class="text-muted">({{ _("Auto-derived") }})</small></label>
-                                <input type="text" class="form-control" id="bic" name="bic" 
-                                       placeholder="ABNANL2A" maxlength="11" readonly>
-                                <small class="form-text text-muted">{{ _("Automatically derived from IBAN") }}</small>
-                                <div class="invalid-feedback"></div>
-                            </div>
                         </div>
                         <div class="row">
                             <div class="col-md-12 mb-3">
@@ -449,13 +442,6 @@
                                 <input type="text" class="form-control" id="transfer_iban" name="transfer_iban" 
                                        placeholder="NL91 ABNA 0417 1643 00" maxlength="34">
                                 <small class="form-text text-muted">{{ _("Helps us match your payment to your application") }}</small>
-                                <div class="invalid-feedback"></div>
-                            </div>
-                            <div class="col-md-6 mb-3" style="display: none;">
-                                <label for="transfer_bic">{{ _("BIC/SWIFT Code") }} <small class="text-muted">({{ _("Auto-derived") }})</small></label>
-                                <input type="text" class="form-control" id="transfer_bic" name="transfer_bic" 
-                                       placeholder="ABNANL2A" maxlength="11" readonly>
-                                <small class="form-text text-muted">{{ _("Automatically derived from IBAN") }}</small>
                                 <div class="invalid-feedback"></div>
                             </div>
                         </div>

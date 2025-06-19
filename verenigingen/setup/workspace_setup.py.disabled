@@ -1,0 +1,174 @@
+"""
+Workspace setup and customization for Verenigingen app
+"""
+
+import frappe
+
+def setup_workspace_customizations():
+    """Hide unnecessary ERPNext modules and set up clean workspace"""
+    
+    # List of modules to hide
+    modules_to_hide = [
+        "Buying",
+        "Selling", 
+        "Stock",
+        "Manufacturing",
+        "CRM",
+        "Assets", 
+        "Support",
+        "Quality",
+        "Marketplace",
+        "Education",
+        "Healthcare",
+        "Agriculture",
+        "Loan Management", 
+        "Non Profit",
+        "Frappe CRM",
+        "Payroll",
+        "Shift & Attendance",
+        "Performance",
+        "Employee Lifecycle",
+        "Recruitment",
+        "Payables",
+        "Receivables",
+        "Financial Reports",
+        "ALYF Banking"
+    ]
+    
+    # Hide workspaces
+    for module_name in modules_to_hide:
+        if frappe.db.exists("Workspace", module_name):
+            workspace = frappe.get_doc("Workspace", module_name)
+            workspace.is_hidden = 1
+            workspace.save(ignore_permissions=True)
+            print(f"Hidden workspace: {module_name}")
+    
+    # Update portal menu to remove duplicate projects and unwanted items
+    update_portal_menu()
+    
+    # Ensure Verenigingen workspace is visible and set as default
+    setup_verenigingen_workspace()
+    
+    frappe.db.commit()
+
+def update_portal_menu():
+    """Update portal menu to remove duplicates and unwanted items"""
+    
+    # Override standard portal menu items to keep only what we need
+    portal_menu_items = [
+        {"title": "Member Portal", "route": "/member_portal", "reference_doctype": "", "role": "Verenigingen Member"},
+        {"title": "Volunteer Portal", "route": "/volunteer_portal", "reference_doctype": "", "role": "Volunteer"},
+        {"title": "Issues & Support", "route": "/issues", "reference_doctype": "Issue"},
+        {"title": "My Addresses", "route": "/my_addresses", "reference_doctype": ""},
+    ]
+    
+    # Update hooks setting
+    frappe.get_hooks("standard_portal_menu_items", default=[])[:] = portal_menu_items
+
+def setup_verenigingen_workspace():
+    """Ensure Verenigingen workspace is properly configured"""
+    
+    if frappe.db.exists("Workspace", "Verenigingen"):
+        workspace = frappe.get_doc("Workspace", "Verenigingen")
+        workspace.is_hidden = 0
+        workspace.public = 1
+        workspace.save(ignore_permissions=True)
+        print("Configured Verenigingen workspace as default")
+
+def hide_unwanted_modules():
+    """Hide modules that users shouldn't see"""
+    
+    # List of modules to hide from module list
+    unwanted_modules = [
+        "Accounts",  # Keep only specific accounting features we need
+        "Buying",
+        "Selling", 
+        "Stock",
+        "Manufacturing",
+        "CRM",
+        "Assets", 
+        "Support",
+        "Quality",
+        "Marketplace",
+        "Education",
+        "Healthcare",
+        "Agriculture",
+        "Loan Management",
+        "Payroll",  # Hide since we're only using HRMS for basic employee features
+    ]
+    
+    for module_name in unwanted_modules:
+        # Check if module exists and hide it
+        if frappe.db.exists("Module Def", module_name):
+            module = frappe.get_doc("Module Def", module_name)
+            # We can't easily hide modules, but we can control workspace visibility
+            pass
+
+def clean_home_workspace():
+    """Clean up the Home workspace to remove unwanted shortcuts"""
+    
+    if frappe.db.exists("Workspace", "Home"):
+        home_workspace = frappe.get_doc("Workspace", "Home")
+        
+        # Define a clean home workspace content focused on association management
+        clean_content = [
+            {"id":"kb3XPLg8lb","type":"header","data":{"text":"<span class=\"h4\"><b>Quick Access</b></span>","col":12}},
+            {"id":"nWd2KJPW8l","type":"shortcut","data":{"shortcut_name":"Member Portal","col":3}},
+            {"id":"snrzfbFr5Y","type":"shortcut","data":{"shortcut_name":"Volunteer Portal","col":3}},
+            {"id":"SHJKakmLLf","type":"shortcut","data":{"shortcut_name":"Verenigingen","col":3}},
+            {"id":"d_KVM1gsf9","type":"spacer","data":{"col":12}},
+            {"id":"JVu8-FJZCu","type":"header","data":{"text":"<span class=\"h4\"><b>Essential Tools</b></span>","col":12}},
+            {"id":"JiuSi0ubOg","type":"card","data":{"card_name":"Members","col":4}},
+            {"id":"ji2Jlm3Q8i","type":"card","data":{"card_name":"Volunteers","col":4}},
+            {"id":"N61oiXpuwK","type":"card","data":{"card_name":"Reports","col":4}}
+        ]
+        
+        home_workspace.content = frappe.as_json(clean_content)
+        home_workspace.save(ignore_permissions=True)
+        print("Cleaned up Home workspace")
+
+def remove_unwanted_shortcuts():
+    """Remove shortcuts to modules we don't want users to access"""
+    
+    unwanted_shortcuts = [
+        "Quotation", "Sales Order", "Purchase Order", "Delivery Note", 
+        "Stock Entry", "Material Request", "Timesheets", "Projects",
+        "Manufacturing", "Quality", "CRM", "Assets", "Loan"
+    ]
+    
+    for shortcut_name in unwanted_shortcuts:
+        if frappe.db.exists("Workspace Shortcut", {"label": shortcut_name}):
+            frappe.delete_doc("Workspace Shortcut", shortcut_name, ignore_permissions=True)
+            print(f"Removed shortcut: {shortcut_name}")
+
+@frappe.whitelist()
+def setup_clean_workspace():
+    """API endpoint to set up clean workspace - run this once"""
+    try:
+        setup_workspace_customizations()
+        hide_unwanted_modules()
+        clean_home_workspace()
+        remove_unwanted_shortcuts()
+        
+        return {
+            "success": True,
+            "message": "Workspace cleaned up successfully. Please refresh your browser and clear cache."
+        }
+    except Exception as e:
+        frappe.log_error(frappe.get_traceback(), "Workspace Setup Error")
+        return {
+            "success": False,
+            "message": f"Error setting up workspace: {str(e)}"
+        }
+
+def get_visible_modules():
+    """Get list of modules that should be visible to users"""
+    
+    visible_modules = [
+        "Verenigingen",  # Our main module
+        "Home",          # Keep home for basic navigation
+        "HR",            # Keep for basic employee management (limited)
+        "Accounting",    # Keep for invoicing and payments (limited)
+    ]
+    
+    return visible_modules

@@ -49,6 +49,94 @@ def has_membership_permission(doc, user=None, permission_type=None):
     # Return None to fall back to standard permission system if no match
     return None
 
+def has_address_permission(doc, user=None, permission_type=None):
+    """Permission check for Address doctype - allows members to access their own addresses"""
+    if not user:
+        user = frappe.session.user
+    
+    # Admin roles always have access
+    admin_roles = ["System Manager", "Verenigingen Administrator"]
+    if any(role in frappe.get_roles(user) for role in admin_roles):
+        return True
+    
+    # Check if this address is linked to the user's member record
+    member_name = frappe.db.get_value("Member", {"email": user}, "name")
+    if not member_name:
+        member_name = frappe.db.get_value("Member", {"user": user}, "name")
+    
+    if member_name:
+        # Check if address is linked to this member via Dynamic Link
+        link_exists = frappe.db.exists("Dynamic Link", {
+            "parent": doc.name,
+            "parenttype": "Address",
+            "link_doctype": "Member",
+            "link_name": member_name
+        })
+        
+        if link_exists:
+            return True
+        
+        # Also check if this is the member's primary address
+        member_primary_address = frappe.db.get_value("Member", member_name, "primary_address")
+        if member_primary_address == doc.name:
+            return True
+    
+    # Fall back to standard Contact-based permissions
+    contact_name = frappe.db.get_value("Contact", {"email_id": user}, "name")
+    if contact_name:
+        contact = frappe.get_doc("Contact", contact_name)
+        return contact.has_common_link(doc)
+    
+    return False
+
+def get_address_permission_query(user):
+    """Permission query for Address - filters to show only member's addresses"""
+    if not user:
+        user = frappe.session.user
+    
+    # Admin roles see all
+    admin_roles = ["System Manager", "Verenigingen Administrator"]
+    if any(role in frappe.get_roles(user) for role in admin_roles):
+        return ""
+    
+    conditions = []
+    
+    # Find member by email or user field
+    member_name = frappe.db.get_value("Member", {"email": user}, "name")
+    if not member_name:
+        member_name = frappe.db.get_value("Member", {"user": user}, "name")
+    
+    if member_name:
+        # Add condition for addresses linked to this member
+        escaped_member_name = member_name.replace("'", "''")  # Simple SQL escaping
+        conditions.append(f"""
+            `tabAddress`.name in (
+                SELECT parent FROM `tabDynamic Link` 
+                WHERE parenttype = 'Address' 
+                AND link_doctype = 'Member' 
+                AND link_name = '{escaped_member_name}'
+            )
+        """)
+    
+    # Also check Contact-based addresses (original ERPNext behavior)
+    contact_name = frappe.db.get_value("Contact", {"email_id": user}, "name")
+    if contact_name:
+        escaped_contact_name = contact_name.replace("'", "''")  # Simple SQL escaping
+        conditions.append(f"""
+            `tabAddress`.name in (
+                SELECT parent FROM `tabDynamic Link` 
+                WHERE parenttype = 'Address' 
+                AND link_doctype = 'Contact' 
+                AND link_name = '{escaped_contact_name}'
+            )
+        """)
+    
+    if conditions:
+        return f"({' OR '.join(conditions)})"
+    
+    # No member or contact found - no access
+    return "1=0"
+
 def get_member_permission_query(user):
     """Permission query for Member doctype"""
     if not user:

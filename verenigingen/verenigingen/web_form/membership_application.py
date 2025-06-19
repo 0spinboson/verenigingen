@@ -17,6 +17,13 @@ def get_context(context):
     # Get countries for address
     context.countries = frappe.get_all("Country", fields=["name"])
     
+    # Get calculator settings from Verenigingen Settings
+    settings = frappe.get_single("Verenigingen Settings")
+    context.enable_income_calculator = getattr(settings, 'enable_income_calculator', 0)
+    context.income_percentage_rate = getattr(settings, 'income_percentage_rate', 0.5)
+    context.calculator_description = getattr(settings, 'calculator_description', 
+        'Our suggested contribution is 0.5% of your monthly net income. This helps ensure fair and equitable contributions based on your financial capacity.')
+    
     return context
 
 @frappe.whitelist(allow_guest=True)
@@ -95,8 +102,12 @@ def submit_membership_application(data):
         if data.get("payment_method") == "Direct Debit" and data.get("iban"):
             member.payment_method = "Direct Debit"
             member.iban = data.get("iban")
-            member.bic = data.get("bic", "")
             member.bank_account_name = data.get("bank_account_name", "")
+        
+        # Handle income calculator data if provided
+        if data.get("monthly_income") and data.get("payment_interval"):
+            member.monthly_income = data.get("monthly_income")
+            member.preferred_payment_interval = data.get("payment_interval")
         
         member.insert(ignore_permissions=True)
         
