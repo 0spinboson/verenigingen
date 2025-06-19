@@ -7,6 +7,19 @@ import frappe
 from frappe import _
 from frappe.utils import getdate, add_days, now_datetime, flt
 import json
+from verenigingen.api.sepa_duplicate_prevention import (
+    create_payment_entry_with_duplicate_check,
+    check_batch_processing_status,
+    check_return_file_processed,
+    acquire_processing_lock,
+    release_processing_lock,
+    generate_idempotency_key,
+    execute_idempotent_operation,
+    amounts_match_with_tolerance,
+    identify_split_payment_scenario,
+    validate_batch_mandates,
+    detect_orphaned_payments
+)
 from datetime import datetime, timedelta
 
 # ========================
@@ -99,6 +112,38 @@ def find_matching_sepa_batches(bank_transaction):
 
 @frappe.whitelist()
 def process_sepa_transaction_conservative(bank_transaction_name, sepa_batch_name):
+    """Process SEPA transaction with conservative approach and duplicate prevention"""
+    
+    # Acquire processing lock to prevent concurrent processing
+    if not acquire_processing_lock("sepa_batch", sepa_batch_name):
+        return {
+            "success": False,
+            "error": "Another process is currently working on this SEPA batch"
+        }
+    
+    try:
+        # Check if batch has already been processed
+        check_batch_processing_status(sepa_batch_name, bank_transaction_name)
+        
+        # Validate batch mandates before processing
+        sepa_batch = frappe.get_doc("Direct Debit Batch", sepa_batch_name)
+        batch_validation = validate_batch_mandates({"invoices": sepa_batch.invoices})
+        
+        if not batch_validation["valid"]:
+            return {
+                "success": False,
+                "error": "Batch contains items without valid SEPA mandates",
+                "missing_mandates": batch_validation["missing_mandates"]
+            }
+        
+        # Continue with original processing logic
+        return _process_sepa_transaction_conservative_internal(bank_transaction_name, sepa_batch_name)
+    
+    finally:
+        # Always release the lock
+        release_processing_lock("sepa_batch", sepa_batch_name)
+
+def _process_sepa_transaction_conservative_internal(bank_transaction_name, sepa_batch_name):
     """Conservative processing: Link transaction to batch but handle reconciliation carefully"""
     try:
         bank_transaction = frappe.get_doc("Bank Transaction", bank_transaction_name)
@@ -151,8 +196,8 @@ def reconcile_full_sepa_batch(bank_transaction, sepa_batch):
     
     for item in batch_items:
         try:
-            # Create payment entry for each invoice
-            payment_entry = frappe.get_doc({
+            # Create payment entry with duplicate prevention
+            payment_data = {
                 "doctype": "Payment Entry",
                 "payment_type": "Receive",
                 "party_type": "Customer",
@@ -175,15 +220,18 @@ def reconcile_full_sepa_batch(bank_transaction, sepa_batch):
                     "outstanding_amount": item.amount,
                     "allocated_amount": item.amount
                 }]
-            })
+            }
             
-            payment_entry.insert()
-            payment_entry.submit()
+            payment_result = create_payment_entry_with_duplicate_check(
+                item.sales_invoice, 
+                item.amount, 
+                payment_data
+            )
             
             reconciled_items.append({
                 "invoice": item.sales_invoice,
                 "amount": item.amount,
-                "payment_entry": payment_entry.name,
+                "payment_entry": payment_result.get("payment_entry"),
                 "status": "success"
             })
             
