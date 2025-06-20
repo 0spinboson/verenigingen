@@ -216,7 +216,7 @@ def reject_membership_application(member_name, reason, email_template=None, reje
     
     # Process refund if payment was made
     refund_processed = False
-    if process_refund and member.application_payment:
+    if process_refund and hasattr(member, 'application_invoice') and getattr(member, 'application_invoice', None):
         from verenigingen.api.payment_processing import process_application_refund
         refund_result = process_application_refund(member_name, "Application Rejected: " + reason)
         refund_processed = refund_result.get("success", False)
@@ -353,13 +353,43 @@ def send_approval_notification(member, invoice, membership_type):
             "company": frappe.defaults.get_global_default('company')
         }
         
-        frappe.sendmail(
-            recipients=[member.email],
-            subject=_("Membership Application Approved - Payment Required"),
-            template="membership_application_approved",
-            args=args,
-            now=True
-        )
+        # Use Email Template if available
+        if frappe.db.exists("Email Template", "membership_application_approved"):
+            email_template_doc = frappe.get_doc("Email Template", "membership_application_approved")
+            frappe.sendmail(
+                recipients=[member.email],
+                subject=email_template_doc.subject or _("Membership Application Approved - Payment Required"),
+                message=frappe.render_template(email_template_doc.response, args),
+                now=True
+            )
+        else:
+            # Fallback to simple HTML email
+            message = f"""
+            <h2>Membership Application Approved!</h2>
+            
+            <p>Dear {member.first_name},</p>
+            
+            <p>Congratulations! Your membership application has been approved.</p>
+            
+            <p><strong>Application Details:</strong></p>
+            <ul>
+                <li>Application ID: {getattr(member, 'application_id', member.name)}</li>
+                <li>Membership Type: {membership_type.membership_type_name}</li>
+                <li>Fee Amount: {frappe.format_value(invoice.grand_total, {'fieldtype': 'Currency'})}</li>
+            </ul>
+            
+            <p>To complete your membership, please pay the membership fee using the link below:</p>
+            <p><a href="{payment_url}" class="btn btn-primary">Pay Membership Fee</a></p>
+            
+            <p>Thank you for joining us!</p>
+            """
+            
+            frappe.sendmail(
+                recipients=[member.email],
+                subject=_("Membership Application Approved - Payment Required"),
+                message=message,
+                now=True
+            )
     else:
         # Use simple HTML email instead of template
         message = f"""
@@ -409,20 +439,21 @@ def send_rejection_notification(member, reason, email_template=None, rejection_c
     # Use specified email template if provided and exists
     template_to_use = email_template
     if template_to_use and frappe.db.exists("Email Template", template_to_use):
+        # Get the Email Template document and send using Frappe's email template system
+        email_template_doc = frappe.get_doc("Email Template", template_to_use)
         frappe.sendmail(
             recipients=[member.email],
-            subject=_("Membership Application Update"),
-            template=template_to_use,
-            args=args,
+            subject=email_template_doc.subject or _("Membership Application Update"),
+            message=frappe.render_template(email_template_doc.response, args),
             now=True
         )
     elif frappe.db.exists("Email Template", "membership_application_rejected"):
         # Fallback to default rejection template
+        email_template_doc = frappe.get_doc("Email Template", "membership_application_rejected")
         frappe.sendmail(
             recipients=[member.email],
-            subject=_("Membership Application Update"),
-            template="membership_application_rejected",
-            args=args,
+            subject=email_template_doc.subject or _("Membership Application Update"),
+            message=frappe.render_template(email_template_doc.response, args),
             now=True
         )
     else:

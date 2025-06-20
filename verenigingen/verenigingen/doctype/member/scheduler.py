@@ -306,10 +306,148 @@ def test_member_history_refresh(member_name=None):
         return {"success": False, "message": error_msg}
 
 
+def update_all_membership_durations():
+    """
+    Scheduled task to update membership duration calculations for all members.
+    Runs daily to keep duration data current for filtering and reporting.
+    """
+    from frappe.utils import now_datetime
+    import datetime
+    
+    frappe.logger().info("Starting scheduled membership duration updates")
+    
+    try:
+        # Get all active members (exclude cancelled)
+        members = frappe.get_all(
+            "Member",
+            filters={
+                "docstatus": ["!=", 2],  # Exclude cancelled members
+                "status": ["not in", ["Deceased", "Banned"]]  # Exclude inactive statuses
+            },
+            fields=["name", "full_name", "total_membership_days", "last_duration_update"]
+        )
+        
+        if not members:
+            frappe.logger().info("No members found for duration update")
+            return {"success": True, "message": "No members to process", "processed": 0}
+        
+        frappe.logger().info(f"Found {len(members)} members to process")
+        
+        # Process in batches to avoid memory issues
+        batch_size = 100
+        total_processed = 0
+        total_updated = 0
+        errors = []
+        
+        for i in range(0, len(members), batch_size):
+            batch = members[i:i + batch_size]
+            
+            for member_data in batch:
+                try:
+                    # Get the member document
+                    member = frappe.get_doc("Member", member_data.name)
+                    
+                    # Calculate new duration
+                    new_total_days = member.calculate_total_membership_days()
+                    old_total_days = getattr(member, 'total_membership_days', 0) or 0
+                    
+                    # Only update if the value has changed or if it's never been set
+                    if new_total_days != old_total_days or not member_data.last_duration_update:
+                        member.total_membership_days = new_total_days
+                        member.last_duration_update = now()
+                        member.calculate_cumulative_membership_duration()
+                        
+                        # Save without triggering full validation to avoid recursive calls
+                        member.save(ignore_permissions=True)
+                        total_updated += 1
+                        
+                        if total_updated % 50 == 0:
+                            frappe.logger().info(f"Updated {total_updated} member durations")
+                    
+                    total_processed += 1
+                        
+                except Exception as e:
+                    error_msg = f"Error updating duration for member {member_data.name}: {str(e)}"
+                    errors.append(error_msg)
+                    frappe.logger().error(error_msg)
+                    continue
+            
+            # Commit after each batch to avoid long transactions
+            frappe.db.commit()
+        
+        # Log final results
+        result_message = f"Membership duration update completed: {total_updated} updated out of {total_processed} processed"
+        frappe.logger().info(result_message)
+        
+        if errors:
+            frappe.logger().warning(f"Errors occurred during duration updates: {errors[:5]}")  # Log first 5 errors
+        
+        return {
+            "success": True,
+            "message": result_message,
+            "processed": total_processed,
+            "updated": total_updated,
+            "errors": len(errors),
+            "error_details": errors if len(errors) <= 10 else errors[:10]
+        }
+        
+    except Exception as e:
+        error_msg = f"Fatal error in scheduled membership duration update: {str(e)}"
+        frappe.logger().error(error_msg)
+        frappe.logger().error(traceback.format_exc())
+        return {"success": False, "message": error_msg}
+
+
+@frappe.whitelist()
+def update_single_member_duration(member_name):
+    """Update duration for a single member - useful for testing"""
+    try:
+        member = frappe.get_doc("Member", member_name)
+        result = member.update_membership_duration()
+        return result
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@frappe.whitelist()
+def get_duration_update_stats():
+    """Get statistics about membership duration updates"""
+    try:
+        # Count members with/without duration data
+        total_members = frappe.db.count("Member", filters={"docstatus": ["!=", 2]})
+        
+        members_with_duration = frappe.db.count(
+            "Member", 
+            filters={
+                "docstatus": ["!=", 2],
+                "total_membership_days": [">", 0]
+            }
+        )
+        
+        members_updated_today = frappe.db.count(
+            "Member",
+            filters={
+                "docstatus": ["!=", 2],
+                "last_duration_update": [">=", frappe.utils.today()]
+            }
+        )
+        
+        return {
+            "total_members": total_members,
+            "members_with_duration": members_with_duration,
+            "members_updated_today": members_updated_today,
+            "coverage_percentage": round((members_with_duration / total_members * 100), 2) if total_members > 0 else 0
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def setup_member_scheduler_events():
     """Set up the scheduler events for member automation"""
     return {
         "daily": [
-            "verenigingen.verenigingen.doctype.member.scheduler.refresh_all_member_financial_histories"
+            "verenigingen.verenigingen.doctype.member.scheduler.refresh_all_member_financial_histories",
+            "verenigingen.verenigingen.doctype.member.scheduler.update_all_membership_durations"
         ]
     }

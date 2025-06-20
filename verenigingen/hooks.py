@@ -19,8 +19,7 @@ required_apps = ["erpnext", "payments", "hrms"]
 on_app_init = ["verenigingen.setup.doctype_overrides.setup_subscription_override"]
 app_include_css = [
     "/assets/verenigingen/css/verenigingen_custom.css",
-    "/assets/verenigingen/css/volunteer_portal.css",
-    "/brand_css"
+    "/assets/verenigingen/css/volunteer_portal.css"
 ]
 app_include_js = [
     # Removed termination_dashboard.js as it's a React component and causes import errors
@@ -105,6 +104,8 @@ scheduler_events = {
     "daily": [
         # Member financial history refresh - runs once daily
         "verenigingen.verenigingen.doctype.member.scheduler.refresh_all_member_financial_histories",
+        # Membership duration updates - runs once daily
+        "verenigingen.verenigingen.doctype.member.scheduler.update_all_membership_durations",
         # Core membership system
         "verenigingen.verenigingen.doctype.membership.scheduler.process_expired_memberships",
         "verenigingen.verenigingen.doctype.membership.scheduler.send_renewal_reminders",

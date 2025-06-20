@@ -90,12 +90,72 @@ class BrandSettings(Document):
 		frappe.cache().delete_key("brand_settings_css")
 		frappe.cache().delete_key("organization_logo")
 		
+		# Clear website cache to rebuild portal pages
+		frappe.clear_cache()
+		
 		# Trigger CSS rebuild for brand changes
 		if self.is_active:
 			frappe.publish_realtime("brand_settings_updated", {
 				"message": "Brand settings updated",
 				"settings_name": self.settings_name
 			})
+			
+			# Sync with Owl Theme Settings if available
+			self.sync_to_owl_theme()
+	
+	def sync_to_owl_theme(self):
+		"""Sync Brand Settings to Owl Theme Settings if owl_theme app is installed"""
+		try:
+			# Check if owl_theme app is installed
+			if not frappe.db.exists("DocType", "Owl Theme Settings"):
+				return
+			
+			# Get or create Owl Theme Settings
+			owl_settings = frappe.get_single("Owl Theme Settings")
+			
+			# Map Brand Settings colors to Owl Theme fields
+			owl_settings.primary_buttons_background_color = self.primary_color
+			owl_settings.primary_buttons_text_color = self.get_contrasting_text_color(self.primary_color)
+			owl_settings.secondary_buttons_background_color = self.secondary_color
+			owl_settings.secondary_buttons_text_color = self.get_contrasting_text_color(self.secondary_color)
+			
+			# Set navbar colors
+			owl_settings.navbar_background_color = self.primary_color
+			owl_settings.navbar_text_color = self.get_contrasting_text_color(self.primary_color)
+			
+			# Set sidebar colors
+			owl_settings.sidebar_background_color = self.background_secondary_color
+			owl_settings.sidebar_text_color = self.text_primary_color
+			
+			# Set page background colors
+			owl_settings.main_page_background_color = self.background_primary_color
+			owl_settings.main_page_card_container_background_color = self.background_secondary_color
+			
+			# Set card colors
+			owl_settings.cards_background_color = self.background_primary_color
+			owl_settings.cards_title_text_color = self.text_primary_color
+			owl_settings.cards_text_color = self.text_secondary_color
+			
+			# Set form and list page backgrounds
+			owl_settings.form_background_color = self.background_primary_color
+			owl_settings.list_page_background_color = self.background_primary_color
+			
+			# Set general background and app name colors
+			owl_settings.background_color = self.background_primary_color
+			owl_settings.app_name_color = self.primary_color
+			
+			# Sync logo if available
+			if self.logo:
+				owl_settings.app_logo = self.logo
+			
+			# Save the Owl Theme Settings
+			owl_settings.save(ignore_permissions=True)
+			
+			frappe.msgprint(_("Successfully synced brand settings to Owl Theme"))
+			
+		except Exception as e:
+			frappe.log_error(f"Error syncing to Owl Theme: {str(e)}", "Brand Settings Sync")
+			# Don't throw error, just log it - brand settings should still work
 
 @frappe.whitelist()
 def get_active_brand_settings():
@@ -148,13 +208,37 @@ def generate_brand_css():
 	
 	settings = get_active_brand_settings()
 	
-	# Create a temporary BrandSettings instance to access color calculation methods
-	brand_instance = BrandSettings()
-	
 	# Calculate contrasting text colors for smart styling
-	primary_text = brand_instance.get_contrasting_text_color(settings['primary_color'])
-	secondary_text = brand_instance.get_contrasting_text_color(settings['secondary_color'])
-	accent_text = brand_instance.get_contrasting_text_color(settings['accent_color'])
+	def get_color_brightness(hex_color):
+		"""Calculate brightness of a hex color (0-255 scale)"""
+		if not hex_color or not hex_color.startswith('#'):
+			return 128  # Default medium brightness
+		
+		hex_part = hex_color[1:]
+		
+		# Convert 3-digit hex to 6-digit
+		if len(hex_part) == 3:
+			hex_part = ''.join([c*2 for c in hex_part])
+		
+		try:
+			r = int(hex_part[0:2], 16)
+			g = int(hex_part[2:4], 16) 
+			b = int(hex_part[4:6], 16)
+			
+			# Calculate perceived brightness using standard formula
+			brightness = (r * 299 + g * 587 + b * 114) / 1000
+			return brightness
+		except (ValueError, IndexError):
+			return 128  # Default medium brightness
+	
+	def get_contrasting_text_color(background_color):
+		"""Get white or black text color based on background brightness"""
+		brightness = get_color_brightness(background_color)
+		return "#ffffff" if brightness < 128 else "#000000"
+	
+	primary_text = get_contrasting_text_color(settings['primary_color'])
+	secondary_text = get_contrasting_text_color(settings['secondary_color'])
+	accent_text = get_contrasting_text_color(settings['accent_color'])
 	
 	css = f"""
 /* Brand Settings CSS - Auto-generated */
@@ -176,6 +260,14 @@ def generate_brand_css():
 	--brand-primary-text: {primary_text};
 	--brand-secondary-text: {secondary_text};
 	--brand-accent-text: {accent_text};
+	
+	/* Override Tailwind CSS custom properties */
+	--color-primary-500: {settings['primary_color']} !important;
+	--color-primary-600: {settings['primary_hover_color']} !important;
+	--color-secondary-500: {settings['secondary_color']} !important;
+	--color-secondary-600: {settings['secondary_hover_color']} !important;
+	--color-accent-500: {settings['accent_color']} !important;
+	--color-accent-600: {settings['accent_hover_color']} !important;
 }}
 
 /* Override Tailwind classes with brand colors */
@@ -368,8 +460,8 @@ def generate_brand_css():
 }}
 """
 	
-	# Cache for 1 hour
-	frappe.cache().set_value("brand_settings_css", css, expires_in_sec=3600)
+	# Cache for 5 minutes to allow for quicker updates during development
+	frappe.cache().set_value("brand_settings_css", css, expires_in_sec=300)
 	
 	return css
 
@@ -420,3 +512,190 @@ def create_default_brand_settings():
 	
 	default_settings.insert(ignore_permissions=True)
 	return True
+
+@frappe.whitelist()
+def sync_brand_settings_to_owl_theme():
+	"""Manual function to sync active Brand Settings to Owl Theme"""
+	try:
+		# Get active brand settings
+		active_settings = frappe.get_all("Brand Settings", 
+			filters={"is_active": 1}, 
+			limit=1)
+		
+		if not active_settings:
+			return {"success": False, "message": "No active Brand Settings found"}
+		
+		# Get the brand settings document
+		brand_doc = frappe.get_doc("Brand Settings", active_settings[0].name)
+		
+		# Sync to owl theme
+		brand_doc.sync_to_owl_theme()
+		
+		return {"success": True, "message": "Successfully synced Brand Settings to Owl Theme"}
+		
+	except Exception as e:
+		frappe.log_error(f"Error in manual sync to Owl Theme: {str(e)}", "Brand Settings Manual Sync")
+		return {"success": False, "message": f"Error: {str(e)}"}
+
+@frappe.whitelist()
+def check_owl_theme_integration():
+	"""Check if Owl Theme is installed and working"""
+	try:
+		# Check if owl_theme app is installed
+		owl_theme_installed = frappe.db.exists("DocType", "Owl Theme Settings")
+		
+		if not owl_theme_installed:
+			return {
+				"installed": False,
+				"message": "Owl Theme app is not installed"
+			}
+		
+		# Check if Owl Theme Settings document exists
+		owl_settings = frappe.get_single("Owl Theme Settings")
+		
+		# Get active brand settings
+		active_brand = frappe.get_all("Brand Settings", 
+			filters={"is_active": 1}, 
+			fields=["name", "settings_name"],
+			limit=1)
+		
+		return {
+			"installed": True,
+			"owl_settings_exists": bool(owl_settings),
+			"active_brand_settings": active_brand[0] if active_brand else None,
+			"message": "Owl Theme integration is available"
+		}
+		
+	except Exception as e:
+		return {
+			"installed": False,
+			"error": str(e),
+			"message": f"Error checking Owl Theme integration: {str(e)}"
+		}
+
+@frappe.whitelist()
+def test_owl_theme_integration():
+	"""Test the complete Owl Theme integration"""
+	results = {}
+	
+	try:
+		# Test 1: Check Owl Theme detection
+		status = check_owl_theme_integration()
+		results["owl_theme_detection"] = {
+			"success": status.get("installed", False),
+			"details": status
+		}
+		
+		# Test 2: Test sync functionality
+		sync_result = sync_brand_settings_to_owl_theme()
+		results["sync_functionality"] = {
+			"success": sync_result.get("success", False),
+			"message": sync_result.get("message", "Unknown error")
+		}
+		
+		# Test 3: Verify sync actually changed Owl Theme Settings
+		if sync_result.get("success"):
+			owl_settings = frappe.get_single("Owl Theme Settings")
+			brand_settings = frappe.get_all("Brand Settings", 
+				filters={"is_active": 1}, 
+				fields=["primary_color"],
+				limit=1)
+			
+			if brand_settings:
+				brand_primary = brand_settings[0].get("primary_color")
+				owl_navbar = getattr(owl_settings, 'navbar_background_color', None)
+				
+				results["sync_verification"] = {
+					"success": brand_primary == owl_navbar,
+					"brand_primary_color": brand_primary,
+					"owl_navbar_color": owl_navbar,
+					"colors_match": brand_primary == owl_navbar
+				}
+			else:
+				results["sync_verification"] = {
+					"success": False,
+					"message": "No active brand settings found"
+				}
+		
+		# Test 4: Test automatic sync trigger
+		if results["owl_theme_detection"]["success"]:
+			brand_doc = frappe.get_all("Brand Settings", 
+				filters={"is_active": 1}, 
+				limit=1)
+			
+			if brand_doc:
+				doc = frappe.get_doc("Brand Settings", brand_doc[0].name)
+				try:
+					doc.sync_to_owl_theme()
+					results["auto_sync_trigger"] = {
+						"success": True,
+						"message": "Auto-sync method executed successfully"
+					}
+				except Exception as e:
+					results["auto_sync_trigger"] = {
+						"success": False,
+						"error": str(e)
+					}
+		
+		# Overall test result
+		all_tests_passed = all(
+			test.get("success", False) 
+			for test in results.values() 
+			if isinstance(test, dict)
+		)
+		
+		results["overall_success"] = all_tests_passed
+		results["summary"] = {
+			"owl_theme_installed": results["owl_theme_detection"]["success"],
+			"sync_works": results["sync_functionality"]["success"],
+			"colors_sync_correctly": results.get("sync_verification", {}).get("success", False),
+			"auto_sync_works": results.get("auto_sync_trigger", {}).get("success", False)
+		}
+		
+	except Exception as e:
+		results["error"] = str(e)
+		results["overall_success"] = False
+	
+	return results
+
+@frappe.whitelist()
+def get_brand_css_inline():
+	"""Get brand CSS for inline inclusion in pages - bypasses route caching issues"""
+	try:
+		css = generate_brand_css()
+		return {
+			"success": True,
+			"css": css,
+			"timestamp": frappe.utils.now()
+		}
+	except Exception as e:
+		return {
+			"success": False,
+			"error": str(e)
+		}
+
+@frappe.whitelist()
+def force_rebuild_css():
+	"""Force rebuild and clear all brand-related caches"""
+	try:
+		# Clear all brand-related cache keys
+		frappe.cache().delete_key("active_brand_settings")
+		frappe.cache().delete_key("brand_settings_css")
+		frappe.cache().delete_key("organization_logo")
+		
+		# Clear all website cache
+		frappe.clear_cache()
+		
+		# Regenerate CSS
+		css = generate_brand_css()
+		
+		return {
+			"success": True,
+			"message": "CSS cache cleared and regenerated",
+			"css_length": len(css)
+		}
+	except Exception as e:
+		return {
+			"success": False,
+			"message": f"Error rebuilding CSS: {str(e)}"
+		}

@@ -9,6 +9,26 @@
 
 {% block style %}
 <link href="/assets/verenigingen/css/tailwind.css" rel="stylesheet">
+<style>
+/* Fallback colors if brand CSS variables aren't loaded */
+:root {
+    --brand-primary: #cf3131;
+    --brand-secondary: #01796f;
+    --brand-primary-dark: #a52828;
+}
+
+/* Fallback gradients for browsers that don't support color-mix() */
+.gradient-primary-to-dark {
+    background: linear-gradient(to right, var(--brand-primary), var(--brand-primary-dark))!important;
+}
+
+/* Modern browsers with color-mix support */
+@supports (color: color-mix(in srgb, red, blue)) {
+    .gradient-primary-to-dark {
+        background: linear-gradient(to right, var(--brand-primary), color-mix(in srgb, var(--brand-primary) 70%, black))!important;
+    }
+}
+</style>
 {% endblock %}
 
 {% block page_content %}
@@ -22,26 +42,26 @@
         </div>
     {% else %}
         <!-- Portal Header -->
-        <div class="bg-gradient-to-r from-purple-700 to-red-600 text-white p-8 rounded-xl mb-8 text-center">
+        <div class="gradient-primary-to-dark text-white p-8 rounded-xl mb-8 text-center">
             <h1 class="text-4xl font-light mb-2">{{ _("Volunteer Expenses") }}</h1>
             <p class="text-xl opacity-90">{{ _("Submit and track your volunteer expenses") }}</p>
         </div>
         
         <!-- Statistics Cards -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-purple-700 p-6 text-center">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 border-l-4 p-6 text-center" style="border-left-color: var(--brand-primary)!important;">
                 <h3 class="text-2xl font-bold text-gray-800 mb-2">€{{ "{:,.2f}".format(expense_stats.total_submitted) }}</h3>
                 <p class="text-gray-600 text-sm">{{ _("Total Submitted (12 months)") }}</p>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-purple-700 p-6 text-center">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 border-l-4 p-6 text-center" style="border-left-color: var(--brand-primary)!important;">
                 <h3 class="text-2xl font-bold text-gray-800 mb-2">€{{ "{:,.2f}".format(expense_stats.total_approved) }}</h3>
                 <p class="text-gray-600 text-sm">{{ _("Total Approved") }}</p>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-purple-700 p-6 text-center">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 border-l-4 p-6 text-center" style="border-left-color: var(--brand-primary)!important;">
                 <h3 class="text-2xl font-bold text-gray-800 mb-2">{{ expense_stats.pending_count }}</h3>
                 <p class="text-gray-600 text-sm">{{ _("Pending Approval") }}</p>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 border-l-4 border-l-purple-700 p-6 text-center">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 border-l-4 p-6 text-center" style="border-left-color: var(--brand-primary)!important;">
                 <h3 class="text-2xl font-bold text-gray-800 mb-2">{{ expense_stats.approved_count }}</h3>
                 <p class="text-gray-600 text-sm">{{ _("Approved Expenses") }}</p>
             </div>
@@ -135,12 +155,21 @@
                 </div>
                 
                 <div class="mt-6">
-                    <label for="receipt" class="block text-sm font-medium text-gray-700 mb-2">{{ _("Receipt/Invoice") }}</label>
+                    <label for="receipt" class="block text-sm font-medium text-gray-700 mb-2">{{ _("Receipt/Invoice") }} <span class="text-gray-500">({{ _("Optional") }})</span></label>
                     <input type="file" id="receipt" name="receipt" accept="image/*,.pdf,.doc,.docx" 
                            class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500">
                     <p class="text-sm text-gray-600 mt-1">
                         {{ _("Upload receipt or invoice (JPG, PNG, PDF, DOC formats accepted)") }}
                     </p>
+                    <div class="bg-green-50 border border-green-200 rounded-md p-3 mt-2">
+                        <div class="flex items-start">
+                            <i class="fa fa-check-circle text-green-600 mr-2 mt-0.5"></i>
+                            <div class="text-sm text-green-800">
+                                <strong>{{ _("Info:") }}</strong>
+                                {{ _("Receipts will be automatically attached to your expense claim in ERPNext for administrator review.") }}
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="mt-6">
@@ -160,7 +189,7 @@
                 </div>
                 
                 <div class="mt-8">
-                    <button type="submit" class="w-full bg-gradient-to-r from-red-600 to-teal-600 hover:from-red-700 hover:to-teal-700 disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed text-white font-medium py-3 px-6 rounded-md transition-all duration-200 transform hover:-translate-y-0.5 hover:shadow-lg disabled:transform-none disabled:shadow-none" id="submit-btn">
+                    <button type="submit" class="gradient-primary-to-dark w-full text-white font-medium py-3 px-6 rounded-md transition-all duration-200 transform hover:-translate-y-0.5 hover:shadow-lg disabled:transform-none disabled:shadow-none disabled:cursor-not-allowed" id="submit-btn">
                         <i class="fa fa-paper-plane mr-2"></i>
                         {{ _("Submit Expense") }}
                     </button>
@@ -336,38 +365,142 @@ function initExpenseForm() {
         const receiptFile = $('#receipt')[0].files[0];
         
         if (receiptFile) {
-            // First upload the file
-            const fileFormData = new FormData();
-            fileFormData.append('file', receiptFile);
-            fileFormData.append('is_private', 0);
-            fileFormData.append('doctype', 'Volunteer Expense');
-            fileFormData.append('docname', '');
+            // Upload the file first
+            console.log('Uploading receipt file:', receiptFile.name, 'Size:', receiptFile.size, 'Type:', receiptFile.type);
             
-            $.ajax({
-                url: '/api/method/upload_file',
-                type: 'POST',
-                data: fileFormData,
-                processData: false,
-                contentType: false,
-                success: function(response) {
-                    submitExpenseWithReceipt(response.message.file_url);
-                },
-                error: function() {
-                    submitBtn.prop('disabled', false).html('<i class="fa fa-paper-plane"></i> {{ _("Submit Expense") }}');
-                    formAlerts.html(`
-                        <div class="alert alert-danger">
-                            <i class="fa fa-exclamation-triangle"></i>
-                            {{ _("Failed to upload receipt. Please try again.") }}
-                        </div>
-                    `);
-                }
-            });
+            const fileData = new FormData();
+            fileData.append('receipt', receiptFile);
+            
+            console.log('FormData created, entries:');
+            for (let pair of fileData.entries()) {
+                console.log(pair[0], pair[1]);
+            }
+            
+            // Show upload progress
+            formAlerts.html(`
+                <div class="alert alert-info">
+                    <i class="fa fa-spinner fa-spin"></i>
+                    Uploading receipt "${receiptFile.name}"...
+                </div>
+            `);
+            
+            // Use direct AJAX for file upload since frappe.call doesn't support multipart/form-data
+            console.log('Using direct AJAX for file upload (frappe.call does not support multipart/form-data)...');
+            tryDirectAjaxUpload(fileData, receiptFile.name);
         } else {
             submitExpenseWithReceipt(null);
         }
     });
     
-    function submitExpenseWithReceipt(receiptUrl) {
+    // Helper functions for file upload
+    function handleFileUploadResponse(response, fileName) {
+        const submitBtn = $('#submit-btn');
+        const formAlerts = $('#form-alerts');
+        console.log('Full file upload response:', response);
+        if (response.message && response.message.debug_info) {
+            console.log('Debug info:', response.message.debug_info);
+        }
+        
+        if (response.message && response.message.success) {
+            console.log('File uploaded successfully:', response.message.file_name);
+            formAlerts.html(`
+                <div class="alert alert-success">
+                    <i class="fa fa-check-circle"></i>
+                    Receipt "${fileName}" uploaded successfully.
+                </div>
+            `);
+            // Pass the complete file data instead of just URL
+            submitExpenseWithReceipt(response.message);
+        } else {
+            console.error('File upload failed:', response.message ? response.message.error : 'Unknown error');
+            console.error('Full error response:', response.message);
+            formAlerts.html(`
+                <div class="alert alert-danger">
+                    <i class="fa fa-exclamation-triangle"></i>
+                    <strong>File Upload Failed:</strong> ${response.message ? response.message.error : 'Unknown error'}
+                    <br><small>Check browser console for debug details. Will NOT submit expense without receipt.</small>
+                </div>
+            `);
+            // Don't submit the expense if file upload fails - let user try again
+            submitBtn.prop('disabled', false).html('<i class="fa fa-paper-plane mr-2"></i>{{ _("Submit Expense") }}');
+            return;
+        }
+    }
+    
+    function tryDirectAjaxUpload(fileData, fileName) {
+        const submitBtn = $('#submit-btn');
+        const formAlerts = $('#form-alerts');
+        
+        // First try Frappe's built-in upload endpoint
+        console.log('Trying Frappe built-in upload_file endpoint...');
+        
+        $.ajax({
+            url: '/api/method/upload_file',
+            type: 'POST',
+            data: fileData,
+            processData: false,
+            contentType: false,
+            headers: {
+                'X-Frappe-CSRF-Token': frappe.csrf_token || ''
+            },
+            success: function(response) {
+                console.log('Frappe upload_file success:', response);
+                if (response.message && response.message.file_url) {
+                    // Convert to our expected format
+                    const fileResponse = {
+                        success: true,
+                        file_name: fileName,
+                        file_url: response.message.file_url,
+                        frappe_file_name: response.message.name
+                    };
+                    handleFileUploadResponse({message: fileResponse}, fileName);
+                } else {
+                    console.log('Frappe upload succeeded but no file_url, trying custom endpoint...');
+                    tryCustomUploadEndpoint(fileData, fileName);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Frappe upload_file failed:', error, 'Status:', xhr.status);
+                console.log('Trying custom upload endpoint...');
+                tryCustomUploadEndpoint(fileData, fileName);
+            }
+        });
+    }
+    
+    function tryCustomUploadEndpoint(fileData, fileName) {
+        const submitBtn = $('#submit-btn');
+        const formAlerts = $('#form-alerts');
+        console.log('Trying custom upload endpoint...');
+        
+        $.ajax({
+            url: '/api/method/verenigingen.templates.pages.volunteer.expenses.upload_expense_receipt',
+            type: 'POST',
+            data: fileData,
+            processData: false,
+            contentType: false,
+            headers: {
+                'X-Frappe-CSRF-Token': frappe.csrf_token || ''
+            },
+            success: function(response) {
+                console.log('Custom endpoint success:', response);
+                handleFileUploadResponse(response, fileName);
+            },
+            error: function(xhr, status, error) {
+                console.error('Custom endpoint failed:', error);
+                console.error('XHR status:', xhr.status, xhr.responseText);
+                formAlerts.html(`
+                    <div class="alert alert-danger">
+                        <i class="fa fa-exclamation-triangle"></i>
+                        <strong>All upload methods failed:</strong> ${error}
+                        <br><small>Cannot submit expense without receipt. Please try again or contact support.</small>
+                    </div>
+                `);
+                submitBtn.prop('disabled', false).html('<i class="fa fa-paper-plane mr-2"></i>{{ _("Submit Expense") }}');
+            }
+        });
+    }
+    
+    function submitExpenseWithReceipt(receiptData) {
         const submitBtn = $('#submit-btn');
         const formAlerts = $('#form-alerts');
         
@@ -378,7 +511,7 @@ function initExpenseForm() {
             expense_date: $('#expense_date').val(),
             category: $('#category').val(),
             notes: $('#notes').val(),
-            receipt_attachment: receiptUrl
+            receipt_attachment: receiptData  // Now contains file data object or null
         };
         
         // Add organization field based on type selection
@@ -420,10 +553,10 @@ function initExpenseForm() {
                     $('#chapter_select').val('').removeAttr('required');
                     $('#team_select').val('').removeAttr('required');
                     
-                    // Reload page after 2 seconds to show new expense
+                    // Reload page after 3 seconds to show new expense (only on success)
                     setTimeout(function() {
                         window.location.reload();
-                    }, 2000);
+                    }, 3000);
                 } else {
                     // Show error message
                     const errorMsg = r.message ? r.message.message : '{{ _("An error occurred while submitting the expense") }}';
@@ -453,6 +586,53 @@ if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initExpenseForm);
 } else {
     initExpenseForm();
+}
+
+// Load brand CSS after Frappe is ready
+function loadBrandCSS() {
+    if (typeof frappe !== 'undefined' && frappe.call) {
+        frappe.call({
+            method: 'verenigingen.templates.pages.brand_css.serve_brand_css',
+            callback: function(r) {
+                if (r.message) {
+                    // Remove any existing dynamic brand CSS
+                    var existingStyle = document.getElementById('brand-css-dynamic');
+                    if (existingStyle) {
+                        existingStyle.remove();
+                    }
+                    
+                    var style = document.createElement('style');
+                    style.type = 'text/css';
+                    style.innerHTML = r.message;
+                    style.id = 'brand-css-dynamic';
+                    document.head.appendChild(style);
+                    console.log('Brand CSS loaded successfully');
+                } else {
+                    console.warn('Brand CSS API returned empty response');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.warn('Failed to load brand CSS:', {xhr: xhr, status: status, error: error});
+                // Continue with fallback colors - they're already loaded
+            }
+        });
+    } else {
+        // Retry after 100ms if frappe is not ready (max 50 attempts = 5 seconds)
+        if (!loadBrandCSS.attempts) loadBrandCSS.attempts = 0;
+        if (loadBrandCSS.attempts < 50) {
+            loadBrandCSS.attempts++;
+            setTimeout(loadBrandCSS, 100);
+        } else {
+            console.warn('Frappe not available after 5 seconds, using fallback brand colors');
+        }
+    }
+}
+
+// Start loading brand CSS when page is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadBrandCSS);
+} else {
+    loadBrandCSS();
 }
 </script>
 {% endblock %}

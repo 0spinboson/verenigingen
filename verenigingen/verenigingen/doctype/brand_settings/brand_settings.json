@@ -79,7 +79,7 @@
   },
   {
    "default": "#cf3131",
-   "description": "Primary brand color (RSP Red)",
+   "description": "Main brand color used for buttons, headers, and key interface elements",
    "fieldname": "primary_color",
    "fieldtype": "Color",
    "in_list_view": 1,
@@ -88,10 +88,10 @@
   },
   {
    "default": "#b82828",
-   "description": "Primary color on hover/active state",
+   "description": "Darker shade of primary color used in gradients, shadows, and interactive states",
    "fieldname": "primary_hover_color",
    "fieldtype": "Color",
-   "label": "Primary Hover Color",
+   "label": "Primary Dark Shade",
    "reqd": 1
   },
   {
@@ -100,7 +100,7 @@
   },
   {
    "default": "#01796f",
-   "description": "Secondary brand color (Pine Green)",
+   "description": "Supporting brand color used for secondary buttons and complementary elements",
    "fieldname": "secondary_color",
    "fieldtype": "Color",
    "label": "Secondary Color",
@@ -108,10 +108,10 @@
   },
   {
    "default": "#015a52",
-   "description": "Secondary color on hover/active state",
+   "description": "Darker shade of secondary color used in gradients, shadows, and interactive states",
    "fieldname": "secondary_hover_color",
    "fieldtype": "Color",
-   "label": "Secondary Hover Color",
+   "label": "Secondary Dark Shade",
    "reqd": 1
   },
   {
@@ -120,7 +120,7 @@
   },
   {
    "default": "#663399",
-   "description": "Accent color (Royal Purple)",
+   "description": "Accent color used for highlights, special features, and decorative elements",
    "fieldname": "accent_color",
    "fieldtype": "Color",
    "label": "Accent Color",
@@ -128,10 +128,10 @@
   },
   {
    "default": "#4d2673",
-   "description": "Accent color on hover/active state",
+   "description": "Darker shade of accent color used in gradients, shadows, and interactive states",
    "fieldname": "accent_hover_color",
    "fieldtype": "Color",
-   "label": "Accent Hover Color",
+   "label": "Accent Dark Shade",
    "reqd": 1
   },
   {

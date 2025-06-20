@@ -1,13 +1,60 @@
-{% extends "templates/web.html" %}
+{% extends "templates/base_portal.html" %}
 
 {% block title %}{{ _("Member Portal") }}{% endblock %}
 
 {% block style %}
 <link href="/assets/verenigingen/css/tailwind.css" rel="stylesheet">
+<style>
+/* Override Tailwind CSS custom properties to use our brand colors */
+:root {
+    --color-primary-500: var(--brand-primary, #39E4A5) !important;
+    --color-primary-600: var(--brand-primary-hover, #CB2929) !important;
+    --color-secondary-500: var(--brand-secondary, #49ad58) !important;
+    --color-secondary-600: var(--brand-secondary-hover, #015a52) !important;
+    --color-accent-500: var(--brand-accent, #4463F0) !important;
+    --color-accent-600: var(--brand-accent-hover, #4d2673) !important;
+}
+
+/* Override primary colors to use brand variables */
+.bg-primary-100 { background-color: color-mix(in srgb, var(--brand-primary) 10%, white) !important; }
+.bg-primary-500 { background-color: var(--brand-primary) !important; }
+.bg-primary-600 { background-color: var(--brand-primary) !important; }
+.text-primary-500 { color: var(--brand-primary) !important; }
+.text-primary-600 { color: var(--brand-primary) !important; }
+
+/* Override secondary colors */
+.text-secondary-500 { color: var(--brand-secondary) !important; }
+.text-secondary-600 { color: var(--brand-secondary) !important; }
+
+/* Override accent colors */
+.text-accent-500 { color: var(--brand-accent) !important; }
+.text-accent-600 { color: var(--brand-accent) !important; }
+
+/* Override warning colors */
+.text-warning-600 { color: var(--brand-warning) !important; }
+
+/* Override success/danger colors */
+.bg-success-100 { background-color: color-mix(in srgb, var(--brand-success) 10%, white) !important; }
+.bg-success-500 { background-color: var(--brand-success) !important; }
+.text-success-800 { color: var(--brand-success) !important; }
+.bg-danger-100 { background-color: color-mix(in srgb, var(--brand-error) 10%, white) !important; }
+.text-danger-600 { color: var(--brand-error) !important; }
+.text-danger-800 { color: var(--brand-error) !important; }
+.bg-warning-100 { background-color: color-mix(in srgb, var(--brand-warning) 10%, white) !important; }
+.text-warning-800 { color: var(--brand-warning) !important; }
+
+/* Force override .form-header specifically */
+.form-header {
+    --tw-gradient-from: var(--brand-primary, #39E4A5) !important;
+    --tw-gradient-to: var(--brand-primary-hover, #CB2929) !important;
+    --color-primary-500: var(--brand-primary, #39E4A5) !important;
+    --color-primary-600: var(--brand-primary-hover, #CB2929) !important;
+}
+</style>
 {% endblock %}
 
 {% block page_content %}
-<div class="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 py-8">
+<div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 py-8">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         <!-- Header -->
@@ -18,7 +65,7 @@
 
         {% if member %}
         <!-- Member Info Card -->
-        <div class="bg-gradient-to-r from-primary-500 to-primary-600 rounded-xl text-white p-8 mb-8 shadow-lg animate-slide-up">
+        <div class="bg-red-600 rounded-xl text-white p-8 mb-8 shadow-lg animate-slide-up">
             <h2 class="text-3xl font-bold mb-6">{{ _("Hello, {0}!").format(member.first_name or member.full_name) }}</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div class="text-center">

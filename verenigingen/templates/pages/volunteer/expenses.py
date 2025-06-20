@@ -118,6 +118,29 @@ def check_workspace_status():
     
     return result
 
+@frappe.whitelist()
+def test_expense_query_fix():
+    """Test that the expense claim query works without 'title' field"""
+    try:
+        expense_claims = frappe.get_all("Expense Claim",
+            fields=[
+                "name", "employee_name", "total_claimed_amount", "status", "posting_date",
+                "creation", "approval_status", "company", "cost_center"
+            ],
+            limit=2
+        )
+        
+        return {
+            "success": True,
+            "message": f"Query successful! Found {len(expense_claims)} expense claims",
+            "sample_data": expense_claims[0] if expense_claims else None
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
 @frappe.whitelist()  
 def update_workspace_links():
     """Update workspace with comprehensive links"""
@@ -331,77 +354,128 @@ def get_expense_categories():
     )
 
 def get_volunteer_expenses(volunteer_name, limit=None):
-    """Get volunteer's recent expenses from ERPNext Expense Claims"""
+    """Get volunteer's recent expenses from ERPNext Expense Claims and Volunteer Expense records"""
     try:
+        expenses = []
+        
         # Get volunteer's employee ID
         volunteer_doc = frappe.get_doc("Volunteer", volunteer_name)
-        if not volunteer_doc.employee_id:
-            return []
         
-        # Get ERPNext Expense Claims for this employee
-        expense_claims = frappe.get_all("Expense Claim",
-            filters={"employee": volunteer_doc.employee_id},
-            fields=[
-                "name", "title", "total_claimed_amount", "status", "posting_date",
-                "creation", "approval_status", "company", "cost_center"
-            ],
-            order_by="creation desc",
-            limit=limit
-        )
-        
-        expenses = []
-        for claim in expense_claims:
-            # Get expense details from the claim's expense table
-            claim_details = frappe.get_all("Expense Claim Detail",
-                filters={"parent": claim.name},
-                fields=["expense_type", "description", "amount", "expense_date"],
-                order_by="idx"
+        # First, try to get from ERPNext if employee_id exists
+        if volunteer_doc.employee_id:
+            # Get ERPNext Expense Claims for this employee
+            expense_claims = frappe.get_all("Expense Claim",
+                filters={"employee": volunteer_doc.employee_id},
+                fields=[
+                    "name", "employee_name", "total_claimed_amount", "status", "posting_date",
+                    "creation", "approval_status", "company", "cost_center"
+                ],
+                order_by="creation desc",
+                limit=limit
             )
             
-            # Get linked Volunteer Expense record for organization info if it exists
-            volunteer_expense = frappe.db.get_value("Volunteer Expense", 
-                {"expense_claim_id": claim.name}, 
-                ["organization_type", "chapter", "team", "category"], 
-                as_dict=True)
-            
-            for detail in claim_details:
-                expense = frappe._dict({
-                    "name": f"{claim.name}-{detail.get('idx', 1)}",
-                    "expense_claim_id": claim.name,
-                    "description": detail.description or claim.title,
-                    "amount": detail.amount,
-                    "currency": "EUR",  # Default currency
-                    "expense_date": detail.expense_date or claim.posting_date,
-                    "status": map_erpnext_status_to_volunteer_status(claim.status, claim.approval_status),
-                    "creation": claim.creation,
-                    "approved_on": None,  # ERPNext doesn't track approval date directly
+            for claim in expense_claims:
+                # Get expense details from the claim's expense table
+                claim_details = frappe.get_all("Expense Claim Detail",
+                    filters={"parent": claim.name},
+                    fields=["expense_type", "description", "amount", "expense_date"],
+                    order_by="idx"
+                )
+                
+                # Get linked Volunteer Expense record for organization info if it exists
+                # Note: expense_claim_id field doesn't exist, so this will always return None
+                volunteer_expense = None
+                
+                for detail in claim_details:
+                    expense = frappe._dict({
+                        "name": f"{claim.name}-{detail.get('idx', 1)}",
+                        "expense_claim_id": claim.name,
+                        "description": detail.description or f"Expense Claim {claim.name}",
+                        "amount": detail.amount,
+                        "currency": "EUR",  # Default currency
+                        "expense_date": detail.expense_date or claim.posting_date,
+                        "status": map_erpnext_status_to_volunteer_status(claim.status, claim.approval_status),
+                        "creation": claim.creation,
+                        "approved_on": None,  # ERPNext doesn't track approval date directly
+                        
+                        # Organization info from linked Volunteer Expense if available
+                        "organization_type": volunteer_expense.organization_type if volunteer_expense else "Unknown",
+                        "chapter": volunteer_expense.chapter if volunteer_expense else None,
+                        "team": volunteer_expense.team if volunteer_expense else None,
+                        "category": volunteer_expense.category if volunteer_expense else detail.expense_type,
+                    })
                     
-                    # Organization info from linked Volunteer Expense if available
-                    "organization_type": volunteer_expense.organization_type if volunteer_expense else "Unknown",
-                    "chapter": volunteer_expense.chapter if volunteer_expense else None,
-                    "team": volunteer_expense.team if volunteer_expense else None,
-                    "category": volunteer_expense.category if volunteer_expense else detail.expense_type,
-                })
+                    # Get category name
+                    if expense.category:
+                        expense.category_name = frappe.db.get_value("Expense Category", expense.category, "category_name") or \
+                                              frappe.db.get_value("Expense Claim Type", expense.category, "expense_type") or \
+                                              expense.category
+                    else:
+                        expense.category_name = "Uncategorized"
+                    
+                    # Get organization name
+                    expense.organization_name = expense.chapter or expense.team or "Unknown"
+                    
+                    # Format dates
+                    expense.formatted_date = formatdate(expense.expense_date)
+                    expense.formatted_creation = formatdate(expense.creation)
+                    
+                    # Add status styling
+                    expense.status_class = get_status_class(expense.status)
+                    
+                    expenses.append(expense)
+        
+        # Also get direct Volunteer Expense records (only those not represented in ERPNext)
+        volunteer_expenses = frappe.get_all("Volunteer Expense",
+            filters={"volunteer": volunteer_name},
+            fields=[
+                "name", "description", "amount", "currency", "expense_date",
+                "status", "organization_type", "chapter", "team", "category",
+                "creation", "approved_on"
+            ],
+            order_by="creation desc",
+            limit=limit or 10
+        )
+        
+        # Process Volunteer Expense records, but avoid duplicates with ERPNext
+        erpnext_expense_keys = set()
+        for exp in expenses:
+            if exp.get("expense_claim_id"):
+                # Create a key to identify potential duplicates
+                key = (exp.get("description", ""), float(exp.get("amount", 0)), exp.get("expense_date"))
+                erpnext_expense_keys.add(key)
+        
+        for vol_expense in volunteer_expenses:
+            # Check if this expense is already represented in ERPNext
+            expense_key = (vol_expense.description or "", float(vol_expense.amount or 0), vol_expense.expense_date)
+            
+            if expense_key not in erpnext_expense_keys:
+                # Only add if not duplicated in ERPNext
                 
                 # Get category name
-                if expense.category:
-                    expense.category_name = frappe.db.get_value("Expense Category", expense.category, "category_name") or \
-                                          frappe.db.get_value("Expense Claim Type", expense.category, "expense_type") or \
-                                          expense.category
+                if vol_expense.category:
+                    vol_expense.category_name = frappe.db.get_value("Expense Category", vol_expense.category, "category_name")
                 else:
-                    expense.category_name = "Uncategorized"
+                    vol_expense.category_name = "Uncategorized"
                 
                 # Get organization name
-                expense.organization_name = expense.chapter or expense.team or "Unknown"
+                vol_expense.organization_name = vol_expense.chapter or vol_expense.team or "Unknown"
                 
                 # Format dates
-                expense.formatted_date = formatdate(expense.expense_date)
-                expense.formatted_creation = formatdate(expense.creation)
+                vol_expense.formatted_date = formatdate(vol_expense.expense_date)
+                vol_expense.formatted_creation = formatdate(vol_expense.creation)
+                if vol_expense.approved_on:
+                    vol_expense.formatted_approved_on = formatdate(vol_expense.approved_on)
                 
                 # Add status styling
-                expense.status_class = get_status_class(expense.status)
+                vol_expense.status_class = get_status_class(vol_expense.status)
                 
-                expenses.append(expense)
+                expenses.append(vol_expense)
+        
+        # Sort by creation date and limit
+        expenses.sort(key=lambda x: x.get("creation", ""), reverse=True)
+        if limit:
+            expenses = expenses[:limit]
         
         return expenses
         
@@ -469,49 +543,78 @@ def get_volunteer_expenses_legacy(volunteer_name, limit=None):
 
 
 def get_expense_statistics(volunteer_name):
-    """Get expense statistics for the volunteer from ERPNext Expense Claims"""
+    """Get expense statistics for the volunteer from ERPNext Expense Claims and Volunteer Expenses"""
     from frappe.utils import add_months
     
     try:
-        # Get volunteer's employee ID
-        volunteer_doc = frappe.get_doc("Volunteer", volunteer_name)
-        if not volunteer_doc.employee_id:
-            return {"total_submitted": 0, "total_approved": 0, "pending_amount": 0, "pending_count": 0, "approved_count": 0, "total_count": 0}
-        
         # Get expenses from last 12 months
         from_date = add_months(today(), -12)
-        
-        # Get ERPNext Expense Claims for this employee
-        expense_claims = frappe.get_all("Expense Claim",
-            filters={
-                "employee": volunteer_doc.employee_id,
-                "posting_date": [">=", from_date],
-                "docstatus": ["!=", 2]  # Not cancelled
-            },
-            fields=["name", "total_claimed_amount", "total_sanctioned_amount", 
-                   "status", "approval_status", "posting_date"]
-        )
         
         total_submitted = 0
         total_approved = 0
         pending_count = 0
         approved_count = 0
         reimbursed_count = 0
+        total_count = 0
         
-        for claim in expense_claims:
-            amount = flt(claim.total_claimed_amount)
-            status = map_erpnext_status_to_volunteer_status(claim.status, claim.approval_status)
+        # Get volunteer's employee ID
+        volunteer_doc = frappe.get_doc("Volunteer", volunteer_name)
+        
+        # Try ERPNext first if employee_id exists
+        if volunteer_doc.employee_id:
+            # Get ERPNext Expense Claims for this employee
+            expense_claims = frappe.get_all("Expense Claim",
+                filters={
+                    "employee": volunteer_doc.employee_id,
+                    "posting_date": [">=", from_date],
+                    "docstatus": ["!=", 2]  # Not cancelled
+                },
+                fields=["name", "total_claimed_amount", "total_sanctioned_amount", 
+                       "status", "approval_status", "posting_date"]
+            )
             
-            if status in ["Submitted", "Approved", "Reimbursed"]:
+            for claim in expense_claims:
+                amount = flt(claim.total_claimed_amount)
+                status = map_erpnext_status_to_volunteer_status(claim.status, claim.approval_status)
+                
+                if status in ["Submitted", "Approved", "Reimbursed"]:
+                    total_submitted += amount
+                    total_count += 1
+                    
+                if status == "Approved":
+                    total_approved += flt(claim.total_sanctioned_amount or amount)
+                    approved_count += 1
+                elif status == "Submitted":
+                    pending_count += 1
+                elif status == "Reimbursed":
+                    total_approved += flt(claim.total_sanctioned_amount or amount)
+                    reimbursed_count += 1
+        
+        # Also get direct Volunteer Expense records
+        volunteer_expenses = frappe.get_all("Volunteer Expense",
+            filters={
+                "volunteer": volunteer_name,
+                "expense_date": [">=", from_date],
+                "docstatus": ["!=", 2]  # Not cancelled
+            },
+            fields=["name", "amount", "status", "expense_date"]
+        )
+        
+        for vol_expense in volunteer_expenses:
+            amount = flt(vol_expense.amount)
+            status = vol_expense.status
+            
+            if status in ["Submitted", "Awaiting Approval", "Approved", "Reimbursed"]:
                 total_submitted += amount
+                total_count += 1
                 
             if status == "Approved":
-                total_approved += flt(claim.total_sanctioned_amount or amount)
+                total_approved += amount
                 approved_count += 1
-            elif status == "Submitted":
+            elif status in ["Submitted", "Awaiting Approval"]:
                 pending_count += 1
             elif status == "Reimbursed":
-                total_approved += flt(claim.total_sanctioned_amount or amount)
+                total_approved += amount
                 reimbursed_count += 1
         
         return {
@@ -520,7 +623,7 @@ def get_expense_statistics(volunteer_name):
             "pending_amount": total_submitted - total_approved,
             "pending_count": pending_count,
             "approved_count": approved_count + reimbursed_count,
-            "total_count": len(expense_claims)
+            "total_count": total_count
         }
         
     except Exception as e:
@@ -598,6 +701,335 @@ def get_status_class(status):
         "Reimbursed": "badge-primary"
     }
     return status_classes.get(status, "badge-secondary")
+
+@frappe.whitelist()
+def debug_file_attachment(expense_claim_name, file_url):
+    """Debug function to test file attachment to expense claims"""
+    try:
+        # Get the expense claim
+        expense_claim = frappe.get_doc("Expense Claim", expense_claim_name)
+        
+        # Get the file document
+        file_doc = frappe.get_doc("File", {"file_url": file_url})
+        
+        # Try to attach it by updating the file document
+        file_doc.attached_to_doctype = expense_claim.doctype
+        file_doc.attached_to_name = expense_claim.name
+        file_doc.save()
+        
+        result = f"File {file_doc.name} attached to {expense_claim.name}"
+        
+        return {
+            "success": True,
+            "expense_claim": expense_claim_name,
+            "file_url": file_url,
+            "file_name": file_doc.file_name,
+            "attachment_result": str(result)
+        }
+        
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@frappe.whitelist()
+def debug_attachment_process(file_url):
+    """Debug the attachment process step by step"""
+    try:
+        result = {}
+        
+        # Step 1: Check if file exists
+        file_exists = frappe.db.exists("File", {"file_url": file_url})
+        result["file_exists"] = file_exists
+        
+        if file_exists:
+            # Step 2: Get file document
+            file_doc = frappe.get_doc("File", {"file_url": file_url})
+            result["file_doc"] = {
+                "name": file_doc.name,
+                "file_name": file_doc.file_name,
+                "file_url": file_doc.file_url,
+                "attached_to_doctype": file_doc.attached_to_doctype,
+                "attached_to_name": file_doc.attached_to_name
+            }
+            
+            # Step 3: Test attachment process
+            result["attachment_test"] = "File document retrieved successfully"
+        else:
+            result["error"] = f"File with URL {file_url} not found"
+        
+        return result
+        
+    except Exception as e:
+        import traceback
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@frappe.whitelist()
+def test_new_attachment_system():
+    """Test the new file attachment system end-to-end"""
+    try:
+        # Simulate file data as it would come from the upload function
+        import base64
+        test_content = b"This is a test receipt file content"
+        
+        file_data = {
+            "file_name": "test_receipt_new.txt",
+            "file_content": base64.b64encode(test_content).decode('utf-8'),
+            "content_type": "text/plain"
+        }
+        
+        # Test expense data with new file format
+        expense_data = {
+            "description": "Test expense with new attachment system",
+            "amount": 75.00,
+            "expense_date": "2025-06-20",
+            "organization_type": "National",
+            "category": "Reiskosten",
+            "notes": "Testing the new Frappe API-based file attachment",
+            "receipt_attachment": file_data
+        }
+        
+        # Submit the expense
+        result = submit_expense(expense_data)
+        
+        if result.get("success"):
+            expense_claim_name = result.get("expense_claim_name")
+            
+            # Check if file was attached
+            attached_files = frappe.get_all("File",
+                filters={"attached_to_name": expense_claim_name},
+                fields=["name", "file_name", "file_url", "attached_to_doctype"]
+            )
+            
+            return {
+                "success": True,
+                "expense_result": result,
+                "attached_files": attached_files,
+                "test_note": "Using official Frappe API for file attachment"
+            }
+        else:
+            return {
+                "success": False,
+                "expense_result": result
+            }
+            
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@frappe.whitelist()
+def test_expense_with_attachment():
+    """Test expense submission with file attachment"""
+    try:
+        # Create a test file first
+        from frappe.utils.file_manager import save_file
+        
+        test_content = b"Test receipt content"
+        file_doc = save_file(
+            fname="test_receipt.txt",
+            content=test_content,
+            dt="",
+            dn="",
+            folder="Home/Attachments",
+            is_private=0
+        )
+        
+        # Test expense data
+        expense_data = {
+            "description": "Test expense with receipt",
+            "amount": 50.00,
+            "expense_date": "2025-06-20",
+            "organization_type": "National",
+            "category": "Reiskosten",
+            "notes": "Test expense for debugging file attachments",
+            "receipt_attachment": file_doc.file_url
+        }
+        
+        # Submit the expense
+        result = submit_expense(expense_data)
+        
+        if result.get("success"):
+            expense_claim_name = result.get("expense_claim_name")
+            
+            # Check if file was attached
+            attached_files = frappe.get_all("File",
+                filters={"attached_to_name": expense_claim_name},
+                fields=["name", "file_name", "file_url"]
+            )
+            
+            return {
+                "success": True,
+                "expense_result": result,
+                "attached_files": attached_files,
+                "test_file_url": file_doc.file_url
+            }
+        else:
+            return {
+                "success": False,
+                "expense_result": result
+            }
+            
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@frappe.whitelist()
+def debug_expense_retrieval(volunteer_name):
+    """Debug function to test expense retrieval"""
+    try:
+        # Test the actual functions
+        expenses = get_volunteer_expenses(volunteer_name, limit=10)
+        stats = get_expense_statistics(volunteer_name)
+        
+        return {
+            "volunteer_name": volunteer_name,
+            "expense_count": len(expenses) if expenses else 0,
+            "expenses": expenses,
+            "stats": stats
+        }
+        
+    except Exception as e:
+        import traceback
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@frappe.whitelist()
+def upload_expense_receipt():
+    """Upload receipt file and return file data for later attachment"""
+    try:
+        # Enhanced debugging - check all possible file access methods
+        debug_info = {
+            "request_exists": hasattr(frappe, 'request'),
+            "files_attr": hasattr(frappe.request, 'files') if hasattr(frappe, 'request') else False,
+            "files_content": dict(frappe.request.files) if hasattr(frappe, 'request') and hasattr(frappe.request, 'files') else {},
+            "files_keys": list(frappe.request.files.keys()) if hasattr(frappe, 'request') and hasattr(frappe.request, 'files') else [],
+            "form_dict": dict(frappe.form_dict) if hasattr(frappe, 'form_dict') else {},
+            "form_dict_keys": list(frappe.form_dict.keys()) if hasattr(frappe, 'form_dict') else [],
+            "local_files": getattr(frappe.local, 'uploaded_files', None),
+            "request_method": frappe.request.method if hasattr(frappe, 'request') else None,
+            "request_content_type": frappe.request.content_type if hasattr(frappe, 'request') else None,
+            "request_data": len(frappe.request.data) if hasattr(frappe, 'request') and hasattr(frappe.request, 'data') else 0,
+        }
+        
+        # Try multiple methods to access uploaded files
+        uploaded_file = None
+        
+        # Method 1: Direct from request.files
+        if hasattr(frappe, 'request') and hasattr(frappe.request, 'files') and frappe.request.files:
+            if 'receipt' in frappe.request.files:
+                uploaded_file = frappe.request.files['receipt']
+        
+        # Method 2: From form_dict (common in Frappe)
+        if not uploaded_file and hasattr(frappe, 'form_dict'):
+            # Check for various possible field names
+            for field_name in ['receipt', 'file', '_file', 'uploaded_file']:
+                if field_name in frappe.form_dict:
+                    uploaded_file = frappe.form_dict[field_name]
+                    break
+        
+        # Method 3: From local.uploaded_files (Frappe's internal storage)
+        if not uploaded_file and hasattr(frappe.local, 'uploaded_files') and frappe.local.uploaded_files:
+            # Take the first uploaded file if available
+            uploaded_file = list(frappe.local.uploaded_files.values())[0]
+        
+        if not uploaded_file:
+            return {
+                "success": False,
+                "error": "No file uploaded",
+                "debug_info": debug_info
+            }
+        
+        # Handle different file object types
+        if hasattr(uploaded_file, 'filename') and hasattr(uploaded_file, 'read'):
+            # Standard file upload object
+            filename = uploaded_file.filename
+            if not filename:
+                return {
+                    "success": False,
+                    "error": "No filename provided"
+                }
+            
+            file_content = uploaded_file.read()
+            content_type = getattr(uploaded_file, 'content_type', 'application/octet-stream')
+            
+        elif isinstance(uploaded_file, dict) and 'filename' in uploaded_file:
+            # Frappe's processed file format
+            filename = uploaded_file['filename']
+            file_content = uploaded_file.get('content', b'')
+            content_type = uploaded_file.get('content_type', 'application/octet-stream')
+            
+        else:
+            return {
+                "success": False,
+                "error": f"Unsupported file object type: {type(uploaded_file)}",
+                "debug_info": debug_info
+            }
+        
+        if not file_content:
+            return {
+                "success": False,
+                "error": "Empty file uploaded"
+            }
+        
+        # Return file data for processing during expense submission
+        import base64
+        return {
+            "success": True,
+            "file_name": filename,
+            "file_content": base64.b64encode(file_content).decode('utf-8'),
+            "content_type": content_type
+        }
+        
+    except Exception as e:
+        import traceback
+        frappe.log_error(f"Error uploading expense receipt: {str(e)}\n{traceback.format_exc()}", "File Upload Error")
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@frappe.whitelist()
+def debug_request_info():
+    """Debug function to check what's available in the request without file upload"""
+    try:
+        debug_info = {
+            "method": frappe.request.method if hasattr(frappe, 'request') else None,
+            "content_type": frappe.request.content_type if hasattr(frappe, 'request') else None,
+            "form_dict_keys": list(frappe.form_dict.keys()) if hasattr(frappe, 'form_dict') else [],
+            "form_dict_content": dict(frappe.form_dict) if hasattr(frappe, 'form_dict') else {},
+            "request_files_keys": list(frappe.request.files.keys()) if hasattr(frappe, 'request') and hasattr(frappe.request, 'files') else [],
+            "request_exists": hasattr(frappe, 'request'),
+            "session_user": frappe.session.user,
+            "local_uploaded_files": getattr(frappe.local, 'uploaded_files', None)
+        }
+        return {
+            "success": True,
+            "debug_info": debug_info
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 
 @frappe.whitelist()
 def submit_expense(expense_data):
@@ -748,7 +1180,6 @@ def submit_expense(expense_data):
             "cost_center": cost_center,
             "payable_account": payable_account,
             "approval_status": "Draft",  # Leave approval to appropriate user roles
-            "title": f"Volunteer Expense - {expense_data.get('description')[:50]}",
             "remark": expense_data.get("notes"),
             "status": "Draft"
         })
@@ -763,15 +1194,56 @@ def submit_expense(expense_data):
             "cost_center": cost_center
         })
         
-        # Add receipt attachment if provided
-        if expense_data.get("receipt_attachment"):
-            expense_claim.append("attachments", {
-                "file_url": expense_data.get("receipt_attachment")
-            })
-        
         # Insert the expense claim as draft (don't submit automatically)
         expense_claim.insert(ignore_permissions=True)
         frappe.logger().info(f"Successfully created expense claim draft: {expense_claim.name}")
+        
+        # Add receipt attachment if provided - attach to the ERPNext Expense Claim
+        receipt_data = expense_data.get("receipt_attachment")
+        if receipt_data and isinstance(receipt_data, dict):
+            try:
+                if receipt_data.get("file_url") and receipt_data.get("frappe_file_name"):
+                    # Handle Frappe's built-in upload format
+                    frappe.logger().info(f"Using Frappe built-in file: {receipt_data.get('frappe_file_name')}")
+                    
+                    # Get the existing file document and re-attach it to the expense claim
+                    file_doc = frappe.get_doc("File", receipt_data.get("frappe_file_name"))
+                    file_doc.attached_to_doctype = expense_claim.doctype
+                    file_doc.attached_to_name = expense_claim.name
+                    file_doc.folder = "Home/Attachments"
+                    file_doc.is_private = 0
+                    file_doc.save(ignore_permissions=True)
+                    
+                    frappe.logger().info(f"Successfully re-attached Frappe file {file_doc.name} to expense claim {expense_claim.name}")
+                    
+                elif receipt_data.get("file_content"):
+                    # Handle our custom base64 format
+                    frappe.logger().info(f"Using custom base64 file: {receipt_data.get('file_name')}")
+                    
+                    # Decode file content
+                    import base64
+                    file_content = base64.b64decode(receipt_data.get("file_content", ""))
+                    
+                    # Create file with proper attachment using official Frappe API
+                    file_doc = frappe.get_doc({
+                        "doctype": "File",
+                        "file_name": receipt_data.get("file_name"),
+                        "content": file_content,
+                        "attached_to_doctype": expense_claim.doctype,
+                        "attached_to_name": expense_claim.name,
+                        "folder": "Home/Attachments",
+                        "is_private": 0
+                    })
+                    file_doc.insert(ignore_permissions=True)
+                    
+                    frappe.logger().info(f"Successfully attached custom receipt {receipt_data.get('file_name')} to expense claim {expense_claim.name}")
+                else:
+                    frappe.logger().warning(f"Receipt data provided but no valid file format found: {receipt_data}")
+                
+            except Exception as attachment_error:
+                # Log error but don't fail the entire expense submission
+                frappe.log_error(f"Failed to attach receipt to expense claim {expense_claim.name}: {str(attachment_error)}", "Expense Receipt Attachment Error")
+                frappe.logger().warning(f"Receipt attachment failed for {expense_claim.name}: {attachment_error}")
         
         # Don't submit automatically - leave for approval workflow
         # The expense claim will remain in Draft status until approved and submitted by authorized users

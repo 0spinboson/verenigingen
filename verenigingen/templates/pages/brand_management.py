@@ -30,8 +30,11 @@ def get_context(context):
     context.brand_settings = all_settings
     
     # Get active settings for preview
-    from verenigingen.verenigingen.doctype.brand_settings.brand_settings import get_active_brand_settings
+    from verenigingen.verenigingen.doctype.brand_settings.brand_settings import get_active_brand_settings, check_owl_theme_integration
     context.active_settings = get_active_brand_settings()
+    
+    # Check Owl Theme integration status
+    context.owl_theme_status = check_owl_theme_integration()
     
     return context
 

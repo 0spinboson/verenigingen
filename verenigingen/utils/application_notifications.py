@@ -360,13 +360,33 @@ def check_overdue_applications():
                              if bm.is_active and bm.email]
                 
                 if recipients:
-                    frappe.sendmail(
-                        recipients=recipients,
-                        subject="Overdue Membership Applications",
-                        template="membership_applications_overdue",
-                        args={"applications": overdue},
-                        now=True
-                    )
+                    # Use Email Template if available
+                    args = {"applications": overdue}
+                    if frappe.db.exists("Email Template", "membership_applications_overdue"):
+                        email_template_doc = frappe.get_doc("Email Template", "membership_applications_overdue")
+                        frappe.sendmail(
+                            recipients=recipients,
+                            subject=email_template_doc.subject or "Overdue Membership Applications",
+                            message=frappe.render_template(email_template_doc.response, args),
+                            now=True
+                        )
+                    else:
+                        # Fallback to simple message
+                        app_list = "\n".join([f"- {app.full_name} (Applied: {app.application_date})" for app in overdue])
+                        message = f"""
+                        <h3>Overdue Membership Applications</h3>
+                        <p>The following membership applications have been pending for more than 2 weeks:</p>
+                        <ul>
+                        {app_list}
+                        </ul>
+                        <p>Please review these applications as soon as possible.</p>
+                        """
+                        frappe.sendmail(
+                            recipients=recipients,
+                            subject="Overdue Membership Applications",
+                            message=message,
+                            now=True
+                        )
         except Exception as e:
             frappe.log_error(f"Error notifying about overdue applications: {str(e)}")
 
