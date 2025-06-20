@@ -30,6 +30,8 @@
   "status",
   "approved_by",
   "approved_on",
+  "section_break_9",
+  "expense_claim_id",
   "section_break_8",
   "reimbursement_details"
  ],
@@ -176,6 +178,19 @@
    "fieldtype": "Datetime",
    "label": "Approved On",
    "read_only": 1
+  },
+  {
+   "fieldname": "section_break_9",
+   "fieldtype": "Section Break",
+   "label": "ERPNext Integration"
+  },
+  {
+   "fieldname": "expense_claim_id",
+   "fieldtype": "Link",
+   "label": "ERPNext Expense Claim",
+   "options": "Expense Claim",
+   "read_only": 1,
+   "description": "Link to the corresponding ERPNext Expense Claim record"
   },
   {
    "fieldname": "section_break_8",

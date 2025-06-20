@@ -5,6 +5,79 @@
 {% block head_include %}
 {% endblock %}
 
+{% block style %}
+<link href="/assets/verenigingen/css/tailwind.css" rel="stylesheet">
+<style>
+/* Custom slider styling to prevent overflow and match brand colors */
+#fee-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    outline: none;
+    opacity: 0.9;
+    transition: opacity 0.2s;
+    max-width: 100%;
+    box-sizing: border-box;
+    background: transparent;
+}
+
+#fee-slider:hover {
+    opacity: 1;
+}
+
+/* Webkit slider track */
+#fee-slider::-webkit-slider-track {
+    width: 100%;
+    height: 12px;
+    cursor: pointer;
+    background: #e5e7eb;
+    border-radius: 6px;
+    border: none;
+}
+
+/* Webkit slider thumb */
+#fee-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #cf3131;
+    cursor: pointer;
+    border: 3px solid white;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    margin-top: -6px;
+}
+
+/* Firefox slider track */
+#fee-slider::-moz-range-track {
+    width: 100%;
+    height: 12px;
+    cursor: pointer;
+    background: #e5e7eb;
+    border-radius: 6px;
+    border: none;
+}
+
+/* Firefox slider thumb */
+#fee-slider::-moz-range-thumb {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #cf3131;
+    cursor: pointer;
+    border: 3px solid white;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    border: none;
+}
+
+/* Ensure container doesn't overflow */
+.w-full {
+    max-width: 100%;
+    overflow: hidden;
+}
+</style>
+{% endblock %}
+
 {% block page_content %}
 <div class="max-w-6xl mx-auto p-8">
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -62,9 +135,9 @@
             <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
                 <h4 class="text-lg font-semibold text-gray-800 mb-4">{{ _("Adjust Your Fee") }}</h4>
                 
-                <div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg mb-6">
-                    <h6 class="font-medium text-blue-800 mb-2">{{ _("Important Information") }}</h6>
-                    <ul class="text-sm text-blue-700 space-y-1">
+                <div class="bg-primary-50 border-l-4 border-primary-400 p-4 rounded-r-lg mb-6">
+                    <h6 class="font-medium text-primary-800 mb-2">{{ _("Important Information") }}</h6>
+                    <ul class="text-sm text-primary-700 space-y-1">
                         <li>{{ _("You can adjust your membership fee up to {0} times per year").format(settings.max_adjustments_per_year) }}</li>
                         <li>{{ _("Minimum fee is {0}").format(frappe.format_value(minimum_fee, {"fieldtype": "Currency"})) }}</li>
                         <li>{{ _("Maximum fee via this form is {0}").format(frappe.format_value(minimum_fee * 5, {"fieldtype": "Currency"})) }}</li>
@@ -81,19 +154,21 @@
                 <form id="fee-adjustment-form">
                     <div class="mb-6">
                         <label for="new-fee-amount" class="block text-sm font-medium text-gray-700 mb-2">{{ _("New {0} Fee Amount").format(_(billing_frequency)) }}</label>
-                        <input type="range" 
-                               id="fee-slider" 
-                               class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider mb-4"
-                               min="{{ minimum_fee }}" 
-                               max="{{ minimum_fee * 5 }}" 
-                               step="1"
-                               value="{{ current_fee.amount }}">
+                        <div class="w-full mb-4">
+                            <input type="range" 
+                                   id="fee-slider" 
+                                   class="w-full cursor-pointer"
+                                   min="{{ minimum_fee }}" 
+                                   max="{{ minimum_fee * 5 }}" 
+                                   step="1"
+                                   value="{{ current_fee.amount }}">
+                        </div>
                         
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <input type="number" 
                                        id="new-fee-amount" 
-                                       class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                                       class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                                        min="{{ minimum_fee }}" 
                                        max="{{ minimum_fee * 5 }}"
                                        step="0.50"
@@ -101,7 +176,7 @@
                                        required>
                             </div>
                             <div class="flex items-center justify-center">
-                                <div class="text-2xl font-bold text-blue-600" id="fee-display">
+                                <div class="text-2xl font-bold text-primary-600" id="fee-display">
                                     {{ frappe.format_value(current_fee.amount, {"fieldtype": "Currency"}) }}
                                 </div>
                             </div>
@@ -112,7 +187,7 @@
                     <div class="mb-6">
                         <label for="adjustment-reason" class="block text-sm font-medium text-gray-700 mb-2">{{ _("Reason for Adjustment") }} <span class="text-red-500">*</span></label>
                         <textarea id="adjustment-reason" 
-                                  class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" 
+                                  class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500" 
                                   rows="3" 
                                   placeholder="{{ _('Please explain why you want to adjust your membership fee...') }}"
                                   required></textarea>
@@ -120,7 +195,7 @@
                     {% endif %}
 
                     <div>
-                        <button type="submit" class="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-3 px-6 rounded-md transition-colors duration-200" id="submit-btn">
+                        <button type="submit" class="w-full bg-secondary-500 hover:bg-secondary-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-medium py-3 px-6 rounded-md transition-colors duration-200" id="submit-btn">
                             {{ _("Submit Fee Adjustment") }}
                         </button>
                     </div>
@@ -148,26 +223,26 @@
                 <p class="text-sm text-gray-600 mb-4">{{ calculator_description }}</p>
                 
                 <div class="mb-4">
-                    <label for="calc-monthly-income" class="block text-sm font-medium text-gray-700 mb-1">{{ _("Monthly Gross Income (€)") }}</label>
-                    <input type="number" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm" id="calc-monthly-income" 
+                    <label for="calc-monthly-income" class="block text-sm font-medium text-gray-700 mb-1">{{ _("Monthly Net Income (€)") }}</label>
+                    <input type="number" class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-sm" id="calc-monthly-income" 
                            placeholder="3500" min="0" step="0.01">
                 </div>
                 
                 <div class="mb-4">
                     <label for="calc-payment-interval" class="block text-sm font-medium text-gray-700 mb-1">{{ _("Payment Interval") }}</label>
-                    <select class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm" id="calc-payment-interval">
+                    <select class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 text-sm" id="calc-payment-interval">
                         <option value="monthly">{{ _("Monthly") }}</option>
                         <option value="quarterly">{{ _("Quarterly") }}</option>
                     </select>
                 </div>
                 
-                <div id="calc-result" class="bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg mb-4" style="display: none;">
+                <div id="calc-result" class="bg-accent-50 border border-accent-200 text-accent-800 p-4 rounded-lg mb-4" style="display: none;">
                     <p class="text-sm font-medium mb-1">{{ _("Suggested Contribution:") }}</p>
                     <p class="text-lg font-bold">
                         <span id="calc-suggested-amount"></span>
                         <span id="calc-payment-frequency"></span>
                     </p>
-                    <p class="text-xs text-blue-600 mt-1">
+                    <p class="text-xs text-accent-600 mt-1">
                         {{ _("Based on") }} <span id="calc-income-percentage">{{ income_percentage_rate }}%</span> {{ _("of your monthly income") }}
                     </p>
                 </div>
@@ -181,7 +256,7 @@
             <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
                 <h5 class="text-lg font-semibold text-gray-800 mb-3">{{ _("Need Help?") }}</h5>
                 <p class="text-gray-600 mb-4">{{ _("If you have questions about fee adjustments or need financial assistance, please contact us.") }}</p>
-                <a href="mailto:{{ member_contact_email }}" class="inline-flex items-center px-4 py-2 border border-blue-300 text-blue-700 rounded-md hover:bg-blue-50 transition-colors duration-200 text-sm">
+                <a href="mailto:{{ member_contact_email }}" class="inline-flex items-center px-4 py-2 border border-primary-300 text-primary-700 rounded-md hover:bg-primary-50 transition-colors duration-200 text-sm">
                     {{ _("Contact Support") }}
                 </a>
             </div>

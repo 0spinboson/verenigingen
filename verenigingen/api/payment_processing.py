@@ -206,11 +206,11 @@ def send_payment_reminder_email(member_name, reminder_type="Friendly Reminder",
     try:
         # Check if template exists, otherwise use fallback
         if frappe.db.exists("Email Template", template_name):
+            email_template_doc = frappe.get_doc("Email Template", template_name)
             frappe.sendmail(
                 recipients=[member.email],
-                subject=get_reminder_subject(reminder_type, payment_info),
-                template=template_name,
-                args=context,
+                subject=email_template_doc.subject or get_reminder_subject(reminder_type, payment_info),
+                message=frappe.render_template(email_template_doc.response, context),
                 now=True
             )
         else:

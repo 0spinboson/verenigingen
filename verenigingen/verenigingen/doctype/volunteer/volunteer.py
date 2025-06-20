@@ -647,6 +647,9 @@ class Volunteer(Document):
             first_name = name_parts[0] if name_parts else "Volunteer"
             last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
             
+            # Get default expense approver (treasurer)
+            expense_approver = self.get_default_expense_approver()
+            
             # Create minimal employee record with required fields
             employee_data = {
                 "doctype": "Employee",
@@ -657,7 +660,8 @@ class Volunteer(Document):
                 "status": "Active",
                 "gender": "Prefer not to say",  # Required field with default
                 "date_of_birth": "1990-01-01",  # Required field with default
-                "date_of_joining": frappe.utils.today()  # Required field with today's date
+                "date_of_joining": frappe.utils.today(),  # Required field with today's date
+                "expense_approver": expense_approver  # Set default approver for expense claims
             }
             
             # Add optional fields if available
@@ -671,9 +675,22 @@ class Volunteer(Document):
             employee = frappe.get_doc(employee_data)
             employee.insert(ignore_permissions=True)
             
+            # Assign limited employee role for expense declarations
+            self.assign_employee_role(employee.name)
+            
             # Update volunteer record with employee ID
             self.employee_id = employee.name
             self.save(ignore_permissions=True)
+            
+            # Also update linked Member record with employee ID
+            if self.member:
+                try:
+                    member_doc = frappe.get_doc("Member", self.member)
+                    member_doc.employee = employee.name
+                    member_doc.save(ignore_permissions=True)
+                    frappe.logger().info(f"Updated Member {self.member} with employee ID {employee.name}")
+                except Exception as e:
+                    frappe.log_error(f"Error updating Member {self.member} with employee ID: {str(e)}", "Member Update Error")
             
             frappe.logger().info(f"Created minimal employee {employee.name} for volunteer {self.name}")
             
@@ -683,7 +700,101 @@ class Volunteer(Document):
             frappe.log_error(f"Error creating minimal employee for volunteer {self.name}: {str(e)}", "Employee Creation Error")
             frappe.throw(_("Unable to create employee record: {0}").format(str(e)))
     
+    def assign_employee_role(self, employee_id):
+        """Assign limited employee role to the user for expense declarations"""
+        try:
+            if not self.email:
+                frappe.logger().warning(f"No email for volunteer {self.name}, cannot assign employee role")
+                return
+            
+            # Check if user exists
+            if not frappe.db.exists("User", self.email):
+                frappe.logger().warning(f"User {self.email} does not exist, cannot assign employee role")
+                return
+            
+            user_doc = frappe.get_doc("User", self.email)
+            
+            # Define the limited employee role
+            employee_role = "Employee"
+            
+            # Check if user already has the role
+            existing_roles = [role.role for role in user_doc.roles]
+            if employee_role not in existing_roles:
+                # Add the employee role
+                user_doc.append("roles", {
+                    "role": employee_role
+                })
+                user_doc.save(ignore_permissions=True)
+                frappe.logger().info(f"Assigned {employee_role} role to user {self.email} for volunteer {self.name}")
+            else:
+                frappe.logger().info(f"User {self.email} already has {employee_role} role")
+                
+        except Exception as e:
+            frappe.log_error(f"Error assigning employee role for volunteer {self.name}: {str(e)}", "Role Assignment Error")
+            # Don't throw here as this is not critical for volunteer creation
+    
+    def get_default_expense_approver(self):
+        """Get the default expense approver (treasurer) for expense claims"""
+        try:
+            # Method 1: Look for treasurer in national board settings
+            settings = frappe.get_single("Verenigingen Settings")
+            if settings.national_board_chapter:
+                # Get board members with financial permissions from national chapter
+                board_members = frappe.get_all(
+                    "Chapter Member",
+                    filters={
+                        "parent": settings.national_board_chapter,
+                        "role": ["in", ["Treasurer", "Financial Officer", "Board Chair", "Secretary-Treasurer"]],
+                        "is_active": 1
+                    },
+                    fields=["member", "role"],
+                    order_by="case when role='Treasurer' then 1 when role='Financial Officer' then 2 when role='Secretary-Treasurer' then 3 else 4 end"
+                )
+                
+                for board_member in board_members:
+                    # Get the member's email/user
+                    member = frappe.get_doc("Member", board_member.member)
+                    if member.email and frappe.db.exists("User", member.email):
+                        frappe.logger().info(f"Found default expense approver: {member.email} ({board_member.role})")
+                        return member.email
+            
+            # Method 2: Look for users with "Verenigingen Administrator" role
+            admin_users = frappe.get_all(
+                "Has Role",
+                filters={"role": "Verenigingen Administrator"},
+                fields=["parent"]
+            )
+            
+            for admin in admin_users:
+                user = frappe.get_doc("User", admin.parent)
+                if user.enabled and user.email:
+                    frappe.logger().info(f"Using Verenigingen Administrator as default expense approver: {user.email}")
+                    return user.email
+            
+            # Method 3: Fallback to system manager
+            system_managers = frappe.get_all(
+                "Has Role",
+                filters={"role": "System Manager"},
+                fields=["parent"]
+            )
+            
+            for manager in system_managers:
+                user = frappe.get_doc("User", manager.parent)
+                if user.enabled and user.email and user.email != "Administrator":
+                    frappe.logger().info(f"Using System Manager as fallback expense approver: {user.email}")
+                    return user.email
+            
+            # Method 4: Last resort - use Administrator
+            frappe.logger().warning("No suitable expense approver found, using Administrator as fallback")
+            return "Administrator"
+            
+        except Exception as e:
+            frappe.log_error(f"Error getting default expense approver: {str(e)}", "Expense Approver Error")
+            frappe.logger().warning(f"Error finding expense approver, using Administrator: {str(e)}")
+            return "Administrator"
+
 # Integration functions to be called from other doctypes
+
 
 @frappe.whitelist()
 def create_volunteer_from_member(member_doc):

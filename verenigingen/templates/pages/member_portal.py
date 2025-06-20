@@ -122,24 +122,62 @@ def get_member_activity(member_name):
         assignments = frappe.get_all(
             "Volunteer Assignment",
             filters={"parent": volunteer},
-            fields=["assignment_type", "start_date", "role"],
+            fields=["assignment_type", "start_date", "role", "reference_doctype", "reference_name"],
             order_by="start_date desc",
             limit=2
         )
         
         for assignment in assignments:
+            # Build description with organization info
+            assignment_desc = assignment.role or assignment.assignment_type
+            
+            # Add organization context based on reference
+            if assignment.reference_name and assignment.reference_doctype:
+                if assignment.reference_doctype == "Chapter":
+                    # For Chapter, the name itself is the chapter name
+                    assignment_desc += f" ({_('Chapter')}: {assignment.reference_name})"
+                elif assignment.reference_doctype == "Team":
+                    # For Team, get the team_name field
+                    org_name = frappe.db.get_value("Team", assignment.reference_name, "team_name") or assignment.reference_name
+                    assignment_desc += f" ({_('Team')}: {org_name})"
+                else:
+                    assignment_desc += f" ({assignment.reference_name})"
+            
             activities.append({
                 "icon": "fa-heart",
-                "description": _("Volunteer assignment: {0}").format(assignment.role or assignment.assignment_type),
+                "description": _("Volunteer assignment: {0}").format(assignment_desc),
                 "date": assignment.start_date
             })
     
     # Get recent membership changes
     member_doc = frappe.get_doc("Member", member_name)
     if member_doc.modified:
+        # Add chapter context if member belongs to chapters
+        description = _("Profile updated")
+        
+        # Get member's chapters
+        member_chapters = frappe.get_all(
+            "Chapter Member",
+            filters={"member": member_name, "enabled": 1},
+            fields=["parent"],
+            limit=2
+        )
+        
+        if member_chapters:
+            chapter_names = []
+            for chapter_member in member_chapters:
+                # For Chapter, the name itself is the chapter name
+                chapter_name = chapter_member.parent
+                chapter_names.append(chapter_name)
+            
+            if len(chapter_names) == 1:
+                description += f" ({_('Chapter')}: {chapter_names[0]})"
+            elif len(chapter_names) > 1:
+                description += f" ({_('Chapters')}: {', '.join(chapter_names)})"
+        
         activities.append({
             "icon": "fa-user",
-            "description": _("Profile updated"),
+            "description": description,
             "date": getdate(member_doc.modified)
         })
     

@@ -1,0 +1,35 @@
+<!-- Example of how to integrate organization logo in portal pages -->
+
+<!-- Option 1: Simple logo display -->
+{% if organization_logo %}
+<div class="text-center mb-4">
+    <img src="{{ organization_logo }}" alt="{{ _('Organization Logo') }}" class="organization-logo">
+</div>
+{% endif %}
+
+<!-- Option 2: Header with logo and title -->
+<div class="header-with-logo">
+    {% if organization_logo %}
+    <img src="{{ organization_logo }}" alt="{{ _('Organization Logo') }}" class="organization-logo">
+    {% endif %}
+    <div>
+        <h1 class="text-2xl font-bold text-gray-800">{{ _("Portal Page Title") }}</h1>
+        <p class="text-gray-600">{{ _("Welcome to our member portal") }}</p>
+    </div>
+</div>
+
+<!-- Option 3: Logo in navigation/header area -->
+<div class="bg-white shadow-sm border-b mb-6">
+    <div class="max-w-6xl mx-auto p-4 flex items-center justify-between">
+        {% if organization_logo %}
+        <img src="{{ organization_logo }}" alt="{{ _('Organization Logo') }}" class="organization-logo">
+        {% else %}
+        <h2 class="text-xl font-semibold">{{ _("Member Portal") }}</h2>
+        {% endif %}
+        
+        <nav class="flex space-x-4">
+            <a href="/member_dashboard" class="text-gray-600 hover:text-red-600">{{ _("Dashboard") }}</a>
+            <a href="/my-account" class="text-gray-600 hover:text-red-600">{{ _("Account") }}</a>
+        </nav>
+    </div>
+</div>

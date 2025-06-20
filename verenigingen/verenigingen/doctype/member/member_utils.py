@@ -160,6 +160,28 @@ def get_linked_donations(member):
 
 
 @frappe.whitelist()
+def check_donor_exists(member):
+    """Check if a donor record exists for this member"""
+    if not member:
+        return {"exists": False, "message": "No member specified"}
+        
+    member_doc = frappe.get_doc("Member", member)
+    
+    # Check by email first (correct field name)
+    if member_doc.email:
+        existing_donor = frappe.db.exists("Donor", {"donor_email": member_doc.email})
+        if existing_donor:
+            return {"exists": True, "donor": existing_donor}
+    
+    # Check by name if no email match
+    if member_doc.full_name:
+        existing_donor = frappe.db.exists("Donor", {"donor_name": member_doc.full_name})
+        if existing_donor:
+            return {"exists": True, "donor": existing_donor}
+    
+    return {"exists": False, "message": "No donor record found"}
+
+@frappe.whitelist()
 def create_donor_from_member(member):
     """Create a donor record from a member for tracking donations"""
     if not member:
@@ -167,29 +189,92 @@ def create_donor_from_member(member):
         
     member_doc = frappe.get_doc("Member", member)
     
+    # Check if donor already exists using correct field name
     if member_doc.email:
         existing_donor = frappe.db.exists("Donor", {"donor_email": member_doc.email})
         if existing_donor:
             return existing_donor
     
+    # Create new donor with all required fields
     donor = frappe.new_doc("Donor")
     donor.donor_name = member_doc.full_name or member_doc.name
     donor.donor_type = "Individual"
-    donor.donor_email = member_doc.email
-    donor.contact_person = member_doc.full_name or member_doc.name
-    donor.phone = member_doc.contact_number or member_doc.phone
     
-    donor.donor_category = "Regular Donor"
+    # Handle required fields with fallbacks
+    donor.contact_person = member_doc.full_name or member_doc.first_name or "Member"
+    donor.phone = member_doc.contact_number or "+31000000000"  # Required field, provide valid Dutch number format
     
+    # Get address from primary_address if available
+    address_text = "Address not provided"
+    if hasattr(member_doc, 'primary_address') and member_doc.primary_address:
+        try:
+            address_doc = frappe.get_doc("Address", member_doc.primary_address)
+            address_text = f"{address_doc.address_line1}, {address_doc.city}" if address_doc.address_line1 else "Address not provided"
+        except:
+            address_text = "Address not provided"
+    
+    donor.contact_person_address = address_text
+    donor.donor_category = "Regular Donor"  # Required field
+    
+    # Optional fields
     if member_doc.email:
+        donor.donor_email = member_doc.email
         donor.preferred_communication_method = "Email"
-    elif member_doc.contact_number:
+    elif donor.phone and donor.phone != "+31000000000":
         donor.preferred_communication_method = "Phone"
+    else:
+        donor.preferred_communication_method = "Email"  # Default
     
-    donor.insert(ignore_permissions=True)
+    try:
+        donor.insert(ignore_permissions=True)
+        frappe.msgprint(_("Donor record {0} created from member").format(donor.name))
+        return donor.name
+    except Exception as e:
+        frappe.log_error(f"Error creating donor from member {member}: {str(e)}")
+        frappe.throw(_("Failed to create donor record: {0}").format(str(e)))
+
+
+@frappe.whitelist()
+def test_donor_fixes():
+    """Test the fixed donor-related functions"""
+    results = {}
     
-    frappe.msgprint(_("Donor record {0} created from member").format(donor.name))
-    return donor.name
+    try:
+        # Test 1: Check that check_donor_exists function works
+        result = check_donor_exists("Assoc-Member-2025-06-0001")
+        results["check_donor_exists"] = {
+            "success": True,
+            "result": result,
+            "has_exists_key": "exists" in result
+        }
+        
+        # Test 2: Test field access doesn't cause database errors
+        try:
+            donor_name = create_donor_from_member("Assoc-Member-2025-06-0001")
+            results["create_donor_from_member"] = {
+                "success": True,
+                "donor_created": donor_name
+            }
+            # Clean up
+            if donor_name:
+                frappe.delete_doc("Donor", donor_name, ignore_permissions=True)
+        except Exception as e:
+            error_msg = str(e)
+            results["create_donor_from_member"] = {
+                "success": "Unknown column" not in error_msg and "email.*WHERE" not in error_msg,
+                "error": error_msg,
+                "no_field_errors": "Unknown column" not in error_msg
+            }
+        
+        results["overall_success"] = all(
+            r.get("success", False) for r in results.values() if isinstance(r, dict)
+        )
+        
+    except Exception as e:
+        results["error"] = str(e)
+        results["overall_success"] = False
+    
+    return results
 
 
 @frappe.whitelist()

@@ -295,6 +295,7 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         self.update_full_name()
         self.update_membership_status()
         self.calculate_age()
+        self.calculate_cumulative_membership_duration()
         self.validate_payment_method()
         self.set_payment_reference()
         self.validate_bank_details()
@@ -368,6 +369,117 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
                 self.age = None
         except Exception as e:
             frappe.log_error(f"Error calculating age: {str(e)}", "Member Error")
+
+    def calculate_cumulative_membership_duration(self):
+        """Calculate the human-readable duration from total_membership_days field"""
+        try:
+            total_days = getattr(self, 'total_membership_days', 0) or 0
+            
+            if total_days == 0:
+                self.cumulative_membership_duration = "0 years, 0 months"
+                return
+            
+            # Convert total days to human-readable format
+            years = total_days // 365
+            remaining_days = total_days % 365
+            months = remaining_days // 30
+            remaining_days = remaining_days % 30
+            
+            # Build duration string
+            duration_parts = []
+            if years > 0:
+                duration_parts.append(f"{years} year{'s' if years != 1 else ''}")
+            if months > 0:
+                duration_parts.append(f"{months} month{'s' if months != 1 else ''}")
+            if remaining_days > 0 and years == 0:  # Only show days if less than a year
+                duration_parts.append(f"{remaining_days} day{'s' if remaining_days != 1 else ''}")
+            
+            if duration_parts:
+                self.cumulative_membership_duration = ", ".join(duration_parts)
+            else:
+                self.cumulative_membership_duration = "Less than 1 day"
+                
+        except Exception as e:
+            frappe.log_error(f"Error calculating cumulative membership duration: {str(e)}", "Member Error")
+            self.cumulative_membership_duration = "Error calculating duration"
+
+    def calculate_total_membership_days(self):
+        """Calculate total membership days from all active membership periods"""
+        try:
+            if not self.name or not frappe.db.exists("Member", self.name):
+                # For new records, can't calculate duration yet
+                return 0
+            
+            # Get all memberships for this member, ordered by start date
+            memberships = frappe.get_all(
+                "Membership",
+                filters={"member": self.name, "docstatus": 1},
+                fields=["name", "start_date", "renewal_date", "status", "cancellation_date"],
+                order_by="start_date asc"
+            )
+            
+            if not memberships:
+                return 0
+            
+            total_days = 0
+            today_date = getdate(today())
+            
+            for membership in memberships:
+                start_date = getdate(membership.start_date)
+                
+                # Determine end date for this membership period
+                if membership.status in ["Cancelled", "Expired"]:
+                    # Use cancellation date if available, otherwise renewal date
+                    end_date = getdate(membership.cancellation_date) if membership.cancellation_date else getdate(membership.renewal_date)
+                elif membership.status == "Active":
+                    # For active memberships, use today or renewal date (whichever is earlier)
+                    renewal_date = getdate(membership.renewal_date) if membership.renewal_date else today_date
+                    end_date = min(today_date, renewal_date)
+                else:
+                    # For other statuses, use renewal date if available
+                    end_date = getdate(membership.renewal_date) if membership.renewal_date else start_date
+                
+                # Calculate days for this membership period
+                if end_date >= start_date:
+                    period_days = date_diff(end_date, start_date) + 1  # +1 to include both start and end dates
+                    total_days += period_days
+            
+            return total_days
+                    
+        except Exception as e:
+            frappe.log_error(f"Error calculating total membership days: {str(e)}", "Member Error")
+            return 0
+
+    @frappe.whitelist()
+    def update_membership_duration(self):
+        """Update the total membership days and human-readable duration"""
+        try:
+            # Calculate the raw days
+            total_days = self.calculate_total_membership_days()
+            
+            # Update the fields
+            self.total_membership_days = total_days
+            self.last_duration_update = now()
+            
+            # Calculate human-readable format
+            self.calculate_cumulative_membership_duration()
+            
+            # Save the record
+            self.save(ignore_permissions=True)
+            
+            return {
+                "success": True,
+                "total_days": total_days,
+                "duration": self.cumulative_membership_duration,
+                "updated": self.last_duration_update
+            }
+            
+        except Exception as e:
+            frappe.log_error(f"Error updating membership duration for {self.name}: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
 
     def generate_application_id(self):
         """Generate unique application ID"""
@@ -2000,7 +2112,7 @@ def check_donor_exists(member_name):
         # Check if donor record exists with matching email or member link
         existing_donor = frappe.db.get_value(
             "Donor", 
-            {"email": member.email}, 
+            {"donor_email": member.email}, 
             ["name", "donor_name"]
         )
         
@@ -2050,7 +2162,7 @@ def create_donor_from_member(member_name):
         
         # Copy basic information from member
         donor.donor_name = member.full_name
-        donor.email = member.email
+        donor.donor_email = member.email
         donor.member = member_name  # Link back to member
         
         # Copy address information if available

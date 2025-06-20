@@ -212,6 +212,15 @@ def get_member_context(context):
             else:
                 context["is_member"] = False
         
+        # Add organization logo for all portal pages
+        try:
+            from verenigingen.verenigingen.doctype.brand_settings.brand_settings import get_organization_logo
+            logo_url = get_organization_logo()
+            if logo_url:
+                context["organization_logo"] = logo_url
+        except Exception as logo_error:
+            frappe.log_error(f"Error getting organization logo: {str(logo_error)}")
+        
         return context
         
     except Exception as e:

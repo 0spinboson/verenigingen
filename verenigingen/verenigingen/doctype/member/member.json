@@ -22,6 +22,7 @@
   "status",
   "member_id",
   "member_since",
+  "cumulative_membership_duration",
   "address_section",
   "primary_address",
   "address_display",
@@ -92,6 +93,10 @@
   "customer",
   "column_break_24",
   "user",
+  "employee",
+  "membership_analytics_section",
+  "total_membership_days",
+  "last_duration_update",
   "next_member_id",
   "reset_counter_to",
   "reset_counter_button",
@@ -471,6 +476,33 @@
    "options": "User"
   },
   {
+   "fieldname": "employee",
+   "fieldtype": "Link",
+   "label": "Employee",
+   "options": "Employee",
+   "description": "Link to ERPNext Employee record for expense claims and HR operations"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "membership_analytics_section",
+   "fieldtype": "Section Break",
+   "label": "Membership Analytics"
+  },
+  {
+   "description": "Total number of days this member has been active (updated daily)",
+   "fieldname": "total_membership_days",
+   "fieldtype": "Int",
+   "label": "Total Membership Days",
+   "read_only": 1
+  },
+  {
+   "description": "Last time the membership duration was calculated",
+   "fieldname": "last_duration_update",
+   "fieldtype": "Datetime",
+   "label": "Last Duration Update",
+   "read_only": 1
+  },
+  {
    "fieldname": "subscription_section",
    "fieldtype": "Section Break",
    "label": "Membership Information"
@@ -571,6 +603,14 @@
    "fieldtype": "Date",
    "label": "Member Since",
    "read_only": 1
+  },
+  {
+   "description": "Total cumulative time as an active member, calculated from membership days",
+   "fieldname": "cumulative_membership_duration",
+   "fieldtype": "Data",
+   "label": "Total Membership Duration",
+   "read_only": 1,
+   "no_copy": 1
   },
   {
    "fieldname": "membership_tab",

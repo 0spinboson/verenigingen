@@ -93,12 +93,12 @@ class BaseManager(ABC):
                 )
                 return
 
-            # Send email
+            # Send email using Email Template
+            email_template_doc = frappe.get_doc("Email Template", template)
             frappe.sendmail(
                 recipients=recipients,
-                subject=subject or f"Notification from {self.chapter_name}",
-                template=template,
-                args=context,
+                subject=email_template_doc.subject or subject or f"Notification from {self.chapter_name}",
+                message=frappe.render_template(email_template_doc.response, context),
                 header=[("Chapter Notification"), "blue"]
             )
 

@@ -154,12 +154,12 @@ def send_renewal_reminders():
                 "days_to_expiry": membership.days_to_expiry
             }
             
-            # Send email
+            # Send email using Email Template
+            email_template_doc = frappe.get_doc("Email Template", template)
             frappe.sendmail(
                 recipients=membership.email,
-                subject=f"Membership Renewal Reminder: {membership.days_to_expiry} days left",
-                template=template,
-                args=context,
+                subject=email_template_doc.subject or f"Membership Renewal Reminder: {membership.days_to_expiry} days left",
+                message=frappe.render_template(email_template_doc.response, context),
                 header=[_("Membership Renewal"), "blue"]
             )
             
