@@ -3,337 +3,142 @@
 {% block title %}{{ _("Confirm Bank Details Update") }}{% endblock %}
 
 {% block head_include %}
-<style>
-.confirmation-form {
-    max-width: 700px;
-    margin: 2rem auto;
-    padding: 2rem;
-    background: white;
-    border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
+{% endblock %}
 
-.summary-section {
-    background-color: #f8f9fa;
-    padding: 1.5rem;
-    border-radius: 6px;
-    margin-bottom: 2rem;
-    border-left: 4px solid #007bff;
-}
-
-.change-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.75rem 0;
-    border-bottom: 1px solid #eee;
-}
-
-.change-item:last-child {
-    border-bottom: none;
-}
-
-.change-label {
-    font-weight: 500;
-    color: #333;
-}
-
-.change-value {
-    color: #666;
-    text-align: right;
-}
-
-.change-value.new {
-    color: #28a745;
-    font-weight: 500;
-}
-
-.action-alert {
-    padding: 1rem;
-    border-radius: 4px;
-    margin-bottom: 1.5rem;
-}
-
-.alert-info {
-    background-color: #d1ecf1;
-    border: 1px solid #bee5eb;
-    color: #0c5460;
-}
-
-.alert-warning {
-    background-color: #fff3cd;
-    border: 1px solid #ffeaa7;
-    color: #856404;
-}
-
-.alert-success {
-    background-color: #d4edda;
-    border: 1px solid #c3e6cb;
-    color: #155724;
-}
-
-.alert-danger {
-    background-color: #f8d7da;
-    border: 1px solid #f5c6cb;
-    color: #721c24;
-}
-
-.btn {
-    padding: 0.75rem 2rem;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 1rem;
-    text-decoration: none;
-    display: inline-block;
-    text-align: center;
-    margin-right: 1rem;
-}
-
-.btn-primary {
-    background-color: #007bff;
-    color: white;
-}
-
-.btn-primary:hover {
-    background-color: #0056b3;
-}
-
-.btn-danger {
-    background-color: #dc3545;
-    color: white;
-}
-
-.btn-danger:hover {
-    background-color: #c82333;
-}
-
-.btn-secondary {
-    background-color: #6c757d;
-    color: white;
-}
-
-.btn-secondary:hover {
-    background-color: #545b62;
-}
-
-.action-buttons {
-    margin-top: 2rem;
-    text-align: center;
-}
-
-.sepa-info {
-    background-color: #f1f8ff;
-    border: 1px solid #c1e7ff;
-    border-radius: 4px;
-    padding: 1rem;
-    margin-bottom: 1.5rem;
-}
-
-.sepa-info h5 {
-    color: #0366d6;
-    margin-bottom: 0.5rem;
-}
-
-.consent-section {
-    background-color: #fffbf0;
-    border: 1px solid #ffeaa7;
-    border-radius: 4px;
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-}
-
-.consent-checkbox {
-    margin-bottom: 1rem;
-}
-
-.consent-checkbox input[type="checkbox"] {
-    margin-right: 0.5rem;
-}
-
-.mandate-details {
-    font-size: 0.875rem;
-    color: #666;
-    line-height: 1.5;
-}
-</style>
+{% block style %}
+<link href="/assets/verenigingen/css/tailwind.css" rel="stylesheet">
 {% endblock %}
 
 {% block page_content %}
-<div class="container">
-    <div class="confirmation-form">
-        <h2>{{ _("Confirm Bank Details Update") }}</h2>
+<div class="max-w-2xl mx-auto p-8">
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+        <h2 class="text-2xl font-bold text-gray-800 mb-6">{{ _("Confirm Bank Details Update") }}</h2>
         
-        <div class="summary-section">
-            <h4>{{ _("Summary of Changes") }}</h4>
+        <!-- Summary of Changes -->
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+            <h3 class="text-lg font-semibold text-blue-900 mb-4">{{ _("Summary of Changes") }}</h3>
             
-            <div class="change-item">
-                <span class="change-label">{{ _("IBAN") }}</span>
-                <span class="change-value {% if update_data.bank_details_changed %}new{% endif %}">
-                    {{ update_data.new_iban }}
-                </span>
+            <div class="space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <span class="text-sm font-medium text-blue-800">{{ _("IBAN:") }}</span>
+                        <p class="text-blue-900 font-mono">{{ new_iban[:4] }} {{ new_iban[4:8] }} {{ new_iban[8:12] }} {{ new_iban[12:16] }} {{ new_iban[16:] }}</p>
+                    </div>
+                    <div>
+                        <span class="text-sm font-medium text-blue-800">{{ _("Account Holder:") }}</span>
+                        <p class="text-blue-900">{{ new_account_holder }}</p>
+                    </div>
+                </div>
+                
+                {% if new_bic %}
+                <div>
+                    <span class="text-sm font-medium text-blue-800">{{ _("BIC:") }}</span>
+                    <p class="text-blue-900 font-mono">{{ new_bic }}</p>
+                </div>
+                {% endif %}
             </div>
-            
-            <div class="change-item">
-                <span class="change-label">{{ _("Account Holder") }}</span>
-                <span class="change-value {% if update_data.bank_details_changed %}new{% endif %}">
-                    {{ update_data.new_account_holder }}
-                </span>
+        </div>
+
+        <!-- Payment Method Changes -->
+        {% if enable_dd %}
+            {% if action_needed == "create_mandate" %}
+            <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                <div class="flex items-start">
+                    <i class="fa fa-check-circle text-green-600 mr-3 mt-0.5"></i>
+                    <div>
+                        <h4 class="font-semibold text-green-900">{{ _("SEPA Direct Debit will be enabled") }}</h4>
+                        <p class="text-green-800 text-sm mt-1">
+                            {{ _("A new SEPA mandate will be created for automatic payment collection. The mandate will be processed by our scheduled task within 24 hours.") }}
+                        </p>
+                    </div>
+                </div>
             </div>
-            
-            {% if update_data.new_bic %}
-            <div class="change-item">
-                <span class="change-label">{{ _("BIC") }}</span>
-                <span class="change-value {% if update_data.bank_details_changed %}new{% endif %}">
-                    {{ update_data.new_bic }}
-                </span>
+            {% elif action_needed == "replace_mandate" %}
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                <div class="flex items-start">
+                    <i class="fa fa-refresh text-yellow-600 mr-3 mt-0.5"></i>
+                    <div>
+                        <h4 class="font-semibold text-yellow-900">{{ _("SEPA Direct Debit will be updated") }}</h4>
+                        <p class="text-yellow-800 text-sm mt-1">
+                            {{ _("Your existing SEPA mandate will be replaced with a new one using the updated bank details. This will be processed within 24 hours.") }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+            {% elif action_needed == "keep_mandate" %}
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <div class="flex items-start">
+                    <i class="fa fa-info-circle text-blue-600 mr-3 mt-0.5"></i>
+                    <div>
+                        <h4 class="font-semibold text-blue-900">{{ _("SEPA Direct Debit remains active") }}</h4>
+                        <p class="text-blue-800 text-sm mt-1">
+                            {{ _("Your existing SEPA mandate will remain active. Bank details will be updated.") }}
+                        </p>
+                    </div>
+                </div>
             </div>
             {% endif %}
-            
-            <div class="change-item">
-                <span class="change-label">{{ _("Direct Debit") }}</span>
-                <span class="change-value {% if update_data.enable_dd != (update_data.current_payment_method == 'Direct Debit') %}new{% endif %}">
-                    {% if update_data.enable_dd %}{{ _("Enabled") }}{% else %}{{ _("Disabled") }}{% endif %}
-                </span>
+        {% else %}
+            {% if action_needed == "cancel_mandate" %}
+            <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                <div class="flex items-start">
+                    <i class="fa fa-times-circle text-red-600 mr-3 mt-0.5"></i>
+                    <div>
+                        <h4 class="font-semibold text-red-900">{{ _("SEPA Direct Debit will be disabled") }}</h4>
+                        <p class="text-red-800 text-sm mt-1">
+                            {{ _("Your existing SEPA mandate will be cancelled. You will need to pay membership fees manually.") }}
+                        </p>
+                    </div>
+                </div>
             </div>
-        </div>
-
-        <!-- Action-specific alerts and information -->
-        {% if update_data.action_needed == "create_mandate" %}
-        <div class="alert alert-success">
-            <strong>{{ _("New SEPA Mandate Required") }}</strong><br>
-            {{ _("A new SEPA Direct Debit mandate will be created for automatic membership fee collection.") }}
-        </div>
-        {% elif update_data.action_needed == "replace_mandate" %}
-        <div class="alert alert-warning">
-            <strong>{{ _("SEPA Mandate Update Required") }}</strong><br>
-            {{ _("Your current SEPA mandate will be cancelled and a new one will be created due to the bank account changes.") }}
-        </div>
-        {% elif update_data.action_needed == "cancel_mandate" %}
-        <div class="alert alert-info">
-            <strong>{{ _("SEPA Mandate Cancellation") }}</strong><br>
-            {{ _("Your current SEPA Direct Debit mandate will be cancelled. Future payments will use your preferred alternative payment method.") }}
-        </div>
-        {% elif update_data.action_needed == "keep_mandate" %}
-        <div class="alert alert-info">
-            <strong>{{ _("No Mandate Changes") }}</strong><br>
-            {{ _("Your existing SEPA Direct Debit mandate will remain active.") }}
-        </div>
+            {% else %}
+            <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+                <div class="flex items-start">
+                    <i class="fa fa-info-circle text-gray-600 mr-3 mt-0.5"></i>
+                    <div>
+                        <h4 class="font-semibold text-gray-900">{{ _("Manual payment method") }}</h4>
+                        <p class="text-gray-800 text-sm mt-1">
+                            {{ _("Bank details will be updated. SEPA Direct Debit remains disabled.") }}
+                        </p>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
         {% endif %}
 
-        <!-- SEPA Direct Debit Information -->
-        {% if update_data.enable_dd %}
-        <div class="sepa-info">
-            <h5>{{ _("SEPA Direct Debit Information") }}</h5>
-            <p>{{ _("By enabling SEPA Direct Debit, you authorize us to:") }}</p>
-            <ul>
-                <li>{{ _("Collect membership fees automatically from your bank account") }}</li>
-                <li>{{ _("Process payments according to your membership terms") }}</li>
-                <li>{{ _("Send you advance notification of collection dates") }}</li>
-            </ul>
-            <p>{{ _("You can cancel this authorization at any time by contacting us or your bank.") }}</p>
-        </div>
-
-        <!-- Consent section for SEPA -->
-        <div class="consent-section">
-            <h5>{{ _("SEPA Direct Debit Consent") }}</h5>
-            
-            <div class="consent-checkbox">
-                <input type="checkbox" id="sepa_consent" required>
-                <label for="sepa_consent">
-                    {{ _("I authorize the collection of payments via SEPA Direct Debit from the specified bank account") }}
-                </label>
-            </div>
-            
-            <div class="consent-checkbox">
-                <input type="checkbox" id="terms_consent" required>
-                <label for="terms_consent">
-                    {{ _("I understand that I can cancel this mandate at any time with 8 weeks notice") }}
-                </label>
-            </div>
-            
-            <div class="mandate-details">
-                <strong>{{ _("Creditor Information:") }}</strong><br>
-                {{ organization_name or _("Nederlandse Vereniging voor Veganisme") }}<br>
-                {{ _("Creditor ID:") }} {{ creditor_id or "NL98ZZZ123456780001" }}
+        <!-- Important Information -->
+        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+            <div class="flex items-start">
+                <i class="fa fa-exclamation-triangle text-yellow-600 mr-3 mt-0.5"></i>
+                <div>
+                    <h4 class="font-semibold text-yellow-900">{{ _("Important Information") }}</h4>
+                    <div class="text-yellow-800 text-sm mt-1 space-y-1">
+                        <p>{{ _("• Bank details will be updated immediately in your profile") }}</p>
+                        {% if enable_dd %}
+                        <p>{{ _("• SEPA mandate processing happens automatically via scheduled tasks") }}</p>
+                        <p>{{ _("• You will receive email confirmation once the mandate is processed") }}</p>
+                        <p>{{ _("• First automatic collection may take 1-2 billing cycles to activate") }}</p>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
         </div>
-        {% endif %}
 
-        <form method="post" action="/api/method/verenigingen.templates.pages.bank_details_confirm.process_bank_details_update" id="confirm-form">
+        <!-- Action Buttons -->
+        <form method="post" action="/api/method/verenigingen.templates.pages.bank_details_confirm.process_bank_details_update" class="space-y-6">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <input type="hidden" name="action" value="confirm">
             
-            <div class="action-buttons">
-                <a href="/bank_details" class="btn btn-secondary">{{ _("Back to Edit") }}</a>
-                
-                {% if update_data.action_needed == "cancel_mandate" %}
-                <button type="submit" class="btn btn-danger" id="confirm-btn">
-                    {{ _("Confirm & Cancel Direct Debit") }}
-                </button>
-                {% else %}
-                <button type="submit" class="btn btn-primary" id="confirm-btn">
+            <div class="flex flex-col sm:flex-row gap-3 pt-6">
+                <a href="/bank_details" class="inline-flex items-center justify-center px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors duration-200">
+                    <i class="fa fa-arrow-left mr-2"></i>
+                    {{ _("Back to Edit") }}
+                </a>
+                <button type="submit" class="inline-flex items-center justify-center px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors duration-200">
+                    <i class="fa fa-check mr-2"></i>
                     {{ _("Confirm Changes") }}
                 </button>
-                {% endif %}
             </div>
         </form>
     </div>
 </div>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const form = document.getElementById('confirm-form');
-    const confirmBtn = document.getElementById('confirm-btn');
-    const sepaConsentCheckbox = document.getElementById('sepa_consent');
-    const termsConsentCheckbox = document.getElementById('terms_consent');
-    
-    function updateButtonState() {
-        const enableDD = {{ 'true' if update_data.enable_dd else 'false' }};
-        
-        if (enableDD) {
-            // SEPA enabled - require both consents
-            const sepaChecked = sepaConsentCheckbox ? sepaConsentCheckbox.checked : false;
-            const termsChecked = termsConsentCheckbox ? termsConsentCheckbox.checked : false;
-            confirmBtn.disabled = !(sepaChecked && termsChecked);
-        } else {
-            // SEPA disabled - no consent required
-            confirmBtn.disabled = false;
-        }
-    }
-    
-    // Add event listeners if consent checkboxes exist
-    if (sepaConsentCheckbox) {
-        sepaConsentCheckbox.addEventListener('change', updateButtonState);
-    }
-    if (termsConsentCheckbox) {
-        termsConsentCheckbox.addEventListener('change', updateButtonState);
-    }
-    
-    // Initial state
-    updateButtonState();
-    
-    // Form submission
-    form.addEventListener('submit', function(e) {
-        const enableDD = {{ 'true' if update_data.enable_dd else 'false' }};
-        
-        if (enableDD) {
-            const sepaChecked = sepaConsentCheckbox ? sepaConsentCheckbox.checked : false;
-            const termsChecked = termsConsentCheckbox ? termsConsentCheckbox.checked : false;
-            
-            if (!sepaChecked || !termsChecked) {
-                e.preventDefault();
-                alert('{{ _("Please confirm all required consents to proceed") }}');
-                return false;
-            }
-        }
-        
-        // Show loading state
-        confirmBtn.disabled = true;
-        confirmBtn.textContent = '{{ _("Processing...") }}';
-        
-        return true;
-    });
-});
-</script>
 {% endblock %}

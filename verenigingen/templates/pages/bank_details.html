@@ -5,13 +5,17 @@
 {% block head_include %}
 {% endblock %}
 
+{% block style %}
+<link href="/assets/verenigingen/css/tailwind.css" rel="stylesheet">
+{% endblock %}
+
 {% block page_content %}
 <div class="max-w-2xl mx-auto p-8">
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
         <h2 class="text-2xl font-bold text-gray-800 mb-6">{{ _("Update Bank Details") }}</h2>
         
         {% if current_mandate %}
-        <div class="bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-lg mb-6">
+        <div class="bg-teal-50 border border-teal-200 text-teal-800 p-4 rounded-lg mb-6">
             <div class="flex items-start">
                 <i class="fa fa-info-circle mr-2 mt-0.5"></i>
                 <div>
@@ -23,7 +27,7 @@
         {% endif %}
 
         {% if current_details %}
-        <div class="bg-gray-50 border-l-4 border-blue-400 p-4 rounded-r-lg mb-6">
+        <div class="bg-gray-50 border-l-4 border-red-400 p-4 rounded-r-lg mb-6">
             <h5 class="font-medium text-gray-800 mb-2">{{ _("Current Bank Details") }}</h5>
             <div class="space-y-1 text-sm text-gray-600">
                 <p><span class="font-medium">{{ _("IBAN:") }}</span> {{ current_details.iban or _("Not set") }}</p>
@@ -43,7 +47,7 @@
                     {{ _("IBAN") }} <span class="text-red-500">*</span>
                 </label>
                 <input type="text" 
-                       class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" 
+                       class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" 
                        id="iban" 
                        name="iban" 
                        value="{{ current_details.iban if current_details else '' }}"
@@ -58,7 +62,7 @@
                     {{ _("Account Holder Name") }} <span class="text-red-500">*</span>
                 </label>
                 <input type="text" 
-                       class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" 
+                       class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" 
                        id="account_holder_name" 
                        name="account_holder_name" 
                        value="{{ current_details.bank_account_name if current_details else member.full_name }}"
@@ -69,7 +73,7 @@
             <div>
                 <label for="bic" class="block text-sm font-medium text-gray-700 mb-2">{{ _("BIC/SWIFT Code") }}</label>
                 <input type="text" 
-                       class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" 
+                       class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-red-500 focus:border-red-500" 
                        id="bic" 
                        name="bic" 
                        value="{{ current_details.bic if current_details else '' }}"
@@ -80,7 +84,7 @@
             <div>
                 <div class="flex items-start">
                     <input type="checkbox" 
-                           class="mt-1 mr-3 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" 
+                           class="mt-1 mr-3 h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded" 
                            id="enable_direct_debit" 
                            name="enable_direct_debit"
                            {% if member.payment_method == "Direct Debit" or current_mandate %}checked{% endif %}>
@@ -108,7 +112,7 @@
                 <a href="/member_dashboard" class="inline-flex items-center justify-center px-6 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors duration-200">
                     {{ _("Cancel") }}
                 </a>
-                <button type="submit" class="inline-flex items-center justify-center px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors duration-200">
+                <button type="submit" class="inline-flex items-center justify-center px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md transition-colors duration-200">
                     {{ _("Continue") }}
                 </button>
             </div>

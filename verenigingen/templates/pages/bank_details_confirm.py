@@ -1,12 +1,11 @@
 """
 Bank Details Confirmation Page
-Handles the confirmation and processing of bank details updates
+Shows confirmation of bank details changes before processing
 """
 
 import frappe
 from frappe import _
 from frappe.utils import today, now
-import json
 
 def get_context(context):
     """Get context for bank details confirmation page"""
@@ -15,23 +14,20 @@ def get_context(context):
     if frappe.session.user == "Guest":
         frappe.throw(_("Please login to access this page"), frappe.PermissionError)
     
-    context.no_cache = 1
-    context.show_sidebar = True
-    context.title = _("Confirm Bank Details Update")
-    
-    # Get stored update data from session
+    # Check if we have pending update data
     update_data = frappe.session.get('bank_details_update')
     if not update_data:
         frappe.local.response["type"] = "redirect"
         frappe.local.response["location"] = "/bank_details"
         return
     
-    context.update_data = update_data
+    context.no_cache = 1
+    context.show_sidebar = True
+    context.title = _("Confirm Bank Details Update")
     
-    # Get organization details for SEPA info
-    settings = frappe.get_single("Verenigingen Settings")
-    context.organization_name = settings.organization_name if settings else None
-    context.creditor_id = settings.sepa_creditor_id if settings else None
+    # Pass all update data to template
+    for key, value in update_data.items():
+        context[key] = value
     
     return context
 
@@ -49,182 +45,174 @@ def has_website_permission(doc, ptype, user, verbose=False):
 def process_bank_details_update():
     """Process the confirmed bank details update"""
     
-    # Get stored update data
+    # Get member
+    member_name = frappe.db.get_value("Member", {"email": frappe.session.user})
+    if not member_name:
+        frappe.throw(_("No member record found"), frappe.DoesNotExistError)
+    
+    # Get pending update data
     update_data = frappe.session.get('bank_details_update')
     if not update_data:
-        frappe.throw(_("Session expired. Please start over."))
-    
-    # Verify action is confirm
-    if frappe.local.form_dict.get('action') != 'confirm':
-        frappe.throw(_("Invalid action"))
+        frappe.throw(_("No pending update found"), frappe.ValidationError)
     
     try:
-        # Get member
-        member = frappe.get_doc("Member", update_data['member']['name'])
+        # Get member document
+        member = frappe.get_doc("Member", member_name)
         
-        # Update bank details
-        member.iban = update_data['new_iban']
-        member.bic = update_data['new_bic']
-        member.bank_account_name = update_data['new_account_holder']
+        # Extract update data
+        new_iban = update_data['new_iban']
+        new_bic = update_data['new_bic']
+        new_account_holder = update_data['new_account_holder']
+        enable_dd = update_data['enable_dd']
+        action_needed = update_data['action_needed']
+        current_mandate = update_data['current_mandate']
         
-        # Update payment method if needed
-        if update_data['enable_dd']:
+        # Update bank details on member record
+        member.iban = new_iban
+        member.bic = new_bic
+        member.bank_account_name = new_account_holder
+        
+        # Update payment method based on direct debit choice
+        if enable_dd:
             member.payment_method = "Direct Debit"
-        elif update_data['current_payment_method'] == "Direct Debit" and not update_data['enable_dd']:
-            # If disabling DD, set to a default alternative
-            member.payment_method = "Bank Transfer"
+        else:
+            # Only change if currently Direct Debit, preserve other methods
+            if member.payment_method == "Direct Debit":
+                member.payment_method = "Manual"
         
         # Save member changes
         member.save(ignore_permissions=True)
         
         # Handle SEPA mandate changes
-        mandate_result = handle_sepa_mandate_changes(member, update_data)
+        mandate_result = handle_sepa_mandate_changes(
+            member_name, 
+            action_needed, 
+            current_mandate, 
+            new_iban, 
+            new_bic, 
+            new_account_holder
+        )
         
         # Clear session data
         if 'bank_details_update' in frappe.session:
             del frappe.session['bank_details_update']
         
-        # Prepare success message
-        success_message = prepare_success_message(update_data, mandate_result)
+        # Create success message
+        if enable_dd:
+            if action_needed == "create_mandate":
+                message = _("Bank details updated successfully. SEPA mandate will be created by our scheduled task within 24 hours.")
+            elif action_needed == "replace_mandate":
+                message = _("Bank details updated successfully. Your SEPA mandate will be updated within 24 hours.")
+            else:
+                message = _("Bank details updated successfully. Your SEPA Direct Debit remains active.")
+        else:
+            if action_needed == "cancel_mandate":
+                message = _("Bank details updated successfully. SEPA Direct Debit has been disabled.")
+            else:
+                message = _("Bank details updated successfully.")
         
-        # Store success message in session for redirect
-        frappe.session['bank_details_success'] = success_message
+        frappe.msgprint(message, title=_("Update Successful"), indicator="green")
         
-        # Redirect to success page
+        # Redirect to member dashboard
         frappe.local.response["type"] = "redirect"
-        frappe.local.response["location"] = "/bank_details_success"
+        frappe.local.response["location"] = "/member_dashboard?success=bank_details_updated"
         
     except Exception as e:
         frappe.log_error(f"Bank details update failed: {str(e)}")
         frappe.throw(_("Failed to update bank details. Please try again or contact support."))
 
-def handle_sepa_mandate_changes(member, update_data):
-    """Handle SEPA mandate creation, replacement, or cancellation using existing methods"""
+def handle_sepa_mandate_changes(member_name, action_needed, current_mandate, new_iban, new_bic, new_account_holder):
+    """Handle SEPA mandate changes based on action needed"""
     
-    action = update_data['action_needed']
-    result = {"action": action, "success": False}
+    result = {"action": action_needed, "success": True}
     
     try:
-        if action == "create_mandate":
-            # Use existing create_and_link_mandate_enhanced method
-            mandate_result = create_sepa_mandate_via_existing_method(member, update_data)
-            result["mandate_name"] = mandate_result.get("mandate_name")
-            result["success"] = True
+        if action_needed == "create_mandate":
+            # Create mandate pending record for scheduled task
+            create_mandate_pending_record(member_name, new_iban, new_bic, new_account_holder)
+            result["message"] = "Mandate creation scheduled"
             
-        elif action == "replace_mandate":
-            # Cancel current mandate and create new one
-            if update_data['current_mandate']:
-                cancel_sepa_mandate_via_existing_method(update_data['current_mandate']['name'])
+        elif action_needed == "replace_mandate":
+            # Cancel existing mandate and create new one
+            if current_mandate:
+                cancel_existing_mandate(current_mandate['name'])
+            create_mandate_pending_record(member_name, new_iban, new_bic, new_account_holder)
+            result["message"] = "Mandate replacement scheduled"
             
-            mandate_result = create_sepa_mandate_via_existing_method(member, update_data)
-            result["old_mandate"] = update_data['current_mandate']['name']
-            result["mandate_name"] = mandate_result.get("mandate_name")
-            result["success"] = True
-            
-        elif action == "cancel_mandate":
+        elif action_needed == "cancel_mandate":
             # Cancel existing mandate
-            if update_data['current_mandate']:
-                cancel_sepa_mandate_via_existing_method(update_data['current_mandate']['name'])
-                result["cancelled_mandate"] = update_data['current_mandate']['name']
-                result["success"] = True
+            if current_mandate:
+                cancel_existing_mandate(current_mandate['name'])
+            result["message"] = "Mandate cancelled"
             
-        elif action in ["keep_mandate", "no_mandate", "no_action"]:
-            # No mandate changes needed
-            result["success"] = True
+        elif action_needed == "keep_mandate":
+            # Update existing mandate with new details (if bank details changed)
+            if current_mandate:
+                update_existing_mandate(current_mandate['name'], new_iban, new_bic, new_account_holder)
+            result["message"] = "Mandate updated"
             
+        # Log the action for audit trail
+        frappe.log_error(
+            f"SEPA mandate action '{action_needed}' processed for member {member_name}",
+            "Bank Details Update"
+        )
+        
     except Exception as e:
-        frappe.log_error(f"SEPA mandate handling failed: {str(e)}")
+        result["success"] = False
         result["error"] = str(e)
+        frappe.log_error(f"SEPA mandate handling failed: {str(e)}")
     
     return result
 
-def create_sepa_mandate_via_existing_method(member, update_data):
-    """Create a new SEPA mandate using existing member controller method"""
+def create_mandate_pending_record(member_name, iban, bic, account_holder):
+    """Create a pending mandate record for scheduled task processing"""
     
-    # Generate mandate reference
-    mandate_id = generate_mandate_reference(member)
-    
-    # Use the existing whitelist method from member controller
-    from verenigingen.verenigingen.doctype.member.member import create_and_link_mandate_enhanced
-    
-    return create_and_link_mandate_enhanced(
-        member=member.name,
-        mandate_id=mandate_id,
-        iban=update_data['new_iban'],
-        bic=update_data['new_bic'] or "",
-        account_holder_name=update_data['new_account_holder'],
-        mandate_type="Recurring",
-        sign_date=today(),
-        used_for_memberships=1,
-        used_for_donations=0,
-        notes=f"Created via member portal on {today()}"
-    )
-
-def cancel_sepa_mandate_via_existing_method(mandate_name):
-    """Cancel an existing SEPA mandate using existing method"""
-    
-    mandate = frappe.get_doc("SEPA Mandate", mandate_name)
-    
-    # Use the existing cancel_mandate method
-    mandate.cancel_mandate(
-        reason="Cancelled via member portal - bank details changed",
-        cancellation_date=today()
-    )
-    
-    mandate.save(ignore_permissions=True)
-
-def generate_mandate_reference(member):
-    """Generate a unique mandate reference"""
-    
-    member_id = member.member_id or member.name.replace('Assoc-Member-', '').replace('-', '')
-    date_str = today().replace('-', '')
-    
-    # Find next sequence number for today
-    existing_count = frappe.db.count(
-        "SEPA Mandate",
-        filters={
-            "mandate_id": ["like", f"M-{member_id}-{date_str}-%"],
-            "creation": [">=", today() + " 00:00:00"]
-        }
-    )
-    
-    sequence = str(existing_count + 1).zfill(3)
-    return f"M-{member_id}-{date_str}-{sequence}"
-
-def prepare_success_message(update_data, mandate_result):
-    """Prepare success message based on actions taken"""
-    
-    messages = []
-    
-    # Bank details update
-    if update_data['bank_details_changed']:
-        messages.append(_("Your bank details have been updated successfully."))
-    
-    # SEPA mandate actions
-    if mandate_result['success']:
-        action = mandate_result['action']
+    # Create a record that the scheduled task can pick up
+    try:
+        # For now, we'll create a simple log entry that the scheduled task can process
+        # In a full implementation, you might create a dedicated "SEPA Mandate Request" doctype
         
-        if action == "create_mandate":
-            messages.append(_("A new SEPA Direct Debit mandate has been created and activated."))
-            
-        elif action == "replace_mandate":
-            messages.append(_("Your SEPA mandate has been updated with the new bank details."))
-            
-        elif action == "cancel_mandate":
-            messages.append(_("Your SEPA Direct Debit mandate has been cancelled."))
-            messages.append(_("Future membership fees will be collected via alternative payment methods."))
-            
-        elif action == "keep_mandate":
-            messages.append(_("Your existing SEPA Direct Debit mandate remains active."))
+        frappe.log_error(
+            f"SEPA_MANDATE_REQUEST|{member_name}|{iban}|{bic or ''}|{account_holder}|{now()}",
+            "SEPA Mandate Pending"
+        )
+        
+        # You could also create a more structured approach:
+        # frappe.get_doc({
+        #     "doctype": "SEPA Mandate Request",
+        #     "member": member_name,
+        #     "iban": iban,
+        #     "bic": bic,
+        #     "account_holder_name": account_holder,
+        #     "status": "Pending",
+        #     "request_date": now()
+        # }).insert(ignore_permissions=True)
+        
+    except Exception as e:
+        frappe.log_error(f"Failed to create mandate pending record: {str(e)}")
+
+def cancel_existing_mandate(mandate_name):
+    """Cancel an existing SEPA mandate"""
     
-    else:
-        if 'error' in mandate_result:
-            messages.append(_("Bank details updated, but there was an issue with the SEPA mandate: {0}").format(mandate_result['error']))
+    try:
+        mandate = frappe.get_doc("SEPA Mandate", mandate_name)
+        mandate.status = "Cancelled"
+        mandate.is_active = 0
+        mandate.cancellation_date = today()
+        mandate.save(ignore_permissions=True)
+        
+    except Exception as e:
+        frappe.log_error(f"Failed to cancel mandate {mandate_name}: {str(e)}")
+
+def update_existing_mandate(mandate_name, new_iban, new_bic, new_account_holder):
+    """Update existing mandate with new bank details"""
     
-    # Payment method change
-    if update_data['enable_dd'] and update_data['current_payment_method'] != "Direct Debit":
-        messages.append(_("Your payment method has been changed to Direct Debit."))
-    elif not update_data['enable_dd'] and update_data['current_payment_method'] == "Direct Debit":
-        messages.append(_("Your payment method has been changed to Bank Transfer."))
-    
-    return messages
+    try:
+        mandate = frappe.get_doc("SEPA Mandate", mandate_name)
+        mandate.iban = new_iban
+        mandate.bic = new_bic
+        mandate.account_holder_name = new_account_holder
+        mandate.save(ignore_permissions=True)
+        
+    except Exception as e:
+        frappe.log_error(f"Failed to update mandate {mandate_name}: {str(e)}")

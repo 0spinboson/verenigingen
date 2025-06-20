@@ -11,6 +11,56 @@ def can_access_termination_functions_api():
     """Whitelisted API wrapper for can_access_termination_functions"""
     return can_access_termination_functions()
 
+@frappe.whitelist()
+def test_team_member_access(team_name=None):
+    """Test function to verify team member access permissions"""
+    user = frappe.session.user
+    
+    # Get user's roles
+    user_roles = frappe.get_roles(user)
+    
+    # Get user's member record
+    member = frappe.db.get_value("Member", {"user": user}, "name")
+    if not member:
+        return {"error": "No member record found", "user": user, "roles": user_roles}
+    
+    # Get user's volunteer record
+    volunteer = frappe.db.get_value("Volunteer", {"member": member}, "name")
+    if not volunteer:
+        return {"error": "No volunteer record found", "member": member, "roles": user_roles}
+    
+    # Get user's teams
+    user_teams = frappe.db.sql("""
+        SELECT DISTINCT parent, role_type, role
+        FROM `tabTeam Member` 
+        WHERE volunteer = %s AND is_active = 1
+    """, volunteer, as_dict=True)
+    
+    result = {
+        "user": user,
+        "roles": user_roles,
+        "member": member, 
+        "volunteer": volunteer,
+        "teams": user_teams,
+        "can_access_team": False,
+        "portal_url": None
+    }
+    
+    if team_name:
+        # Check if user can access specific team
+        can_access = frappe.db.exists("Team Member", {
+            "parent": team_name,
+            "volunteer": volunteer,
+            "is_active": 1
+        })
+        result["can_access_team"] = bool(can_access)
+        result["requested_team"] = team_name
+        
+        if can_access:
+            result["portal_url"] = f"/team_members?team={team_name}"
+    
+    return result
+
 def has_member_permission(doc, user=None, permission_type=None):
     """Direct permission check for Member doctype"""
     if not user:
@@ -448,3 +498,38 @@ def get_volunteer_permission_query(user):
     
     # Allow access to own volunteer records
     return f"`tabVolunteer`.member = '{requesting_member}'"
+
+def get_team_member_permission_query(user):
+    """Permission query for Team Member doctype"""
+    if not user:
+        user = frappe.session.user
+        
+    # Admin roles get full access
+    admin_roles = ["System Manager", "Membership Manager", "Verenigingen Administrator", "Volunteer Manager"]
+    if any(role in frappe.get_roles(user) for role in admin_roles):
+        return ""
+    
+    # Get requesting user's member and volunteer records
+    requesting_member = frappe.db.get_value("Member", {"user": user}, "name")
+    if not requesting_member:
+        return "1=0"  # No access if not a member
+    
+    requesting_volunteer = frappe.db.get_value("Volunteer", {"member": requesting_member}, "name")
+    if not requesting_volunteer:
+        return "1=0"  # No access if not a volunteer
+    
+    # Users can view team members for teams where they are members themselves
+    # This allows team members to see other members of their teams
+    user_teams = frappe.db.sql("""
+        SELECT DISTINCT parent 
+        FROM `tabTeam Member` 
+        WHERE volunteer = %s AND is_active = 1
+    """, requesting_volunteer)
+    
+    if not user_teams:
+        return "1=0"  # No access if not a member of any team
+    
+    team_names = [team[0] for team in user_teams]
+    team_filter = " OR ".join([f"`tabTeam Member`.parent = '{team}'" for team in team_names])
+    
+    return f"({team_filter})"

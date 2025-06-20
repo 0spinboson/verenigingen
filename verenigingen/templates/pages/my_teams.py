@@ -72,9 +72,9 @@ def get_context(context):
             "is_active": team.is_active
         })
         
-        # Check if user can view team members (if they are Team Leader or have desk access)
-        if team.role_type == "Team Leader":
-            teams_dict[team_name]["can_view_members"] = True
+        # Check if user can view team members (any team member can view other members)
+        # This is now controlled by the permission system in permissions.py
+        teams_dict[team_name]["can_view_members"] = True
     
     # Convert to list for template
     context.teams = list(teams_dict.values())

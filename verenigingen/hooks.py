@@ -18,9 +18,9 @@ required_apps = ["erpnext", "payments", "hrms"]
 # ------------------
 on_app_init = ["verenigingen.setup.doctype_overrides.setup_subscription_override"]
 app_include_css = [
-    "/assets/verenigingen/css/tailwind.css",
     "/assets/verenigingen/css/verenigingen_custom.css",
-    "/assets/verenigingen/css/volunteer_portal.css"
+    "/assets/verenigingen/css/volunteer_portal.css",
+    "/brand_css"
 ]
 app_include_js = [
     # Removed termination_dashboard.js as it's a React component and causes import errors
@@ -146,6 +146,12 @@ jinja = {
     ]
 }
 
+# Installation and Migration Hooks
+# ---------------------------------
+after_migrate = [
+    "verenigingen.verenigingen.doctype.brand_settings.brand_settings.create_default_brand_settings"
+]
+
 # Portal Configuration
 # --------------------
 # Custom portal menu items for association members (overrides ERPNext defaults)
@@ -175,6 +181,7 @@ permission_query_conditions = {
     "Chapter": "verenigingen.verenigingen.doctype.chapter.chapter.get_chapter_permission_query_conditions",
     "Chapter Member": "verenigingen.permissions.get_chapter_member_permission_query",
     "Team": "verenigingen.verenigingen.doctype.team.team.get_team_permission_query_conditions",
+    "Team Member": "verenigingen.permissions.get_team_member_permission_query",
     "Membership Termination Request": "verenigingen.permissions.get_termination_permission_query",
     "Volunteer": "verenigingen.permissions.get_volunteer_permission_query",
     "Address": "verenigingen.permissions.get_address_permission_query"

@@ -10,11 +10,13 @@ def execute(filters=None):
 	if not team:
 		frappe.throw("Team parameter is required")
 	
-	# Security check: Only allow team leaders/members to see their own team
+	# Security check: Only allow team members to see their own team
 	# or administrators to see any team
 	if not (frappe.session.user == "Administrator" or 
 	        "System Manager" in frappe.get_roles() or 
-	        "Verenigingen Administrator" in frappe.get_roles()):
+	        "Verenigingen Administrator" in frappe.get_roles() or
+	        "Membership Manager" in frappe.get_roles() or
+	        "Volunteer Manager" in frappe.get_roles()):
 		
 		# Check if user is a member of this team
 		user_email = frappe.session.user
@@ -32,11 +34,11 @@ def execute(filters=None):
 				})
 				
 				if not is_team_member:
-					frappe.throw("You can only view members of teams where you are a member")
+					frappe.throw(_("You can only view members of teams where you are a member"))
 			else:
-				frappe.throw("You must be registered as a volunteer to access this report")
+				frappe.throw(_("You must be registered as a volunteer to access this report"))
 		else:
-			frappe.throw("You must be a member to access this report")
+			frappe.throw(_("You must be a member to access this report"))
 		
 	columns = [
 		{
