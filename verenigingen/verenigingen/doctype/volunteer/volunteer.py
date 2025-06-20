@@ -671,6 +671,9 @@ class Volunteer(Document):
             employee = frappe.get_doc(employee_data)
             employee.insert(ignore_permissions=True)
             
+            # Assign limited employee role for expense declarations
+            self.assign_employee_role(employee.name)
+            
             # Update volunteer record with employee ID
             self.employee_id = employee.name
             self.save(ignore_permissions=True)
@@ -682,6 +685,39 @@ class Volunteer(Document):
         except Exception as e:
             frappe.log_error(f"Error creating minimal employee for volunteer {self.name}: {str(e)}", "Employee Creation Error")
             frappe.throw(_("Unable to create employee record: {0}").format(str(e)))
+    
+    def assign_employee_role(self, employee_id):
+        """Assign limited employee role to the user for expense declarations"""
+        try:
+            if not self.email:
+                frappe.logger().warning(f"No email for volunteer {self.name}, cannot assign employee role")
+                return
+            
+            # Check if user exists
+            if not frappe.db.exists("User", self.email):
+                frappe.logger().warning(f"User {self.email} does not exist, cannot assign employee role")
+                return
+            
+            user_doc = frappe.get_doc("User", self.email)
+            
+            # Define the limited employee role
+            employee_role = "Employee"
+            
+            # Check if user already has the role
+            existing_roles = [role.role for role in user_doc.roles]
+            if employee_role not in existing_roles:
+                # Add the employee role
+                user_doc.append("roles", {
+                    "role": employee_role
+                })
+                user_doc.save(ignore_permissions=True)
+                frappe.logger().info(f"Assigned {employee_role} role to user {self.email} for volunteer {self.name}")
+            else:
+                frappe.logger().info(f"User {self.email} already has {employee_role} role")
+                
+        except Exception as e:
+            frappe.log_error(f"Error assigning employee role for volunteer {self.name}: {str(e)}", "Role Assignment Error")
+            # Don't throw here as this is not critical for volunteer creation
     
 # Integration functions to be called from other doctypes
 

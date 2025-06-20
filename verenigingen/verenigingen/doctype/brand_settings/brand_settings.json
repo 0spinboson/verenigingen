@@ -12,6 +12,8 @@
   "is_active",
   "column_break_3",
   "description",
+  "section_break_4",
+  "logo",
   "section_break_5",
   "primary_color",
   "primary_hover_color",
@@ -58,6 +60,17 @@
    "fieldname": "description",
    "fieldtype": "Text",
    "label": "Description"
+  },
+  {
+   "fieldname": "section_break_4",
+   "fieldtype": "Section Break",
+   "label": "Logo & Branding"
+  },
+  {
+   "description": "Upload organization logo (recommended: PNG or SVG, max 2MB)",
+   "fieldname": "logo",
+   "fieldtype": "Attach Image",
+   "label": "Organization Logo"
   },
   {
    "fieldname": "section_break_5",

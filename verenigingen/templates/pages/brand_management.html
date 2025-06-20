@@ -131,6 +131,24 @@
     margin-left: 0.75rem;
 }
 
+.mini-logo-preview {
+    margin: 0.5rem 0;
+    padding: 0.5rem;
+    background: white;
+    border-radius: 4px;
+    border: 1px solid #e5e7eb;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    max-width: 120px;
+}
+
+.mini-logo {
+    max-height: 30px;
+    max-width: 100px;
+    object-fit: contain;
+}
+
 .color-mini-preview {
     display: flex;
     gap: 0.5rem;
@@ -232,6 +250,45 @@
     color: #ccc;
 }
 
+/* Logo preview styles */
+.logo-preview {
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+}
+
+.logo-preview-title {
+    margin: 0 0 1rem 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #374151;
+}
+
+.logo-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 1rem;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+}
+
+.current-logo {
+    max-height: 80px;
+    max-width: 200px;
+    object-fit: contain;
+}
+
+.color-section-title {
+    margin: 1.5rem 0 1rem 0;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #374151;
+}
+
 @media (max-width: 768px) {
     .brand-management-page {
         padding: 1rem;
@@ -276,7 +333,18 @@
 
     <!-- Current Active Preview -->
     <div class="current-preview">
-        <h3>{{ _("Current Active Brand Colors") }}</h3>
+        <h3>{{ _("Current Active Brand Settings") }}</h3>
+        
+        {% if active_settings.logo %}
+        <div class="logo-preview">
+            <h4 class="logo-preview-title">{{ _("Current Logo") }}</h4>
+            <div class="logo-container">
+                <img src="{{ active_settings.logo }}" alt="{{ _('Organization Logo') }}" class="current-logo">
+            </div>
+        </div>
+        {% endif %}
+        
+        <h4 class="color-section-title">{{ _("Brand Colors") }}</h4>
         <div class="color-preview-grid">
             <div class="color-preview">
                 <div class="color-swatch" style="background-color: {{ active_settings.primary_color }}"></div>
@@ -322,6 +390,11 @@
                     </h4>
                     {% if setting.description %}
                     <p>{{ setting.description }}</p>
+                    {% endif %}
+                    {% if setting.logo %}
+                    <div class="mini-logo-preview">
+                        <img src="{{ setting.logo }}" alt="{{ _('Logo') }}" class="mini-logo">
+                    </div>
                     {% endif %}
                     <div class="color-mini-preview">
                         <div class="color-mini" style="background-color: {{ setting.primary_color }}" title="{{ _('Primary') }}: {{ setting.primary_color }}"></div>

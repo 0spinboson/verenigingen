@@ -17,6 +17,7 @@
   "user",
   "column_break_5",
   "email",
+  "employee_id",
   "status",
   "start_date",
   "volunteer_profile_section",
@@ -68,6 +69,14 @@
    "label": "Organization Email",
    "reqd": 1,
    "unique": 1
+  },
+  {
+   "description": "Linked Employee record for expense management",
+   "fieldname": "employee_id",
+   "fieldtype": "Link",
+   "label": "Employee ID",
+   "options": "Employee",
+   "read_only": 1
   },
   {
    "depends_on": "eval:!doc.__islocal;",

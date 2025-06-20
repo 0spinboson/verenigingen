@@ -24,7 +24,7 @@ def get_context(context):
     
     # Get all brand settings
     all_settings = frappe.get_all("Brand Settings", 
-        fields=["name", "settings_name", "description", "is_active", "primary_color", "secondary_color", "accent_color"],
+        fields=["name", "settings_name", "description", "is_active", "logo", "primary_color", "secondary_color", "accent_color"],
         order_by="is_active desc, modified desc")
     
     context.brand_settings = all_settings

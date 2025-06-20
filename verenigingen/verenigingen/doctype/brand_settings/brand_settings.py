@@ -57,10 +57,45 @@ class BrandSettings(Document):
 		except ValueError:
 			return False
 	
+	def get_color_brightness(self, hex_color):
+		"""Calculate brightness of a hex color (0-255 scale)"""
+		if not hex_color or not hex_color.startswith('#'):
+			return 128  # Default medium brightness
+		
+		hex_part = hex_color[1:]
+		
+		# Convert 3-digit hex to 6-digit
+		if len(hex_part) == 3:
+			hex_part = ''.join([c*2 for c in hex_part])
+		
+		try:
+			r = int(hex_part[0:2], 16)
+			g = int(hex_part[2:4], 16) 
+			b = int(hex_part[4:6], 16)
+			
+			# Calculate perceived brightness using standard formula
+			brightness = (r * 299 + g * 587 + b * 114) / 1000
+			return brightness
+		except (ValueError, IndexError):
+			return 128  # Default medium brightness
+	
+	def get_contrasting_text_color(self, background_color):
+		"""Get white or black text color based on background brightness"""
+		brightness = self.get_color_brightness(background_color)
+		return "#ffffff" if brightness < 128 else "#000000"
+	
 	def on_update(self):
 		"""Clear cache when settings are updated"""
 		frappe.cache().delete_key("active_brand_settings")
 		frappe.cache().delete_key("brand_settings_css")
+		frappe.cache().delete_key("organization_logo")
+		
+		# Trigger CSS rebuild for brand changes
+		if self.is_active:
+			frappe.publish_realtime("brand_settings_updated", {
+				"message": "Brand settings updated",
+				"settings_name": self.settings_name
+			})
 
 @frappe.whitelist()
 def get_active_brand_settings():
@@ -84,6 +119,7 @@ def get_active_brand_settings():
 	
 	# Return default settings if none found
 	default_settings = {
+		"logo": None,
 		"primary_color": "#cf3131",
 		"primary_hover_color": "#b82828", 
 		"secondary_color": "#01796f",
@@ -112,6 +148,14 @@ def generate_brand_css():
 	
 	settings = get_active_brand_settings()
 	
+	# Create a temporary BrandSettings instance to access color calculation methods
+	brand_instance = BrandSettings()
+	
+	# Calculate contrasting text colors for smart styling
+	primary_text = brand_instance.get_contrasting_text_color(settings['primary_color'])
+	secondary_text = brand_instance.get_contrasting_text_color(settings['secondary_color'])
+	accent_text = brand_instance.get_contrasting_text_color(settings['accent_color'])
+	
 	css = f"""
 /* Brand Settings CSS - Auto-generated */
 :root {{
@@ -129,6 +173,9 @@ def generate_brand_css():
 	--brand-text-secondary: {settings['text_secondary_color']};
 	--brand-bg-primary: {settings['background_primary_color']};
 	--brand-bg-secondary: {settings['background_secondary_color']};
+	--brand-primary-text: {primary_text};
+	--brand-secondary-text: {secondary_text};
+	--brand-accent-text: {accent_text};
 }}
 
 /* Override Tailwind classes with brand colors */
@@ -217,12 +264,131 @@ def generate_brand_css():
 	border-color: var(--brand-primary) !important;
 	box-shadow: 0 0 0 2px rgba(207, 49, 49, 0.25) !important;
 }}
+
+/* Compact section styling for better space utilization */
+.page-header {{
+	padding: 1.25rem 1.5rem !important;
+	margin-bottom: 1.5rem !important;
+}}
+
+.page-header h1 {{
+	margin: 0 0 0.25rem 0 !important;
+	font-size: 2rem !important;
+	color: var(--brand-primary-text) !important;
+}}
+
+.page-header p {{
+	margin: 0 !important;
+	font-size: 1rem !important;
+	opacity: 0.85 !important;
+}}
+
+/* Compact info boxes */
+.bg-teal-50, .bg-blue-50, .bg-yellow-50, .bg-green-50, .bg-red-50 {{
+	padding: 0.875rem 1rem !important;
+	margin-bottom: 1rem !important;
+}}
+
+/* Brand-colored headers with smart text colors */
+.bg-red-600, .bg-teal-600, .bg-purple-600 {{
+	color: var(--brand-primary-text) !important;
+}}
+
+.bg-red-600 h1, .bg-red-600 h2, .bg-red-600 h3, .bg-red-600 h4 {{
+	color: var(--brand-primary-text) !important;
+}}
+
+.bg-teal-600 h1, .bg-teal-600 h2, .bg-teal-600 h3, .bg-teal-600 h4 {{
+	color: var(--brand-secondary-text) !important;
+}}
+
+.bg-purple-600 h1, .bg-purple-600 h2, .bg-purple-600 h3, .bg-purple-600 h4 {{
+	color: var(--brand-accent-text) !important;
+}}
+
+/* Compact button styling */
+.btn-primary, .btn-brand-primary {{
+	color: var(--brand-primary-text) !important;
+}}
+
+.btn-secondary, .btn-brand-secondary {{
+	color: var(--brand-secondary-text) !important;
+}}
+
+/* More compact card spacing */
+.rounded-xl {{
+	padding: 1.25rem !important;
+}}
+
+.rounded-xl h3, .rounded-xl h4 {{
+	margin-bottom: 0.75rem !important;
+}}
+
+/* Expense form button override */
+.bg-green-600, .bg-green-500 {{
+	background-color: var(--brand-primary) !important;
+	color: var(--brand-primary-text) !important;
+}}
+
+.bg-green-600:hover, .bg-green-500:hover {{
+	background-color: var(--brand-primary-hover) !important;
+}}
+
+/* Logo integration styles */
+.organization-logo {{
+	max-height: 60px;
+	max-width: 200px;
+	object-fit: contain;
+	margin-bottom: 1rem;
+}}
+
+.header-with-logo {{
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	margin-bottom: 2rem;
+}}
+
+.header-with-logo .organization-logo {{
+	margin-bottom: 0;
+}}
+
+/* Responsive logo adjustments */
+@media (max-width: 768px) {{
+	.header-with-logo {{
+		flex-direction: column;
+		text-align: center;
+		gap: 0.5rem;
+	}}
+	
+	.organization-logo {{
+		max-height: 40px;
+		margin-bottom: 0.5rem;
+	}}
+}}
 """
 	
 	# Cache for 1 hour
 	frappe.cache().set_value("brand_settings_css", css, expires_in_sec=3600)
 	
 	return css
+
+@frappe.whitelist()
+def get_organization_logo():
+	"""Get the currently active organization logo"""
+	# Try to get from cache first
+	cached_logo = frappe.cache().get_value("organization_logo")
+	if cached_logo:
+		return cached_logo
+	
+	settings = get_active_brand_settings()
+	logo_url = settings.get('logo')
+	
+	# Cache for 1 hour
+	if logo_url:
+		frappe.cache().set_value("organization_logo", logo_url, expires_in_sec=3600)
+	
+	return logo_url
 
 @frappe.whitelist()
 def create_default_brand_settings():
