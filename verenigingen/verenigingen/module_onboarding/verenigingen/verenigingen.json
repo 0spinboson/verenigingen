@@ -1,91 +1,41 @@
 {
- "category": "Modules",
- "creation": "2025-06-17 00:00:00.000000",
+ "allow_roles": [
+  {
+   "role": "System Manager"
+  },
+  {
+   "role": "Verenigingen Administrator"
+  }
+ ],
+ "creation": "2025-06-21 14:48:21.253752",
  "docstatus": 0,
  "doctype": "Module Onboarding",
- "documentation_url": "",
+ "documentation_url": "https://github.com/verenigingen/docs",
  "idx": 0,
  "is_complete": 0,
- "modified": "2025-06-17 00:00:00.000000",
+ "modified": "2025-06-21 14:48:21.253752",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Verenigingen",
  "owner": "Administrator",
  "steps": [
   {
-   "action": "Create Entry",
-   "action_label": "Create your first Member",
-   "creation_doctype": "Member",
-   "description": "Create a member profile to get started with membership management.",
-   "is_complete": 0,
-   "is_mandatory": 1,
-   "is_skipped": 0,
-   "reference_document": "Member",
-   "show_form_tour": 0,
-   "show_full_form": 0,
-   "step": "Create Member",
-   "title": "Create Member",
-   "validate_action": 1
+   "step": "Verenigingen-Setup-Settings"
   },
   {
-   "action": "Create Entry",
-   "action_label": "Set up Membership Types",
-   "creation_doctype": "Membership Type",
-   "description": "Define the different types of memberships your association offers.",
-   "is_complete": 0,
-   "is_mandatory": 1,
-   "is_skipped": 0,
-   "reference_document": "Membership Type",
-   "show_form_tour": 0,
-   "show_full_form": 0,
-   "step": "Create Membership Type",
-   "title": "Create Membership Type",
-   "validate_action": 1
+   "step": "Verenigingen-Create-Member"
   },
   {
-   "action": "Create Entry",
-   "action_label": "Create your first Membership",
-   "creation_doctype": "Membership",
-   "description": "Link members to their membership types and track their status.",
-   "is_complete": 0,
-   "is_mandatory": 1,
-   "is_skipped": 0,
-   "reference_document": "Membership",
-   "show_form_tour": 0,
-   "show_full_form": 0,
-   "step": "Create Membership",
-   "title": "Create Membership",
-   "validate_action": 1
+   "step": "Verenigingen-Create-Membership-Type"
   },
   {
-   "action": "Create Entry", 
-   "action_label": "Set up your first Chapter",
-   "creation_doctype": "Chapter",
-   "description": "Organize members by geographic regions or local chapters.",
-   "is_complete": 0,
-   "is_mandatory": 0,
-   "is_skipped": 0,
-   "reference_document": "Chapter",
-   "show_form_tour": 0,
-   "show_full_form": 0,
-   "step": "Create Chapter",
-   "title": "Create Chapter",
-   "validate_action": 1
+   "step": "Verenigingen-Create-Membership"
   },
   {
-   "action": "Create Entry",
-   "action_label": "Register your first Volunteer",
-   "creation_doctype": "Volunteer",
-   "description": "Track volunteers and their activities within your association.",
-   "is_complete": 0,
-   "is_mandatory": 0,
-   "is_skipped": 0,
-   "reference_document": "Volunteer",
-   "show_form_tour": 0,
-   "show_full_form": 0,
-   "step": "Create Volunteer",
-   "title": "Create Volunteer",
-   "validate_action": 1
+   "step": "Verenigingen-Create-Chapter"
+  },
+  {
+   "step": "Verenigingen-Create-Volunteer"
   }
  ],
  "subtitle": "Members, Volunteers, Chapters, and more.",
