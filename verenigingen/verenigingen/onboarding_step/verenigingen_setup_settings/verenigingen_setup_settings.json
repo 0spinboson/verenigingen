@@ -1,7 +1,7 @@
 {
  "action": "Create Entry",
  "action_label": "Configure basic settings",
- "creation": "2025-06-21 14:48:21.182619",
+ "creation": "2025-06-21 15:30:44.506498",
  "description": "Configure basic settings for your association including default membership types, email templates, and system preferences.",
  "docstatus": 0,
  "doctype": "Onboarding Step",
@@ -9,7 +9,7 @@
  "is_complete": 0,
  "is_single": 1,
  "is_skipped": 0,
- "modified": "2025-06-21 14:48:21.182619",
+ "modified": "2025-06-21 15:30:44.506498",
  "modified_by": "Administrator",
  "name": "Verenigingen-Setup-Settings",
  "owner": "Administrator",

@@ -653,9 +653,10 @@
    "type": "Link"
   }
  ],
- "modified": "2025-06-21 14:48:21.335720",
+ "modified": "2025-06-21 15:30:44.672029",
  "modified_by": "Administrator",
  "module": "Verenigingen",
+ "module_onboarding": "Verenigingen",
  "name": "Verenigingen",
  "number_cards": [],
  "owner": "Administrator",

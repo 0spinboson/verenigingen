@@ -1,7 +1,7 @@
 {
  "action": "Create Entry",
  "action_label": "Set up your first Chapter",
- "creation": "2025-06-21 14:48:21.242960",
+ "creation": "2025-06-21 15:30:44.549948",
  "description": "Organize members by geographic regions or local chapters.",
  "docstatus": 0,
  "doctype": "Onboarding Step",
@@ -9,7 +9,7 @@
  "is_complete": 0,
  "is_single": 0,
  "is_skipped": 0,
- "modified": "2025-06-21 14:48:21.242960",
+ "modified": "2025-06-21 15:30:44.549948",
  "modified_by": "Administrator",
  "name": "Verenigingen-Create-Chapter",
  "owner": "Administrator",

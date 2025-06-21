@@ -1478,6 +1478,154 @@ def final_onboarding_verification():
         return {"success": False, "message": str(e)}
 
 @frappe.whitelist()
+def install_email_templates_ui():
+    """User-friendly endpoint for installing email templates from onboarding"""
+    try:
+        # Check what templates are missing vs available
+        basic_templates = [
+            "membership_application_confirmation",
+            "membership_welcome", 
+            "volunteer_welcome",
+            "membership_payment_failed"
+        ]
+        
+        missing_templates = []
+        existing_templates = []
+        
+        for template_name in basic_templates:
+            if frappe.db.exists("Email Template", template_name):
+                existing_templates.append(template_name)
+            else:
+                missing_templates.append(template_name)
+        
+        # If no templates are missing, mark step as complete
+        if not missing_templates:
+            try:
+                step = frappe.get_doc('Onboarding Step', 'Verenigingen-Install-Email-Templates')
+                step.is_complete = 1
+                step.save(ignore_permissions=True)
+                frappe.db.commit()
+            except:
+                pass  # If step doesn't exist, ignore
+            
+            return {
+                "success": True,
+                "message": "✅ All email templates are already installed!",
+                "existing_templates": existing_templates,
+                "missing_templates": [],
+                "action_taken": "none",
+                "step_completed": True
+            }
+        
+        # Install missing templates
+        print("📧 Installing missing email templates...")
+        
+        # Install basic templates
+        basic_count = create_application_email_templates()
+        
+        # Install enhanced templates
+        enhanced_count = 0
+        try:
+            from verenigingen.api.membership_application_review import create_default_email_templates
+            enhanced_count = create_default_email_templates()
+        except Exception as e:
+            print(f"Enhanced templates skipped: {str(e)}")
+        
+        # Install comprehensive templates
+        comprehensive_count = 0
+        try:
+            from verenigingen.api.email_template_manager import create_comprehensive_email_templates
+            comprehensive_count = create_comprehensive_email_templates()
+        except Exception as e:
+            print(f"Comprehensive templates skipped: {str(e)}")
+        
+        total_installed = basic_count + enhanced_count + comprehensive_count
+        
+        # Check what's now available
+        final_missing = []
+        final_existing = []
+        
+        for template_name in basic_templates:
+            if frappe.db.exists("Email Template", template_name):
+                final_existing.append(template_name)
+            else:
+                final_missing.append(template_name)
+        
+        # Mark step as complete if all basic templates are now available
+        step_completed = False
+        if not final_missing:
+            try:
+                step = frappe.get_doc('Onboarding Step', 'Verenigingen-Install-Email-Templates')
+                step.is_complete = 1
+                step.save(ignore_permissions=True)
+                frappe.db.commit()
+                step_completed = True
+            except:
+                pass
+        
+        return {
+            "success": True,
+            "message": f"✅ Installed {total_installed} email templates successfully!",
+            "templates_installed": total_installed,
+            "basic_count": basic_count,
+            "enhanced_count": enhanced_count,
+            "comprehensive_count": comprehensive_count,
+            "existing_templates": final_existing,
+            "missing_templates": final_missing,
+            "action_taken": "installed",
+            "step_completed": step_completed
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"❌ Error installing email templates: {str(e)}",
+            "action_taken": "error"
+        }
+
+@frappe.whitelist()
+def test_email_template_page():
+    """Test that the email template installation page works"""
+    try:
+        # Check what templates are missing vs available (same logic as the page)
+        basic_templates = [
+            "membership_application_confirmation",
+            "membership_welcome", 
+            "volunteer_welcome",
+            "membership_payment_failed"
+        ]
+        
+        missing_templates = []
+        existing_templates = []
+        
+        for template_name in basic_templates:
+            if frappe.db.exists("Email Template", template_name):
+                existing_templates.append({
+                    "name": template_name,
+                    "title": template_name.replace("_", " ").title()
+                })
+            else:
+                missing_templates.append({
+                    "name": template_name,
+                    "title": template_name.replace("_", " ").title()
+                })
+        
+        return {
+            "success": True,
+            "page_context": {
+                "missing_templates_count": len(missing_templates),
+                "existing_templates_count": len(existing_templates),
+                "all_installed": len(missing_templates) == 0,
+                "page_title": "Install Email Templates",
+                "missing_templates": [t["title"] for t in missing_templates],
+                "existing_templates": [t["title"] for t in existing_templates]
+            }
+        }
+        
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@frappe.whitelist()
 def add_module_onboarding_custom_field():
     """Add module_onboarding as a custom field to Workspace"""
     try:
@@ -1885,6 +2033,21 @@ def reinstall_onboarding():
                 "show_form_tour": 0,
                 "show_full_form": 0,
                 "validate_action": 1
+            },
+            {
+                "name": "Verenigingen-Install-Email-Templates",
+                "title": "Install Email Templates",
+                "action": "Go to Page",
+                "action_label": "Install missing email templates",
+                "path": "/install_email_templates",
+                "description": "Install all required email templates for membership applications, welcome messages, payment notifications, and termination processes. This includes templates for application confirmations, welcome emails, payment failures, and termination notices.",
+                "is_complete": 0,
+                "is_mandatory": 0,
+                "is_skipped": 0,
+                "reference_document": "Email Template",
+                "show_form_tour": 0,
+                "show_full_form": 0,
+                "validate_action": 0
             },
             {
                 "name": "Verenigingen-Create-Member",
