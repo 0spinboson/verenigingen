@@ -580,15 +580,24 @@ def setup_membership_application_system():
     
     try:
         # Create email templates
+        print("   📧 Creating basic application email templates...")
         create_application_email_templates()
         
         # Create enhanced rejection email templates
-        from verenigingen.api.membership_application_review import create_default_email_templates
-        create_default_email_templates()
+        try:
+            print("   📧 Creating enhanced rejection email templates...")
+            from verenigingen.api.membership_application_review import create_default_email_templates
+            create_default_email_templates()
+        except Exception as e:
+            print(f"   ⚠️ Enhanced rejection templates failed: {str(e)}")
         
         # Create comprehensive email templates for all notifications
-        from verenigingen.api.email_template_manager import create_comprehensive_email_templates
-        create_comprehensive_email_templates()
+        try:
+            print("   📧 Creating comprehensive email templates...")
+            from verenigingen.api.email_template_manager import create_comprehensive_email_templates
+            create_comprehensive_email_templates()
+        except Exception as e:
+            print(f"   ⚠️ Comprehensive templates failed: {str(e)}")
         
         # Create web pages configuration
         setup_application_web_pages()
@@ -753,21 +762,28 @@ def create_application_email_templates():
     created_count = 0
     for template_data in templates:
         if not frappe.db.exists("Email Template", template_data["name"]):
-            template = frappe.get_doc({
-                "doctype": "Email Template",
-                "name": template_data["name"],
-                "subject": template_data["subject"],
-                "use_html": 1,
-                "response": template_data["response"]
-            })
-            template.insert(ignore_permissions=True)
-            created_count += 1
-            print(f"   ✓ Created email template: {template_data['name']}")
+            try:
+                template = frappe.get_doc({
+                    "doctype": "Email Template",
+                    "name": template_data["name"],
+                    "subject": template_data["subject"],
+                    "use_html": 1,
+                    "response": template_data["response"]
+                })
+                template.insert(ignore_permissions=True)
+                created_count += 1
+                print(f"   ✓ Created email template: {template_data['name']}")
+            except Exception as e:
+                print(f"   ❌ Failed to create email template '{template_data['name']}': {str(e)}")
         else:
             print(f"   ✓ Email template already exists: {template_data['name']}")
     
     if created_count > 0:
-        print(f"   📧 Created {created_count} new email templates")
+        try:
+            frappe.db.commit()
+            print(f"   📧 Created {created_count} new email templates")
+        except Exception as e:
+            print(f"   ⚠️ Failed to commit email templates: {str(e)}")
     
     return created_count
 
@@ -1108,6 +1124,80 @@ def verify_donation_type_setup():
             "total_count": len(donation_types),
             "default_donation_type": default_type,
             "message": f"Found {len(donation_types)} donation types, default: {default_type}"
+        }
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@frappe.whitelist()
+def create_email_templates_manual():
+    """Manual endpoint to create email templates"""
+    try:
+        print("🔧 Manually creating email templates...")
+        
+        # Create basic templates
+        basic_count = create_application_email_templates()
+        
+        # Create enhanced templates
+        enhanced_count = 0
+        try:
+            from verenigingen.api.membership_application_review import create_default_email_templates
+            enhanced_count = create_default_email_templates()
+        except Exception as e:
+            print(f"Enhanced templates failed: {str(e)}")
+        
+        # Create comprehensive templates
+        comprehensive_count = 0
+        try:
+            from verenigingen.api.email_template_manager import create_comprehensive_email_templates
+            comprehensive_count = create_comprehensive_email_templates()
+        except Exception as e:
+            print(f"Comprehensive templates failed: {str(e)}")
+        
+        total_count = basic_count + enhanced_count + comprehensive_count
+        
+        return {
+            "success": True,
+            "message": f"Created {total_count} email templates",
+            "basic_count": basic_count,
+            "enhanced_count": enhanced_count,
+            "comprehensive_count": comprehensive_count
+        }
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+@frappe.whitelist()
+def verify_email_templates():
+    """Verify email templates are properly installed"""
+    try:
+        # Check for basic templates
+        basic_templates = [
+            "membership_application_confirmation",
+            "membership_welcome", 
+            "volunteer_welcome",
+            "membership_payment_failed"
+        ]
+        
+        existing_templates = []
+        missing_templates = []
+        
+        for template_name in basic_templates:
+            if frappe.db.exists("Email Template", template_name):
+                existing_templates.append(template_name)
+            else:
+                missing_templates.append(template_name)
+        
+        # Get all email templates with verenigingen-related names
+        all_templates = frappe.get_all("Email Template", 
+            filters=[["name", "like", "%membership%"], ["name", "like", "%volunteer%"], ["name", "like", "%termination%"]],
+            fields=["name", "subject"])
+        
+        return {
+            "success": True,
+            "existing_basic_templates": existing_templates,
+            "missing_basic_templates": missing_templates,
+            "all_related_templates": all_templates,
+            "total_related_count": len(all_templates),
+            "message": f"Found {len(existing_templates)}/{len(basic_templates)} basic templates, {len(all_templates)} total related templates"
         }
     except Exception as e:
         return {"success": False, "message": str(e)}
