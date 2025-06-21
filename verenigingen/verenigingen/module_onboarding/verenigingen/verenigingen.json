@@ -7,13 +7,13 @@
    "role": "Verenigingen Administrator"
   }
  ],
- "creation": "2025-06-21 14:48:21.253752",
+ "creation": "2025-06-21 15:30:44.560741",
  "docstatus": 0,
  "doctype": "Module Onboarding",
  "documentation_url": "https://github.com/verenigingen/docs",
  "idx": 0,
  "is_complete": 0,
- "modified": "2025-06-21 14:48:21.253752",
+ "modified": "2025-06-21 15:30:44.560741",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Verenigingen",
@@ -21,6 +21,9 @@
  "steps": [
   {
    "step": "Verenigingen-Setup-Settings"
+  },
+  {
+   "step": "Verenigingen-Install-Email-Templates"
   },
   {
    "step": "Verenigingen-Create-Member"
