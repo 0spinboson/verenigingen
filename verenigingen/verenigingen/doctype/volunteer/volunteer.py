@@ -52,6 +52,11 @@ class Volunteer(Document):
         """Actions before saving volunteer record"""
         # Update volunteer status based on assignments
         self.update_status()
+    
+    def after_insert(self):
+        """Actions after inserting new volunteer record"""
+        # Automatically create employee record for expense functionality
+        self.create_employee_if_needed()
         
     def update_status(self):
         """Update volunteer status based on assignments"""
@@ -732,6 +737,28 @@ class Volunteer(Document):
         except Exception as e:
             frappe.log_error(f"Error assigning employee role for volunteer {self.name}: {str(e)}", "Role Assignment Error")
             # Don't throw here as this is not critical for volunteer creation
+    
+    def create_employee_if_needed(self):
+        """Create employee record if it doesn't exist, for automatic expense functionality"""
+        try:
+            # Only create employee if volunteer has email and no existing employee
+            if self.email and not self.employee_id:
+                frappe.logger().info(f"Auto-creating employee record for new volunteer: {self.name}")
+                employee_id = self.create_minimal_employee()
+                if employee_id:
+                    frappe.logger().info(f"Successfully auto-created employee {employee_id} for volunteer {self.name}")
+                else:
+                    frappe.logger().warning(f"Failed to auto-create employee for volunteer {self.name}")
+            else:
+                if not self.email:
+                    frappe.logger().info(f"Skipping employee creation for volunteer {self.name} - no email address")
+                elif self.employee_id:
+                    frappe.logger().info(f"Skipping employee creation for volunteer {self.name} - employee already exists: {self.employee_id}")
+                    
+        except Exception as e:
+            # Log error but don't fail volunteer creation
+            frappe.log_error(f"Error auto-creating employee for volunteer {self.name}: {str(e)}", "Auto Employee Creation Error")
+            frappe.logger().warning(f"Auto employee creation failed for volunteer {self.name}: {str(e)}")
     
     def get_default_expense_approver(self):
         """Get the default expense approver (treasurer) for expense claims"""
