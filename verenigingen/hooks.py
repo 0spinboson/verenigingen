@@ -12,7 +12,7 @@ app_email = "info@verenigingen.org"
 app_license = "AGPL-3"
 
 # Required apps - Frappe will ensure these are installed before this app
-required_apps = ["erpnext", "payments", "hrms"]
+required_apps = ["erpnext", "payments", "hrms", "banking"]
 
 # Includes in <head>
 # ------------------

@@ -765,25 +765,42 @@ class Volunteer(Document):
         try:
             # Method 1: Look for treasurer in national board settings
             settings = frappe.get_single("Verenigingen Settings")
-            if settings.national_board_chapter:
+            if settings and settings.national_board_chapter:
                 # Get board members with financial permissions from national chapter
+                # Try to get treasurer first
                 board_members = frappe.get_all(
-                    "Chapter Member",
+                    "Chapter Board Member",
                     filters={
                         "parent": settings.national_board_chapter,
-                        "role": ["in", ["Treasurer", "Financial Officer", "Board Chair", "Secretary-Treasurer"]],
+                        "chapter_role": "Treasurer",
                         "is_active": 1
                     },
-                    fields=["member", "role"],
-                    order_by="case when role='Treasurer' then 1 when role='Financial Officer' then 2 when role='Secretary-Treasurer' then 3 else 4 end"
+                    fields=["volunteer", "chapter_role"],
+                    limit=1
                 )
                 
+                # If no treasurer, try other financial roles
+                if not board_members:
+                    board_members = frappe.get_all(
+                        "Chapter Board Member",
+                        filters={
+                            "parent": settings.national_board_chapter,
+                            "chapter_role": ["in", ["Financial Officer", "Secretary-Treasurer", "Board Chair"]],
+                            "is_active": 1
+                        },
+                        fields=["volunteer", "chapter_role"],
+                        limit=1
+                    )
+                
                 for board_member in board_members:
-                    # Get the member's email/user
-                    member = frappe.get_doc("Member", board_member.member)
-                    if member.email and frappe.db.exists("User", member.email):
-                        frappe.logger().info(f"Found default expense approver: {member.email} ({board_member.role})")
-                        return member.email
+                    # Get the volunteer's email
+                    volunteer = frappe.get_doc("Volunteer", board_member.volunteer)
+                    if volunteer.email and frappe.db.exists("User", volunteer.email):
+                        frappe.logger().info(f"Found default expense approver: {volunteer.email} ({board_member.chapter_role})")
+                        return volunteer.email
+                    elif volunteer.personal_email and frappe.db.exists("User", volunteer.personal_email):
+                        frappe.logger().info(f"Found default expense approver: {volunteer.personal_email} ({board_member.chapter_role})")
+                        return volunteer.personal_email
             
             # Method 2: Look for users with "Verenigingen Administrator" role
             admin_users = frappe.get_all(

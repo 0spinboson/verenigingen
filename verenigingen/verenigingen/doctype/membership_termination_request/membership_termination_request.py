@@ -123,7 +123,9 @@ class MembershipTerminationRequest(Document):
             cancel_subscription_safe,
             update_invoice_safe,
             suspend_team_memberships_safe,
-            deactivate_user_account_safe
+            deactivate_user_account_safe,
+            terminate_volunteer_records_safe,
+            terminate_employee_records_safe
         )
         
         results = {
@@ -135,7 +137,11 @@ class MembershipTerminationRequest(Document):
             "subscriptions_cancelled": 0,
             "invoices_updated": 0,
             "customer_updated": False,
-            "member_updated": False
+            "member_updated": False,
+            "volunteers_terminated": 0,
+            "volunteer_expenses_cancelled": 0,
+            "employees_terminated": 0,
+            "user_deactivated": False
         }
         
         # Get member document
@@ -230,6 +236,29 @@ class MembershipTerminationRequest(Document):
         else:
             results["user_deactivated"] = False
             results["errors"].append("Failed to deactivate user account")
+        
+        # 5a. Terminate volunteer records
+        volunteer_results = terminate_volunteer_records_safe(
+            member_doc.name,
+            self.termination_type,
+            self.termination_date or today(),
+            termination_reason
+        )
+        results["volunteers_terminated"] = volunteer_results["volunteers_terminated"]
+        results["volunteer_expenses_cancelled"] = volunteer_results["volunteer_expenses_cancelled"]
+        results["actions_taken"].extend(volunteer_results["actions_taken"])
+        results["errors"].extend(volunteer_results["errors"])
+        
+        # 5b. Terminate employee records
+        employee_results = terminate_employee_records_safe(
+            member_doc.name,
+            self.termination_type,
+            self.termination_date or today(),
+            termination_reason
+        )
+        results["employees_terminated"] = employee_results["employees_terminated"]
+        results["actions_taken"].extend(employee_results["actions_taken"])
+        results["errors"].extend(employee_results["errors"])
         
         # 6. Update member status
         if update_member_status_safe(
@@ -586,6 +615,10 @@ def get_termination_impact_preview(member):
             "board_positions": 0,
             "outstanding_invoices": 0,
             "subscriptions": 0,
+            "volunteer_records": 0,
+            "pending_volunteer_expenses": 0,
+            "employee_records": 0,
+            "user_account": False,
             "customer_linked": False
         }
 

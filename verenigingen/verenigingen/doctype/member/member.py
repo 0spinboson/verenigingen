@@ -94,6 +94,87 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         # Member ID generation is now handled in before_save based on application status
         pass
     
+    @frappe.whitelist()
+    def get_address_members_html(self):
+        """Get HTML content for address members field - called from JavaScript"""
+        try:
+            if not self.primary_address:
+                return '<div class="text-muted"><i class="fa fa-home"></i> No address selected</div>'
+                
+            # Get other members at the same address
+            other_members = self.get_other_members_at_address()
+            
+            if other_members:
+                # Create HTML content for display
+                html_content = f'<div class="address-members-display"><h6>Other Members at This Address ({len(other_members)} found):</h6>'
+                
+                for other in other_members:
+                    html_content += f'''
+                    <div class="member-card" style="border: 1px solid #ddd; padding: 8px; margin: 4px 0; border-radius: 4px; background: #f8f9fa;">
+                        <strong>{other.get("full_name", "Unknown")}</strong> 
+                        <span class="text-muted">({other.get("name", "Unknown ID")})</span>
+                        <br><small class="text-muted">
+                            <i class="fa fa-users"></i> {other.get("relationship", "Unknown")} | 
+                            <i class="fa fa-birthday-cake"></i> {other.get("age_group", "Unknown")} | 
+                            <i class="fa fa-circle text-{self._get_status_color(other.get("status", "Unknown"))}"></i> {other.get("status", "Unknown")}
+                        </small>
+                        <br><small class="text-muted">
+                            <i class="fa fa-envelope"></i> {other.get("email", "Unknown")}
+                        </small>
+                    </div>
+                    '''
+                html_content += '</div>'
+                return html_content
+            else:
+                # No other members found
+                return '<div class="text-muted"><i class="fa fa-info-circle"></i> No other members found at this address</div>'
+                
+        except Exception as e:
+            frappe.log_error(f"Error loading address members for {self.name}: {str(e)}")
+            return f'<div class="text-danger"><i class="fa fa-exclamation-triangle"></i> Error loading member information: {str(e)}</div>'
+    
+    def _get_status_color(self, status):
+        """Get Bootstrap color class for member status"""
+        status_colors = {
+            "Active": "success",
+            "Pending": "warning", 
+            "Suspended": "danger",
+            "Terminated": "secondary"
+        }
+        return status_colors.get(status, "secondary")
+    
+    @frappe.whitelist()
+    def test_address_field_loading(self):
+        """Test method to check if address field gets populated"""
+        # Test if the field exists
+        field_exists = hasattr(self, 'other_members_at_address')
+        
+        # Get the field value safely
+        field_value = getattr(self, 'other_members_at_address', None)
+        
+        # Force reload and check again
+        self.reload()
+        field_value_after_reload = getattr(self, 'other_members_at_address', None)
+        
+        # Check backend functionality
+        backend_members = self.get_other_members_at_address()
+        
+        # Check if on_load was called by setting a test flag
+        self.on_load()
+        field_value_after_manual_load = getattr(self, 'other_members_at_address', None)
+        
+        return {
+            "member_id": self.name,
+            "member_name": f"{self.first_name} {self.last_name}",
+            "primary_address": self.primary_address,
+            "field_exists": field_exists,
+            "field_value": field_value,
+            "field_value_after_reload": field_value_after_reload, 
+            "field_value_after_manual_load": field_value_after_manual_load,
+            "backend_members_count": len(backend_members),
+            "backend_members": backend_members[:2] if backend_members else []  # Show first 2 for debugging
+        }
+    
     def after_save(self):
         """Execute after saving the document"""
         # Create user account for manually created members (non-application members)
@@ -228,6 +309,139 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         self.member_id = self.generate_member_id()
         self.save()
         return {"success": True, "message": _("Member ID force assigned successfully: {0}").format(self.member_id)}
+    
+    def get_other_members_at_address(self):
+        """Get other members living at the same address"""
+        if not self.primary_address:
+            return []
+        
+        try:
+            # Get the primary address details
+            address_doc = frappe.get_doc("Address", self.primary_address)
+            
+            # Find other addresses with the same physical location components
+            # Normalize address line for comparison (convert to lowercase, remove extra spaces)
+            normalized_address_line = address_doc.address_line1.lower().strip() if address_doc.address_line1 else ""
+            normalized_city = address_doc.city.lower().strip() if address_doc.city else ""
+            
+            # Find matching addresses by physical components
+            matching_addresses = frappe.get_all(
+                "Address",
+                filters=[
+                    ["address_line1", "!=", ""],  # Must have address line
+                    ["address_line1", "is", "set"],
+                ],
+                fields=["name", "address_line1", "city", "pincode"]
+            )
+            
+            # Filter addresses that match our physical location
+            same_location_addresses = []
+            for addr in matching_addresses:
+                addr_line_normalized = addr.address_line1.lower().strip() if addr.address_line1 else ""
+                addr_city_normalized = addr.city.lower().strip() if addr.city else ""
+                
+                # Match if address line and city are the same (case-insensitive)
+                if (addr_line_normalized == normalized_address_line and 
+                    addr_city_normalized == normalized_city and
+                    addr.name != self.primary_address):  # Exclude current member's address
+                    same_location_addresses.append(addr.name)
+            
+            if not same_location_addresses:
+                return []
+            
+            # Find members using any of the matching addresses
+            other_members = frappe.get_all(
+                "Member",
+                filters={
+                    "primary_address": ["in", same_location_addresses],
+                    "name": ["!=", self.name],  # Exclude current member
+                    "status": ["in", ["Active", "Pending", "Suspended"]]  # Only include active statuses
+                },
+                fields=["name", "full_name", "email", "status", "member_since", "birth_date"],
+                order_by="full_name asc"
+            )
+            
+            # Enrich the data with additional info
+            enriched_members = []
+            for member in other_members:
+                member_data = {
+                    "name": member.name,
+                    "full_name": member.full_name,
+                    "email": member.email,
+                    "status": member.status,
+                    "member_since": member.member_since,
+                    "relationship": self._guess_relationship(member),
+                    "age_group": self._get_age_group(member.birth_date) if member.birth_date else None
+                }
+                enriched_members.append(member_data)
+            
+            return enriched_members
+            
+        except Exception as e:
+            frappe.log_error(f"Error getting other members at address for {self.name}: {str(e)}")
+            return []
+    
+    def _guess_relationship(self, other_member):
+        """Attempt to guess relationship based on name patterns and data"""
+        # Handle both dict and object inputs
+        other_full_name = other_member.get('full_name') if isinstance(other_member, dict) else getattr(other_member, 'full_name', None)
+        other_birth_date = other_member.get('birth_date') if isinstance(other_member, dict) else getattr(other_member, 'birth_date', None)
+        
+        if not other_full_name or not self.full_name:
+            return "Household Member"
+        
+        # Check if they share a last name
+        self_parts = self.full_name.strip().split()
+        other_parts = other_full_name.strip().split()
+        
+        if len(self_parts) > 0 and len(other_parts) > 0:
+            self_last = self_parts[-1].lower()
+            other_last = other_parts[-1].lower()
+            
+            if self_last == other_last:
+                # Same last name - likely family
+                if self.birth_date and other_birth_date:
+                        try:
+                            self_date = getdate(self.birth_date)
+                            other_date = getdate(other_birth_date)
+                            age_diff = abs((self_date - other_date).days // 365)
+                            
+                            if age_diff < 5:
+                                return "Spouse/Partner"
+                            elif age_diff > 15:
+                                return "Parent/Child"
+                            else:
+                                return "Sibling"
+                        except:
+                            pass
+                return "Family Member"
+            else:
+                return "Partner/Spouse"
+        
+        return "Household Member"
+    
+    def _get_age_group(self, birth_date):
+        """Get age group for privacy-friendly display"""
+        if not birth_date:
+            return None
+        
+        try:
+            today_date = getdate(today())
+            birth_date = getdate(birth_date)
+            age = (today_date - birth_date).days // 365
+            
+            if age < 18:
+                return "Minor"
+            elif age < 30:
+                return "Young Adult"
+            elif age < 50:
+                return "Adult"
+            elif age < 65:
+                return "Middle-aged"
+            else:
+                return "Senior"
+        except:
+            return None
             
     def approve_application(self):
         """Approve this application and assign member ID"""
@@ -333,7 +547,10 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
                     if not self.member_since:
                         self.member_since = today()
                 elif self.application_status == "Rejected" and self.status != "Rejected":
-                    self.status = "Rejected"
+                    # Don't override status if member was terminated
+                    termination_statuses = ["Deceased", "Banned", "Suspended", "Terminated", "Expired"]
+                    if self.status not in termination_statuses:
+                        self.status = "Rejected"
                 elif self.application_status == "Pending" and self.status not in ["Pending", "Active"]:
                     # For pending applications, default to Pending unless already Active
                     if self.status != "Active":
@@ -592,7 +809,9 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
     def create_customer(self):
         """Create a customer for this member in ERPNext"""
         if self.customer:
-            frappe.msgprint(_("Customer {0} already exists for this member").format(self.customer))
+            # Only show existing customer message if not during application submission
+            if not getattr(self, '_suppress_customer_messages', False):
+                frappe.msgprint(_("Customer {0} already exists for this member").format(self.customer))
             return self.customer
     
         if self.full_name:
@@ -605,14 +824,14 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             )
     
             exact_name_match = next((c for c in similar_name_customers if c.customer_name.lower() == self.full_name.lower()), None)
-            if exact_name_match:
+            if exact_name_match and not getattr(self, '_suppress_customer_messages', False):
                 customer_info = f"Name: {exact_name_match.name}, Email: {exact_name_match.email_id or 'N/A'}"
                 frappe.msgprint(
                     _("Found existing customer with same name: {0}").format(customer_info) +
                     _("\nCreating a new customer for this member. If you want to link to the existing customer instead, please do so manually.")
                 )
     
-            elif similar_name_customers:
+            elif similar_name_customers and not getattr(self, '_suppress_customer_messages', False):
                 customer_list = "\n".join([f"- {c.customer_name} ({c.name})" for c in similar_name_customers[:5]])
                 frappe.msgprint(
                     _("Found similar customer names. Please review:") + 
@@ -635,12 +854,28 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             customer.phone = self.phone
 
         customer.flags.ignore_mandatory = True
-        customer.insert(ignore_permissions=True)
+        
+        # Suppress all messages during customer creation if we're in application submission
+        if getattr(self, '_suppress_customer_messages', False):
+            customer.flags.ignore_messages = True
+            # Also temporarily disable all message printing during customer creation
+            original_msgprint = frappe.msgprint
+            frappe.msgprint = lambda *args, **kwargs: None
+            try:
+                customer.insert(ignore_permissions=True)
+            finally:
+                # Restore original msgprint function
+                frappe.msgprint = original_msgprint
+        else:
+            customer.insert(ignore_permissions=True)
 
         self.customer = customer.name
         self.save(ignore_permissions=True)
 
-        frappe.msgprint(_("Customer {0} created successfully").format(customer.name))
+        # Only show success message if not during application submission
+        if not getattr(self, '_suppress_customer_messages', False):
+            frappe.msgprint(_("Customer {0} created successfully").format(customer.name))
+        
         return customer.name   
         
     @frappe.whitelist()
@@ -2026,7 +2261,8 @@ def add_member_roles_to_user(user_name):
     try:
         # Define the roles that members need for portal access
         member_roles = [
-            "Verenigingen Member"  # Primary member role for all member access
+            "Verenigingen Member",  # Primary member role for all member access
+            "All"  # Standard role for basic system access
         ]
         
         # Check if Verenigingen Member role exists, create if not
@@ -2036,20 +2272,45 @@ def add_member_roles_to_user(user_name):
         # Add roles to user
         user = frappe.get_doc("User", user_name)
         
+        # Clear existing roles first to avoid conflicts
+        user.roles = []
+        
         for role in member_roles:
             if not frappe.db.exists("Role", role):
                 frappe.logger().warning(f"Role {role} does not exist, skipping")
                 continue
-            if not any(r.role == role for r in user.roles):
-                user.append("roles", {"role": role})
+            # Always add the role since we cleared roles above
+            user.append("roles", {"role": role})
         
-        user.save(ignore_permissions=True)
-        frappe.db.commit()  # Force immediate commit
-        frappe.logger().info(f"Added member roles to user {user_name}")
+        # Ensure user is enabled
+        if not user.enabled:
+            user.enabled = 1
         
-        # Force reload to ensure consistency
-        user.reload()
-        return user.name
+        # Save with validation handling
+        try:
+            user.save(ignore_permissions=True)
+            frappe.db.commit()  # Force immediate commit
+            frappe.logger().info(f"Added member roles to user {user_name}: {[r.role for r in user.roles]}")
+            
+            # Force reload to ensure consistency
+            user.reload()
+            
+            # Verify roles were saved
+            final_roles = [r.role for r in user.roles]
+            if len(final_roles) == 0:
+                frappe.logger().error(f"No roles found after saving user {user_name} - possible validation issue")
+                return None
+            
+            return user.name
+            
+        except Exception as save_error:
+            frappe.log_error(f"Error saving user {user_name} with roles: {str(save_error)}")
+            # Try to save without roles as fallback
+            user.roles = []
+            user.append("roles", {"role": "All"})  # Minimal role
+            user.save(ignore_permissions=True)
+            frappe.logger().warning(f"Saved user {user_name} with minimal roles due to error")
+            return user.name
         
     except Exception as e:
         frappe.log_error(f"Error adding roles to user {user_name}: {str(e)}")
@@ -2123,13 +2384,8 @@ def check_donor_exists(member_name):
                 "donor_display_name": existing_donor[1]
             }
         
-        # Also check if member is linked to any donor record
-        linked_donor = frappe.db.get_value("Donor", {"member": member_name}, "name")
-        if linked_donor:
-            return {
-                "exists": True,
-                "donor_name": linked_donor
-            }
+        # Note: No direct member field exists in Donor doctype
+        # Email-based lookup above is the primary method for finding donor records
         
         return {
             "exists": False
@@ -2163,7 +2419,26 @@ def create_donor_from_member(member_name):
         # Copy basic information from member
         donor.donor_name = member.full_name
         donor.donor_email = member.email
-        donor.member = member_name  # Link back to member
+        
+        # Set mandatory fields
+        donor.donor_type = "Individual"
+        donor.contact_person = member.full_name
+        # Set phone with proper fallback using international format
+        if member.contact_number and member.contact_number.strip():
+            # If the number doesn't start with +, assume it's Dutch and add +31
+            phone_number = member.contact_number
+            if not phone_number.startswith('+'):
+                # Check if it's a Dutch mobile number (starts with 06) or landline
+                if phone_number.startswith('06') or phone_number.startswith('0'):
+                    phone_number = '+31' + phone_number[1:]  # Replace leading 0 with +31
+                else:
+                    phone_number = '+31' + phone_number  # Add +31 prefix
+            donor.phone = phone_number
+        else:
+            # Since phone is required, use a valid Dutch placeholder format
+            donor.phone = "+31000000000"  # Valid international format placeholder
+        donor.contact_person_address = "As per member record"
+        donor.donor_category = "Regular Donor"
         
         # Copy address information if available
         if member.primary_address:
@@ -2179,14 +2454,13 @@ def create_donor_from_member(member_name):
                 frappe.logger().warning(f"Could not copy address from member {member_name}: {str(addr_e)}")
         
         # Set other fields
-        donor.donor_type = "Individual"
         donor.pan_number = ""  # Can be filled manually later
         
-        # Copy phone numbers if available
-        if hasattr(member, 'mobile_no') and member.mobile_no:
-            donor.mobile_no = member.mobile_no
-        if hasattr(member, 'phone') and member.phone:
-            donor.phone = member.phone
+        # Copy additional contact information if available
+        if hasattr(member, 'contact_number') and member.contact_number:
+            # Phone is already set above, but we can copy to mobile_no field if it exists in Donor
+            if hasattr(donor, 'mobile_no'):
+                donor.mobile_no = member.contact_number
         
         # Insert the donor record
         donor.insert(ignore_permissions=True)
@@ -2211,9 +2485,42 @@ def create_donor_from_member(member_name):
         }
         
     except Exception as e:
-        frappe.log_error(f"Error creating donor from member {member_name}: {str(e)}")
+        # Very short error message to avoid log truncation
+        frappe.log_error(f"Donor creation failed: {str(e)[:50]}")
         return {
             "success": False,
             "error": str(e),
             "message": _("Failed to create donor record: {0}").format(str(e))
         }
+    
+    @frappe.whitelist()
+    def debug_address_members(self):
+        """Debug method to test address members functionality"""
+        try:
+            result = {
+                "member_id": self.name,
+                "member_name": f"{self.first_name} {self.last_name}",
+                "primary_address": self.primary_address,
+                "address_members_html": None,
+                "address_members_html_length": 0,
+                "other_members_count": 0,
+                "other_members_list": []
+            }
+            
+            # Test the HTML generation
+            html_result = self.get_address_members_html()
+            result["address_members_html"] = html_result
+            result["address_members_html_length"] = len(html_result) if html_result else 0
+            
+            # Test the underlying method
+            other_members = self.get_other_members_at_address()
+            result["other_members_count"] = len(other_members) if other_members else 0
+            result["other_members_list"] = other_members if other_members else []
+            
+            return result
+            
+        except Exception as e:
+            return {
+                "error": str(e),
+                "traceback": frappe.get_traceback()
+            }

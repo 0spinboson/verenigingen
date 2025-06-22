@@ -249,6 +249,27 @@
    "default": "0"
   },
   {
+   "fieldname": "volunteers_terminated",
+   "fieldtype": "Int",
+   "label": "Volunteer Records Updated",
+   "read_only": 1,
+   "default": "0"
+  },
+  {
+   "fieldname": "volunteer_expenses_cancelled",
+   "fieldtype": "Int",
+   "label": "Volunteer Expenses Cancelled",
+   "read_only": 1,
+   "default": "0"
+  },
+  {
+   "fieldname": "employees_terminated",
+   "fieldtype": "Int",
+   "label": "Employee Records Updated",
+   "read_only": 1,
+   "default": "0"
+  },
+  {
    "fieldname": "audit_section",
    "fieldtype": "Section Break",
    "label": "Audit Trail"

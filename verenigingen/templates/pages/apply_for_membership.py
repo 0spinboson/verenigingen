@@ -29,6 +29,12 @@ def get_context(context):
         "company_name": frappe.get_value("Company", settings.company, "company_name")
     }
     
+    # Add income calculator settings
+    context.enable_income_calculator = getattr(settings, 'enable_income_calculator', 0)
+    context.income_percentage_rate = getattr(settings, 'income_percentage_rate', 0.5)
+    context.calculator_description = getattr(settings, 'calculator_description', 
+        'Our suggested contribution is 0.5% of your monthly net income. This helps ensure fair and equitable contributions based on your financial capacity.')
+    
     # Basic context setup
     context.already_member = False
     

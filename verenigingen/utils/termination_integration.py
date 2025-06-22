@@ -606,6 +606,222 @@ def unsuspend_member_safe(member_name, unsuspension_reason, restore_teams=True):
             "errors": [str(e)]
         }
 
+def terminate_volunteer_records_safe(member_name, termination_type, termination_date, reason):
+    """
+    Terminate or update volunteer records associated with a member
+    """
+    try:
+        if not termination_date:
+            termination_date = today()
+        
+        results = {
+            "volunteers_terminated": 0,
+            "volunteer_expenses_cancelled": 0,
+            "actions_taken": [],
+            "errors": []
+        }
+        
+        # Get all volunteer records for this member
+        volunteer_records = frappe.get_all(
+            "Volunteer",
+            filters={"member": member_name},
+            fields=["name", "volunteer_name", "status"]
+        )
+        
+        frappe.logger().info(f"Found {len(volunteer_records)} volunteer record(s) for member {member_name}")
+        
+        for volunteer_data in volunteer_records:
+            try:
+                volunteer_doc = frappe.get_doc("Volunteer", volunteer_data.name)
+                
+                # Update volunteer status based on termination type
+                disciplinary_types = ['Policy Violation', 'Disciplinary Action', 'Expulsion']
+                
+                if termination_type == 'Deceased':
+                    volunteer_doc.status = 'Inactive'
+                    volunteer_doc.inactive_reason = 'Deceased'
+                elif termination_type in disciplinary_types:
+                    volunteer_doc.status = 'Suspended'
+                    volunteer_doc.inactive_reason = f'Member terminated - {termination_type}'
+                else:
+                    volunteer_doc.status = 'Inactive'
+                    volunteer_doc.inactive_reason = f'Member terminated - {termination_type}'
+                
+                # Add termination note
+                termination_note = f"Volunteer record updated on {termination_date} - {reason}"
+                if hasattr(volunteer_doc, 'notes'):
+                    if volunteer_doc.notes:
+                        volunteer_doc.notes += f"\n\n{termination_note}"
+                    else:
+                        volunteer_doc.notes = termination_note
+                
+                # Set end date if field exists
+                if hasattr(volunteer_doc, 'end_date') and not volunteer_doc.end_date:
+                    volunteer_doc.end_date = termination_date
+                
+                volunteer_doc.flags.ignore_permissions = True
+                volunteer_doc.save()
+                
+                results["volunteers_terminated"] += 1
+                results["actions_taken"].append(f"Updated volunteer record {volunteer_data.volunteer_name}")
+                
+                # Cancel any active volunteer expenses
+                active_expenses = frappe.get_all(
+                    "Volunteer Expense",
+                    filters={
+                        "volunteer": volunteer_data.name,
+                        "docstatus": 0,  # Draft status
+                        "approval_status": ["in", ["Pending", "Under Review"]]
+                    },
+                    fields=["name"]
+                )
+                
+                for expense in active_expenses:
+                    try:
+                        expense_doc = frappe.get_doc("Volunteer Expense", expense.name)
+                        expense_doc.approval_status = "Cancelled"
+                        expense_doc.cancellation_reason = f"Volunteer terminated - {reason}"
+                        expense_doc.flags.ignore_permissions = True
+                        expense_doc.save()
+                        
+                        results["volunteer_expenses_cancelled"] += 1
+                        results["actions_taken"].append(f"Cancelled volunteer expense {expense.name}")
+                        
+                    except Exception as expense_error:
+                        results["errors"].append(f"Failed to cancel volunteer expense {expense.name}: {str(expense_error)}")
+                
+            except Exception as volunteer_error:
+                results["errors"].append(f"Failed to update volunteer record {volunteer_data.name}: {str(volunteer_error)}")
+        
+        frappe.logger().info(f"Terminated {results['volunteers_terminated']} volunteer record(s) for member {member_name}")
+        return results
+        
+    except Exception as e:
+        frappe.logger().error(f"Failed to terminate volunteer records for {member_name}: {str(e)}")
+        return {
+            "volunteers_terminated": 0,
+            "volunteer_expenses_cancelled": 0,
+            "actions_taken": [],
+            "errors": [str(e)]
+        }
+
+def terminate_employee_records_safe(member_name, termination_type, termination_date, reason):
+    """
+    Terminate or update employee records associated with a member
+    """
+    try:
+        if not termination_date:
+            termination_date = today()
+        
+        results = {
+            "employees_terminated": 0,
+            "actions_taken": [],
+            "errors": []
+        }
+        
+        # Get user email to find employee records
+        user_email = frappe.db.get_value("Member", member_name, "user")
+        
+        # Method 1: Find employee records linked via user_id - enhanced detection
+        employee_records = []
+        if user_email:
+            # Try user_id field first
+            employee_records = frappe.get_all(
+                "Employee",
+                filters={
+                    "user_id": user_email,
+                    "status": ["in", ["Active", "On Leave"]]
+                },
+                fields=["name", "employee_name", "status", "relieving_date"]
+            )
+            
+            # If no results with user_id, try alternative field names
+            if not employee_records:
+                # Try with personal_email field
+                employee_records = frappe.get_all(
+                    "Employee",
+                    filters={
+                        "personal_email": user_email,
+                        "status": ["in", ["Active", "On Leave"]]
+                    },
+                    fields=["name", "employee_name", "status", "relieving_date"]
+                )
+                
+                # Try with company_email field
+                if not employee_records:
+                    employee_records = frappe.get_all(
+                        "Employee",
+                        filters={
+                            "company_email": user_email,
+                            "status": ["in", ["Active", "On Leave"]]
+                        },
+                        fields=["name", "employee_name", "status", "relieving_date"]
+                    )
+        
+        # Method 2: Check direct employee link from Member doctype
+        direct_employee_link = frappe.db.get_value("Member", member_name, "employee")
+        if direct_employee_link and frappe.db.exists("Employee", direct_employee_link):
+            employee_status = frappe.db.get_value("Employee", direct_employee_link, "status")
+            if employee_status in ["Active", "On Leave"]:
+                # Check if this employee is already in the list to avoid duplicates
+                already_included = any(emp.name == direct_employee_link for emp in employee_records)
+                if not already_included:
+                    direct_employee = frappe.get_doc("Employee", direct_employee_link)
+                    employee_records.append({
+                        "name": direct_employee.name,
+                        "employee_name": direct_employee.employee_name,
+                        "status": direct_employee.status,
+                        "relieving_date": getattr(direct_employee, 'relieving_date', None)
+                    })
+        
+        frappe.logger().info(f"Found {len(employee_records)} active employee record(s) for member {member_name}")
+        
+        for employee_data in employee_records:
+            try:
+                employee_doc = frappe.get_doc("Employee", employee_data.name)
+                
+                # Update employee status based on termination type
+                if termination_type == 'Deceased':
+                    employee_doc.status = 'Left'
+                    employee_doc.relieving_date = termination_date
+                    employee_doc.reason_for_leaving = 'Deceased'
+                elif termination_type in ['Policy Violation', 'Disciplinary Action', 'Expulsion']:
+                    employee_doc.status = 'Left'
+                    employee_doc.relieving_date = termination_date
+                    employee_doc.reason_for_leaving = 'Terminated'
+                else:
+                    employee_doc.status = 'Left'
+                    employee_doc.relieving_date = termination_date
+                    employee_doc.reason_for_leaving = 'Resignation'
+                
+                # Add termination note to remarks
+                termination_note = f"Employee record updated on {termination_date} due to member termination - {reason}"
+                if hasattr(employee_doc, 'remarks'):
+                    if employee_doc.remarks:
+                        employee_doc.remarks += f"\n\n{termination_note}"
+                    else:
+                        employee_doc.remarks = termination_note
+                
+                employee_doc.flags.ignore_permissions = True
+                employee_doc.save()
+                
+                results["employees_terminated"] += 1
+                results["actions_taken"].append(f"Updated employee record {employee_data.employee_name}")
+                
+            except Exception as employee_error:
+                results["errors"].append(f"Failed to update employee record {employee_data.name}: {str(employee_error)}")
+        
+        frappe.logger().info(f"Terminated {results['employees_terminated']} employee record(s) for member {member_name}")
+        return results
+        
+    except Exception as e:
+        frappe.logger().error(f"Failed to terminate employee records for {member_name}: {str(e)}")
+        return {
+            "employees_terminated": 0,
+            "actions_taken": [],
+            "errors": [str(e)]
+        }
+
 def get_member_suspension_status(member_name):
     """
     Get current suspension status of a member

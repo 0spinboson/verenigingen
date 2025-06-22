@@ -22,7 +22,7 @@ def send_application_confirmation_email(member, application_id):
                 <li><strong>Application ID:</strong> {application_id}</li>
                 <li><strong>Name:</strong> {member.full_name}</li>
                 <li><strong>Status:</strong> Pending Review</li>
-                <li><strong>Applied On:</strong> {frappe.format_datetime(member.application_date)}</li>
+                <li><strong>Applied On:</strong> {frappe.utils.format_datetime(member.application_date)}</li>
             </ul>
         </div>
         
@@ -74,7 +74,7 @@ def notify_reviewers_of_new_application(member, application_id):
             </tr>
             <tr>
                 <td style="padding: 8px; border: 1px solid #dee2e6;"><strong>Applied On:</strong></td>
-                <td style="padding: 8px; border: 1px solid #dee2e6;">{frappe.format_datetime(member.application_date)}</td>
+                <td style="padding: 8px; border: 1px solid #dee2e6;">{frappe.utils.format_datetime(member.application_date)}</td>
             </tr>
         </table>
         
@@ -315,7 +315,7 @@ def notify_admins_of_new_application(member, invoice=None):
                 <li><strong>Email:</strong> {member.email}</li>
                 <li><strong>Application ID:</strong> {member.application_id}</li>
                 <li><strong>Status:</strong> {member.application_status}</li>
-                <li><strong>Applied On:</strong> {frappe.format_datetime(member.application_date)}</li>
+                <li><strong>Applied On:</strong> {frappe.utils.format_datetime(member.application_date)}</li>
             </ul>
         </div>
         
@@ -404,7 +404,7 @@ def send_simple_notification(data, member_id):
             <ul>
                 <li><strong>Member ID:</strong> {member_id}</li>
                 <li><strong>Name:</strong> {data.get('first_name', '')} {data.get('last_name', '')}</li>
-                <li><strong>Submitted:</strong> {frappe.format_datetime(now_datetime())}</li>
+                <li><strong>Submitted:</strong> {frappe.utils.format_datetime(now_datetime())}</li>
             </ul>
         </div>
         

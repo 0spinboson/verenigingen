@@ -24,6 +24,7 @@
   "enable_income_calculator",
   "income_percentage_rate",
   "calculator_description",
+  "maximum_fee_multiplier",
   "dutch_btw_section",
   "tax_exempt_for_contributions",
   "default_tax_exemption_type",
@@ -427,6 +428,14 @@
    "fieldtype": "Text",
    "label": "Calculator Description",
    "default": "Our suggested contribution is 0.5% of your monthly net income. This helps ensure fair and equitable contributions based on your financial capacity."
+  },
+  {
+   "default": "10",
+   "description": "Maximum multiplier for membership fee contributions (e.g., 10 allows up to 10x the base membership fee)",
+   "fieldname": "maximum_fee_multiplier",
+   "fieldtype": "Int",
+   "label": "Maximum Fee Multiplier",
+   "min_value": 1
   }
  ],
  "index_web_pages_for_search": 1,

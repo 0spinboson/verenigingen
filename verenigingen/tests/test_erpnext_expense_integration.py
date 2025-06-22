@@ -682,6 +682,80 @@ class TestERPNextExpenseEdgeCases(unittest.TestCase):
                         if i % 10 == 0:
                             frappe.db.commit()
 
+    def test_volunteer_expense_approver_simplified_query(self):
+        """Test that the simplified expense approver query logic works without SQL errors"""
+        # Create test volunteer
+        test_volunteer = frappe.get_doc({
+            "doctype": "Volunteer",
+            "volunteer_name": "Expense Approver Test",
+            "email": "expense.approver.test@example.com",
+            "status": "Active"
+        })
+        test_volunteer.insert(ignore_permissions=True)
+        
+        try:
+            # This should not raise any SQL errors with the new simplified logic
+            approver = test_volunteer.get_default_expense_approver()
+            
+            # Should return a valid result
+            self.assertIsInstance(approver, str)
+            self.assertTrue(len(approver) > 0)
+            
+            # Should be either Administrator or a valid email
+            self.assertTrue(approver == "Administrator" or "@" in approver)
+            
+        except Exception as e:
+            self.fail(f"Simplified expense approver logic failed: {e}")
+        finally:
+            # Clean up
+            if frappe.db.exists("Volunteer", test_volunteer.name):
+                frappe.delete_doc("Volunteer", test_volunteer.name, ignore_permissions=True)
+
+    @patch('frappe.get_single')
+    def test_expense_approver_treasurer_priority(self, mock_get_single):
+        """Test that treasurer gets priority in expense approver selection"""
+        # Mock settings
+        mock_settings = MagicMock()
+        mock_settings.national_board_chapter = "Test Chapter"
+        mock_get_single.return_value = mock_settings
+        
+        # Create test volunteer
+        test_volunteer = frappe.get_doc({
+            "doctype": "Volunteer",
+            "volunteer_name": "Priority Test Volunteer",
+            "email": "priority.test@example.com",
+            "status": "Active"
+        })
+        test_volunteer.insert(ignore_permissions=True)
+        
+        try:
+            # Mock frappe.get_all to return treasurer first
+            with patch('frappe.get_all') as mock_get_all:
+                # First call returns treasurer
+                mock_get_all.return_value = [{"volunteer": "treasurer_volunteer", "chapter_role": "Treasurer"}]
+                
+                # Mock the volunteer document for treasurer
+                treasurer_vol = MagicMock()
+                treasurer_vol.email = "treasurer@example.com"
+                
+                with patch('frappe.get_doc', return_value=treasurer_vol):
+                    with patch('frappe.db.exists', return_value=True):
+                        approver = test_volunteer.get_default_expense_approver()
+                        
+                        # Should find the treasurer
+                        self.assertEqual(approver, "treasurer@example.com")
+                        
+                        # Verify the simplified query was called correctly
+                        # First call should be for Treasurer specifically
+                        calls = mock_get_all.call_args_list
+                        first_call_filters = calls[0][1]['filters']
+                        self.assertEqual(first_call_filters['chapter_role'], 'Treasurer')
+                        
+        finally:
+            # Clean up
+            if frappe.db.exists("Volunteer", test_volunteer.name):
+                frappe.delete_doc("Volunteer", test_volunteer.name, ignore_permissions=True)
+
 
 if __name__ == '__main__':
     unittest.main()

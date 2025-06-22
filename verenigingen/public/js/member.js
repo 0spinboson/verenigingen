@@ -281,6 +281,12 @@ frappe.ui.form.on('Member', {
     onload: function(frm) {
         // Set up form behavior on load
         setup_form_behavior(frm);
+        
+        // Populate address members on form load if address exists
+        if (frm.doc.primary_address) {
+            console.log('Form loaded with address, updating address members...');
+            update_other_members_at_address(frm);
+        }
     },
     
     // ==================== FIELD EVENT HANDLERS ====================
@@ -316,8 +322,155 @@ frappe.ui.form.on('Member', {
                 ChapterUtils.suggest_chapter_from_address(frm);
             }, 1000);
         }
+    },
+    
+    primary_address: function(frm) {
+        // Update other members at address when primary address changes
+        update_other_members_at_address(frm);
     }
 });
+
+// ==================== ADDRESS MEMBERS FUNCTIONALITY ====================
+
+function update_other_members_at_address(frm) {
+    console.log('=== UPDATE OTHER MEMBERS AT ADDRESS CALLED ===');
+    console.log('Member:', frm.doc.name);
+    console.log('Primary Address:', frm.doc.primary_address);
+    
+    if (!frm.doc.name || !frm.doc.primary_address) {
+        console.log('No name or address, clearing field');
+        frm.set_value('other_members_at_address', '<div class="text-muted">No address selected</div>');
+        return;
+    }
+    
+    // Show loading state
+    console.log('Setting loading state');
+    frm.set_value('other_members_at_address', 
+        '<div class="text-muted"><i class="fa fa-spinner fa-spin"></i> Loading other members...</div>');
+    
+    // Call dedicated API method to get HTML content for address members
+    console.log('Calling API method: verenigingen.api.member_management.get_address_members_html_api');
+    frappe.call({
+        method: 'verenigingen.api.member_management.get_address_members_html_api',
+        args: {
+            member_id: frm.doc.name
+        },
+        callback: function(r) {
+            console.log('API callback received:', r);
+            if (r.message && r.message.success && r.message.html) {
+                console.log('Setting HTML content, length:', r.message.html.length);
+                frm.set_value('other_members_at_address', r.message.html);
+                
+                // Add click handlers for view buttons after content is set
+                setTimeout(() => {
+                    $(frm.fields_dict.other_members_at_address.$wrapper).off('click', '.view-member-btn').on('click', '.view-member-btn', function(e) {
+                        e.preventDefault();
+                        const memberName = $(this).data('member');
+                        if (memberName) {
+                            console.log('Opening member:', memberName);
+                            frappe.set_route('Form', 'Member', memberName);
+                        }
+                    });
+                }, 100);
+                
+                console.log('Address members HTML updated successfully');
+            } else {
+                console.log('No HTML content received');
+                frm.set_value('other_members_at_address', 
+                    '<div class="text-muted">No other members found at this address</div>');
+            }
+        },
+        error: function(err) {
+            console.error('API Error:', err);
+            frm.set_value('other_members_at_address', 
+                '<div class="text-muted text-danger">Error loading member information</div>');
+        }
+    });
+}
+
+function display_other_members_at_address(frm, other_members) {
+    if (!other_members || other_members.length === 0) {
+        frm.set_value('other_members_at_address', 
+            '<div class="text-muted">No other members found at this address</div>');
+        return;
+    }
+    
+    let html = `
+        <div class="other-members-container" style="background: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6;">
+            <div style="display: flex; align-items: center; margin-bottom: 12px;">
+                <i class="fa fa-users" style="color: #6c757d; margin-right: 8px;"></i>
+                <span style="font-weight: 600; color: #495057;">
+                    ${other_members.length} other member${other_members.length !== 1 ? 's' : ''} at this address
+                </span>
+            </div>
+            <div class="members-list">
+    `;
+    
+    other_members.forEach(member => {
+        const statusColor = getStatusColor(member.status);
+        const memberSince = member.member_since ? frappe.datetime.str_to_user(member.member_since) : 'Unknown';
+        
+        html += `
+            <div class="member-card" style="background: white; padding: 12px; margin-bottom: 8px; border-radius: 6px; border-left: 4px solid ${statusColor}; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                <div style="display: flex; justify-content: between; align-items: flex-start;">
+                    <div style="flex-grow: 1;">
+                        <div style="display: flex; align-items: center; margin-bottom: 4px;">
+                            <strong style="color: #212529; margin-right: 8px;">${member.full_name}</strong>
+                            <span class="badge" style="background-color: ${statusColor}; color: white; font-size: 11px; padding: 2px 6px; border-radius: 12px;">
+                                ${member.status}
+                            </span>
+                        </div>
+                        <div style="font-size: 13px; color: #6c757d; margin-bottom: 4px;">
+                            <i class="fa fa-heart" style="margin-right: 4px;"></i>
+                            ${member.relationship}
+                            ${member.age_group ? ` • ${member.age_group}` : ''}
+                        </div>
+                        <div style="font-size: 12px; color: #868e96;">
+                            <i class="fa fa-calendar" style="margin-right: 4px;"></i>
+                            Member since: ${memberSince}
+                        </div>
+                    </div>
+                    <div style="margin-left: 12px;">
+                        <button type="button" class="btn btn-xs btn-default view-member-btn" 
+                                data-member="${member.name}" 
+                                style="font-size: 11px; padding: 4px 8px;">
+                            <i class="fa fa-external-link" style="margin-right: 4px;"></i>View
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += `
+            </div>
+        </div>
+    `;
+    
+    frm.set_value('other_members_at_address', html);
+    
+    // Bind click events for view buttons
+    setTimeout(() => {
+        $(frm.fields_dict.other_members_at_address.$wrapper).off('click', '.view-member-btn').on('click', '.view-member-btn', function(e) {
+            e.preventDefault();
+            const memberName = $(this).data('member');
+            frappe.set_route('Form', 'Member', memberName);
+        });
+    }, 100);
+}
+
+function getStatusColor(status) {
+    const statusColors = {
+        'Active': '#28a745',
+        'Pending': '#ffc107', 
+        'Suspended': '#fd7e14',
+        'Deceased': '#6c757d',
+        'Banned': '#dc3545',
+        'Terminated': '#dc3545',
+        'Expired': '#6c757d'
+    };
+    return statusColors[status] || '#6c757d';
+}
 
 // ==================== CHILD TABLE EVENT HANDLERS ====================
 
@@ -431,12 +584,7 @@ function add_chapter_buttons(frm) {
                 
                 // Chapter indicator is handled in main member form JS
                 
-                // Add debug button for postal code matching (development only)
-                if (frappe.boot.developer_mode && window.UIUtils) {
-                    frm.add_custom_button(__('Debug Postal Code'), function() {
-                        UIUtils.show_debug_postal_code_info(frm);
-                    }, __('Debug'));
-                }
+                // Debug postal code button removed as requested
             }
         },
         error: function(r) {
@@ -597,29 +745,8 @@ function add_termination_buttons(frm) {
 }
 
 function add_chapter_suggestion_UI(frm) {
-    if (!frm.doc.__islocal && !$('.chapter-suggestion-container').length) {
-        // Check if member has any chapters assigned
-        get_member_current_chapters(frm.doc.name).then((chapters) => {
-            if (chapters.length === 0) {
-                var $container = $('<div class="chapter-suggestion-container alert alert-info mt-2"></div>');
-                $container.html(`
-                    <p>${__("This member doesn't have a chapter assigned yet.")}</p>
-                    <button class="btn btn-sm btn-primary suggest-chapter-btn">
-                        ${__("Find a Chapter")}
-                    </button>
-                `);
-                
-                // Append to the current chapter display field wrapper
-                $(frm.fields_dict.current_chapter_display.wrapper).append($container);
-                
-                $('.suggest-chapter-btn').on('click', function() {
-                    if (window.ChapterUtils) {
-                        ChapterUtils.suggest_chapter_for_member(frm);
-                    }
-                });
-            }
-        });
-    }
+    // Banner removed as requested - chapter assignment is handled elsewhere
+    // No longer showing "This member doesn't have a chapter assigned yet" message
 }
 
 // ==================== FORM SETUP FUNCTIONS ====================
@@ -729,12 +856,7 @@ verenigingen.member_form = {
         // Add termination buttons
         add_termination_buttons(frm);
         
-        // Add debug button to manually show chapter info
-        if (frm.doc.name && !frm.doc.__islocal) {
-            frm.add_custom_button(__('Show Chapter Info'), function() {
-                verenigingen.member_form.refresh_chapter_display(frm);
-            }, __('Debug'));
-        }
+        // Show Chapter Info debug button removed as requested
         
         console.log('All member form buttons setup complete');
     },
@@ -864,5 +986,148 @@ function get_member_current_chapters(member_name) {
         });
     });
 }
+
+// ==================== ADDRESS MEMBERS FUNCTIONALITY ====================
+
+// Address members display functions
+function update_other_members_at_address(frm) {
+    console.log('Updating other members at address for:', frm.doc.name);
+    
+    if (!frm.doc.name || !frm.doc.primary_address) {
+        // Clear the field if no address or new document
+        frm.set_df_property('other_members_at_address', 'options', 
+            '<div class="text-muted">No address selected</div>');
+        frm.refresh_field('other_members_at_address');
+        return;
+    }
+    
+    // Show loading state
+    frm.set_df_property('other_members_at_address', 'options', 
+        '<div class="text-muted"><i class="fa fa-spinner fa-spin"></i> Loading other members...</div>');
+    frm.refresh_field('other_members_at_address');
+    
+    // Call API method to get other members at the same address
+    frappe.call({
+        method: 'verenigingen.api.member_management.get_address_members_html_api',
+        args: {
+            member_id: frm.doc.name
+        },
+        callback: function(r) {
+            if (r.message && r.message.success && r.message.html) {
+                frm.set_df_property('other_members_at_address', 'options', r.message.html);
+                frm.refresh_field('other_members_at_address');
+                
+                // Add click handlers for view buttons
+                setTimeout(() => {
+                    $(frm.fields_dict.other_members_at_address.$wrapper).off('click', '.view-member-btn').on('click', '.view-member-btn', function(e) {
+                        e.preventDefault();
+                        const memberName = $(this).data('member');
+                        if (memberName) {
+                            frappe.set_route('Form', 'Member', memberName);
+                        }
+                    });
+                }, 100);
+            } else {
+                frm.set_df_property('other_members_at_address', 'options', 
+                    '<div class="text-muted">No other members found at this address</div>');
+                frm.refresh_field('other_members_at_address');
+            }
+        },
+        error: function(r) {
+            console.error('Error getting other members at address:', r);
+            frm.set_df_property('other_members_at_address', 'options', 
+                '<div class="text-muted text-danger">Error loading member information</div>');
+            frm.refresh_field('other_members_at_address');
+        }
+    });
+}
+
+function display_other_members_at_address(frm, members) {
+    if (!members || members.length === 0) {
+        frm.set_df_property('other_members_at_address', 'options', 
+            '<div class="text-muted">No other members found at this address</div>');
+        frm.refresh_field('other_members_at_address');
+        return;
+    }
+    
+    // Create styled HTML display
+    let html = `
+        <div class="address-members-container" style="padding: 10px; background: #f8f9fa; border-radius: 5px; border: 1px solid #dee2e6;">
+            <h6 style="margin-bottom: 15px; color: #495057; font-weight: 600;">
+                <i class="fa fa-home" style="margin-right: 8px;"></i>
+                Other Members at This Address (${members.length})
+            </h6>
+            <div class="row">
+    `;
+    
+    members.forEach(function(member) {
+        // Determine status color
+        const statusColors = {
+            'Active': 'success',
+            'Pending': 'warning', 
+            'Suspended': 'secondary',
+            'Expired': 'info'
+        };
+        const statusColor = statusColors[member.status] || 'secondary';
+        
+        // Create member card
+        html += `
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="card h-100" style="border: 1px solid #dee2e6; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                    <div class="card-body" style="padding: 15px;">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <h6 class="card-title mb-1" style="font-size: 14px; font-weight: 600; color: #495057;">
+                                ${frappe.utils.escape_html(member.full_name)}
+                            </h6>
+                            <span class="badge badge-${statusColor}" style="font-size: 11px;">
+                                ${member.status}
+                            </span>
+                        </div>
+                        
+                        <div class="member-details" style="font-size: 12px; color: #6c757d;">
+                            ${member.relationship ? `<div><strong>Relationship:</strong> ${member.relationship}</div>` : ''}
+                            ${member.age_group ? `<div><strong>Age Group:</strong> ${member.age_group}</div>` : ''}
+                            ${member.member_since ? `<div><strong>Member Since:</strong> ${frappe.datetime.str_to_user(member.member_since)}</div>` : ''}
+                        </div>
+                        
+                        <div class="mt-3">
+                            <button class="btn btn-sm btn-outline-primary view-member-btn" 
+                                    data-member-name="${member.name}"
+                                    style="font-size: 11px; padding: 4px 8px;">
+                                <i class="fa fa-external-link" style="margin-right: 4px;"></i>
+                                View Member
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += `
+            </div>
+        </div>
+    `;
+    
+    // Set the HTML content
+    frm.set_df_property('other_members_at_address', 'options', html);
+    frm.refresh_field('other_members_at_address');
+    
+    // Add click handlers for view buttons using setTimeout to ensure DOM is ready
+    setTimeout(function() {
+        $(frm.fields_dict.other_members_at_address.wrapper).find('.view-member-btn').off('click').on('click', function(e) {
+            e.preventDefault();
+            const memberName = $(this).data('member-name');
+            if (memberName) {
+                frappe.set_route('Form', 'Member', memberName);
+            }
+        });
+    }, 100);
+}
+
+// ==================== FORM EVENT HANDLERS ====================
+
+// Note: Main form handlers are in verenigingen/doctype/member/member.js
+// Address members functionality is integrated into the main refresh handler
 
 console.log("Member form scripts and review functionality loaded");

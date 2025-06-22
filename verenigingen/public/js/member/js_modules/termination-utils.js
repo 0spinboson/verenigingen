@@ -18,7 +18,7 @@ function show_termination_dialog(member_id, member_name) {
                     fieldname: 'termination_type',
                     fieldtype: 'Select',
                     label: __('Termination Type'),
-                    options: 'Voluntary\nPolicy Violation\nDisciplinary Action\nExpulsion\nNon-payment\nOther',
+                    options: 'Voluntary\nNon-payment\nDeceased\n--- Disciplinary ---\nPolicy Violation\nDisciplinary Action\nExpulsion',
                     reqd: 1,
                     onchange: function() {
                         update_termination_dialog_fields(dialog);
@@ -282,7 +282,11 @@ function generate_impact_assessment_html(impact_data) {
         { label: 'Active Memberships', count: impact_data.active_memberships, icon: '📝' },
         { label: 'Board Positions', count: impact_data.board_positions, icon: '👔' },
         { label: 'Outstanding Invoices', count: impact_data.outstanding_invoices, icon: '💰' },
-        { label: 'Active Subscriptions', count: impact_data.subscriptions, icon: '🔄' }
+        { label: 'Active Subscriptions', count: impact_data.subscriptions, icon: '🔄' },
+        { label: 'Volunteer Records', count: impact_data.volunteer_records || 0, icon: '🤝' },
+        { label: 'Pending Volunteer Expenses', count: impact_data.pending_volunteer_expenses || 0, icon: '💸' },
+        { label: 'Employee Records', count: impact_data.employee_records || 0, icon: '👥' },
+        { label: 'User Account', count: impact_data.user_account ? 1 : 0, icon: '👤' }
     ];
     
     html += '<div class="row">';

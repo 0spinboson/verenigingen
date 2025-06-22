@@ -98,8 +98,12 @@ class Membership(Document):
                 # Ensure minimum 1-year membership period
                 if months and months < 12:
                     months = 12
-                    frappe.msgprint(_("Note: Membership type has a period less than 1 year. Due to the mandatory minimum period, the renewal date is set to 1 year from start date."), 
-                                  indicator='yellow')
+                    # Only show message once per session and if renewal date is not already set
+                    message_key = f"renewal_message_{self.name or 'new'}"
+                    if not frappe.flags.get(message_key) and not self.renewal_date:
+                        frappe.msgprint(_("Note: Membership type has a period less than 1 year. Due to the mandatory minimum period, the renewal date is set to 1 year from start date."), 
+                                      indicator='yellow')
+                        frappe.flags[message_key] = True
                 
                 if months:
                     self.renewal_date = add_to_date(self.start_date, months=months)
@@ -107,8 +111,13 @@ class Membership(Document):
                 # For lifetime memberships, still set a minimum 1-year initial period
                 # This allows the 1-year cancellation rule to be enforced
                 self.renewal_date = add_to_date(self.start_date, months=12)
-                frappe.msgprint(_("Note: Although this is a lifetime membership, a 1-year minimum commitment period still applies."), 
-                              indicator='info')
+                # Only show message once per session and if renewal date is not already set
+                message_key = f"lifetime_message_{self.name or 'new'}"
+                if not frappe.flags.get(message_key) and not getattr(self, '_lifetime_message_shown', False):
+                    frappe.msgprint(_("Note: Although this is a lifetime membership, a 1-year minimum commitment period still applies."), 
+                                  indicator='info')
+                    frappe.flags[message_key] = True
+                    self._lifetime_message_shown = True
     
     def get_months_from_period(self, period, custom_months=None):
         period_months = {

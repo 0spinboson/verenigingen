@@ -171,7 +171,7 @@ def get_custom_fields():
 
 def validate_app_dependencies():
     """Validate that required apps are installed"""
-    required_apps = ["erpnext", "payments", "hrms"]
+    required_apps = ["erpnext", "payments", "hrms", "banking"]
     missing_apps = []
     
     try:
@@ -195,7 +195,7 @@ def validate_app_dependencies():
         # If validation fails, just log a warning and continue
         # This prevents installation failures due to dependency checking issues
         print(f"⚠️  Warning: Could not validate app dependencies: {str(e)}")
-        print("Continuing with installation - please ensure erpnext, payments, and hrms are installed")
+        print("Continuing with installation - please ensure erpnext, payments, hrms, and banking are installed")
 
 def execute_after_install():
     """
@@ -1582,6 +1582,40 @@ def install_email_templates_ui():
             "message": f"❌ Error installing email templates: {str(e)}",
             "action_taken": "error"
         }
+
+@frappe.whitelist()
+def verify_app_dependencies():
+    """Verify all app dependencies are properly configured and installed"""
+    try:
+        # Get dependencies from hooks.py
+        from verenigingen.hooks import required_apps as hook_required_apps
+        
+        # Get installed apps
+        installed_apps = frappe.get_installed_apps()
+        
+        # Check each dependency
+        dependency_status = []
+        for app in hook_required_apps:
+            is_installed = app in installed_apps
+            dependency_status.append({
+                "app": app,
+                "installed": is_installed,
+                "status": "✅ Installed" if is_installed else "❌ Missing"
+            })
+        
+        all_installed = all(status["installed"] for status in dependency_status)
+        
+        return {
+            "success": True,
+            "all_dependencies_met": all_installed,
+            "required_apps": hook_required_apps,
+            "installed_apps": installed_apps,
+            "dependency_status": dependency_status,
+            "summary": f"Dependencies: {len([s for s in dependency_status if s['installed']])}/{len(dependency_status)} installed"
+        }
+        
+    except Exception as e:
+        return {"success": False, "message": str(e)}
 
 @frappe.whitelist()
 def test_email_template_page():

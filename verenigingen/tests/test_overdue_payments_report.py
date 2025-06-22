@@ -3,7 +3,7 @@ import unittest
 from frappe.utils import today, add_days, flt
 from unittest.mock import patch, MagicMock
 from verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments import (
-    execute, get_data, get_user_chapter_filter, get_summary, get_chart_data
+    execute, get_data, get_user_accessible_chapters, get_summary, get_chart_data
 )
 
 class TestOverduePaymentsReport(unittest.TestCase):
@@ -75,7 +75,7 @@ class TestOverduePaymentsReport(unittest.TestCase):
                 self.assertIn('fieldtype', column)
 
     @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.frappe.db.sql')
-    @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_user_chapter_filter')
+    @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_user_accessible_chapters')
     def test_get_data_basic_query(self, mock_chapter_filter, mock_sql):
         """Test basic data retrieval and query construction"""
         mock_chapter_filter.return_value = None  # Admin user
@@ -98,7 +98,7 @@ class TestOverduePaymentsReport(unittest.TestCase):
         self.assertIn('m.primary_chapter = %(chapter)s', sql_call)
 
     @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.frappe.db.sql')
-    @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_user_chapter_filter')
+    @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_user_accessible_chapters')
     def test_get_data_with_filters(self, mock_chapter_filter, mock_sql):
         """Test data retrieval with various filters"""
         mock_chapter_filter.return_value = None
@@ -126,7 +126,7 @@ class TestOverduePaymentsReport(unittest.TestCase):
     def test_status_indicator_logic(self):
         """Test status indicator assignment based on days overdue"""
         with patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.frappe.db.sql') as mock_sql:
-            with patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_user_chapter_filter') as mock_filter:
+            with patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_user_accessible_chapters') as mock_filter:
                 mock_filter.return_value = None
                 mock_sql.return_value = [
                     {'days_overdue': 70, 'total_overdue': 100},  # Critical
@@ -145,11 +145,11 @@ class TestOverduePaymentsReport(unittest.TestCase):
 
     @patch('frappe.session.user', 'admin@example.com')
     @patch('frappe.get_roles')
-    def test_get_user_chapter_filter_admin_access(self, mock_get_roles):
+    def test_get_user_accessible_chapters_admin_access(self, mock_get_roles):
         """Test chapter filtering for admin users"""
         mock_get_roles.return_value = ['System Manager']
         
-        result = get_user_chapter_filter()
+        result = get_user_accessible_chapters()
         
         # Admin should have no filter (see all)
         self.assertIsNone(result)
@@ -159,7 +159,7 @@ class TestOverduePaymentsReport(unittest.TestCase):
     @patch('frappe.db.get_value')
     @patch('frappe.get_all')
     @patch('frappe.get_doc')
-    def test_get_user_chapter_filter_board_member_access(self, mock_get_doc, mock_get_all, mock_get_value, mock_get_roles):
+    def test_get_user_accessible_chapters_board_member_access(self, mock_get_doc, mock_get_all, mock_get_value, mock_get_roles):
         """Test chapter filtering for board members"""
         mock_get_roles.return_value = ['Chapter Board Member']
         mock_get_value.return_value = 'MEM-BOARD-001'
@@ -175,7 +175,7 @@ class TestOverduePaymentsReport(unittest.TestCase):
         mock_role.permissions_level = 'Membership'
         mock_get_doc.return_value = mock_role
         
-        result = get_user_chapter_filter()
+        result = get_user_accessible_chapters()
         
         # Should return chapter filter
         self.assertIsInstance(result, str)
@@ -185,12 +185,12 @@ class TestOverduePaymentsReport(unittest.TestCase):
     @patch('frappe.session.user', 'user@example.com')
     @patch('frappe.get_roles')
     @patch('frappe.db.get_value')
-    def test_get_user_chapter_filter_no_access(self, mock_get_value, mock_get_roles):
+    def test_get_user_accessible_chapters_no_access(self, mock_get_value, mock_get_roles):
         """Test chapter filtering for users without access"""
         mock_get_roles.return_value = ['Member']
         mock_get_value.return_value = None  # No member record
         
-        result = get_user_chapter_filter()
+        result = get_user_accessible_chapters()
         
         # Should deny access
         self.assertEqual(result, '1=0')
@@ -252,7 +252,7 @@ class TestOverduePaymentsReport(unittest.TestCase):
         self.assertIsNone(chart)
 
     @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.frappe.db.sql')
-    @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_user_chapter_filter')
+    @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_user_accessible_chapters')
     def test_filter_combinations(self, mock_chapter_filter, mock_sql):
         """Test various filter combinations"""
         mock_chapter_filter.return_value = None
@@ -277,7 +277,7 @@ class TestOverduePaymentsReport(unittest.TestCase):
     def test_data_type_validation(self):
         """Test that returned data has correct types"""
         with patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.frappe.db.sql') as mock_sql:
-            with patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_user_chapter_filter') as mock_filter:
+            with patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_user_accessible_chapters') as mock_filter:
                 mock_filter.return_value = None
                 mock_sql.return_value = self.sample_overdue_data
                 
@@ -300,7 +300,7 @@ class TestOverduePaymentsReport(unittest.TestCase):
         
         # Test with None filters
         with patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.frappe.db.sql') as mock_sql:
-            with patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_user_chapter_filter') as mock_filter:
+            with patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_user_accessible_chapters') as mock_filter:
                 mock_filter.return_value = None
                 mock_sql.return_value = []
                 
@@ -309,7 +309,7 @@ class TestOverduePaymentsReport(unittest.TestCase):
         
         # Test with empty string chapter filter
         with patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.frappe.db.sql') as mock_sql:
-            with patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_user_chapter_filter') as mock_filter:
+            with patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_user_accessible_chapters') as mock_filter:
                 mock_filter.return_value = ""
                 mock_sql.return_value = []
                 
@@ -317,7 +317,7 @@ class TestOverduePaymentsReport(unittest.TestCase):
                 self.assertEqual(result, [])
 
     @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.frappe.db.sql')
-    @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_user_chapter_filter') 
+    @patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_user_accessible_chapters') 
     def test_subscription_filtering(self, mock_chapter_filter, mock_sql):
         """Test that only subscription-based invoices are included"""
         mock_chapter_filter.return_value = None
@@ -336,7 +336,7 @@ class TestOverduePaymentsReport(unittest.TestCase):
     def test_performance_considerations(self):
         """Test query performance considerations"""
         with patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.frappe.db.sql') as mock_sql:
-            with patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_user_chapter_filter') as mock_filter:
+            with patch('verenigingen.verenigingen.report.overdue_member_payments.overdue_member_payments.get_user_accessible_chapters') as mock_filter:
                 mock_filter.return_value = None
                 mock_sql.return_value = []
                 

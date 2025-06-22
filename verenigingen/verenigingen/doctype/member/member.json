@@ -26,8 +26,7 @@
   "address_section",
   "primary_address",
   "address_display",
-  "board_memberships_section",
-  "board_memberships_html",
+  "other_members_at_address",
   "notes_section",
   "notes",
   "membership_tab",
@@ -67,10 +66,11 @@
   "chapter_data_tab",
   "chapter_and_volunteer_activity_section",
   "current_chapter_display",
-  "chapter_assigned_date",
   "chapter_assigned_by",
   "previous_chapter",
   "chapter_change_reason",
+  "board_memberships_section",
+  "board_memberships_html",
   "chapter_membership_history_section",
   "chapter_membership_history",
   "volunteer_details_section",
@@ -294,13 +294,6 @@
    "read_only": 1
   },
   {
-   "description": "Date when member was assigned to current chapter",
-   "fieldname": "chapter_assigned_date",
-   "fieldtype": "Datetime",
-   "label": "Chapter Assigned Date",
-   "read_only": 1
-  },
-  {
    "description": "User who assigned member to current chapter",
    "fieldname": "chapter_assigned_by",
    "fieldtype": "Link",
@@ -455,6 +448,12 @@
    "read_only": 1
   },
   {
+   "fieldname": "other_members_at_address",
+   "fieldtype": "HTML",
+   "label": "Other Members at This Address",
+   "read_only": 1
+  },
+  {
    "fieldname": "erpnext_integration_section",
    "fieldtype": "Section Break",
    "label": "ERPNext Integration"
@@ -476,11 +475,11 @@
    "options": "User"
   },
   {
+   "description": "Link to ERPNext Employee record for expense claims and HR operations",
    "fieldname": "employee",
    "fieldtype": "Link",
    "label": "Employee",
-   "options": "Employee",
-   "description": "Link to ERPNext Employee record for expense claims and HR operations"
+   "options": "Employee"
   },
   {
    "collapsible": 1,
@@ -609,8 +608,8 @@
    "fieldname": "cumulative_membership_duration",
    "fieldtype": "Data",
    "label": "Total Membership Duration",
-   "read_only": 1,
-   "no_copy": 1
+   "no_copy": 1,
+   "read_only": 1
   },
   {
    "fieldname": "membership_tab",
@@ -778,7 +777,7 @@
   {
    "fieldname": "chapter_data_tab",
    "fieldtype": "Tab Break",
-   "label": "Chapter data"
+   "label": "Volunteer & Chapter Data"
   }
  ],
  "links": [
@@ -839,7 +838,7 @@
    "link_fieldname": "name"
   }
  ],
- "modified": "2025-06-18 06:46:06.258176",
+ "modified": "2025-06-22 20:44:30.548792",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",

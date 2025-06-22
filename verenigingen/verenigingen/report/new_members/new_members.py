@@ -65,12 +65,6 @@ def get_columns():
             "width": 100
         },
         {
-            "label": _("Chapter Assigned"),
-            "fieldname": "chapter_assigned_date",
-            "fieldtype": "Datetime",
-            "width": 140
-        },
-        {
             "label": _("Assigned By"),
             "fieldname": "chapter_assigned_by",
             "fieldtype": "Link",
@@ -123,7 +117,7 @@ def get_data(filters):
         filters=member_filters,
         fields=[
             "name", "full_name", "email", "status", "creation",
-            "chapter_assigned_date", "chapter_assigned_by", "previous_chapter"
+            "chapter_assigned_by", "previous_chapter"
         ],
         order_by="creation desc"
     )
@@ -180,10 +174,8 @@ def get_data(filters):
         
         # Determine if this is a new member or recent chapter change
         is_chapter_change = False
-        if member.chapter_assigned_date:
-            chapter_assign_date = getdate(member.chapter_assigned_date.date() if hasattr(member.chapter_assigned_date, 'date') else member.chapter_assigned_date)
-            if chapter_assign_date >= getdate(threshold_date) and member.previous_chapter:
-                is_chapter_change = True
+        # Chapter change detection removed since chapter_assigned_date field was removed
+        # This now only shows new members, not chapter changes
         
         # Build row data
         row = {
@@ -194,7 +186,6 @@ def get_data(filters):
             "membership_type": membership_type,
             "member_since": member_since,
             "days_active": days_active,
-            "chapter_assigned_date": member.chapter_assigned_date,
             "chapter_assigned_by": member.chapter_assigned_by,
             "status_indicator": get_status_indicator(days_active, is_chapter_change)
         }

@@ -77,6 +77,11 @@ frappe.ui.form.on('Member', {
         
         // Load and display current subscription details
         load_subscription_summary(frm);
+        
+        // Update address members display if address is present
+        if (frm.doc.primary_address && window.update_other_members_at_address) {
+            update_other_members_at_address(frm);
+        }
     },
     
     onload: function(frm) {
@@ -165,6 +170,13 @@ frappe.ui.form.on('Member', {
                 message: __('Postal code updated. You may want to assign a chapter based on this location.'),
                 indicator: 'blue'
             }, 3);
+        }
+    },
+    
+    primary_address: function(frm) {
+        // Update other members at address when primary address changes
+        if (window.update_other_members_at_address) {
+            update_other_members_at_address(frm);
         }
     },
     
@@ -687,15 +699,8 @@ function view_donations(frm) {
 }
 
 function add_simple_chapter_suggestion(frm) {
-    if (!frm.doc.__islocal && !frm.doc.current_chapter_display && !$('.chapter-suggestion-container').length) {
-        var $container = $('<div class="chapter-suggestion-container alert alert-info mt-2"></div>');
-        $container.html(`
-            <p><i class="fa fa-info-circle"></i> ${__("This member doesn't have a chapter assigned yet.")}</p>
-            <p class="mb-0"><small class="text-muted">${__("Use the Chapter field above to assign this member to a chapter.")}</small></p>
-        `);
-        
-        $(frm.fields_dict.current_chapter_display.wrapper).append($container);
-    }
+    // Chapter suggestion banner removed as requested
+    // No longer showing assignment prompts in the UI
 }
 
 // ==================== FORM SETUP FUNCTIONS ====================
