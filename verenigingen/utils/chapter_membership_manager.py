@@ -363,7 +363,6 @@ class ChapterMembershipManager:
         try:
             frappe.db.set_value("Member", member_id, {
                 "chapter_change_reason": reason,
-                "chapter_assigned_date": now(),
                 "chapter_assigned_by": assigned_by
             })
             

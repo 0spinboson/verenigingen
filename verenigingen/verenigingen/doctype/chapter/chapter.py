@@ -882,7 +882,6 @@ def assign_member_to_chapter(member, chapter, note=None):
     # Update chapter tracking fields on member using document instead of direct DB update
     member_doc = frappe.get_doc("Member", member)
     member_doc.chapter_change_reason = note or f"Assigned to {chapter}"
-    member_doc.chapter_assigned_date = frappe.utils.now()
     member_doc.chapter_assigned_by = frappe.session.user
     
     # Force update chapter display

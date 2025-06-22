@@ -80,6 +80,9 @@ def get_context(context):
     context.calculator_description = getattr(verenigingen_settings, 'calculator_description', 
         'Our suggested contribution is 0.5% of your monthly net income. This helps ensure fair and equitable contributions based on your financial capacity.')
     
+    # Get maximum fee multiplier setting
+    context.maximum_fee_multiplier = getattr(verenigingen_settings, 'maximum_fee_multiplier', 10)
+    
     # Check if member can adjust their fee
     context.can_adjust_fee = can_member_adjust_fee(context.member, settings)
     
@@ -231,9 +234,19 @@ def submit_fee_adjustment_request(new_amount, reason=""):
     membership_type = frappe.get_doc("Membership Type", membership[1])
     minimum_fee = get_minimum_fee(member_doc, membership_type)
     
+    # Get maximum fee multiplier from settings
+    verenigingen_settings = frappe.get_single("Verenigingen Settings")
+    maximum_fee_multiplier = getattr(verenigingen_settings, 'maximum_fee_multiplier', 10)
+    maximum_fee = minimum_fee * maximum_fee_multiplier
+    
     if new_amount < minimum_fee:
         frappe.throw(_("Amount cannot be less than minimum fee of {0}").format(
             frappe.format_value(minimum_fee, {"fieldtype": "Currency"})
+        ))
+    
+    if new_amount > maximum_fee:
+        frappe.throw(_("Amount cannot be more than maximum fee of {0} (for higher amounts, please contact us directly)").format(
+            frappe.format_value(maximum_fee, {"fieldtype": "Currency"})
         ))
     
     # Check if member can adjust fee

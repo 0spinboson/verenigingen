@@ -140,7 +140,7 @@
                     <ul class="text-sm text-primary-700 space-y-1">
                         <li>{{ _("You can adjust your membership fee up to {0} times per year").format(settings.max_adjustments_per_year) }}</li>
                         <li>{{ _("Minimum fee is {0}").format(frappe.format_value(minimum_fee, {"fieldtype": "Currency"})) }}</li>
-                        <li>{{ _("Maximum fee via this form is {0}").format(frappe.format_value(minimum_fee * 5, {"fieldtype": "Currency"})) }}</li>
+                        <li>{{ _("Maximum fee via this form is {0}").format(frappe.format_value(minimum_fee * maximum_fee_multiplier, {"fieldtype": "Currency"})) }}</li>
                         <li>{{ _("For higher amounts, please contact us directly") }}</li>
                         {% if settings.require_approval_for_decreases %}
                         <li>{{ _("Fee reductions require approval") }}</li>
@@ -159,7 +159,7 @@
                                    id="fee-slider" 
                                    class="w-full cursor-pointer"
                                    min="{{ minimum_fee }}" 
-                                   max="{{ minimum_fee * 5 }}" 
+                                   max="{{ minimum_fee * maximum_fee_multiplier }}" 
                                    step="1"
                                    value="{{ current_fee.amount }}">
                         </div>
@@ -170,7 +170,7 @@
                                        id="new-fee-amount" 
                                        class="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                                        min="{{ minimum_fee }}" 
-                                       max="{{ minimum_fee * 5 }}"
+                                       max="{{ minimum_fee * maximum_fee_multiplier }}"
                                        step="0.50"
                                        value="{{ current_fee.amount }}"
                                        required>

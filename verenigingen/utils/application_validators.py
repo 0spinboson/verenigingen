@@ -248,8 +248,12 @@ def validate_custom_amount(membership_type, amount):
                 "message": _("Minimum amount is {0}").format(frappe.utils.fmt_money(min_amount, currency=membership_type_doc.currency or "EUR"))
             }
         
-        # Use 5x standard amount as reasonable maximum, warn if exceeded
-        max_reasonable = standard_amount * 5
+        # Get maximum fee multiplier from settings
+        verenigingen_settings = frappe.get_single("Verenigingen Settings")
+        maximum_fee_multiplier = getattr(verenigingen_settings, 'maximum_fee_multiplier', 10)
+        
+        # Use configured multiplier as reasonable maximum, warn if exceeded
+        max_reasonable = standard_amount * maximum_fee_multiplier
         warning = None
         if custom_amount > max_reasonable:
             warning = _("Amount is significantly higher than standard - may require review")

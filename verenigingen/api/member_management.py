@@ -270,3 +270,279 @@ def add_member_to_chapter_roster(member_name, new_chapter):
         
     except Exception as e:
         frappe.log_error(f"Error updating chapter roster: {str(e)}", "Chapter Roster Update Error")
+
+@frappe.whitelist()
+def debug_address_members(member_id):
+    """Debug method to test address members functionality"""
+    try:
+        member = frappe.get_doc("Member", member_id)
+        
+        result = {
+            "member_id": member.name,
+            "member_name": f"{member.first_name} {member.last_name}",
+            "primary_address": member.primary_address,
+            "address_members_html": None,
+            "address_members_html_length": 0,
+            "other_members_count": 0,
+            "other_members_list": [],
+            "current_field_value": member.get("other_members_at_address")
+        }
+        
+        # Test the HTML generation
+        html_result = member.get_address_members_html()
+        result["address_members_html"] = html_result
+        result["address_members_html_length"] = len(html_result) if html_result else 0
+        
+        # Test the underlying method
+        other_members = member.get_other_members_at_address()
+        result["other_members_count"] = len(other_members) if other_members else 0
+        result["other_members_list"] = other_members if other_members else []
+        
+        return result
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "traceback": frappe.get_traceback()
+        }
+
+@frappe.whitelist()
+def manually_populate_address_members(member_id):
+    """Manually populate the address members field to test UI"""
+    try:
+        member = frappe.get_doc("Member", member_id)
+        
+        # Generate the HTML content
+        html_content = member.get_address_members_html()
+        
+        # Set the field value directly
+        member.other_members_at_address = html_content
+        member.save(ignore_permissions=True)
+        
+        return {
+            "success": True,
+            "message": f"Field populated for {member_id}",
+            "html_length": len(html_content) if html_content else 0,
+            "field_value": member.other_members_at_address
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": frappe.get_traceback()
+        }
+
+@frappe.whitelist()
+def clear_address_members_field(member_id):
+    """Clear the address members field to test automatic population"""
+    try:
+        member = frappe.get_doc("Member", member_id)
+        member.other_members_at_address = None
+        member.save(ignore_permissions=True)
+        
+        return {
+            "success": True,
+            "message": f"Field cleared for {member_id}"
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
+def test_simple_field_population(member_id):
+    """Test setting a simple value to verify field visibility"""
+    try:
+        member = frappe.get_doc("Member", member_id)
+        
+        # Set a simple test value
+        test_html = '<div style="background: red; color: white; padding: 10px;">TEST: This field is working! If you can see this, the field is visible.</div>'
+        member.other_members_at_address = test_html
+        member.save(ignore_permissions=True)
+        
+        return {
+            "success": True,
+            "message": f"Test content set for {member_id}",
+            "test_html": test_html
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
+def get_address_members_html_api(member_id):
+    """Dedicated API method to get address members HTML - completely separate from document methods"""
+    try:
+        member = frappe.get_doc("Member", member_id)
+        
+        if not member.primary_address:
+            return {
+                "success": True,
+                "html": '<div class="text-muted"><i class="fa fa-home"></i> No address selected</div>'
+            }
+            
+        # Get the address document
+        try:
+            address_doc = frappe.get_doc("Address", member.primary_address)
+        except Exception:
+            return {
+                "success": True,
+                "html": '<div class="text-muted"><i class="fa fa-exclamation-triangle"></i> Address not found</div>'
+            }
+        
+        # Find other members at the same physical address
+        if not address_doc.address_line1 or not address_doc.city:
+            return {
+                "success": True,
+                "html": '<div class="text-muted"><i class="fa fa-info-circle"></i> Incomplete address information</div>'
+            }
+        
+        # Normalize the address components for matching
+        normalized_address_line = address_doc.address_line1.lower().strip()
+        normalized_city = address_doc.city.lower().strip()
+        
+        # Find all addresses with matching physical location (optimized query)
+        matching_addresses = frappe.get_all("Address", 
+            fields=["name", "address_line1", "city"],
+            filters={
+                "address_line1": address_doc.address_line1,  # Exact match instead of LIKE
+                "city": address_doc.city
+            }
+        )
+        
+        same_location_addresses = []
+        for addr in matching_addresses:
+            if addr.address_line1 and addr.city:
+                addr_line_normalized = addr.address_line1.lower().strip()
+                addr_city_normalized = addr.city.lower().strip()
+                
+                # Match if address line AND city are the same (case-insensitive)
+                if (addr_line_normalized == normalized_address_line and 
+                    addr_city_normalized == normalized_city):
+                    same_location_addresses.append(addr.name)
+        
+        if not same_location_addresses:
+            return {
+                "success": True,
+                "html": '<div class="text-muted"><i class="fa fa-info-circle"></i> No other members found at this address</div>'
+            }
+        
+        # Find members using any of the matching addresses, excluding current member
+        other_members = frappe.get_all(
+            "Member",
+            filters={
+                "primary_address": ["in", same_location_addresses],
+                "name": ["!=", member.name],
+                "status": ["in", ["Active", "Pending", "Suspended"]]
+            },
+            fields=["name", "full_name", "email", "status", "member_since", "birth_date"]
+        )
+        
+        if not other_members:
+            return {
+                "success": True,
+                "html": '<div class="text-muted"><i class="fa fa-info-circle"></i> No other members found at this address</div>'
+            }
+        
+        # Generate HTML
+        html_content = f'<div class="address-members-display"><h6>Other Members at This Address ({len(other_members)} found):</h6>'
+        
+        for other in other_members:
+            # Guess relationship
+            relationship = guess_relationship_simple(member, other)
+            
+            # Get age group
+            age_group = get_age_group_simple(other.get("birth_date"))
+            
+            # Get status color
+            status_color = get_status_color_simple(other.get("status", "Unknown"))
+            
+            html_content += f'''
+            <div class="member-card" style="border: 1px solid #ddd; padding: 8px; margin: 4px 0; border-radius: 4px; background: #f8f9fa;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                    <div style="flex-grow: 1;">
+                        <strong>{other.get("full_name", "Unknown")}</strong> 
+                        <span class="text-muted">({other.get("name", "Unknown ID")})</span>
+                        <br><small class="text-muted">
+                            <i class="fa fa-users"></i> {relationship} | 
+                            <i class="fa fa-birthday-cake"></i> {age_group} | 
+                            <i class="fa fa-circle text-{status_color}"></i> {other.get("status", "Unknown")}
+                        </small>
+                        <br><small class="text-muted">
+                            <i class="fa fa-envelope"></i> {other.get("email", "Unknown")}
+                        </small>
+                    </div>
+                    <div style="margin-left: 12px;">
+                        <button type="button" class="btn btn-xs btn-default view-member-btn" 
+                                data-member="{other.get("name", "")}" 
+                                style="font-size: 11px; padding: 4px 8px;">
+                            <i class="fa fa-external-link" style="margin-right: 4px;"></i>View
+                        </button>
+                    </div>
+                </div>
+            </div>
+            '''
+        html_content += '</div>'
+        
+        return {
+            "success": True,
+            "html": html_content
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error in get_address_members_html_api for {member_id}: {str(e)}")
+        return {
+            "success": False,
+            "html": f'<div class="text-danger"><i class="fa fa-exclamation-triangle"></i> Error loading member information: {str(e)}</div>'
+        }
+
+def guess_relationship_simple(member1, member2_data):
+    """Simple relationship guessing"""
+    # Extract last names
+    member1_last = member1.last_name.lower() if member1.last_name else ""
+    member2_name = member2_data.get("full_name", "")
+    member2_last = member2_name.split()[-1].lower() if member2_name else ""
+    
+    # Same last name suggests family
+    if member1_last and member2_last and member1_last == member2_last:
+        return "Family Member"
+    else:
+        return "Household Member"
+
+def get_age_group_simple(birth_date):
+    """Simple age group calculation"""
+    if not birth_date:
+        return "Unknown"
+    
+    try:
+        from frappe.utils import date_diff, today
+        age = date_diff(today(), birth_date) / 365.25
+        
+        if age < 18:
+            return "Minor"
+        elif age < 30:
+            return "Young Adult"
+        elif age < 50:
+            return "Adult"
+        elif age < 65:
+            return "Middle-aged"
+        else:
+            return "Senior"
+    except:
+        return "Unknown"
+
+def get_status_color_simple(status):
+    """Simple status color mapping"""
+    status_colors = {
+        "Active": "success",
+        "Pending": "warning", 
+        "Suspended": "danger",
+        "Terminated": "secondary"
+    }
+    return status_colors.get(status, "secondary")

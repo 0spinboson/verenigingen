@@ -5,6 +5,8 @@ from datetime import timedelta
 
 def execute(filters=None):
     """Generate Recent Chapter Changes Report"""
+    # NOTE: This report needs to be updated to use Chapter Membership History
+    # since the chapter_assigned_date field has been removed from Member doctype
     
     columns = get_columns()
     data = get_data(filters)
@@ -47,12 +49,13 @@ def get_columns():
             "options": "Chapter",
             "width": 150
         },
-        {
-            "label": _("Change Date"),
-            "fieldname": "chapter_assigned_date",
-            "fieldtype": "Datetime",
-            "width": 140
-        },
+        # Field removed - using chapter membership history instead
+        # {
+        #     "label": _("Change Date"),
+        #     "fieldname": "chapter_assigned_date",
+        #     "fieldtype": "Datetime",
+        #     "width": 140
+        # },
         {
             "label": _("Changed By"),
             "fieldname": "chapter_assigned_by",

@@ -64,35 +64,6 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Chapters",
-   "link_count": 2,
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Chapter",
-   "link_count": 0,
-   "link_to": "Chapter",
-   "link_type": "DocType",
-   "onboard": 1,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Chapter Role",
-   "link_count": 0,
-   "link_to": "Chapter Role",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
    "label": "Teams and Commissions",
    "link_count": 1,
    "link_type": "DocType",
@@ -144,105 +115,6 @@
    "label": "Donation Type",
    "link_count": 0,
    "link_to": "Donation Type",
-   "link_type": "DocType",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Reports",
-   "link_count": 9,
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Expiring Memberships",
-   "link_count": 0,
-   "link_to": "Expiring Memberships",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "New Members",
-   "link_count": 0,
-   "link_to": "New Members",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Members Without Chapter",
-   "link_count": 0,
-   "link_to": "Members Without Chapter",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Overdue Member Payments",
-   "link_count": 0,
-   "link_to": "Overdue Member Payments",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Orphaned Subscriptions Report",
-   "link_count": 0,
-   "link_to": "Orphaned Subscriptions Report",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Chapter Expense Report",
-   "link_count": 0,
-   "link_to": "Chapter Expense Report",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Termination Compliance Report",
-   "link_count": 0,
-   "link_to": "Termination Compliance Report",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 1,
-   "label": "Users by Team",
-   "link_count": 0,
-   "link_to": "Users by Team",
-   "link_type": "Report",
-   "onboard": 0,
-   "type": "Link"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Email Templates",
-   "link_count": 0,
-   "link_to": "Email Template",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -651,9 +523,197 @@
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Chapters",
+   "link_count": 3,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Chapter",
+   "link_count": 0,
+   "link_to": "Chapter",
+   "link_type": "DocType",
+   "onboard": 1,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Chapter Role",
+   "link_count": 0,
+   "link_to": "Chapter Role",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Region",
+   "link_count": 0,
+   "link_to": "Region",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Reports",
+   "link_count": 14,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Expiring Memberships",
+   "link_count": 0,
+   "link_to": "Expiring Memberships",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "New Members",
+   "link_count": 0,
+   "link_to": "New Members",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Members Without Chapter",
+   "link_count": 0,
+   "link_to": "Members Without Chapter",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Overdue Member Payments",
+   "link_count": 0,
+   "link_to": "Overdue Member Payments",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Orphaned Subscriptions Report",
+   "link_count": 0,
+   "link_to": "Orphaned Subscriptions Report",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Chapter Expense Report",
+   "link_count": 0,
+   "link_to": "Chapter Expense Report",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Termination Compliance Report",
+   "link_count": 0,
+   "link_to": "Termination Compliance Report",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Users by Team",
+   "link_count": 0,
+   "link_to": "Users by Team",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Bank Transaction",
+   "link_count": 0,
+   "link_to": "Bank Transaction",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Bank Reconciliation Tool",
+   "link_count": 0,
+   "link_to": "Bank Reconciliation Tool",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Bank Statement Import",
+   "link_count": 0,
+   "link_to": "Bank Statement Import",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Payment Request",
+   "link_count": 0,
+   "link_to": "Payment Request",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Account",
+   "link_count": 0,
+   "link_to": "Account",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Accounting Dimension",
+   "link_count": 0,
+   "link_to": "Accounting Dimension",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
   }
  ],
- "modified": "2025-06-21 15:30:44.672029",
+ "modified": "2025-06-21 17:14:39.299217",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "module_onboarding": "Verenigingen",

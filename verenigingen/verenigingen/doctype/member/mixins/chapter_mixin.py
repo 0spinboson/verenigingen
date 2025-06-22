@@ -21,7 +21,6 @@ class ChapterMixin:
         
         # Set assignment tracking fields
         if new_chapter:
-            self.chapter_assigned_date = now()
             self.chapter_assigned_by = frappe.session.user
             
             # Set a default reason if not provided

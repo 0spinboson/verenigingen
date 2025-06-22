@@ -299,6 +299,9 @@ class MembershipApplication {
         
         // Direct binding for age calculation since step system might not be working
         this.bindAgeCalculation();
+        
+        // Bind chapter suggestion based on postal code
+        this.bindChapterSuggestion();
     }
     
     bindStepNavigation() {
@@ -310,30 +313,30 @@ class MembershipApplication {
         this.showStep(1);
         
         // Next button
-        $('#next-btn').off('click').on('click', async (e) => {
+        $('#btn-next').off('click').on('click', async (e) => {
             e.preventDefault();
             console.log('Next button clicked, current step:', this.currentStep);
             
             // Disable button during validation
-            $('#next-btn').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Validating...');
+            $('#btn-next').prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Validating...');
             
             try {
                 await this.nextStep();
             } finally {
                 // Re-enable button
-                $('#next-btn').prop('disabled', false).html('Next');
+                $('#btn-next').prop('disabled', false).html('Next →');
             }
         });
         
         // Previous button  
-        $('#prev-btn').off('click').on('click', (e) => {
+        $('#btn-prev').off('click').on('click', (e) => {
             e.preventDefault();
             console.log('Previous button clicked, current step:', this.currentStep);
             this.prevStep();
         });
         
         // Submit button
-        $('#submit-btn').off('click').on('click', (e) => {
+        $('#btn-submit').off('click').on('click', (e) => {
             e.preventDefault();
             console.log('Submit button clicked');
             this.submitApplication();
@@ -368,9 +371,19 @@ class MembershipApplication {
         $(`.form-step[data-step="${step}"]`).show().addClass('active');
         
         // Update navigation buttons
-        $('#prev-btn').toggle(step > 1);
-        $('#next-btn').toggle(step < this.maxSteps);
-        $('#submit-btn').toggle(step === this.maxSteps);
+        if (step > 1) {
+            $('#btn-prev').removeClass('hidden').show();
+        } else {
+            $('#btn-prev').addClass('hidden').hide();
+        }
+        
+        if (step < this.maxSteps) {
+            $('#btn-next').removeClass('hidden').show();
+            $('#btn-submit').addClass('hidden').hide();
+        } else {
+            $('#btn-next').addClass('hidden').hide();
+            $('#btn-submit').removeClass('hidden').show();
+        }
         
         // Update progress bar
         const progress = (step / this.maxSteps) * 100;
@@ -396,19 +409,8 @@ class MembershipApplication {
     async validateCurrentStep() {
         console.log('Validating step:', this.currentStep);
         
-        // Try to use step-specific validation if available
-        if (this.steps && this.steps[this.currentStep - 1]) {
-            try {
-                // Await async validation
-                const result = await this.steps[this.currentStep - 1].validate();
-                return result;
-            } catch (error) {
-                console.warn('Step validation failed:', error);
-                // Continue to fallback validation
-            }
-        }
-        
-        // Fallback to basic validation
+        // Use basic validation for now (step-specific validation disabled)
+        // TODO: Fix step-specific validation integration
         return this.validateStepBasic(this.currentStep);
     }
     
@@ -484,24 +486,62 @@ class MembershipApplication {
                 break;
                 
             case 5: // Payment
-                const paymentMethod = this.getPaymentMethod();
+                console.log('Validating step 5 - Payment');
+                
+                // Check payment method selection
+                const paymentMethod = $('input[name="payment_method"]:checked').val();
+                console.log('Payment method selected:', paymentMethod);
                 if (!paymentMethod) {
+                    console.log('No payment method selected');
                     if (typeof frappe !== 'undefined' && frappe.msgprint) {
                         frappe.msgprint('Please select a payment method');
                     }
                     isValid = false;
                 }
                 
-                if (!$('#terms').is(':checked')) {
+                // Check IBAN
+                const iban = $('#iban').val();
+                console.log('IBAN value:', iban);
+                if (!iban || iban.trim() === '') {
+                    console.log('IBAN is empty');
+                    $('#iban').addClass('is-invalid');
+                    let feedback = $('#iban').siblings('.invalid-feedback');
+                    if (feedback.length === 0) {
+                        $('#iban').after('<div class="invalid-feedback">IBAN is required</div>');
+                    }
+                    $('#iban').siblings('.invalid-feedback').show();
+                    isValid = false;
+                }
+                
+                // Check account holder name
+                const accountHolder = $('#account_holder_name').val();
+                console.log('Account holder name:', accountHolder);
+                if (!accountHolder || accountHolder.trim() === '') {
+                    console.log('Account holder name is empty');
+                    $('#account_holder_name').addClass('is-invalid');
+                    let feedback = $('#account_holder_name').siblings('.invalid-feedback');
+                    if (feedback.length === 0) {
+                        $('#account_holder_name').after('<div class="invalid-feedback">Account holder name is required</div>');
+                    }
+                    $('#account_holder_name').siblings('.invalid-feedback').show();
+                    isValid = false;
+                }
+                
+                console.log('Step 5 validation result:', isValid);
+                break;
+                
+            case 6: // Confirmation
+                // Check terms and privacy checkboxes
+                if (!$('input[name="terms_accepted"]').is(':checked')) {
                     if (typeof frappe !== 'undefined' && frappe.msgprint) {
                         frappe.msgprint('Please accept the terms and conditions');
                     }
                     isValid = false;
                 }
                 
-                if (!$('#gdpr_consent').is(':checked')) {
+                if (!$('input[name="privacy_accepted"]').is(':checked')) {
                     if (typeof frappe !== 'undefined' && frappe.msgprint) {
-                        frappe.msgprint('Please consent to data processing');
+                        frappe.msgprint('Please agree to the privacy policy');
                     }
                     isValid = false;
                 }
@@ -621,7 +661,7 @@ class MembershipApplication {
             
             // Bank Account Details (Direct Debit)
             iban: $('#iban').val() || '',
-            bank_account_name: $('#bank_account_name').val() || '',
+            bank_account_name: $('#account_holder_name').val() || $('#bank_account_name').val() || '',
             
             // Bank Transfer Account Details (for payment matching)
             // Note: These should map to the member IBAN fields when payment_method is 'Bank Transfer'
@@ -671,6 +711,118 @@ class MembershipApplication {
         $('#birth_date').on('change blur', () => {
             this.calculateAndShowAge();
         });
+    }
+    
+    bindChapterSuggestion() {
+        // Bind chapter suggestion to postal code field changes
+        $(document).on('change blur', '#postal_code', async () => {
+            const postalCode = $('#postal_code').val();
+            const city = $('#city').val();
+            const country = $('#country').val();
+            
+            if (postalCode && postalCode.trim().length >= 4) {
+                console.log('Checking chapter suggestion for postal code:', postalCode);
+                await this.suggestChapterFromPostalCode(postalCode, city, country);
+            } else {
+                // Hide suggestion if postal code is too short
+                $('#suggested-chapter').hide();
+            }
+        });
+        
+        // Also trigger when city changes (for better matching)
+        $(document).on('change blur', '#city', async () => {
+            const postalCode = $('#postal_code').val();
+            const city = $('#city').val();
+            const country = $('#country').val();
+            
+            if (postalCode && postalCode.trim().length >= 4 && city) {
+                console.log('Checking chapter suggestion for city + postal code:', city, postalCode);
+                await this.suggestChapterFromPostalCode(postalCode, city, country);
+            }
+        });
+    }
+    
+    async suggestChapterFromPostalCode(postalCode, city, country) {
+        try {
+            console.log('Suggesting chapters for:', { postalCode, city, country });
+            
+            // Make API call to get chapter suggestions
+            const result = await new Promise((resolve, reject) => {
+                frappe.call({
+                    method: 'verenigingen.verenigingen.doctype.chapter.chapter.suggest_chapters_for_member',
+                    args: {
+                        member: null, // We don't have a member yet during application
+                        postal_code: postalCode,
+                        city: city,
+                        state: null // Could be derived from city if needed
+                    },
+                    callback: (r) => {
+                        if (r.message !== undefined) {
+                            resolve(r.message);
+                        } else {
+                            reject(new Error('No response'));
+                        }
+                    },
+                    error: reject
+                });
+            });
+            
+            console.log('Chapter suggestion result:', result);
+            
+            if (result && result.length > 0) {
+                this.showChapterSuggestion(result[0]); // Show the best match
+            } else {
+                // Hide suggestion if no matches found
+                $('#suggested-chapter').hide();
+            }
+            
+        } catch (error) {
+            console.error('Error suggesting chapters:', error);
+            // Hide suggestion on error
+            $('#suggested-chapter').hide();
+        }
+    }
+    
+    showChapterSuggestion(chapter) {
+        const suggestionDiv = $('#suggested-chapter');
+        
+        if (suggestionDiv.length === 0) {
+            // Create suggestion div if it doesn't exist
+            $('#chapter-selection').append(`
+                <div id="suggested-chapter" class="alert alert-info mt-3" style="display: none;">
+                    <h6><i class="fa fa-lightbulb-o"></i> Suggested Chapter</h6>
+                    <div id="chapter-suggestion-content"></div>
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-sm btn-primary" id="accept-chapter-suggestion">
+                            Select This Chapter
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="dismiss-chapter-suggestion">
+                            Dismiss
+                        </button>
+                    </div>
+                </div>
+            `);
+            
+            // Bind events for suggestion buttons
+            $('#accept-chapter-suggestion').on('click', () => {
+                $('#chapter').val(chapter.name).trigger('change');
+                $('#suggested-chapter').hide();
+            });
+            
+            $('#dismiss-chapter-suggestion').on('click', () => {
+                $('#suggested-chapter').hide();
+            });
+        }
+        
+        // Update content
+        const content = `
+            <p><strong>${chapter.name}</strong></p>
+            <p class="mb-1">Location: ${chapter.city || chapter.state || 'Not specified'}</p>
+            <p class="mb-1 text-muted">Match score: ${chapter.match_score || 0}%</p>
+        `;
+        
+        $('#chapter-suggestion-content').html(content);
+        $('#suggested-chapter').show();
     }
     
     calculateAndShowAge() {
@@ -976,7 +1128,8 @@ class MembershipApplication {
         successHTML += '<p class="lead">Thank you for your application.</p>';
         successHTML += '</div>';
         
-        $('.membership-application-form').html(successHTML);
+        // Fix: Use ID selector instead of class selector
+        $('#membership-application-form').html(successHTML);
         window.scrollTo(0, 0);
     }
     
@@ -1082,24 +1235,33 @@ class MembershipApplication {
         
         const birthDate = birthDateField.val();
         if (!birthDate) {
-            // Clear any existing warning
-            $('#age-warning').hide();
+            // Clear any existing warning and collapse the space
+            const warningDiv = $('#age-warning');
+            if (warningDiv.length > 0) {
+                warningDiv.css({
+                    'visibility': 'hidden',
+                    'height': '0px',
+                    'min-height': '0px',
+                    'padding': '0px',
+                    'margin': '0px'
+                }).removeClass('alert-info alert-warning alert-danger');
+            }
             return;
         }
         
         const age = this.calculateAge(birthDate);
         let warningDiv = $('#age-warning');
         
-        // Create warning div if it doesn't exist
+        // Create warning div if it doesn't exist with reserved space to prevent layout shift
         if (warningDiv.length === 0) {
-            birthDateField.after('<div id="age-warning" class="alert mt-2" style="display: none;"></div>');
+            birthDateField.after('<div id="age-warning" class="alert mt-2" style="min-height: 20px; visibility: hidden;"></div>');
             warningDiv = $('#age-warning');
         }
         
         // Clear previous states
         birthDateField.removeClass('is-invalid is-valid');
         birthDateField.siblings('.invalid-feedback').remove();
-        warningDiv.hide().removeClass('alert-info alert-warning alert-danger');
+        warningDiv.css('visibility', 'hidden').removeClass('alert-info alert-warning alert-danger');
         
         if (age < 0) {
             birthDateField.addClass('is-invalid');
@@ -1109,17 +1271,25 @@ class MembershipApplication {
         
         birthDateField.addClass('is-valid');
         
-        // Show warnings for edge cases
+        // Show warnings for edge cases (only for ages under 12)
         if (age < 12) {
             warningDiv
                 .addClass('alert-info')
                 .html('<i class="fa fa-info-circle"></i> Applicants under 12 may require parental consent')
-                .show();
-        } else if (age > 100) {
-            warningDiv
-                .addClass('alert-warning')
-                .html(`<i class="fa fa-exclamation-triangle"></i> Please verify birth date - applicant would be ${age} years old`)
-                .show();
+                .css({
+                    'visibility': 'visible',
+                    'height': 'auto', 
+                    'min-height': '20px'
+                });
+        } else {
+            // For ages 12 and above, completely collapse the warning div
+            warningDiv.css({
+                'visibility': 'hidden',
+                'height': '0px',
+                'min-height': '0px',
+                'padding': '0px',
+                'margin': '0px'
+            });
         }
         
         console.log(`Age calculated: ${age} years`);
@@ -1183,10 +1353,17 @@ class MembershipApplication {
     
     setupMembershipStep() {
         console.log('Setting up membership step');
+        
+        // Show chapter selection
+        $('#chapter-selection').show();
+        
         // Ensure membership types are loaded
         if ($('.membership-type-card').length === 0) {
             this.loadMembershipTypes(this.membershipTypes);
         }
+        
+        // Set up income calculator if enabled
+        this.setupIncomeCalculator();
     }
     
     setupVolunteerStep() {
@@ -1278,13 +1455,246 @@ class MembershipApplication {
     }
     
     setupConfirmationStep() {
-        // Update complete application summary for final review
-        this.updateFinalApplicationSummary();
+        console.log('Setting up confirmation step');
+        // Update confirmation step with form data
+        this.updateConfirmationDisplay();
         
         // Ensure the summary is updated after a short delay to handle any async state updates
         setTimeout(() => {
-            this.updateFinalApplicationSummary();
+            this.updateConfirmationDisplay();
         }, 100);
+    }
+    
+    setupIncomeCalculator() {
+        console.log('Setting up income calculator');
+        
+        // Check if income calculator is enabled and available
+        if (!$('#income-calculator').length) {
+            console.log('Income calculator not available in this form');
+            return;
+        }
+        
+        // Calculator is always visible when enabled, so just set up functionality
+        this.bindIncomeCalculatorEvents();
+    }
+    
+    bindIncomeCalculatorEvents() {
+        // Income calculator variables
+        const calculatorSettings = {
+            enabled: true,
+            percentage: parseFloat($('#calc-income-percentage').text()) || 0.5
+        };
+        let calculatedAmount = 0;
+        
+        function calculateContribution() {
+            const monthlyIncome = parseFloat($('#calc-monthly-income').val()) || 0;
+            const paymentInterval = $('#calc-payment-interval').val();
+            
+            if (monthlyIncome <= 0) {
+                $('#calc-result').hide();
+                $('#apply-calculated-amount').hide();
+                calculatedAmount = 0;
+                return;
+            }
+            
+            // Calculate based on percentage of monthly income
+            const monthlyContribution = monthlyIncome * (calculatorSettings.percentage / 100);
+            let displayAmount, displayFrequency;
+            
+            if (paymentInterval === 'quarterly') {
+                displayAmount = monthlyContribution * 3; // 3 months worth
+                displayFrequency = 'per quarter';
+            } else if (paymentInterval === 'annually') {
+                displayAmount = monthlyContribution * 12; // 12 months worth
+                displayFrequency = 'per year';
+            } else {
+                displayAmount = monthlyContribution;
+                displayFrequency = 'per month';
+            }
+            
+            calculatedAmount = displayAmount;
+            
+            // Format currency
+            const formattedAmount = '€' + displayAmount.toFixed(2);
+            
+            // Update display
+            $('#calc-suggested-amount').text(formattedAmount);
+            $('#calc-payment-frequency').text(' ' + displayFrequency);
+            $('#calc-result').show();
+            $('#apply-calculated-amount').show();
+        }
+        
+        // Bind calculator events
+        $('#calc-monthly-income, #calc-payment-interval').on('input change', calculateContribution);
+        
+        // Apply calculated amount to main form
+        $('#apply-calculated-amount').on('click', () => {
+            if (calculatedAmount > 0) {
+                this.applyCalculatedAmount(calculatedAmount, $('#calc-payment-interval').val());
+            }
+        });
+    }
+    
+    applyCalculatedAmount(amount, paymentInterval) {
+        console.log('Applying calculated amount:', amount, 'with interval:', paymentInterval);
+        
+        // Find the first applicable membership type based on payment interval
+        const targetMembershipType = this.findMembershipTypeByInterval(paymentInterval);
+        
+        if (targetMembershipType) {
+            // Select the matching membership type card
+            const membershipCard = $(`.membership-type-card[data-type="${targetMembershipType.name}"]`);
+            console.log('Found membership card:', membershipCard.length > 0, 'for type:', targetMembershipType.name);
+            
+            if (membershipCard.length) {
+                // First select the membership type by clicking the standard select button
+                const selectButton = membershipCard.find('.select-membership');
+                if (selectButton.length) {
+                    selectButton.click();
+                    console.log('Clicked select button for membership type:', targetMembershipType.name);
+                } else {
+                    // Fallback: click the card itself
+                    membershipCard.click();
+                    console.log('Clicked membership card for type:', targetMembershipType.name);
+                }
+            }
+            
+            // Wait a moment for the membership type selection to process
+            setTimeout(() => {
+                // Look for "Choose Amount" button (toggle-custom class) in the selected membership card
+                const chooseAmountButton = membershipCard.find('.toggle-custom');
+                console.log('Found choose amount button:', chooseAmountButton.length > 0);
+                
+                if (chooseAmountButton.length) {
+                    // Click the "Choose Amount" button to show custom amount section
+                    chooseAmountButton.click();
+                    console.log('Clicked choose amount button');
+                    
+                    // Wait for custom amount section to appear
+                    setTimeout(() => {
+                        // Set the calculated amount in the custom input
+                        const customInput = membershipCard.find('.custom-amount-input');
+                        console.log('Found custom input:', customInput.length > 0);
+                        
+                        if (customInput.length) {
+                            customInput.val(amount.toFixed(2)).trigger('input');
+                            console.log('Set custom amount:', amount.toFixed(2));
+                            
+                            // Trigger selection with the custom amount
+                            this.selectMembershipType(membershipCard, true, amount);
+                        }
+                        
+                        // Show confirmation message
+                        if (typeof frappe !== 'undefined' && frappe.show_alert) {
+                            frappe.show_alert({
+                                message: `Calculated amount (€${amount.toFixed(2)}) applied to ${targetMembershipType.name} membership`,
+                                indicator: 'green'
+                            });
+                        }
+                        
+                        // Scroll to the membership selection area
+                        $('html, body').animate({
+                            scrollTop: $('#membership-types').offset().top - 100
+                        }, 500);
+                        
+                    }, 300);
+                } else {
+                    console.warn('Could not find choose amount button for membership type');
+                    // Fallback: try to set any custom amount input directly
+                    const customInput = membershipCard.find('.custom-amount-input');
+                    if (customInput.length) {
+                        customInput.val(amount.toFixed(2)).trigger('input');
+                        this.selectMembershipType(membershipCard, true, amount);
+                    }
+                }
+            }, 400);
+        } else {
+            console.warn('Could not find matching membership type for payment interval:', paymentInterval);
+            
+            // Fallback: Try to apply to first available membership type with custom amount support
+            const firstCardWithCustom = $('.membership-type-card').filter((index, card) => {
+                return $(card).find('.toggle-custom').length > 0;
+            }).first();
+            
+            if (firstCardWithCustom.length) {
+                console.log('Using fallback: first membership type with custom amount support');
+                
+                // Select the membership type first
+                const selectButton = firstCardWithCustom.find('.select-membership');
+                if (selectButton.length) {
+                    selectButton.click();
+                }
+                
+                setTimeout(() => {
+                    const chooseAmountButton = firstCardWithCustom.find('.toggle-custom');
+                    if (chooseAmountButton.length) {
+                        chooseAmountButton.click();
+                        
+                        setTimeout(() => {
+                            const customInput = firstCardWithCustom.find('.custom-amount-input');
+                            if (customInput.length) {
+                                customInput.val(amount.toFixed(2)).trigger('input');
+                                this.selectMembershipType(firstCardWithCustom, true, amount);
+                            }
+                        }, 300);
+                    }
+                }, 400);
+                
+                if (typeof frappe !== 'undefined' && frappe.show_alert) {
+                    frappe.show_alert({
+                        message: `Calculated amount (€${amount.toFixed(2)}) applied to available membership type`,
+                        indicator: 'green'
+                    });
+                }
+            } else {
+                // Last resort fallback
+                if (typeof frappe !== 'undefined' && frappe.show_alert) {
+                    frappe.show_alert({
+                        message: `Calculated amount (€${amount.toFixed(2)}) ready - please select a membership type and choose custom amount`,
+                        indicator: 'orange'
+                    });
+                }
+            }
+        }
+    }
+    
+    findMembershipTypeByInterval(paymentInterval) {
+        console.log('Finding membership type for interval:', paymentInterval);
+        
+        // Get available membership types from state
+        const membershipTypes = this.state.get('membershipTypes') || this.membershipTypes || [];
+        console.log('Available membership types:', membershipTypes.length, membershipTypes);
+        
+        // Define interval matching logic
+        const intervalMatchers = {
+            'monthly': ['month', 'maand', 'monthly'],
+            'quarterly': ['quarter', 'kwartaal', 'quarterly', 'driemaandelijk'],
+            'annually': ['year', 'jaar', 'annual', 'yearly', 'jaarlijks']
+        };
+        
+        const matchers = intervalMatchers[paymentInterval] || [];
+        
+        // Find first membership type that matches the interval
+        for (const membershipType of membershipTypes) {
+            const name = (membershipType.name || membershipType.membership_type_name || '').toLowerCase();
+            const description = (membershipType.description || '').toLowerCase();
+            
+            for (const matcher of matchers) {
+                if (name.includes(matcher) || description.includes(matcher)) {
+                    console.log('Found matching membership type:', membershipType);
+                    return membershipType;
+                }
+            }
+        }
+        
+        // If no specific match, return the first available membership type
+        if (membershipTypes.length > 0) {
+            console.log('Using first available membership type:', membershipTypes[0]);
+            return membershipTypes[0];
+        }
+        
+        console.warn('No membership types available');
+        return null;
     }
     
     loadCountries(countries) {
@@ -1531,114 +1941,63 @@ class MembershipApplication {
         });
     }
     
-    updateFinalApplicationSummary() {
-        const summary = $('#final-application-summary');
-        if (summary.length === 0) {
-            console.warn('Final application summary element not found');
-            return;
-        }
-        
+    updateConfirmationDisplay() {
+        console.log('Updating confirmation display');
         const data = this.getAllFormData();
+        console.log('Form data for confirmation:', data);
         
-        let content = '<div class="row">';
+        // Personal Information
+        const fullName = `${data.first_name || ''} ${data.middle_name ? data.middle_name + ' ' : ''}${data.last_name || ''}`.trim();
+        $('#confirm-name').text(fullName || 'Not provided');
+        $('#confirm-email').text(data.email || 'Not provided');
+        $('#confirm-phone').text(data.mobile_no || 'Not provided');
         
-        // Personal Information Column
-        content += '<div class="col-md-6">';
-        content += '<h6>Personal Information</h6>';
-        content += `<p><strong>Name:</strong> ${data.first_name || ''} ${data.last_name || ''}</p>`;
-        content += `<p><strong>Email:</strong> ${data.email || ''}</p>`;
+        // Address Information
+        const address = `${data.address_line1 || ''}, ${data.city || ''}, ${data.postal_code || ''}`.replace(/^,\s*|,\s*$/g, '');
+        $('#confirm-address').text(address || 'Not provided');
+        $('#confirm-city').text(`${data.city || ''}, ${data.postal_code || ''}`.replace(/^,\s*|,\s*$/g, '') || 'Not provided');
+        $('#confirm-country').text(data.country || 'Not provided');
         
-        if (data.birth_date) {
-            content += `<p><strong>Birth Date:</strong> ${data.birth_date}</p>`;
-        }
+        // Membership Information
+        const membershipType = this.state.get('selected_membership_type') || 'Not selected';
+        const membershipAmount = this.state.get('membership_amount') || 0;
+        $('#confirm-membership-type').text(membershipType);
+        $('#confirm-membership-fee').text(membershipAmount ? `€${membershipAmount}` : 'Not set');
         
-        if (data.contact_number) {
-            content += `<p><strong>Contact:</strong> ${data.contact_number}</p>`;
-        }
-        content += '</div>';
+        // Payment Information
+        const paymentMethod = $('input[name="payment_method"]:checked').val() || 'Not selected';
+        $('#confirm-payment-method').text(paymentMethod.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()));
         
-        // Address Information Column
-        content += '<div class="col-md-6">';
-        content += '<h6>Address</h6>';
-        if (data.address_line1) {
-            content += `<p><strong>Address:</strong> ${data.address_line1}</p>`;
-            content += `<p>${data.city || ''} ${data.postal_code || ''}</p>`;
-            content += `<p>${data.country || ''}</p>`;
-        }
-        content += '</div>';
-        
-        content += '</div>';
-        
-        // Membership Information Row
-        content += '<div class="row mt-3">';
-        content += '<div class="col-md-6">';
-        content += '<h6>Membership</h6>';
-        
-        if (data.selected_membership_type) {
-            const membershipType = this.membershipTypes && this.membershipTypes.find(t => t.name === data.selected_membership_type);
+        // Bank Details for bank transfer or SEPA direct debit
+        if (paymentMethod === 'bank_transfer' || paymentMethod === 'sepa_direct_debit') {
+            const iban = data.iban || '';
+            // Use bank_account_name since that's what gets stored in the database
+            const accountHolder = data.bank_account_name || '';
             
-            if (membershipType) {
-                const typeName = membershipType.membership_type_name || membershipType.name;
-                content += `<p><strong>Type:</strong> ${typeName}</p>`;
-                
-                // Format amount with billing period
-                const amount = data.membership_amount || membershipType.amount;
-                const period = membershipType.subscription_period || 'year';
-                const currency = membershipType.currency || 'EUR';
-                const formattedAmount = `${currency} ${parseFloat(amount).toFixed(2)}`;
-                const periodText = period.toLowerCase() === 'quarterly' ? 'Quarterly' : `per ${period}`;
-                content += `<p><strong>Amount:</strong> ${formattedAmount} ${periodText}</p>`;
-                
-                if (data.uses_custom_amount) {
-                    content += `<p><em>Custom contribution amount</em></p>`;
+            if (iban || accountHolder) {
+                let bankInfo = '';
+                if (iban) bankInfo += `IBAN: ${iban}`;
+                if (accountHolder) {
+                    if (bankInfo) bankInfo += '<br>';
+                    bankInfo += `Account Holder: ${accountHolder}`;
                 }
+                $('#confirm-bank-info').html(bankInfo);
+                $('#confirm-bank-details').show();
             } else {
-                content += `<p><strong>Type:</strong> ${data.selected_membership_type}</p>`;
-                if (data.membership_amount) {
-                    const formattedAmount = `EUR ${parseFloat(data.membership_amount).toFixed(2)}`;
-                    content += `<p><strong>Amount:</strong> ${formattedAmount}</p>`;
-                }
+                $('#confirm-bank-details').hide();
             }
         } else {
-            content += `<p><em>No membership type selected</em></p>`;
+            $('#confirm-bank-details').hide();
         }
         
-        if (data.selected_chapter) {
-            content += `<p><strong>Chapter:</strong> ${data.selected_chapter}</p>`;
-        }
-        content += '</div>';
-        
-        // Payment Information Column
-        content += '<div class="col-md-6">';
-        content += '<h6>Payment Information</h6>';
-        
-        if (data.payment_method) {
-            content += `<p><strong>Payment Method:</strong> ${data.payment_method}</p>`;
-            
-            // Show relevant payment details (masked for security)
-            if (data.payment_method === 'Direct Debit' && data.iban) {
-                const maskedIban = data.iban.slice(0, 4) + ' **** **** ' + data.iban.slice(-4);
-                content += `<p><strong>IBAN:</strong> ${maskedIban}</p>`;
-            }
-        } else {
-            content += `<p><em>No payment method selected</em></p>`;
-        }
-        content += '</div>';
-        
-        content += '</div>';
-        
-        // Additional Information
-        if (data.interested_in_volunteering) {
-            content += `<div class="row mt-3"><div class="col-12">`;
-            content += `<h6>Volunteer Information</h6>`;
-            content += `<p><strong>Interested in volunteering:</strong> Yes</p>`;
-            if (data.volunteer_availability) {
-                content += `<p><strong>Availability:</strong> ${data.volunteer_availability}</p>`;
-            }
-            content += `</div></div>`;
-        }
-        
-        summary.html(content);
+        // Volunteering Information
+        const volunteering = $('#interested_in_volunteering').is(':checked') ? 'Yes, interested in volunteering' : 'Not interested in volunteering';
+        $('#confirm-volunteering').text(volunteering);
+    }
+    
+    updateFinalApplicationSummary() {
+        // Legacy function - now redirects to new confirmation display
+        this.updateConfirmationDisplay();
     }
     
     // Legacy method implementations for compatibility
@@ -2034,13 +2393,13 @@ class MembershipApplication {
             $('#bank-account-details').show();
             
             // Set required attributes for bank account fields
-            $('#iban, #bank_account_name').prop('required', true);
+            $('#iban, #bank_account_name, #account_holder_name').prop('required', true);
         } else if (is_bank_transfer) {
             console.log('Main app: Showing bank transfer details with account fields');
             $('#bank-transfer-details').show();
             
             // Bank transfer fields are optional (for payment matching purposes)
-            $('#iban, #bank_account_name').prop('required', false);
+            $('#iban, #bank_account_name, #account_holder_name').prop('required', false);
             $('#transfer_iban, #transfer_account_name').prop('required', false);
         }
         
@@ -2891,9 +3250,11 @@ class PaymentStep extends BaseStep {
                     valid = false;
                 }
                 
-                if (!$('#bank_account_name').val()) {
-                    $('#bank_account_name').addClass('is-invalid');
-                    $('#bank_account_name').after('<div class="invalid-feedback">Account holder name is required</div>');
+                const bankAccountName = $('#bank_account_name').val() || $('#account_holder_name').val();
+                if (!bankAccountName) {
+                    const $field = $('#bank_account_name').length ? $('#bank_account_name') : $('#account_holder_name');
+                    $field.addClass('is-invalid');
+                    $field.after('<div class="invalid-feedback">Account holder name is required</div>');
                     valid = false;
                 }
                 

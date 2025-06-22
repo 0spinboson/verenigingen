@@ -269,7 +269,7 @@ class ValidationService {
                 return {
                     valid: true,
                     message: 'Valid birth date',
-                    warning: 'Applicants under 12 require parental consent',
+                    warning: 'Applicants under 12 may require parental consent',
                     age: result.age
                 };
             }
@@ -278,7 +278,6 @@ class ValidationService {
                 return {
                     valid: true,
                     message: 'Valid birth date',
-                    warning: 'Age verification may be required',
                     age: result.age
                 };
             }

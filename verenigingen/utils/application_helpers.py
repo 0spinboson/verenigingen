@@ -120,7 +120,11 @@ def determine_chapter_from_application(data):
                 data.get("state"),
                 data.get("city")
             )
-            if suggestion_result.get("matches_by_postal"):
+            # The function now returns a list directly, not a dict with matches_by_postal
+            if suggestion_result and isinstance(suggestion_result, list) and len(suggestion_result) > 0:
+                suggested_chapter = suggestion_result[0]["name"]
+            elif isinstance(suggestion_result, dict) and suggestion_result.get("matches_by_postal"):
+                # Fallback for old format
                 suggested_chapter = suggestion_result["matches_by_postal"][0]["name"]
         except ImportError as e:
             frappe.log_error(f"Could not import chapter module: {str(e)}", "Chapter Import Error")
@@ -257,6 +261,8 @@ def create_member_from_application(data, application_id, address=None):
             frappe.log_error(f"Error storing custom amount data: {str(e)}", "Custom Amount Storage Error")
             pass
     
+    # Suppress customer creation messages during application submission
+    member._suppress_customer_messages = True
     member.flags.ignore_permissions = True
     member.insert(ignore_permissions=True)
     return member
@@ -268,8 +274,14 @@ def create_volunteer_record(member):
         return None
         
     try:
+        # Create volunteer name from member's full name or first/last name
+        volunteer_name = member.full_name or f"{member.first_name} {member.last_name}".strip()
+        if not volunteer_name:
+            volunteer_name = member.email  # Fallback to email if no name available
+        
         volunteer = frappe.get_doc({
             "doctype": "Volunteer",
+            "volunteer_name": volunteer_name,
             "member": member.name,
             "email": member.email,
             "first_name": member.first_name,

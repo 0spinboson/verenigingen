@@ -195,42 +195,51 @@ def create_donor_from_member(member):
         if existing_donor:
             return existing_donor
     
-    # Create new donor with all required fields
+    # Create new donor - only donor_name is required now
     donor = frappe.new_doc("Donor")
     donor.donor_name = member_doc.full_name or member_doc.name
     donor.donor_type = "Individual"
     
-    # Handle required fields with fallbacks
-    donor.contact_person = member_doc.full_name or member_doc.first_name or "Member"
-    donor.phone = member_doc.contact_number or "+31000000000"  # Required field, provide valid Dutch number format
+    # Set required email field - link to member email
+    if member_doc.email:
+        donor.donor_email = member_doc.email
+    else:
+        # If no email, create a placeholder email
+        donor.donor_email = f"member.{member_doc.name}@placeholder.local"
+    
+    # Optional fields (no longer required)
+    if member_doc.full_name:
+        donor.contact_person = member_doc.full_name
+    
+    if member_doc.contact_number:
+        donor.phone = member_doc.contact_number
     
     # Get address from primary_address if available
-    address_text = "Address not provided"
     if hasattr(member_doc, 'primary_address') and member_doc.primary_address:
         try:
             address_doc = frappe.get_doc("Address", member_doc.primary_address)
-            address_text = f"{address_doc.address_line1}, {address_doc.city}" if address_doc.address_line1 else "Address not provided"
+            donor.contact_person_address = f"{address_doc.address_line1}, {address_doc.city}" if address_doc.address_line1 else None
         except:
-            address_text = "Address not provided"
+            pass  # Leave empty if address lookup fails
     
-    donor.contact_person_address = address_text
-    donor.donor_category = "Regular Donor"  # Required field
-    
-    # Optional fields
     if member_doc.email:
-        donor.donor_email = member_doc.email
         donor.preferred_communication_method = "Email"
-    elif donor.phone and donor.phone != "+31000000000":
+    elif member_doc.contact_number:
         donor.preferred_communication_method = "Phone"
-    else:
-        donor.preferred_communication_method = "Email"  # Default
+    
+    # Set member connection
+    donor.member = member_doc.name
+    
+    # Set customer connection if member has customer record
+    if hasattr(member_doc, 'customer') and member_doc.customer:
+        donor.customer = member_doc.customer
     
     try:
         donor.insert(ignore_permissions=True)
         frappe.msgprint(_("Donor record {0} created from member").format(donor.name))
         return donor.name
     except Exception as e:
-        frappe.log_error(f"Error creating donor from member {member}: {str(e)}")
+        frappe.log_error(f"Error creating donor from member {member}: {str(e)[:50]}")
         frappe.throw(_("Failed to create donor record: {0}").format(str(e)))
 
 

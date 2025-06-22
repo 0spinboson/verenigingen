@@ -84,11 +84,6 @@
                         
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div class="input-group">
-                                <label for="birth_date" class="input-label">{{ _("Date of Birth") }}</label>
-                                <input type="date" class="form-input" id="birth_date" name="birth_date">
-                            </div>
-                            
-                            <div class="input-group">
                                 <label for="pronouns" class="input-label">{{ _("Pronouns") }}</label>
                                 <select class="form-input" id="pronouns" name="pronouns">
                                     <option value="">{{ _("Select pronouns") }}</option>
@@ -97,6 +92,12 @@
                                     <option value="they/them">{{ _("They/Them") }}</option>
                                     <option value="other">{{ _("Other") }}</option>
                                 </select>
+                            </div>
+                            
+                            <div class="input-group">
+                                <label for="birth_date" class="input-label">{{ _("Date of Birth") }}</label>
+                                <input type="date" class="form-input" id="birth_date" name="birth_date">
+                                <div class="text-red-500 text-sm hidden" id="birth_date_error">{{ _("This field is required") }}</div>
                             </div>
                         </div>
                     </div>
@@ -171,6 +172,46 @@
                                 </p>
                             </div>
                         </div>
+                        
+                        <!-- Income Calculator -->
+                        {% if enable_income_calculator %}
+                        <div class="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200" id="income-calculator">
+                            <h5 class="text-lg font-semibold text-gray-800 mb-3">{{ _("Contribution Calculator") }}</h5>
+                            <p class="text-sm text-gray-600 mb-4">{{ calculator_description }}</p>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <div class="input-group">
+                                    <label for="calc-monthly-income" class="input-label">{{ _("Monthly Net Income (€)") }}</label>
+                                    <input type="number" class="form-input text-sm" id="calc-monthly-income" 
+                                           placeholder="3500" min="0" step="0.01">
+                                </div>
+                                
+                                <div class="input-group">
+                                    <label for="calc-payment-interval" class="input-label">{{ _("Payment Interval") }}</label>
+                                    <select class="form-input text-sm" id="calc-payment-interval">
+                                        <option value="monthly">{{ _("Monthly") }}</option>
+                                        <option value="quarterly">{{ _("Quarterly") }}</option>
+                                        <option value="annually">{{ _("Annually") }}</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div id="calc-result" class="bg-green-50 border border-green-200 text-green-800 p-4 rounded-lg mb-4" style="display: none;">
+                                <p class="text-sm font-medium mb-1">{{ _("Suggested Contribution:") }}</p>
+                                <p class="text-lg font-bold">
+                                    <span id="calc-suggested-amount"></span>
+                                    <span id="calc-payment-frequency"></span>
+                                </p>
+                                <p class="text-xs text-green-600 mt-1">
+                                    {{ _("Based on") }} <span id="calc-income-percentage">{{ income_percentage_rate }}%</span> {{ _("of your monthly income") }}
+                                </p>
+                            </div>
+                            
+                            <button type="button" class="w-full bg-gray-600 hover:bg-gray-700 text-white text-sm py-2 px-4 rounded-md transition-colors duration-200" id="apply-calculated-amount" style="display: none;">
+                                {{ _("Use This Amount") }}
+                            </button>
+                        </div>
+                        {% endif %}
                         
                         <!-- Membership Type Selection -->
                         <h5 class="input-label required">{{ _("Membership Type") }}</h5>
@@ -371,6 +412,7 @@
                                 <h4 class="font-semibold text-gray-900 mb-3">{{ _("Payment") }}</h4>
                                 <div class="space-y-2 text-sm">
                                     <p><span class="font-medium">{{ _("Method") }}:</span> <span id="confirm-payment-method"></span></p>
+                                    <p id="confirm-bank-details" style="display: none;"><span class="font-medium">{{ _("Bank Details") }}:</span> <span id="confirm-bank-info"></span></p>
                                     <p><span class="font-medium">{{ _("Volunteering") }}:</span> <span id="confirm-volunteering"></span></p>
                                 </div>
                             </div>
@@ -431,920 +473,51 @@
 {% endblock %}
 
 {% block script %}
+<!-- Load service dependencies first -->
+<script src="/assets/verenigingen/js/services/api-service.js"></script>
+<script src="/assets/verenigingen/js/services/validation-service.js"></script>
+<script src="/assets/verenigingen/js/services/storage-service.js"></script>
+
+<!-- Load main application -->
+<script src="/assets/verenigingen/js/membership_application.js"></script>
+
 <script>
-class MembershipApplicationTailwind {
-    constructor() {
-        this.currentStep = 1;
-        this.totalSteps = 6;
-        this.formData = {};
-        
-        this.init();
-    }
+// Initialize the membership application form when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Initializing membership application form...');
     
-    init() {
-        this.bindEvents();
-        this.setupVolunteerFields();
-        this.setupPaymentFields();
-        this.loadFormData();
-        this.loadSavedData();
-    }
-    
-    bindEvents() {
-        // Navigation buttons
-        const nextBtn = document.getElementById('btn-next');
-        const prevBtn = document.getElementById('btn-prev');
-        const submitBtn = document.getElementById('btn-submit');
-        
-        if (nextBtn) {
-            nextBtn.addEventListener('click', (e) => {
-                this.nextStep(e);
-            });
-        }
-        
-        if (prevBtn) {
-            prevBtn.addEventListener('click', (e) => {
-                this.prevStep(e);
-            });
-        }
-        
-        if (submitBtn) {
-            submitBtn.addEventListener('click', (e) => this.submitForm(e));
-        }
-        
-        // Auto-save functionality and validation
-        document.querySelectorAll('.form-input').forEach(input => {
-            input.addEventListener('input', (e) => {
-                this.autoSave(e);
-                // Validate on input for immediate feedback
-                if (e.target.type === 'date' || e.target.type === 'email') {
-                    this.validateField(e);
-                }
-            });
-            input.addEventListener('blur', (e) => this.validateField(e));
-            input.addEventListener('change', (e) => this.validateField(e));
-        });
-    }
-    
-    loadFormData() {
-        console.log('Loading form data from API...');
-        
-        // Load form data including membership types, chapters, countries
-        fetch('/api/method/verenigingen.api.membership_application.get_application_form_data')
-            .then(response => response.json())
-            .then(result => {
-                console.log('Form data loaded:', result);
-                
-                if (result.message) {
-                    const data = result.message;
-                    
-                    // Populate countries
-                    if (data.countries) {
-                        const countrySelect = document.getElementById('country');
-                        countrySelect.innerHTML = '<option value="">{{ _("Select country") }}</option>';
-                        data.countries.forEach(country => {
-                            const isSelected = country.name === 'Netherlands' ? ' selected' : '';
-                            countrySelect.innerHTML += `<option value="${country.name}"${isSelected}>${country.name}</option>`;
-                        });
-                    }
-                    
-                    // Populate chapters if available
-                    if (data.chapters && data.chapters.length > 0) {
-                        const chapterSelect = document.getElementById('selected_chapter');
-                        chapterSelect.innerHTML = '<option value="">{{ _("Select a chapter...") }}</option>';
-                        data.chapters.forEach(chapter => {
-                            chapterSelect.innerHTML += `<option value="${chapter.name}">${chapter.name}${chapter.region ? ' - ' + chapter.region : ''}</option>`;
-                        });
-                        document.getElementById('chapter-selection').style.display = 'block';
-                    }
-                    
-                    // Populate membership types
-                    if (data.membership_types) {
-                        this.renderMembershipTypes(data.membership_types);
-                    }
-                }
-            })
-            .catch(error => {
-                console.error('Error loading form data:', error);
-                this.renderFallbackMembershipTypes();
-            });
-    }
-    
-    renderMembershipTypes(membershipTypes) {
-        const container = document.getElementById('membership-types');
-        container.innerHTML = '';
-        
-        // Enhance membership types with custom amount support
-        const enhancedTypes = membershipTypes.map(type => {
-            const baseAmount = parseFloat(type.amount) || 50;
-            return {
-                ...type,
-                allow_custom_amount: true,
-                minimum_amount: Math.max(10, baseAmount * 0.5),
-                maximum_amount: baseAmount * 5,
-                suggested_amounts: [
-                    { amount: baseAmount, label: "Standard" },
-                    { amount: baseAmount * 1.5, label: "Supporter" },
-                    { amount: baseAmount * 2, label: "Patron" },
-                    { amount: baseAmount * 3, label: "Benefactor" }
-                ]
-            };
-        });
-        
-        enhancedTypes.forEach(type => {
-            const card = this.createMembershipCard(type);
-            container.appendChild(card);
-        });
-        
-        this.setupMembershipSelection();
-    }
-    
-    createMembershipCard(type) {
-        const card = document.createElement('div');
-        card.className = 'membership-type-card';
-        card.dataset.type = type.name;
-        card.dataset.amount = type.amount;
-        
-        const subscriptionPeriod = type.subscription_period || 'Monthly';
-        
-        card.innerHTML = `
-            <div class="membership-type-title">${type.membership_type_name}</div>
-            <div class="membership-type-price">${type.currency} ${type.amount} / ${subscriptionPeriod}</div>
-            <div class="membership-type-description">
-                ${type.description || 'Standard membership with full benefits'}
-            </div>
-            
-            <!-- Custom Amount Section -->
-            <div class="custom-amount-section mt-4" style="display: none;">
-                <label class="input-label mb-2">Choose Your Contribution:</label>
-                <div class="amount-suggestion-pills mb-3">
-                    ${type.suggested_amounts.map(suggestion => 
-                        `<button type="button" class="amount-pill px-3 py-1 mr-2 mb-2 border rounded" 
-                                data-amount="${suggestion.amount}">
-                            ${suggestion.label} (${type.currency} ${suggestion.amount})
-                        </button>`
-                    ).join('')}
-                </div>
-                <div class="mt-3">
-                    <label class="input-label">Or enter custom amount:</label>
-                    <input type="number" class="form-input custom-amount-input mt-1" 
-                           min="${type.minimum_amount}" step="0.01" placeholder="Enter amount">
-                    <p class="text-sm text-gray-600 mt-1">Minimum: ${type.currency} ${type.minimum_amount}</p>
-                </div>
-            </div>
-            
-            <div class="btn-group mt-4">
-                <button type="button" class="btn-primary select-membership mr-2">
-                    Select Standard
-                </button>
-                <button type="button" class="btn-secondary toggle-custom">
-                    Choose Amount
-                </button>
-            </div>
-            
-            <input type="radio" name="membership_type" value="${type.name}" style="display: none;">
-        `;
-        
-        // Bind events for this card
-        this.bindMembershipCardEvents(card, type);
-        
-        return card;
-    }
-    
-    bindMembershipCardEvents(card, type) {
-        // Select standard membership
-        const selectBtn = card.querySelector('.select-membership');
-        selectBtn.addEventListener('click', () => {
-            this.selectMembershipType(type, false);
-        });
-        
-        // Toggle custom amount section
-        const toggleBtn = card.querySelector('.toggle-custom');
-        toggleBtn.addEventListener('click', () => {
-            const customSection = card.querySelector('.custom-amount-section');
-            
-            if (customSection.style.display === 'none') {
-                // Hide all other custom sections
-                document.querySelectorAll('.custom-amount-section').forEach(section => {
-                    section.style.display = 'none';
-                });
-                document.querySelectorAll('.toggle-custom').forEach(btn => {
-                    btn.textContent = 'Choose Amount';
-                });
-                
-                // Show this custom section
-                customSection.style.display = 'block';
-                toggleBtn.textContent = 'Standard Amount';
-                
-                // Pre-select standard amount
-                const standardAmount = parseFloat(type.amount);
-                const standardPill = card.querySelector(`[data-amount="${standardAmount}"]`);
-                if (standardPill) {
-                    standardPill.click();
-                }
-            } else {
-                customSection.style.display = 'none';
-                toggleBtn.textContent = 'Choose Amount';
-                this.selectMembershipType(type, false);
-            }
-        });
-        
-        // Amount suggestion pills
-        card.querySelectorAll('.amount-pill').forEach(pill => {
-            pill.addEventListener('click', () => {
-                const amount = parseFloat(pill.dataset.amount);
-                
-                // Update UI
-                card.querySelectorAll('.amount-pill').forEach(p => p.classList.remove('bg-accent-500', 'text-white'));
-                pill.classList.add('bg-accent-500', 'text-white');
-                
-                const input = card.querySelector('.custom-amount-input');
-                input.value = amount;
-                
-                this.selectMembershipType(type, true, amount);
-            });
-        });
-        
-        // Custom amount input
-        const customInput = card.querySelector('.custom-amount-input');
-        customInput.addEventListener('input', () => {
-            const amount = parseFloat(customInput.value);
-            if (!isNaN(amount) && amount >= type.minimum_amount) {
-                // Clear pill selection
-                card.querySelectorAll('.amount-pill').forEach(p => p.classList.remove('bg-accent-500', 'text-white'));
-                this.selectMembershipType(type, true, amount);
-            }
-        });
-    }
-    
-    renderFallbackMembershipTypes() {
-        // Fallback in case API fails
-        const fallbackTypes = [
-            { name: 'Maandlid', membership_type_name: 'Monthly Member', amount: 5.0, currency: 'EUR', description: 'Monthly membership payment' },
-            { name: 'Kwartaallid', membership_type_name: 'Quarterly Member', amount: 15.0, currency: 'EUR', description: 'Quarterly membership payment' }
-        ];
-        
-        this.renderMembershipTypes(fallbackTypes);
-    }
-    
-    selectMembershipType(type, usesCustomAmount = false, customAmount = null) {
-        // Remove selection from all cards
-        document.querySelectorAll('.membership-type-card').forEach(c => c.classList.remove('selected'));
-        
-        // Add selection to clicked card
-        const card = document.querySelector(`[data-type="${type.name}"]`);
-        if (card) {
-            card.classList.add('selected');
-        }
-        
-        // Determine final amount
-        const finalAmount = usesCustomAmount && customAmount ? customAmount : parseFloat(type.amount);
-        
-        // Set form values
-        document.getElementById('membership_type').value = type.name;
-        
-        // Store additional data for submission (matching working form)
-        this.membershipData = {
-            selected_membership_type: type.name,
-            membership_amount: finalAmount,
-            uses_custom_amount: usesCustomAmount,
-            membership_type_details: type
-        };
-        
-        // Set radio button
-        const radio = card?.querySelector('input[type="radio"]');
-        if (radio) radio.checked = true;
-        
-        // Update payment summary
-        this.updatePaymentSummary({
-            ...type,
-            amount: finalAmount,
-            uses_custom_amount: usesCustomAmount
-        });
-        
-        // Hide membership type error
-        const errorElement = document.getElementById('membership_type_error');
-        if (errorElement) {
-            errorElement.classList.add('hidden');
-        }
-        
-        console.log('Selected membership:', this.membershipData);
-    }
-    
-    setupMembershipSelection() {
-        // Chapter suggestion based on postal code
-        const postalCodeField = document.getElementById('postal_code');
-        if (postalCodeField) {
-            postalCodeField.addEventListener('blur', (e) => {
-                const postalCode = e.target.value;
-                const country = document.getElementById('country').value || 'Netherlands';
-                
-                if (postalCode && document.getElementById('chapter-selection').style.display !== 'none') {
-                    this.suggestChapterFromPostalCode(postalCode, country);
-                }
-            });
-        }
-        
-        // Accept chapter suggestion
-        const acceptButton = document.getElementById('accept-suggestion');
-        if (acceptButton) {
-            acceptButton.addEventListener('click', () => {
-                const suggestedChapter = document.getElementById('suggested-chapter-name').textContent;
-                if (suggestedChapter) {
-                    document.getElementById('selected_chapter').value = suggestedChapter;
-                    document.getElementById('suggested-chapter').style.display = 'none';
-                }
-            });
-        }
-    }
-    
-    setupVolunteerFields() {
-        // Show/hide volunteer details based on interest
-        const interestedCheckbox = document.getElementById('interested_in_volunteering');
-        if (interestedCheckbox) {
-            interestedCheckbox.addEventListener('change', (e) => {
-                const volunteerDetails = document.getElementById('volunteer-details');
-                const volunteerAreas = document.getElementById('volunteer-areas');
-                
-                if (e.target.checked) {
-                    volunteerDetails.style.display = 'block';
-                    volunteerAreas.style.display = 'block';
-                } else {
-                    volunteerDetails.style.display = 'none';
-                    volunteerAreas.style.display = 'none';
-                }
-            });
-        }
-    }
-    
-    setupPaymentFields() {
-        // Bank details are always shown for payment matching
-        const bankDetails = document.getElementById('bank-details');
-        const bankDescription = document.getElementById('bank-details-description');
-        const ibanField = document.getElementById('iban');
-        const accountHolderField = document.getElementById('account_holder_name');
-        
-        // Always show bank details and make them required
-        if (bankDetails) {
-            bankDetails.style.display = 'block';
-            ibanField.setAttribute('required', '');
-            accountHolderField.setAttribute('required', '');
-        }
-        
-        // Update description based on payment method selection
-        document.querySelectorAll('input[name="payment_method"]').forEach(radio => {
-            radio.addEventListener('change', (e) => {
-                if (e.target.value === 'sepa_direct_debit') {
-                    bankDescription.textContent = 'Your bank account for automatic membership fee collection.';
-                } else {
-                    bankDescription.textContent = 'Your bank account details for payment matching and processing.';
-                }
-            });
-        });
-    }
-    
-    suggestChapterFromPostalCode(postalCode, country) {
-        console.log('Suggesting chapter for postal code:', postalCode);
-        
-        fetch('/api/method/verenigingen.api.membership_application.validate_postal_code', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Frappe-CSRF-Token': frappe.csrf_token || '',
-            },
-            body: JSON.stringify({
-                postal_code: postalCode,
-                country: country
-            })
-        })
-        .then(response => response.json())
-        .then(result => {
-            console.log('Postal code validation result:', result.message);
-            
-            if (result.message && result.message.suggested_chapters && result.message.suggested_chapters.length > 0) {
-                const suggestedChapter = result.message.suggested_chapters[0];
-                document.getElementById('suggested-chapter-name').textContent = suggestedChapter.name || suggestedChapter;
-                document.getElementById('suggested-chapter').style.display = 'block';
-            } else {
-                document.getElementById('suggested-chapter').style.display = 'none';
-            }
-        })
-        .catch(error => {
-            console.error('Error validating postal code:', error);
-            document.getElementById('suggested-chapter').style.display = 'none';
-        });
-    }
-    
-    updatePaymentSummary(membershipType) {
-        if (typeof membershipType === 'object') {
-            // New format with actual membership type object
-            const summary = `${membershipType.currency} ${membershipType.amount}`;
-            const element = document.getElementById('payment-summary');
-            if (element) {
-                element.textContent = `Selected: ${membershipType.membership_type_name} - ${summary}`;
-            }
-        } else {
-            // Fallback for old format
-            const fees = {
-                'regular': '€25/year',
-                'student': '€15/year', 
-                'supporter': '€10/year',
-                'custom': 'Custom amount/year'
-            };
-            
-            const types = {
-                'regular': 'Regular Member',
-                'student': 'Student Member',
-                'supporter': 'Supporter'
-            };
-            
-            const summaryElement = document.getElementById('payment-summary');
-            if (summaryElement && fees[membershipType]) {
-                summaryElement.textContent = `${types[membershipType]}: ${fees[membershipType]}`;
-            }
-        }
-    }
-    
-    validateField(e) {
-        const field = e.target;
-        const errorElement = document.getElementById(field.name + '_error');
-        let isValid = true;
-        let errorMessage = '';
-        
-        // Basic required field validation
-        if (field.hasAttribute('required') && !field.value.trim()) {
-            isValid = false;
-            errorMessage = 'This field is required';
-        }
-        
-        // Specific field validations
-        if (isValid && field.value.trim()) {
-            switch (field.name) {
-                case 'email':
-                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                    if (!emailRegex.test(field.value)) {
-                        isValid = false;
-                        errorMessage = 'Please enter a valid email address';
-                    }
-                    break;
-                    
-                case 'mobile_no':
-                    if (field.value.trim()) {
-                        const phoneRegex = /^[\+]?[0-9\s\-\(\)]{8,}$/;
-                        if (!phoneRegex.test(field.value)) {
-                            isValid = false;
-                            errorMessage = 'Please enter a valid phone number';
-                        }
-                    }
-                    break;
-                    
-                case 'birth_date':
-                    if (field.value) {
-                        try {
-                            const age = this.calculateAge(field.value);
-                            
-                            if (age < 14) {
-                                isValid = false;
-                                errorMessage = 'You must be at least 14 years old to apply for membership';
-                            } else if (age > 98) {
-                                isValid = false;
-                                errorMessage = 'Please enter a valid birth date';
-                            }
-                            
-                            // Show age info when date is entered and valid
-                            if (isValid) {
-                                this.showAgeInfo(age);
-                            }
-                        } catch (error) {
-                            console.error('Error calculating age:', error);
-                            isValid = false;
-                            errorMessage = 'Please enter a valid birth date';
-                        }
-                    }
-                    break;
-                    
-                case 'postal_code':
-                    const country = document.getElementById('country').value;
-                    if (country === 'Netherlands') {
-                        const dutchPostalRegex = /^[1-9][0-9]{3}\s?[A-Z]{2}$/i;
-                        if (!dutchPostalRegex.test(field.value)) {
-                            isValid = false;
-                            errorMessage = 'Please enter a valid Dutch postal code (e.g., 1234 AB)';
-                        }
-                    }
-                    break;
-                    
-                case 'iban':
-                    if (field.hasAttribute('required') || field.value.trim()) {
-                        const ibanRegex = /^[A-Z]{2}[0-9]{2}[A-Z0-9]{4}[0-9]{7}([A-Z0-9]?){0,16}$/;
-                        const cleanIban = field.value.replace(/\s/g, '').toUpperCase();
-                        if (!ibanRegex.test(cleanIban)) {
-                            isValid = false;
-                            errorMessage = 'Please enter a valid IBAN';
-                        } else {
-                            // Format IBAN nicely
-                            field.value = cleanIban.replace(/(.{4})/g, '$1 ').trim();
-                        }
-                    }
-                    break;
-                    
-                case 'first_name':
-                case 'last_name':
-                    if (field.value.trim().length < 2) {
-                        isValid = false;
-                        errorMessage = 'Name must be at least 2 characters long';
-                    }
-                    break;
-                    
-                case 'custom_amount':
-                    const amount = parseFloat(field.value);
-                    if (isNaN(amount) || amount < 10) {
-                        isValid = false;
-                        errorMessage = 'Custom amount must be at least €10';
-                    } else if (amount > 1000) {
-                        isValid = false;
-                        errorMessage = 'Custom amount seems unusually high. Please contact us if this is correct.';
-                    }
-                    break;
-            }
-        }
-        
-        // Update field styling and error message
-        if (isValid) {
-            field.classList.remove('border-red-500');
-            field.classList.add('border-green-500');
-            if (errorElement) {
-                errorElement.classList.add('hidden');
-            }
-        } else {
-            field.classList.remove('border-green-500');
-            field.classList.add('border-red-500');
-            if (errorElement) {
-                errorElement.textContent = errorMessage;
-                errorElement.classList.remove('hidden');
-            }
-        }
-        
-        return isValid;
-    }
-    
-    calculateAge(birthDate) {
-        const today = new Date();
-        const birth = new Date(birthDate);
-        let age = today.getFullYear() - birth.getFullYear();
-        const monthDiff = today.getMonth() - birth.getMonth();
-        
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-            age--;
-        }
-        
-        return age;
-    }
-    
-    showAgeInfo(age) {
-        const birthDateField = document.getElementById('birth_date');
-        let ageInfo = document.getElementById('age-info');
-        
-        if (!ageInfo) {
-            ageInfo = document.createElement('p');
-            ageInfo.id = 'age-info';
-            ageInfo.className = 'text-sm text-gray-600 mt-1';
-            birthDateField.parentElement.appendChild(ageInfo);
-        }
-        
-        ageInfo.textContent = `Age: ${age} years`;
-    }
-    
-    nextStep(e) {
-        e.preventDefault();
-        
-        const isValid = this.validateCurrentStep();
-        
-        if (isValid) {
-            if (this.currentStep < this.totalSteps) {
-                this.currentStep++;
-                this.updateStep();
-            }
-        }
-    }
-    
-    prevStep(e) {
-        e.preventDefault();
-        
-        if (this.currentStep > 1) {
-            this.currentStep--;
-            this.updateStep();
-        }
-    }
-    
-    updateStep() {        
-        // Hide all steps
-        const allSteps = document.querySelectorAll('.form-step');
-        allSteps.forEach(step => {
-            step.classList.remove('active');
-        });
-        
-        // Show current step
-        const currentStepElement = document.querySelector(`.form-step[data-step="${this.currentStep}"]`);
-        if (currentStepElement) {
-            currentStepElement.classList.add('active');
-        } else {
-            console.error('Could not find step element for step:', this.currentStep);
-        }
-        
-        // Update progress steps
-        document.querySelectorAll('.progress-step').forEach((step, index) => {
-            step.classList.remove('active', 'completed');
-            if (index + 1 === this.currentStep) {
-                step.classList.add('active');
-            } else if (index + 1 < this.currentStep) {
-                step.classList.add('completed');
-            }
-        });
-        
-        // Update progress bar
-        const progress = (this.currentStep / this.totalSteps) * 100;
-        document.getElementById('form-progress').style.width = `${progress}%`;
-        
-        // Populate confirmation step when reaching step 6
-        if (this.currentStep === 6) {
-            this.populateConfirmation();
-        }
-        
-        // Show/hide navigation buttons
-        const prevBtn = document.getElementById('btn-prev');
-        const nextBtn = document.getElementById('btn-next');
-        const submitBtn = document.getElementById('btn-submit');
-        
-        if (this.currentStep === 1) {
-            prevBtn.classList.add('hidden');
-        } else {
-            prevBtn.classList.remove('hidden');
-        }
-        
-        if (this.currentStep === this.totalSteps) {
-            nextBtn.classList.add('hidden');
-            submitBtn.classList.remove('hidden');
-        } else {
-            nextBtn.classList.remove('hidden');
-            submitBtn.classList.add('hidden');
-        }
-        
-        // Scroll to top smoothly
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-    
-    validateCurrentStep() {
-        const currentStepElement = document.querySelector(`.form-step[data-step="${this.currentStep}"]`);
-        if (!currentStepElement) {
-            console.error('Could not find current step element');
-            return false;
-        }
-        
-        const requiredFields = currentStepElement.querySelectorAll('[required]');
-        let isValid = true;
-        
-        // Basic validation for required fields
-        requiredFields.forEach(field => {
-            if (field.hasAttribute('required')) {
-                const value = field.value?.trim();
-                if (!value) {
-                    // Show validation error but don't block navigation during testing
-                    field.classList.add('border-red-500');
-                    field.classList.remove('border-green-500');
-                    
-                    const errorElement = document.getElementById(field.id + '_error');
-                    if (errorElement) {
-                        errorElement.classList.remove('hidden');
-                        errorElement.textContent = 'This field is required';
-                    }
-                } else {
-                    // Field has value, clear any errors
-                    field.classList.remove('border-red-500');
-                    field.classList.add('border-green-500');
-                    
-                    const errorElement = document.getElementById(field.id + '_error');
-                    if (errorElement) {
-                        errorElement.classList.add('hidden');
-                    }
-                }
-            }
-        });
-        
-        // Special case for membership selection (step 3)
-        if (this.currentStep === 3) {
-            const membershipType = document.getElementById('membership_type').value;
-            if (!membershipType) {
-                isValid = false;
-                document.getElementById('membership_type_error').classList.remove('hidden');
-                console.log('Membership type not selected');
-            } else {
-                document.getElementById('membership_type_error').classList.add('hidden');
-            }
-        }
-        
-        // Temporary: Allow navigation even if validation fails (for testing)
-        return true; // Force allow navigation during testing
-    }
-    
-    populateConfirmation() {
-        // Personal Information
-        const firstName = document.getElementById('first_name').value || '';
-        const middleName = document.getElementById('middle_name').value || '';
-        const lastName = document.getElementById('last_name').value || '';
-        const fullName = [firstName, middleName, lastName].filter(n => n).join(' ');
-        
-        document.getElementById('confirm-name').textContent = fullName;
-        document.getElementById('confirm-email').textContent = document.getElementById('email').value || '';
-        document.getElementById('confirm-phone').textContent = document.getElementById('mobile_no').value || 'Not provided';
-        
-        // Address
-        const address = document.getElementById('address_line1').value || '';
-        const postalCode = document.getElementById('postal_code').value || '';
-        const city = document.getElementById('city').value || '';
-        const country = document.getElementById('country').value || '';
-        
-        document.getElementById('confirm-address').textContent = `${address}, ${postalCode}`;
-        document.getElementById('confirm-city').textContent = `${city}, ${country}`;
-        document.getElementById('confirm-country').textContent = country;
-        
-        // Membership
-        const membershipType = document.getElementById('membership_type').value;
-        const customAmount = document.getElementById('custom_amount').value;
-        
-        const types = {
-            'regular': 'Regular Member (€25/year)',
-            'student': 'Student Member (€15/year)',
-            'supporter': 'Supporter (€10/year)',
-            'custom': `Custom Amount (€${customAmount || '0'}/year)`
-        };
-        
-        document.getElementById('confirm-membership-type').textContent = types[membershipType] || 'Not selected';
-        document.getElementById('confirm-membership-fee').textContent = types[membershipType] || 'Not selected';
-        
-        // Payment Method
-        const paymentMethod = document.querySelector('input[name="payment_method"]:checked');
-        const paymentText = paymentMethod ? 
-            (paymentMethod.value === 'sepa_direct_debit' ? 'Direct Debit' : 'Bank Transfer') : 
-            'Not selected';
-        
-        document.getElementById('confirm-payment-method').textContent = paymentText;
-        
-        // Volunteering
-        const volunteering = document.querySelector('input[name="interested_in_volunteering"]:checked');
-        const volunteerText = volunteering ? 'Yes, interested in volunteering' : 'Not interested in volunteering';
-        
-        document.getElementById('confirm-volunteering').textContent = volunteerText;
-    }
-    
-    autoSave(e) {
-        const field = e.target;
-        this.formData[field.name] = field.value;
-        
-        // Save to localStorage
-        localStorage.setItem('membership_application_draft_tailwind', JSON.stringify(this.formData));
-    }
-    
-    loadSavedData() {
-        const savedData = localStorage.getItem('membership_application_draft_tailwind');
-        if (savedData) {
-            this.formData = JSON.parse(savedData);
-            
-            // Populate form fields
-            Object.keys(this.formData).forEach(fieldName => {
-                const field = document.querySelector(`[name="${fieldName}"]`);
-                if (field) {
-                    field.value = this.formData[fieldName];
-                    
-                    // Update membership selection if applicable
-                    if (fieldName === 'membership_type') {
-                        const membershipCard = document.querySelector(`[data-membership="${field.value}"]`);
-                        if (membershipCard) {
-                            membershipCard.click();
-                        }
-                    }
-                }
-            });
-        }
-    }
-    
-    async submitForm(e) {
-        e.preventDefault();
-        
-        // Validate all steps
-        let allValid = true;
-        for (let step = 1; step <= this.totalSteps; step++) {
-            this.currentStep = step;
-            this.updateStep();
-            if (!this.validateCurrentStep()) {
-                allValid = false;
-                break;
-            }
-        }
-        
-        if (!allValid) {
-            // Show error message
-            this.showMessage('{{ _("Please fill all required fields") }}', 'error');
+    try {
+        // Check if all required classes are available
+        if (typeof MembershipApplication === 'undefined') {
+            console.error('MembershipApplication class not found');
             return;
         }
         
-        // Collect form data
-        const formData = new FormData(document.getElementById('membership-application-form'));
-        const data = Object.fromEntries(formData.entries());
-        
-        // Process checkbox arrays (volunteer areas)
-        const volunteerAreas = [];
-        formData.getAll('volunteer_areas[]').forEach(area => {
-            volunteerAreas.push(area);
+        // Initialize the application with Tailwind-specific configuration
+        const app = new MembershipApplication({
+            maxSteps: 6,
+            enableAutoSave: true,
+            enableErrorHandling: true,
+            autoSaveInterval: 30000
         });
-        data.volunteer_areas = volunteerAreas;
         
-        // Add membership selection data (matching working form)
-        if (this.membershipData) {
-            data.selected_membership_type = this.membershipData.selected_membership_type;
-            data.membership_amount = this.membershipData.membership_amount;
-            data.uses_custom_amount = this.membershipData.uses_custom_amount;
-        }
+        console.log('MembershipApplication initialized successfully');
         
-        console.log('Submitting application data:', data);
+        // Make app globally available for debugging
+        window.membershipApp = app;
         
-        try {
-            // Show loading state
-            const submitBtn = document.getElementById('btn-submit');
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '{{ _("Submitting...") }}';
-            
-            // Make actual API call to Frappe backend
-            const response = await fetch('/api/method/verenigingen.api.membership_application.submit_application', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Frappe-CSRF-Token': frappe.csrf_token || '',
-                },
-                body: JSON.stringify({
-                    data: {
-                        ...data,
-                        // Fix payment method values
-                        payment_method: data.payment_method === 'sepa_direct_debit' ? 'Direct Debit' : 'Bank Transfer'
-                    }
-                })
-            });
-            
-            const result = await response.json();
-            console.log('API Response:', result);
-            
-            if (result.message && result.message.success) {
-                // Success
-                this.showSuccessMessage();
-                // Clear saved data
-                localStorage.removeItem('membership_application_draft_tailwind');
-            } else {
-                // Error from API
-                throw new Error(result.message?.error || result.error || 'Submission failed');
-            }
-            
-            // Clear saved data
-            localStorage.removeItem('membership_application_draft_tailwind');
-            
-            // Show success message
-            this.showSuccessMessage();
-            
-        } catch (error) {
-            console.error('Submission error:', error);
-            this.showMessage('{{ _("An error occurred while submitting your application") }}', 'error');
-        } finally {
-            const submitBtn = document.getElementById('btn-submit');
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = '{{ _("Submit Application") }}';
-        }
-    }
-    
-    showSuccessMessage() {
-        // Hide form
-        document.getElementById('membership-application-form').style.display = 'none';
-        document.querySelector('.progress-container').style.display = 'none';
+    } catch (error) {
+        console.error('Error initializing membership application:', error);
         
-        // Show success message
-        document.getElementById('success-message').classList.remove('hidden');
-    }
-    
-    showMessage(message, type = 'info') {
-        // Create and show a temporary message
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `alert-${type === 'error' ? 'danger' : 'info'} mb-4`;
-        messageDiv.innerHTML = message;
-        
-        // Insert at top of form
+        // Fallback: Show a user-friendly error message
         const form = document.getElementById('membership-application-form');
-        form.insertBefore(messageDiv, form.firstChild);
-        
-        // Remove after 5 seconds
-        setTimeout(() => messageDiv.remove(), 5000);
+        if (form) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'alert-danger mb-4';
+            errorDiv.innerHTML = 'There was an error loading the form. Please refresh the page or contact support.';
+            form.insertBefore(errorDiv, form.firstChild);
+        }
     }
-}
-
-// Initialize when DOM is loaded
-document.addEventListener('DOMContentLoaded', function() {
-    new MembershipApplicationTailwind();
 });
 </script>
 {% endblock %}

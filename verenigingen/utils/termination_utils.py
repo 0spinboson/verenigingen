@@ -21,7 +21,11 @@ def validate_termination_readiness(member_name):
                 "sepa_mandates": 0,
                 "board_positions": 0,
                 "outstanding_invoices": 0,
-                "active_subscriptions": 0
+                "active_subscriptions": 0,
+                "volunteer_records": 0,
+                "pending_volunteer_expenses": 0,
+                "employee_records": 0,
+                "user_account": False
             }
         }
         
@@ -99,6 +103,77 @@ def validate_termination_readiness(member_name):
         if existing_requests > 0:
             readiness["ready"] = False
             readiness["blockers"].append("Member already has pending termination request(s)")
+        
+        # Check volunteer records
+        volunteer_records = frappe.db.count("Volunteer", {
+            "member": member_name,
+            "status": ["in", ["Active", "On Leave"]]
+        })
+        readiness["impact"]["volunteer_records"] = volunteer_records
+        
+        if volunteer_records > 0:
+            readiness["warnings"].append(f"Member has {volunteer_records} active volunteer record(s)")
+            
+            # Check pending volunteer expenses
+            pending_expenses = frappe.db.sql("""
+                SELECT COUNT(*)
+                FROM `tabVolunteer Expense` ve
+                INNER JOIN `tabVolunteer` v ON ve.volunteer = v.name
+                WHERE v.member = %s
+                AND ve.docstatus = 0
+                AND ve.approval_status IN ('Pending', 'Under Review')
+            """, (member_name,))[0][0]
+            
+            readiness["impact"]["pending_volunteer_expenses"] = pending_expenses
+            if pending_expenses > 0:
+                readiness["warnings"].append(f"Member has {pending_expenses} pending volunteer expense(s)")
+        
+        # Check employee records and user account
+        user_email = frappe.db.get_value("Member", member_name, "user")
+        employee_records = 0
+        
+        if user_email:
+            readiness["impact"]["user_account"] = True
+            
+            # Method 1: Check via user_id linkage (existing logic)
+            employee_records = frappe.db.count("Employee", {
+                "user_id": user_email,
+                "status": ["in", ["Active", "On Leave"]]
+            })
+            
+            # If no results with user_id, try alternative field names
+            if employee_records == 0:
+                # Try with email field (some ERPNext versions use this)
+                employee_records += frappe.db.count("Employee", {
+                    "personal_email": user_email,
+                    "status": ["in", ["Active", "On Leave"]]
+                })
+                
+                # Try with company_email field
+                if employee_records == 0:
+                    employee_records += frappe.db.count("Employee", {
+                        "company_email": user_email,
+                        "status": ["in", ["Active", "On Leave"]]
+                    })
+        
+        # Method 2: Check direct employee link from Member doctype
+        # This handles cases where member.employee is set but member.user is not,
+        # or where the employee record doesn't have the correct user_id
+        direct_employee_link = frappe.db.get_value("Member", member_name, "employee")
+        if direct_employee_link and frappe.db.exists("Employee", direct_employee_link):
+            # Check if this employee is active
+            employee_status = frappe.db.get_value("Employee", direct_employee_link, "status")
+            if employee_status in ["Active", "On Leave"]:
+                # Avoid double counting - check if this employee is already counted
+                employee_user_id = frappe.db.get_value("Employee", direct_employee_link, "user_id")
+                if not user_email or employee_user_id != user_email:
+                    # Either no user email or different employee, add to count
+                    employee_records += 1
+        
+        readiness["impact"]["employee_records"] = employee_records
+        
+        if employee_records > 0:
+            readiness["warnings"].append(f"Member has {employee_records} active employee record(s)")
         
         return readiness
         

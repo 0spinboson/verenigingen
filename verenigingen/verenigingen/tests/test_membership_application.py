@@ -32,6 +32,24 @@ class TestMembershipApplication(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up test data"""
+        # Create required Item Group for membership types
+        if not frappe.db.exists("Item Group", "Membership"):
+            item_group = frappe.get_doc({
+                "doctype": "Item Group",
+                "item_group_name": "Membership",
+                "parent_item_group": "All Item Groups",
+                "is_group": 0
+            })
+            item_group.insert()
+        
+        # Create required Region for chapters
+        if not frappe.db.exists("Region", "Test Region"):
+            region = frappe.get_doc({
+                "doctype": "Region",
+                "region": "Test Region"
+            })
+            region.insert()
+        
         # Create test membership type
         if not frappe.db.exists("Membership Type", "Test Membership"):
             membership_type = frappe.get_doc({
@@ -158,7 +176,7 @@ class TestMembershipApplication(unittest.TestCase):
         """Test application approval workflow"""
         # Submit application
         result = submit_application(**self.application_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         # Approve application
         frappe.set_user("Administrator")
@@ -193,7 +211,7 @@ class TestMembershipApplication(unittest.TestCase):
         """Test application rejection"""
         # Submit application
         result = submit_application(**self.application_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         # Reject application
         frappe.set_user("Administrator")
@@ -211,7 +229,7 @@ class TestMembershipApplication(unittest.TestCase):
         """Test payment processing for approved application"""
         # Submit and approve application
         result = submit_application(**self.application_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         frappe.set_user("Administrator")
         approve_membership_application(member_name)
@@ -388,7 +406,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         
         # Submit application
         result = submit_application(**self.application_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         # Get member and verify application_id exists
         member = frappe.get_doc("Member", member_name)
@@ -424,7 +442,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         
         # Submit application
         result = submit_application(**skills_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         # Verify member was created
         member = frappe.get_doc("Member", member_name)
@@ -477,7 +495,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         
         # Submit application
         result = submit_application(**skills_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         # Verify member was created
         member = frappe.get_doc("Member", member_name)
@@ -508,6 +526,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         iban_data["payment_method"] = "Direct Debit"
         iban_data["iban"] = "NL02ABNA0123456789"
         iban_data["bic"] = "ABNANL2A"
+        # Use bank_account_name as that's what the backend expects from form mapping
         iban_data["bank_account_name"] = "Test Account Holder"
         iban_data["email"] = f"iban_{self.test_email}"
         
@@ -516,10 +535,10 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         
         # Verify submission successful
         self.assertTrue(result["success"])
-        self.assertIn("member_id", result)
+        self.assertIn("member_record", result)
         
         # Get created member
-        member = frappe.get_doc("Member", result["member_id"])
+        member = frappe.get_doc("Member", result["member_record"])
         
         # Verify IBAN data was preserved
         self.assertEqual(member.iban, "NL02 ABNA 0123 4567 89")  # Should be formatted
@@ -554,7 +573,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         """Test that membership is properly submitted after approval"""
         # Submit application
         result = submit_application(**self.application_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         # Approve application
         frappe.set_user("Administrator")
@@ -579,7 +598,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         """Test that invoices have proper subscription period dates"""
         # Submit and approve application
         result = submit_application(**self.application_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         frappe.set_user("Administrator")
         approval_result = approve_membership_application(member_name)
@@ -606,7 +625,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         """Test that approval doesn't create duplicate invoices"""
         # Submit application
         result = submit_application(**self.application_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         # Approve application
         frappe.set_user("Administrator")
@@ -634,7 +653,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         custom_amount_data["email"] = f"customdup_{self.test_email}"
         
         result = submit_application(**custom_amount_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         # Approve application
         frappe.set_user("Administrator")
@@ -719,7 +738,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         
         # Submit application
         result = submit_application(**self.application_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         # Approve application
         frappe.set_user("Administrator")
@@ -791,7 +810,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
             custom_data["email"] = f"custom{int(custom_amount)}_{self.test_email}"
             
             result = submit_application(**custom_data)
-            member_name = result["member_id"]
+            member_name = result["member_record"]
             
             # Approve application
             frappe.set_user("Administrator")
@@ -858,7 +877,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         standard_data.pop("uses_custom_amount", None)
         
         result = submit_application(**standard_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         # Approve application
         frappe.set_user("Administrator")
@@ -915,7 +934,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         custom_data["email"] = f"billing_custom_{self.test_email}"
         
         result = submit_application(**custom_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         frappe.set_user("Administrator")
         approve_membership_application(member_name)
@@ -954,7 +973,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         standard_data.pop("uses_custom_amount", None)
         
         result = submit_application(**standard_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         approve_membership_application(member_name)
         
@@ -994,7 +1013,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         custom_data["email"] = f"update_test_{self.test_email}"
         
         result = submit_application(**custom_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         frappe.set_user("Administrator")
         approve_membership_application(member_name)
@@ -1081,7 +1100,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         custom_data["email"] = f"integration_{self.test_email}"
         
         result = submit_application(**custom_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         # 2. Verify member has custom amount data in notes
         member = frappe.get_doc("Member", member_name)
@@ -1209,7 +1228,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         
         # Submit and approve application
         result = submit_application(**volunteer_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         frappe.set_user("Administrator")
         approve_membership_application(member_name)
@@ -1255,7 +1274,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         
         # Submit, approve and complete payment
         result = submit_application(**non_volunteer_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         frappe.set_user("Administrator")
         approve_membership_application(member_name)
@@ -1317,7 +1336,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         zero_data["email"] = f"zero_{self.test_email}"
         
         result = submit_application(**zero_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         # Approve application
         frappe.set_user("Administrator")
@@ -1358,7 +1377,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         # This should either fail during submission or be corrected
         try:
             result = submit_application(**negative_data)
-            member_name = result["member_id"]
+            member_name = result["member_record"]
             
             # If submission succeeds, check that amount was corrected
             member = frappe.get_doc("Member", member_name)
@@ -1393,7 +1412,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         large_data["email"] = f"large_{self.test_email}"
         
         result = submit_application(**large_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         # Approve application
         frappe.set_user("Administrator")
@@ -1446,7 +1465,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         decimal_data["email"] = f"decimal_{self.test_email}"
         
         result = submit_application(**decimal_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         # Approve application
         frappe.set_user("Administrator")
@@ -1501,7 +1520,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         first_data["email"] = f"first_reuse_{self.test_email}"
         
         result1 = submit_application(**first_data)
-        member1_name = result1["member_id"]
+        member1_name = result1["member_record"]
         
         frappe.set_user("Administrator")
         approve_membership_application(member1_name)
@@ -1519,7 +1538,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         second_data["email"] = f"second_reuse_{self.test_email}"
         
         result2 = submit_application(**second_data)
-        member2_name = result2["member_id"]
+        member2_name = result2["member_record"]
         
         approve_membership_application(member2_name)
         
@@ -1584,7 +1603,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         premium_data["email"] = f"premium_{self.test_email}"
         
         result = submit_application(**premium_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         frappe.set_user("Administrator")
         approval_result = approve_membership_application(member_name)
@@ -1646,7 +1665,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         edge_data["email"] = f"edge_{self.test_email}"
         
         result = submit_application(**edge_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         # Approve application
         frappe.set_user("Administrator")
@@ -1713,7 +1732,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         second_member_data["email"] = f"edge2_{self.test_email}"
         
         result2 = submit_application(**second_member_data)
-        member2_name = result2["member_id"]
+        member2_name = result2["member_record"]
         approve_membership_application(member2_name)
         
         memberships2 = frappe.get_all("Membership", filters={"member": member2_name})
@@ -2025,7 +2044,7 @@ class TestChapterSelection(unittest.TestCase):
         # Create a member without a chapter
         application_data = self.base_application_data.copy()
         result = submit_application(**application_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         member = frappe.get_doc("Member", member_name)
         primary_chapter = get_member_primary_chapter(member.name)
@@ -2075,7 +2094,7 @@ class TestChapterSelection(unittest.TestCase):
         application_data["selected_chapter"] = "Test Chapter Amsterdam"
         
         result = submit_application(**application_data)
-        member_name = result["member_id"]
+        member_name = result["member_record"]
         
         # Verify initial assignment
         member = frappe.get_doc("Member", member_name)
@@ -2454,7 +2473,7 @@ class TestMembershipApplicationEdgeCases(unittest.TestCase):
         for result in successful_results:
             if "member_id" in result:
                 try:
-                    member = frappe.get_doc("Member", result["member_id"])
+                    member = frappe.get_doc("Member", result["member_record"])
                     if member.customer:
                         frappe.delete_doc("Customer", member.customer, force=True)
                     frappe.delete_doc("Member", result["member_id"], force=True)
