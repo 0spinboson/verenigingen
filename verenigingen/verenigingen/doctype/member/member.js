@@ -499,7 +499,7 @@ function add_chapter_assignment_button(frm) {
         callback: function(r) {
             if (r.message) {
                 frm.add_custom_button(__('Assign Chapter'), function() {
-                    ChapterUtils.suggest_chapter_for_member(frm);
+                    ChapterUtils.assign_chapter_for_member(frm);
                 }, __('Member Actions'));
                 
                 // Add simple chapter suggestion when no chapter is assigned

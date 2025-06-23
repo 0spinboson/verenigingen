@@ -3,96 +3,10 @@
 function setup_chapter_history_display(frm) {
     if (!frm.doc.name || frm.doc.__islocal) return;
     
-    // Add custom buttons for chapter history management
-    frm.add_custom_button(__('Populate History'), function() {
-        populate_member_chapter_history(frm);
-    }, __('Chapter History'));
-    
-    frm.add_custom_button(__('Show Summary'), function() {
-        show_chapter_history_summary(frm);
-    }, __('Chapter History'));
-    
     // Enhance the chapter membership history table display
     enhance_chapter_history_table(frm);
 }
 
-function populate_member_chapter_history(frm) {
-    frappe.confirm(
-        __('This will populate chapter membership history based on current chapter memberships. Continue?'),
-        function() {
-            frappe.call({
-                method: 'verenigingen.utils.populate_chapter_history.populate_existing_member_chapter_history',
-                callback: function(r) {
-                    if (r.message && r.message.success) {
-                        frappe.show_alert({
-                            message: __('Chapter history populated: {0} records processed', [r.message.processed_count]),
-                            indicator: 'green'
-                        }, 5);
-                        frm.reload_doc();
-                    } else {
-                        frappe.show_alert({
-                            message: __('Error populating history: {0}', [r.message.error || 'Unknown error']),
-                            indicator: 'red'
-                        }, 5);
-                    }
-                }
-            });
-        }
-    );
-}
-
-function show_chapter_history_summary(frm) {
-    if (!frm.doc.name) {
-        frappe.msgprint(__('Please save the member first.'));
-        return;
-    }
-    
-    frappe.call({
-        method: 'verenigingen.utils.populate_chapter_history.get_member_chapter_history_summary',
-        args: {
-            member_id: frm.doc.name
-        },
-        callback: function(r) {
-            if (r.message && !r.message.error) {
-                const summary = r.message;
-                
-                const html = `
-                    <div class="chapter-history-summary">
-                        <h4>${__('Chapter Membership History Summary')}</h4>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="card">
-                                    <div class="card-body">
-                                        <h6 class="card-title">${__('Membership Statistics')}</h6>
-                                        <p><strong>${__('Total Memberships')}:</strong> ${summary.total_memberships}</p>
-                                        <p><strong>${__('Active Memberships')}:</strong> ${summary.active_memberships}</p>
-                                        <p><strong>${__('Completed Memberships')}:</strong> ${summary.completed_memberships}</p>
-                                        <p><strong>${__('Terminated Memberships')}:</strong> ${summary.terminated_memberships}</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="card">
-                                    <div class="card-body">
-                                        <h6 class="card-title">${__('Associated Chapters')}</h6>
-                                        <ul>
-                                            ${summary.chapters_associated.map(chapter => `<li>${chapter}</li>`).join('')}
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <p><small><em>${__('Last updated')}: ${summary.last_updated}</em></small></p>
-                    </div>
-                `;
-                
-                frappe.msgprint(html, __('Chapter History Summary'));
-            } else {
-                frappe.msgprint(__('Error loading chapter history summary: {0}', [r.message.error || 'Unknown error']));
-            }
-        }
-    });
-}
 
 function enhance_chapter_history_table(frm) {
     if (!frm.fields_dict.chapter_membership_history) return;
@@ -172,8 +86,6 @@ function add_chapter_history_insights(frm) {
 // Export functions for use in member.js
 window.ChapterHistoryUtils = {
     setup_chapter_history_display,
-    populate_member_chapter_history,
-    show_chapter_history_summary,
     enhance_chapter_history_table,
     add_chapter_history_insights
 };
