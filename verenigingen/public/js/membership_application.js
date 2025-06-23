@@ -1665,7 +1665,26 @@ class MembershipApplication {
         const membershipTypes = this.state.get('membershipTypes') || this.membershipTypes || [];
         console.log('Available membership types:', membershipTypes.length, membershipTypes);
         
-        // Define interval matching logic
+        // Define direct subscription period mapping (most reliable method)
+        const subscriptionPeriodMapping = {
+            'monthly': 'Monthly',
+            'quarterly': 'Quarterly', 
+            'annually': 'Annual'
+        };
+        
+        // First try: Match by subscription_period field (most reliable)
+        const targetPeriod = subscriptionPeriodMapping[paymentInterval];
+        if (targetPeriod) {
+            for (const membershipType of membershipTypes) {
+                const subscriptionPeriod = membershipType.subscription_period;
+                if (subscriptionPeriod && subscriptionPeriod.toLowerCase() === targetPeriod.toLowerCase()) {
+                    console.log('Found matching membership type by subscription_period:', membershipType);
+                    return membershipType;
+                }
+            }
+        }
+        
+        // Second try: Fallback to name/description matching for legacy support
         const intervalMatchers = {
             'monthly': ['month', 'maand', 'monthly'],
             'quarterly': ['quarter', 'kwartaal', 'quarterly', 'driemaandelijk'],
@@ -1674,21 +1693,33 @@ class MembershipApplication {
         
         const matchers = intervalMatchers[paymentInterval] || [];
         
-        // Find first membership type that matches the interval
+        // Find first membership type that matches the interval in name or description
         for (const membershipType of membershipTypes) {
             const name = (membershipType.name || membershipType.membership_type_name || '').toLowerCase();
             const description = (membershipType.description || '').toLowerCase();
             
             for (const matcher of matchers) {
                 if (name.includes(matcher) || description.includes(matcher)) {
-                    console.log('Found matching membership type:', membershipType);
+                    console.log('Found matching membership type by name/description:', membershipType);
                     return membershipType;
                 }
             }
         }
         
-        // If no specific match, return the first available membership type
+        // Third try: Smart fallback based on interval preference
         if (membershipTypes.length > 0) {
+            // For annually, prefer the type with highest amount (typically annual)
+            if (paymentInterval === 'annually') {
+                const highestAmount = membershipTypes.reduce((prev, current) => {
+                    const prevAmount = parseFloat(prev.amount || 0);
+                    const currentAmount = parseFloat(current.amount || 0);
+                    return currentAmount > prevAmount ? current : prev;
+                });
+                console.log('Using highest amount membership type for annual:', highestAmount);
+                return highestAmount;
+            }
+            
+            // For monthly/quarterly, use first available
             console.log('Using first available membership type:', membershipTypes[0]);
             return membershipTypes[0];
         }

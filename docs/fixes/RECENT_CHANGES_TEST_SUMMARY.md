@@ -71,7 +71,9 @@ bench --site dev.veganisme.net run-tests --app verenigingen
 ### Automated Test Runner
 ```bash
 # Use the provided test runner script
-python3 run_recent_changes_tests.py
+python3 scripts/testing/legacy/run_recent_changes_tests.py
+
+**Note**: This test runner has been moved to the legacy directory. Use the organized test structure in `verenigingen/tests/` instead.
 ```
 
 ## Test Coverage

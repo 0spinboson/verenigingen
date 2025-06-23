@@ -281,6 +281,11 @@ def submit_application(**kwargs):
         # Check eligibility
         eligibility = check_application_eligibility_util(data)
         if not eligibility["eligible"]:
+            # Log detailed validation failure for debugging
+            frappe.log_error(
+                f"Application eligibility check failed for email {data.get('email')}: {'; '.join(eligibility['issues'])}",
+                "Application Eligibility Failed"
+            )
             return {
                 "success": False,
                 "error": "Application not eligible", 
@@ -302,10 +307,25 @@ def submit_application(**kwargs):
         application_id = generate_application_id()
         
         # Create address
-        address = create_address_from_application(data)
+        address = None
+        try:
+            address = create_address_from_application(data)
+        except Exception as e:
+            frappe.log_error(
+                f"Failed to create address for application {application_id}: {str(e)}",
+                "Address Creation Error"
+            )
+            # Continue without address - not critical for member creation
         
         # Create member
-        member = create_member_from_application(data, application_id, address)
+        try:
+            member = create_member_from_application(data, application_id, address)
+        except Exception as e:
+            frappe.log_error(
+                f"Failed to create member record for application {application_id}: {str(e)}\nData: {json.dumps(data, default=str)}",
+                "Member Creation Error"
+            )
+            raise  # Re-raise since this is critical
         
         # Determine suggested chapter
         suggested_chapter = determine_chapter_from_application(data)

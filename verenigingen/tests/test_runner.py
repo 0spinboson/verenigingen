@@ -9,43 +9,174 @@ import traceback
 from datetime import datetime
 
 def run_all_tests():
-    """Run all termination system tests with clear output"""
+    """Run comprehensive test suite including validation tests"""
     
-    print("🧪 TERMINATION SYSTEM TEST RUNNER")
+    print("🧪 COMPREHENSIVE TEST RUNNER")
+    print("=" * 50)
+    print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("=" * 50)
+    
+    test_results = {}
+    overall_success = True
+    
+    # Test suites to run
+    test_suites = [
+        {
+            "name": "Validation Regression Tests",
+            "function": "run_validation_regression_suite",
+            "module": "verenigingen.tests.test_validation_regression"
+        },
+        {
+            "name": "Application Submission Validation",
+            "function": "run_application_submission_tests", 
+            "module": "verenigingen.tests.test_application_submission_validation"
+        },
+        {
+            "name": "Doctype Validation Tests",
+            "function": "run_doctype_validation_tests",
+            "module": "verenigingen.tests.test_doctype_validation_comprehensive"
+        },
+        {
+            "name": "Termination System Tests",
+            "function": "run_termination_tests",
+            "module": "verenigingen.verenigingen.tests.test_termination_system"
+        }
+    ]
+    
+    for suite in test_suites:
+        print(f"\n🚀 Running {suite['name']}...")
+        print("-" * 40)
+        
+        try:
+            # Import and run the test function
+            module = frappe.get_attr(f"{suite['module']}.{suite['function']}")
+            result = module()
+            
+            test_results[suite['name']] = result
+            
+            if isinstance(result, dict):
+                if result.get('success'):
+                    print(f"✅ {suite['name']}: PASSED")
+                    print(f"   {result.get('message', 'Tests completed successfully')}")
+                else:
+                    print(f"❌ {suite['name']}: FAILED")
+                    print(f"   {result.get('message', 'Tests failed')}")
+                    overall_success = False
+            else:
+                # Handle boolean results
+                if result:
+                    print(f"✅ {suite['name']}: PASSED")
+                else:
+                    print(f"❌ {suite['name']}: FAILED")
+                    overall_success = False
+                    
+        except ImportError as e:
+            print(f"❌ {suite['name']}: IMPORT FAILED - {str(e)}")
+            test_results[suite['name']] = {"success": False, "error": str(e)}
+            overall_success = False
+            
+        except Exception as e:
+            print(f"❌ {suite['name']}: EXECUTION FAILED - {str(e)}")
+            test_results[suite['name']] = {"success": False, "error": str(e)}
+            overall_success = False
+    
+    # Summary
+    print("\n" + "=" * 50)
+    print("📊 TEST SUMMARY")
+    print("=" * 50)
+    
+    for suite_name, result in test_results.items():
+        if isinstance(result, dict):
+            status = "✅ PASS" if result.get('success') else "❌ FAIL"
+            tests_info = ""
+            if 'tests_run' in result:
+                tests_info = f" ({result['tests_run']} tests, {result.get('failures', 0)} failures)"
+            print(f"{status} {suite_name}{tests_info}")
+        else:
+            status = "✅ PASS" if result else "❌ FAIL"
+            print(f"{status} {suite_name}")
+    
+    print("\n" + "=" * 50)
+    if overall_success:
+        print("🎉 ALL TEST SUITES PASSED!")
+        print("   System validation is working correctly")
+    else:
+        print("⚠️  SOME TEST SUITES FAILED!")
+        print("   Please review the failures above")
+    
+    print(f"Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("=" * 50)
+    
+    return overall_success
+
+def run_validation_tests_only():
+    """Run only validation-related tests for faster feedback during development"""
+    
+    print("🔍 VALIDATION TEST RUNNER")
     print("=" * 40)
     print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 40)
     
-    try:
-        # Import and run the main test suite
-        from verenigingen.verenigingen.tests.test_termination_system import run_termination_tests
+    validation_suites = [
+        {
+            "name": "Validation Regression Tests",
+            "function": "run_validation_regression_suite",
+            "module": "verenigingen.tests.test_validation_regression"
+        },
+        {
+            "name": "Application Submission Validation",
+            "function": "run_application_submission_tests", 
+            "module": "verenigingen.tests.test_application_submission_validation"
+        },
+        {
+            "name": "Doctype Validation Tests",
+            "function": "run_doctype_validation_tests",
+            "module": "verenigingen.tests.test_doctype_validation_comprehensive"
+        }
+    ]
+    
+    overall_success = True
+    test_results = {}
+    
+    for suite in validation_suites:
+        print(f"\n🚀 Running {suite['name']}...")
+        print("-" * 40)
         
-        print("\n🚀 Running comprehensive test suite...")
-        success = run_termination_tests()
-        
-        print("\n" + "=" * 40)
-        if success:
-            print("✅ ALL TESTS PASSED!")
-            print("   Termination system is working correctly")
-        else:
-            print("❌ SOME TESTS FAILED!")
-            print("   Please check the output above for details")
-        
-        print(f"Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("=" * 40)
-        
-        return success
-        
-    except ImportError as e:
-        print(f"❌ Test import failed: {str(e)}")
-        print("   Make sure test files are properly created")
-        return False
-        
-    except Exception as e:
-        print(f"❌ Test execution failed: {str(e)}")
-        print("\n🔍 Error details:")
-        traceback.print_exc()
-        return False
+        try:
+            module = frappe.get_attr(f"{suite['module']}.{suite['function']}")
+            result = module()
+            
+            test_results[suite['name']] = result
+            
+            if isinstance(result, dict):
+                if result.get('success'):
+                    print(f"✅ {suite['name']}: PASSED")
+                    if 'tests_run' in result:
+                        print(f"   Tests: {result['tests_run']}, Failures: {result.get('failures', 0)}")
+                else:
+                    print(f"❌ {suite['name']}: FAILED")
+                    print(f"   {result.get('message', 'Tests failed')}")
+                    overall_success = False
+            else:
+                if result:
+                    print(f"✅ {suite['name']}: PASSED")
+                else:
+                    print(f"❌ {suite['name']}: FAILED")
+                    overall_success = False
+                    
+        except Exception as e:
+            print(f"❌ {suite['name']}: ERROR - {str(e)}")
+            overall_success = False
+    
+    print("\n" + "=" * 40)
+    if overall_success:
+        print("✅ ALL VALIDATION TESTS PASSED!")
+    else:
+        print("❌ SOME VALIDATION TESTS FAILED!")
+    print(f"Completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("=" * 40)
+    
+    return overall_success
 
 def run_quick_smoke_tests():
     """Run quick smoke tests to verify basic functionality"""
@@ -231,3 +362,13 @@ def main():
 if __name__ == "__main__":
     success = main()
     sys.exit(0 if success else 1)
+
+@frappe.whitelist()
+def run_validation_tests():
+    """Whitelisted function to run validation tests"""
+    return run_validation_tests_only()
+
+@frappe.whitelist()
+def run_comprehensive_tests():
+    """Whitelisted function to run all tests"""
+    return run_all_tests()

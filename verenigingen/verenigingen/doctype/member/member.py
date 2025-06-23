@@ -715,9 +715,30 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         for field in ['first_name', 'middle_name', 'last_name']:
             if not hasattr(self, field) or not getattr(self, field):
                 continue
-            if not getattr(self, field).isalnum() and not all(c.isalnum() or c.isspace() for c in getattr(self, field)):
-                frappe.throw(_("{0} name should not contain special characters")
-                    .format(field.replace('_', ' ').title()))
+            
+            # Use the improved validation from application_validators
+            try:
+                from verenigingen.utils.application_validators import validate_name
+                field_value = getattr(self, field)
+                field_name = field.replace('_', ' ').title()
+                
+                validation_result = validate_name(field_value, field_name)
+                
+                if not validation_result["valid"]:
+                    frappe.throw(_(validation_result["message"]))
+                    
+                # Use sanitized version if available
+                if validation_result.get("sanitized"):
+                    setattr(self, field, validation_result["sanitized"])
+                    
+            except ImportError:
+                # Fallback to basic validation if import fails
+                field_value = getattr(self, field)
+                # Allow letters, spaces, hyphens, apostrophes, and accented characters
+                import re
+                if not re.match(r"^[\w\s\-\'\.\u00C0-\u017F\u0100-\u024F\u1E00-\u1EFF]+$", field_value, re.UNICODE):
+                    frappe.throw(_("{0} contains invalid characters")
+                        .format(field.replace('_', ' ').title()))
                     
     def update_full_name(self):
         """Update the full name based on first names, name particles (tussenvoegsels), and last name"""

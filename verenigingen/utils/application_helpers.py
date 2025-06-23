@@ -138,10 +138,27 @@ def create_address_from_application(data):
     """Create address record from application data"""
     if not (data.get("address_line1") and data.get("city")):
         return None
+    
+    # Import here to avoid circular imports
+    from verenigingen.utils.application_validators import validate_name
+    
+    # Sanitize names for address title
+    first_name = data.get("first_name", "")
+    last_name = data.get("last_name", "")
+    
+    if first_name:
+        validation_result = validate_name(first_name, "First Name")
+        if validation_result.get("valid") and validation_result.get("sanitized"):
+            first_name = validation_result["sanitized"]
+    
+    if last_name:
+        validation_result = validate_name(last_name, "Last Name")
+        if validation_result.get("valid") and validation_result.get("sanitized"):
+            last_name = validation_result["sanitized"]
         
     address = frappe.get_doc({
         "doctype": "Address",
-        "address_title": f"{data['first_name']} {data['last_name']}",
+        "address_title": f"{first_name} {last_name}",
         "address_type": "Personal",
         "address_line1": data.get("address_line1"),
         "address_line2": data.get("address_line2", ""),
@@ -160,11 +177,35 @@ def create_address_from_application(data):
 
 def create_member_from_application(data, application_id, address=None):
     """Create member record from application data"""
+    # Import here to avoid circular imports
+    from verenigingen.utils.application_validators import validate_name
+    
+    # Sanitize names before creating member record
+    first_name = data.get("first_name", "")
+    middle_name = data.get("middle_name", "")
+    last_name = data.get("last_name", "")
+    
+    # Validate and sanitize names
+    if first_name:
+        validation_result = validate_name(first_name, "First Name")
+        if validation_result.get("valid") and validation_result.get("sanitized"):
+            first_name = validation_result["sanitized"]
+    
+    if middle_name:
+        validation_result = validate_name(middle_name, "Middle Name")
+        if validation_result.get("valid") and validation_result.get("sanitized"):
+            middle_name = validation_result["sanitized"]
+    
+    if last_name:
+        validation_result = validate_name(last_name, "Last Name")
+        if validation_result.get("valid") and validation_result.get("sanitized"):
+            last_name = validation_result["sanitized"]
+    
     member = frappe.get_doc({
         "doctype": "Member",
-        "first_name": data.get("first_name"),
-        "middle_name": data.get("middle_name", ""),
-        "last_name": data.get("last_name"),
+        "first_name": first_name,
+        "middle_name": middle_name,
+        "last_name": last_name,
         "email": data.get("email"),
         "contact_number": data.get("contact_number", ""),
         "birth_date": data.get("birth_date"),
@@ -286,7 +327,7 @@ def create_volunteer_record(member):
             "email": member.email,
             "first_name": member.first_name,
             "last_name": member.last_name,
-            "status": "Pending",
+            "status": "New",  # Changed from "Pending" to "New" - valid status for new volunteers
             "available": 1,
             "date_joined": today()
         })
