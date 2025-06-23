@@ -443,6 +443,7 @@ def get_duration_update_stats():
         return {"error": str(e)}
 
 
+
 def setup_member_scheduler_events():
     """Set up the scheduler events for member automation"""
     return {

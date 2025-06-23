@@ -458,24 +458,46 @@ class Membership(Document):
             subscription.party_type = "Customer"
             subscription.party = member.customer
             
-            # If application invoice exists, adjust subscription start date to next billing period
-            if has_application_invoice:
-                # Calculate next billing period start date
-                from frappe.utils import add_months, add_days
-                if subscription_plan.billing_interval == "Month":
-                    next_period_start = add_months(getdate(self.start_date), subscription_plan.billing_interval_count)
-                elif subscription_plan.billing_interval == "Year":
-                    next_period_start = add_months(getdate(self.start_date), subscription_plan.billing_interval_count * 12)
-                else:
-                    # Fallback for other intervals
-                    next_period_start = add_days(getdate(self.start_date), 30)
-                subscription.start_date = next_period_start
-                frappe.log_error(
-                    f"Adjusted subscription start date to {next_period_start} for membership {self.name} to avoid overlap with application invoice",
-                    "Membership Subscription Date Adjustment"
+            # Use subscription period calculator for proper date alignment
+            try:
+                from verenigingen.utils.subscription_period_calculator import get_aligned_subscription_dates
+                membership_type = frappe.get_doc("Membership Type", self.membership_type)
+                
+                # Get properly aligned subscription dates
+                subscription_dates = get_aligned_subscription_dates(
+                    self.start_date, 
+                    membership_type, 
+                    has_application_invoice=has_application_invoice
                 )
-            else:
-                subscription.start_date = getdate(self.start_date)
+                
+                subscription.start_date = subscription_dates['subscription_start_date']
+                
+                # Log the calculated date for tracking
+                frappe.log_error(
+                    f"Subscription start date calculated as {subscription_dates['subscription_start_date']} for membership {self.name} "
+                    f"(application invoice: {has_application_invoice}, billing: {subscription_dates['billing_info']['subscription_period']})",
+                    "Membership Subscription Date Calculation"
+                )
+                
+            except ImportError:
+                # Fallback to original logic if calculator not available
+                if has_application_invoice:
+                    # Calculate next billing period start date
+                    from frappe.utils import add_months, add_days
+                    if subscription_plan.billing_interval == "Month":
+                        next_period_start = add_months(getdate(self.start_date), subscription_plan.billing_interval_count)
+                    elif subscription_plan.billing_interval == "Year":
+                        next_period_start = add_months(getdate(self.start_date), subscription_plan.billing_interval_count * 12)
+                    else:
+                        # Fallback for other intervals
+                        next_period_start = add_days(getdate(self.start_date), 30)
+                    subscription.start_date = next_period_start
+                    frappe.log_error(
+                        f"Fallback: Adjusted subscription start date to {next_period_start} for membership {self.name}",
+                        "Membership Subscription Date Adjustment"
+                    )
+                else:
+                    subscription.start_date = getdate(self.start_date)
             
             # Set company
             default_company = frappe.defaults.get_global_default('company')
