@@ -128,7 +128,7 @@ scheduler_events = {
         "verenigingen.verenigingen.doctype.member_contact_request.contact_request_automation.process_contact_request_automation",
         
         # Board member role cleanup
-        "verenigingen.utils.board_member_role_cleanup.cleanup_expired_board_member_roles",
+        # "verenigingen.utils.board_member_role_cleanup.cleanup_expired_board_member_roles",
     ],
     "weekly": [
         # Termination reports and reviews

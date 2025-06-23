@@ -546,3 +546,881 @@ def get_status_color_simple(status):
         "Terminated": "secondary"
     }
     return status_colors.get(status, "secondary")
+
+@frappe.whitelist()
+def get_mt940_import_url():
+    """Get URL for MT940 import page"""
+    return "/mt940_import"
+
+@frappe.whitelist()
+def test_mt940_extraction(file_content, bank_account=None):
+    """Test the extraction function on first transaction"""
+    try:
+        import base64
+        import tempfile
+        
+        # Decode content
+        mt940_content = base64.b64decode(file_content).decode('utf-8')
+        
+        # Try to import mt940 library
+        try:
+            import mt940
+        except ImportError:
+            return {"success": False, "error": "MT940 library not available"}
+        
+        # Parse without calling the extraction function first to isolate the issue
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.sta', delete=False) as temp_file:
+            temp_file.write(mt940_content)
+            temp_file_path = temp_file.name
+        
+        try:
+            transactions = mt940.parse(temp_file_path)
+            transaction_list = list(transactions)
+            
+            if not transaction_list:
+                return {"success": False, "error": "No statements found"}
+            
+            first_statement = transaction_list[0]
+            if not hasattr(first_statement, 'transactions') or not first_statement.transactions:
+                return {"success": False, "error": "No transactions in first statement"}
+            
+            first_transaction = first_statement.transactions[0]
+            
+            # Get raw data safely
+            raw_data = {
+                "date": str(first_transaction.data.get('date', 'None')),
+                "amount": str(first_transaction.data.get('amount', 'None')),
+                "currency": str(first_transaction.data.get('currency', 'None'))
+            }
+            
+            # Now test extraction
+            try:
+                extracted = extract_transaction_data_improved(first_transaction)
+                return {
+                    "success": True,
+                    "raw_data": raw_data,
+                    "extracted": extracted
+                }
+            except Exception as extract_error:
+                return {
+                    "success": True,
+                    "raw_data": raw_data,
+                    "extracted": None,
+                    "extraction_error": str(extract_error)
+                }
+                
+        finally:
+            import os
+            try:
+                os.unlink(temp_file_path)
+            except:
+                pass
+                
+    except Exception as e:
+        return {"success": False, "error": str(e), "traceback": frappe.get_traceback()}
+
+@frappe.whitelist()
+def debug_mt940_import_improved(file_content, bank_account=None):
+    """Debug version of MT940 import with improved transaction parsing"""
+    try:
+        import base64
+        import tempfile
+        
+        # Decode file content
+        mt940_content = base64.b64decode(file_content).decode('utf-8')
+        
+        debug_info = {
+            "step": "1_file_decoded",
+            "content_length": len(mt940_content),
+            "content_preview": mt940_content[:500] + "..." if len(mt940_content) > 500 else mt940_content
+        }
+        
+        # Try to parse with mt940 library
+        try:
+            import mt940
+            debug_info["step"] = "2_mt940_library_found"
+        except ImportError:
+            debug_info["error"] = "MT940 library not installed"
+            return debug_info
+        
+        # Write to temp file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.sta', delete=False) as temp_file:
+            temp_file.write(mt940_content)
+            temp_file_path = temp_file.name
+        
+        debug_info["step"] = "3_temp_file_created"
+        
+        try:
+            # Parse the MT940 file
+            transactions = mt940.parse(temp_file_path)
+            transaction_list = list(transactions)
+            
+            debug_info["step"] = "4_file_parsed"
+            debug_info["statements_found"] = len(transaction_list)
+            
+            if transaction_list:
+                first_statement = transaction_list[0]
+                debug_info["first_statement"] = {
+                    "has_data": hasattr(first_statement, 'data'),
+                    "has_transactions": hasattr(first_statement, 'transactions'),
+                    "transaction_count": len(first_statement.transactions) if hasattr(first_statement, 'transactions') else 0
+                }
+                
+                if hasattr(first_statement, 'transactions') and first_statement.transactions:
+                    first_transaction = first_statement.transactions[0]
+                    
+                    # Simple inspection without calling extraction (to avoid hanging)
+                    transaction_inspection = {
+                        "has_date_attr": hasattr(first_transaction, 'date'),
+                        "has_amount_attr": hasattr(first_transaction, 'amount'),
+                        "has_data": hasattr(first_transaction, 'data'),
+                        "date_str": str(getattr(first_transaction, 'date', 'None')),
+                        "amount_str": str(getattr(first_transaction, 'amount', 'None')),
+                        "data_keys": list(first_transaction.data.keys()) if hasattr(first_transaction, 'data') else []
+                    }
+                    
+                    # Try to get data values safely
+                    if hasattr(first_transaction, 'data'):
+                        transaction_inspection["data_date"] = str(first_transaction.data.get('date', 'None'))
+                        transaction_inspection["data_amount"] = str(first_transaction.data.get('amount', 'None'))
+                    
+                    debug_info["first_transaction"] = transaction_inspection
+                    debug_info["step"] = "5_transaction_inspected"
+        
+        except Exception as e:
+            debug_info["parse_error"] = str(e)
+            debug_info["step"] = "4_parse_failed"
+        
+        # Clean up temp file
+        import os
+        try:
+            os.unlink(temp_file_path)
+        except:
+            pass
+        
+        return debug_info
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "traceback": frappe.get_traceback()
+        }
+
+@frappe.whitelist()
+def debug_mt940_import(file_content, bank_account=None):
+    """Debug version of MT940 import to see what's happening"""
+    try:
+        import base64
+        import tempfile
+        
+        # Decode file content
+        mt940_content = base64.b64decode(file_content).decode('utf-8')
+        
+        debug_info = {
+            "step": "1_file_decoded",
+            "content_length": len(mt940_content),
+            "content_preview": mt940_content[:500] + "..." if len(mt940_content) > 500 else mt940_content
+        }
+        
+        # Try to parse with mt940 library
+        try:
+            import mt940
+            debug_info["step"] = "2_mt940_library_found"
+        except ImportError:
+            debug_info["error"] = "MT940 library not installed"
+            return debug_info
+        
+        # Write to temp file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.sta', delete=False) as temp_file:
+            temp_file.write(mt940_content)
+            temp_file_path = temp_file.name
+        
+        debug_info["step"] = "3_temp_file_created"
+        debug_info["temp_file"] = temp_file_path
+        
+        try:
+            # Parse the MT940 file
+            transactions = mt940.parse(temp_file_path)
+            transaction_list = list(transactions)
+            
+            debug_info["step"] = "4_file_parsed"
+            debug_info["statements_found"] = len(transaction_list)
+            
+            if transaction_list:
+                first_statement = transaction_list[0]
+                debug_info["first_statement"] = {
+                    "has_data": hasattr(first_statement, 'data'),
+                    "has_transactions": hasattr(first_statement, 'transactions'),
+                    "data_keys": list(first_statement.data.keys()) if hasattr(first_statement, 'data') else [],
+                    "transaction_count": len(first_statement.transactions) if hasattr(first_statement, 'transactions') else 0
+                }
+                
+                if hasattr(first_statement, 'transactions') and first_statement.transactions:
+                    first_transaction = first_statement.transactions[0]
+                    debug_info["first_transaction"] = {
+                        "date": str(first_transaction.date) if hasattr(first_transaction, 'date') else "No date",
+                        "amount": str(first_transaction.amount) if hasattr(first_transaction, 'amount') else "No amount",
+                        "has_data": hasattr(first_transaction, 'data'),
+                        "data_keys": list(first_transaction.data.keys()) if hasattr(first_transaction, 'data') else []
+                    }
+        
+        except Exception as e:
+            debug_info["parse_error"] = str(e)
+            debug_info["step"] = "4_parse_failed"
+        
+        # Clean up temp file
+        import os
+        try:
+            os.unlink(temp_file_path)
+        except:
+            pass
+        
+        return debug_info
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "traceback": frappe.get_traceback()
+        }
+
+@frappe.whitelist()
+def debug_bank_account_search(iban):
+    """Debug bank account search by IBAN"""
+    try:
+        # Get all bank accounts
+        all_accounts = frappe.get_all("Bank Account", 
+            fields=["name", "account_name", "bank_account_no", "iban", "company"],
+            limit_page_length=None
+        )
+        
+        # Search by bank_account_no
+        accounts_by_no = frappe.get_all("Bank Account", 
+            filters={"bank_account_no": iban},
+            fields=["name", "account_name", "bank_account_no", "iban", "company"]
+        )
+        
+        # Search by iban field
+        accounts_by_iban = frappe.get_all("Bank Account", 
+            filters={"iban": iban},
+            fields=["name", "account_name", "bank_account_no", "iban", "company"]
+        )
+        
+        return {
+            "search_iban": iban,
+            "total_accounts": len(all_accounts),
+            "all_accounts": all_accounts,
+            "found_by_bank_account_no": accounts_by_no,
+            "found_by_iban_field": accounts_by_iban
+        }
+        
+    except Exception as e:
+        return {"error": str(e)}
+
+@frappe.whitelist()
+def debug_duplicate_detection(file_content_b64, bank_account, company=None):
+    """Debug the duplicate detection logic specifically"""
+    try:
+        import hashlib
+        import base64
+        
+        # Decode and parse file
+        mt940_content = base64.b64decode(file_content_b64).decode('utf-8')
+        from mt940 import parse
+        statements = parse(mt940_content)
+        
+        debug_info = {
+            "total_transactions": 0,
+            "sample_transactions": [],
+            "duplicate_analysis": [],
+            "existing_transaction_ids": [],
+            "hash_analysis": {}
+        }
+        
+        # Get existing transaction IDs for this bank account
+        existing_transactions = frappe.db.sql("""
+            SELECT transaction_id, date, deposit, withdrawal, description 
+            FROM `tabBank Transaction` 
+            WHERE bank_account = %s
+            ORDER BY date DESC
+            LIMIT 50
+        """, [bank_account], as_dict=True)
+        
+        debug_info["existing_transaction_ids"] = [
+            f"{t.transaction_id}: {t.date} - {t.description[:30]}..." 
+            for t in existing_transactions
+        ]
+        
+        # Analyze first few transactions - use same logic as working import
+        transaction_count = 0
+        for statement in statements:
+            # Debug the statement structure first
+            debug_info["statement_structure"] = {
+                "statement_data_keys": list(statement.data.keys()) if hasattr(statement, 'data') else "No data attribute",
+                "statement_attributes": [attr for attr in dir(statement) if not attr.startswith('_')],
+                "has_transactions_attr": hasattr(statement, 'transactions'),
+                "transactions_type": str(type(statement.transactions)) if hasattr(statement, 'transactions') else "No transactions attr"
+            }
+            
+            # Use same transaction access pattern as working import
+            if hasattr(statement, 'transactions') and statement.transactions:
+                statement_transactions = statement.transactions
+                debug_info["statement_structure"]["transactions_location"] = "statement.transactions"
+            else:
+                # Alternative: statement IS the transaction
+                statement_transactions = [statement]
+                debug_info["statement_structure"]["transactions_location"] = "statement as single transaction"
+            
+            for transaction in statement_transactions:
+                transaction_count += 1
+                
+                # Extract data using same logic as import
+                transaction_data = extract_transaction_data_improved(transaction)
+                if not transaction_data:
+                    continue
+                
+                # Generate ID using same improved logic as create function
+                id_components = [
+                    str(transaction_data['date']),
+                    str(transaction_data['amount']),
+                    str(transaction_data.get('description') or '')[:100],  # Use more of description
+                    str(transaction_data.get('counterparty_name') or ''),
+                    str(transaction_data.get('counterparty_account') or ''),
+                    str(transaction_data.get('reference') or ''),
+                    str(transaction_data.get('bank_reference') or ''),
+                    bank_account  # Include bank account in hash to prevent cross-account collisions
+                ]
+                
+                # Create a more robust hash using all components
+                hash_input = '|'.join(id_components)  # Use separator to prevent concatenation issues
+                transaction_id = hashlib.sha256(hash_input.encode()).hexdigest()[:16]
+                
+                # Check if exists
+                exists = frappe.db.exists("Bank Transaction", {
+                    "transaction_id": transaction_id, 
+                    "bank_account": bank_account
+                })
+                
+                # Check for hash collisions
+                if transaction_id in debug_info["hash_analysis"]:
+                    debug_info["hash_analysis"][transaction_id]["count"] += 1
+                    debug_info["hash_analysis"][transaction_id]["collisions"].append({
+                        "transaction_number": transaction_count,
+                        "date": str(transaction_data['date']),
+                        "amount": transaction_data['amount'],
+                        "description": transaction_data['description'][:50]
+                    })
+                else:
+                    debug_info["hash_analysis"][transaction_id] = {
+                        "count": 1,
+                        "hash_input": hash_input[:200],
+                        "collisions": []
+                    }
+
+                # Add to sample (first 10 transactions)
+                if len(debug_info["sample_transactions"]) < 10:
+                    debug_info["sample_transactions"].append({
+                        "transaction_number": transaction_count,
+                        "date": str(transaction_data['date']),
+                        "amount": transaction_data['amount'],
+                        "description": transaction_data['description'][:50],
+                        "reference": transaction_data.get('reference', ''),
+                        "bank_reference": transaction_data.get('bank_reference', ''),
+                        "generated_id": transaction_id,
+                        "hash_input": hash_input[:100],
+                        "id_components": id_components,
+                        "exists_in_db": bool(exists),
+                        "raw_transaction_data": str(transaction.data)[:200]
+                    })
+                
+                # Analyze duplicates
+                if exists:
+                    existing_record = frappe.db.get_value("Bank Transaction", 
+                        {"transaction_id": transaction_id, "bank_account": bank_account},
+                        ["date", "deposit", "withdrawal", "description"], as_dict=True)
+                    
+                    debug_info["duplicate_analysis"].append({
+                        "new_transaction": {
+                            "date": str(transaction_data['date']),
+                            "amount": transaction_data['amount'],
+                            "description": transaction_data['description'][:50]
+                        },
+                        "existing_transaction": existing_record,
+                        "transaction_id": transaction_id
+                    })
+                    
+                    # Stop after finding 5 duplicates
+                    if len(debug_info["duplicate_analysis"]) >= 5:
+                        break
+        
+        debug_info["total_transactions"] = transaction_count
+        
+        # Analyze hash collisions
+        collision_summary = {}
+        for hash_id, data in debug_info["hash_analysis"].items():
+            if data["count"] > 1:
+                collision_summary[hash_id] = {
+                    "collision_count": data["count"],
+                    "hash_input": data["hash_input"],
+                    "colliding_transactions": data["collisions"]
+                }
+        
+        debug_info["collision_summary"] = collision_summary
+        debug_info["total_collisions"] = len(collision_summary)
+        
+        return debug_info
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "traceback": frappe.get_traceback()
+        }
+
+@frappe.whitelist()
+def debug_mt940_import_detailed(file_content, bank_account=None, company=None):
+    """Debug version that shows exactly what's happening during import"""
+    try:
+        import base64
+        import tempfile
+        from frappe.utils import getdate, today
+        
+        # Decode file content
+        mt940_content = base64.b64decode(file_content).decode('utf-8')
+        
+        debug_results = {
+            "step": "1_decoded",
+            "content_length": len(mt940_content)
+        }
+        
+        # Get company from bank account if not provided
+        if bank_account and not company:
+            company = frappe.db.get_value("Bank Account", bank_account, "company")
+            debug_results["company_from_bank_account"] = company
+        
+        # Ensure we have a company
+        if not company:
+            # Get default company
+            companies = frappe.get_all("Company", limit=1)
+            if companies:
+                company = companies[0].name
+                debug_results["default_company_used"] = company
+        
+        # Auto-detect bank account if not provided
+        if not bank_account:
+            statement_iban = extract_iban_from_mt940_content(mt940_content)
+            debug_results["extracted_iban"] = statement_iban
+            
+            if statement_iban:
+                bank_account = find_bank_account_by_iban_improved(statement_iban, company)
+                debug_results["found_bank_account"] = bank_account
+                
+                # Add detailed search debug
+                debug_search = debug_bank_account_search(statement_iban)
+                debug_results["iban_search_debug"] = debug_search
+                
+                if not bank_account:
+                    debug_results["error"] = f"No Bank Account found with IBAN {statement_iban}"
+                    return debug_results
+            else:
+                debug_results["error"] = "Could not extract IBAN from MT940 file and no bank account specified"
+                return debug_results
+        
+        debug_results["final_bank_account"] = bank_account
+        debug_results["final_company"] = company
+        
+        # Validate bank account exists
+        if not frappe.db.exists("Bank Account", bank_account):
+            debug_results["error"] = f"Bank Account {bank_account} does not exist"
+            return debug_results
+        
+        # Import mt940 library
+        try:
+            import mt940
+            debug_results["step"] = "2_library_imported"
+        except ImportError:
+            debug_results["error"] = "MT940 library not available"
+            return debug_results
+        
+        # Write to temp file and parse
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.sta', delete=False) as temp_file:
+            temp_file.write(mt940_content)
+            temp_file_path = temp_file.name
+        
+        try:
+            transactions = mt940.parse(temp_file_path)
+            transaction_list = list(transactions)
+            
+            debug_results["step"] = "3_parsed"
+            debug_results["statements_found"] = len(transaction_list)
+            
+            if not transaction_list:
+                debug_results["error"] = "No statements found in MT940 file"
+                return debug_results
+            
+            # Test first transaction only
+            first_statement = transaction_list[0]
+            if hasattr(first_statement, 'transactions') and first_statement.transactions:
+                first_transaction = first_statement.transactions[0]
+                
+                # Extract and test creation
+                transaction_data = extract_transaction_data_improved(first_transaction)
+                debug_results["extraction_result"] = transaction_data
+                
+                if transaction_data:
+                    creation_result = create_bank_transaction_improved(transaction_data, bank_account, company)
+                    debug_results["creation_result"] = creation_result
+                else:
+                    debug_results["creation_result"] = "extraction_failed"
+                    
+            debug_results["step"] = "4_complete"
+            return debug_results
+            
+        finally:
+            # Clean up temp file
+            import os
+            try:
+                os.unlink(temp_file_path)
+            except:
+                pass
+            
+    except Exception as e:
+        return {"error": str(e), "traceback": frappe.get_traceback()}
+
+@frappe.whitelist()
+def import_mt940_improved(file_content, bank_account=None, company=None):
+    """Improved MT940 import with better transaction handling"""
+    try:
+        import base64
+        import tempfile
+        from frappe.utils import getdate, today
+        
+        # Decode file content
+        mt940_content = base64.b64decode(file_content).decode('utf-8')
+        
+        # Get company from bank account if not provided
+        if bank_account and not company:
+            company = frappe.db.get_value("Bank Account", bank_account, "company")
+        
+        # Ensure we have a company
+        if not company:
+            # Get default company
+            companies = frappe.get_all("Company", limit=1)
+            if companies:
+                company = companies[0].name
+        
+        # Auto-detect bank account if not provided
+        if not bank_account:
+            statement_iban = extract_iban_from_mt940_content(mt940_content)
+            if statement_iban:
+                bank_account = find_bank_account_by_iban_improved(statement_iban, company)
+                if not bank_account:
+                    return {
+                        "success": False,
+                        "message": f"No Bank Account found with IBAN {statement_iban}",
+                        "extracted_iban": statement_iban
+                    }
+            else:
+                return {
+                    "success": False,
+                    "message": "Could not extract IBAN from MT940 file and no bank account specified"
+                }
+        
+        # Validate bank account exists
+        if not frappe.db.exists("Bank Account", bank_account):
+            return {"success": False, "message": f"Bank Account {bank_account} does not exist"}
+        
+        # Import mt940 library
+        try:
+            import mt940
+        except ImportError:
+            return {
+                "success": False,
+                "message": "MT940 library not available. Please install with: pip install mt-940"
+            }
+        
+        # Write to temp file and parse
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.sta', delete=False) as temp_file:
+            temp_file.write(mt940_content)
+            temp_file_path = temp_file.name
+        
+        try:
+            transactions = mt940.parse(temp_file_path)
+            transaction_list = list(transactions)
+            
+            if not transaction_list:
+                return {"success": False, "message": "No statements found in MT940 file"}
+            
+            transactions_created = 0
+            transactions_skipped = 0
+            errors = []
+            
+            # Fix for MT940 library bug: library may return duplicate statements
+            # Use only the first statement to avoid processing duplicates
+            processed_transaction_ids = set()
+            
+            for statement in transaction_list:
+                # Handle different statement structures
+                statement_transactions = []
+                
+                if hasattr(statement, 'transactions') and statement.transactions:
+                    # Standard structure: statement has transactions list
+                    statement_transactions = statement.transactions
+                else:
+                    # Alternative: statement IS the transaction
+                    statement_transactions = [statement]
+                
+                for transaction in statement_transactions:
+                    try:
+                        # Extract transaction data properly
+                        transaction_data = extract_transaction_data_improved(transaction)
+                        
+                        if transaction_data:
+                            # Create a unique identifier for this transaction to avoid MT940 library duplicates
+                            transaction_signature = (
+                                str(transaction_data['date']),
+                                str(transaction_data['amount']),
+                                str(transaction_data.get('reference', '')),
+                                str(transaction_data.get('description', ''))[:50]
+                            )
+                            
+                            # Skip if we've already processed this exact transaction
+                            if transaction_signature in processed_transaction_ids:
+                                continue
+                                
+                            processed_transaction_ids.add(transaction_signature)
+                            
+                            creation_result = create_bank_transaction_improved(transaction_data, bank_account, company)
+                            if creation_result == "created":
+                                transactions_created += 1
+                            elif creation_result == "exists":
+                                transactions_skipped += 1
+                            else:
+                                transactions_skipped += 1
+                                errors.append(f"Failed to create transaction: {creation_result}")
+                        else:
+                            transactions_skipped += 1
+                            errors.append("Failed to extract transaction data")
+                            
+                    except Exception as e:
+                        transactions_skipped += 1
+                        errors.append(f"Transaction error: {str(e)}")
+                        frappe.logger().error(f"Error processing MT940 transaction: {str(e)}")
+            
+            # Clean up temp file
+            import os
+            try:
+                os.unlink(temp_file_path)
+            except:
+                pass
+            
+            return {
+                "success": True,
+                "message": f"Import completed: {transactions_created} transactions created, {transactions_skipped} skipped",
+                "transactions_created": transactions_created,
+                "transactions_skipped": transactions_skipped,
+                "bank_account": bank_account,
+                "errors": errors[:5],  # Only show first 5 errors
+                "debug_info": {
+                    "total_statements": len(transaction_list),
+                    "total_transactions_processed": transactions_created + transactions_skipped,
+                    "first_few_errors": errors[:3]
+                }
+            }
+            
+        except Exception as e:
+            return {"success": False, "message": f"Failed to parse MT940 file: {str(e)}"}
+            
+    except Exception as e:
+        return {"success": False, "message": f"Import failed: {str(e)}"}
+
+def extract_iban_from_mt940_content(mt940_content):
+    """Extract IBAN from MT940 content"""
+    import re
+    
+    # Look for :25: tag which contains account identification
+    match = re.search(r':25:([A-Z]{2}[0-9]{2}[A-Z0-9]{1,30})', mt940_content)
+    if match:
+        return match.group(1)
+    
+    # Alternative: look for any IBAN pattern
+    iban_match = re.search(r'([A-Z]{2}[0-9]{2}[A-Z0-9]{15,30})', mt940_content)
+    if iban_match:
+        return iban_match.group(1)
+    
+    return None
+
+def find_bank_account_by_iban_improved(iban, company=None):
+    """Find bank account by IBAN"""
+    # First try with company filter if provided
+    if company:
+        filters = {"bank_account_no": iban, "company": company}
+        bank_account = frappe.db.get_value("Bank Account", filters, "name")
+        
+        if not bank_account:
+            filters = {"iban": iban, "company": company}
+            bank_account = frappe.db.get_value("Bank Account", filters, "name")
+            
+        if bank_account:
+            return bank_account
+    
+    # Fallback: search without company filter
+    bank_account = frappe.db.get_value("Bank Account", {"bank_account_no": iban}, "name")
+    
+    if not bank_account:
+        bank_account = frappe.db.get_value("Bank Account", {"iban": iban}, "name")
+    
+    return bank_account
+
+def extract_transaction_data_improved(transaction):
+    """Extract transaction data from MT940 transaction object"""
+    try:
+        from frappe.utils import getdate
+        import re
+        
+        # Get transaction data - all data is in the data dictionary
+        data = transaction.data if hasattr(transaction, 'data') else {}
+        
+        # Extract date from data dictionary
+        transaction_date = None
+        if 'date' in data and data['date']:
+            try:
+                transaction_date = getdate(data['date'])
+            except:
+                pass
+        
+        # Extract amount from data dictionary
+        # Amount comes as string like "-898.54 EUR" or "1234.56 EUR"
+        amount = None
+        currency = 'EUR'
+        
+        if 'amount' in data and data['amount']:
+            amount_str = str(data['amount']).strip()
+            
+            # Parse amount string like "-898.54 EUR" or "1234.56"
+            # Remove currency and extract numeric value
+            currency_match = re.search(r'([A-Z]{3})$', amount_str)
+            if currency_match:
+                currency = currency_match.group(1)
+                amount_str = amount_str.replace(currency, '').strip()
+            
+            # Extract numeric value
+            try:
+                amount = float(amount_str)
+            except:
+                # Try to extract just the numeric part
+                numeric_match = re.search(r'([+-]?\d+\.?\d*)', amount_str)
+                if numeric_match:
+                    amount = float(numeric_match.group(1))
+        
+        # Also try currency from separate field
+        if 'currency' in data and data['currency']:
+            currency = data['currency']
+        
+        # Skip if essential data is missing
+        if not transaction_date or amount is None:
+            return None
+        
+        # Build transaction data
+        transaction_data = {
+            'date': transaction_date,
+            'amount': amount,
+            'currency': currency,
+            'description': '',
+            'reference': data.get('transaction_reference', ''),
+            'bank_reference': data.get('bank_reference', ''),
+            'counterparty_name': data.get('customer_reference', ''),
+            'counterparty_account': data.get('counterparty_account', ''),
+            'extra_details': data.get('extra_details', '')
+        }
+        
+        # Build description from available fields
+        description_parts = []
+        if data.get('extra_details'):
+            description_parts.append(data['extra_details'])
+        if data.get('transaction_details'):
+            description_parts.append(data['transaction_details'])
+        # Add funds code and transaction reference for more context
+        if data.get('funds_code'):
+            description_parts.append(f"Funds: {data['funds_code']}")
+        if data.get('transaction_reference'):
+            description_parts.append(f"Ref: {data['transaction_reference']}")
+        
+        transaction_data['description'] = ' | '.join(filter(None, description_parts)) or 'MT940 Transaction'
+        
+        return transaction_data
+        
+    except Exception as e:
+        frappe.logger().error(f"Error extracting transaction data: {str(e)}")
+        return None
+
+def create_bank_transaction_improved(transaction_data, bank_account, company):
+    """Create ERPNext Bank Transaction from extracted data"""
+    try:
+        import hashlib
+        
+        # Validate required data
+        if not transaction_data.get('date') or transaction_data.get('amount') is None:
+            return "missing_required_data"
+        
+        # Generate unique transaction ID with more specific components
+        id_components = [
+            str(transaction_data['date']),
+            str(transaction_data['amount']),
+            str(transaction_data.get('description') or '')[:100],  # Use more of description
+            str(transaction_data.get('counterparty_name') or ''),
+            str(transaction_data.get('counterparty_account') or ''),
+            str(transaction_data.get('reference') or ''),
+            str(transaction_data.get('bank_reference') or ''),
+            bank_account  # Include bank account in hash to prevent cross-account collisions
+        ]
+        
+        # Create a more robust hash using all components
+        hash_input = '|'.join(id_components)  # Use separator to prevent concatenation issues
+        transaction_id = hashlib.sha256(hash_input.encode()).hexdigest()[:16]
+        
+        # Check if transaction already exists
+        if frappe.db.exists("Bank Transaction", {
+            "transaction_id": transaction_id, 
+            "bank_account": bank_account
+        }):
+            return "exists"
+        
+        # Validate bank account exists
+        if not frappe.db.exists("Bank Account", bank_account):
+            return f"bank_account_not_found: {bank_account}"
+        
+        # Create new Bank Transaction
+        bt = frappe.new_doc("Bank Transaction")
+        bt.date = transaction_data['date']
+        bt.bank_account = bank_account
+        bt.company = company
+        bt.currency = transaction_data.get('currency', 'EUR')
+        
+        # Handle amount and direction
+        amount = transaction_data['amount']
+        if amount >= 0:
+            bt.deposit = amount
+            bt.withdrawal = 0
+        else:
+            bt.deposit = 0
+            bt.withdrawal = abs(amount)
+        
+        bt.description = transaction_data['description']
+        bt.reference_number = transaction_data.get('reference', '')
+        bt.transaction_id = transaction_id
+        
+        # Set counterparty information
+        if transaction_data.get('counterparty_name'):
+            bt.bank_party_name = transaction_data['counterparty_name']
+        if transaction_data.get('counterparty_account'):
+            bt.bank_party_iban = transaction_data['counterparty_account']
+        
+        # Insert transaction
+        bt.insert()
+        bt.submit()
+        
+        return "created"
+        
+    except Exception as e:
+        error_msg = str(e)
+        frappe.logger().error(f"Error creating bank transaction: {error_msg}")
+        return f"error: {error_msg}"
