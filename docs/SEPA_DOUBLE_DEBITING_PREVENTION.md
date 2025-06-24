@@ -355,7 +355,7 @@ SEPA_AUTO_AUDIT_INTERVAL = "Daily"  # Automated audit frequency
 The system adds custom fields to standard doctypes:
 
 **Bank Transaction**:
-- `custom_sepa_batch`: Link to Direct Debit Batch
+- `custom_sepa_batch`: Link to SEPA Direct Debit Batch
 - `custom_processing_status`: Processing status tracking
 - `custom_manual_review_task`: Link to ToDo for manual review
 
@@ -365,7 +365,7 @@ The system adds custom fields to standard doctypes:
 - `custom_original_payment`: For reversal tracking
 - `custom_manual_reconciliation`: Manual processing flag
 
-**Direct Debit Batch**:
+**SEPA Direct Debit Batch**:
 - `custom_reconciliation_status`: Overall reconciliation status
 - `custom_related_bank_transactions`: Transaction references
 

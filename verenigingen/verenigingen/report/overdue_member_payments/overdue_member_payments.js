@@ -212,7 +212,7 @@ function show_payment_recording_dialog(report) {
                 fieldname: "payment_method",
                 label: __("Payment Method"),
                 fieldtype: "Select",
-                options: ["Bank Transfer", "Cash", "Credit Card", "Direct Debit", "Other"],
+                options: ["Bank Transfer", "Cash", "Credit Card", "SEPA Direct Debit", "Other"],
                 reqd: 1
             },
             {

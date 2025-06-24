@@ -228,17 +228,17 @@ QUnit.test("test: Member - Payment Method Edge Cases", function (assert) {
             assert.ok(!ibanField.df.reqd, "IBAN should not be required for Bank Transfer");
         },
 
-        // Test Direct Debit (should require bank details)
+        // Test SEPA Direct Debit (should require bank details)
         () => frappe.tests.set_form_values(cur_frm, [
-            {payment_method: 'Direct Debit'}
+            {payment_method: 'SEPA Direct Debit'}
         ]),
         () => frappe.timeout(1),
         () => {
             let bankSection = $(cur_frm.fields_dict.bank_details_section.wrapper);
-            assert.ok(bankSection.is(':visible'), "Bank details should be visible for Direct Debit");
+            assert.ok(bankSection.is(':visible'), "Bank details should be visible for SEPA Direct Debit");
             
             let ibanField = cur_frm.get_field('iban');
-            assert.ok(ibanField.df.reqd, "IBAN should be required for Direct Debit");
+            assert.ok(ibanField.df.reqd, "IBAN should be required for SEPA Direct Debit");
         },
 
         // Test switching back and forth rapidly
@@ -247,7 +247,7 @@ QUnit.test("test: Member - Payment Method Edge Cases", function (assert) {
         ]),
         () => frappe.timeout(500),
         () => frappe.tests.set_form_values(cur_frm, [
-            {payment_method: 'Direct Debit'}
+            {payment_method: 'SEPA Direct Debit'}
         ]),
         () => frappe.timeout(500),
         () => {
@@ -306,9 +306,9 @@ QUnit.test("test: Member - IBAN Validation Edge Cases", function (assert) {
     assert.expect(15);
 
     frappe.run_serially([
-        // Create member with Direct Debit
+        // Create member with SEPA Direct Debit
         () => frappe.tests.make('Member', createTestMember({
-            payment_method: 'Direct Debit'
+            payment_method: 'SEPA Direct Debit'
         })),
         () => cur_frm.save(),
         () => frappe.timeout(1),
@@ -396,14 +396,14 @@ QUnit.test("test: Member - IBAN Validation Edge Cases", function (assert) {
             assert.ok(true, "Should handle invalid check digits gracefully");
         },
 
-        // Test empty IBAN with Direct Debit
+        // Test empty IBAN with SEPA Direct Debit
         () => frappe.tests.set_form_values(cur_frm, [
             {iban: ''}
         ]),
         () => frappe.timeout(1),
         () => {
             // Should show required field error or handle gracefully
-            assert.ok(true, "Should handle empty IBAN with Direct Debit");
+            assert.ok(true, "Should handle empty IBAN with SEPA Direct Debit");
         },
 
         // Test IBAN with special characters
@@ -455,7 +455,7 @@ QUnit.test("test: Member - SEPA Mandate Complex Scenarios", function (assert) {
     frappe.run_serially([
         // Create member for mandate testing
         () => frappe.tests.make('Member', createTestMember({
-            payment_method: 'Direct Debit',
+            payment_method: 'SEPA Direct Debit',
             iban: 'NL91ABNA0417164300',
             bank_account_name: 'Test Account'
         })),
@@ -465,7 +465,7 @@ QUnit.test("test: Member - SEPA Mandate Complex Scenarios", function (assert) {
         // Test initial mandate creation
         () => {
             let dialogVisible = $('.modal-dialog:visible').length > 0;
-            assert.ok(dialogVisible || true, "Mandate dialog should appear for new Direct Debit setup");
+            assert.ok(dialogVisible || true, "Mandate dialog should appear for new SEPA Direct Debit setup");
         },
 
         // Close any open dialogs
@@ -496,7 +496,7 @@ QUnit.test("test: Member - SEPA Mandate Complex Scenarios", function (assert) {
             assert.equal(cur_frm.doc.bank_account_name, 'Updated Account Name', "Bank account name should be updated");
         },
 
-        // Test switching from Direct Debit to Bank Transfer
+        // Test switching from SEPA Direct Debit to Bank Transfer
         () => frappe.tests.set_form_values(cur_frm, [
             {payment_method: 'Bank Transfer'}
         ]),
@@ -508,15 +508,15 @@ QUnit.test("test: Member - SEPA Mandate Complex Scenarios", function (assert) {
             assert.equal(cur_frm.doc.payment_method, 'Bank Transfer', "Payment method should be updated");
         },
 
-        // Test switching back to Direct Debit
+        // Test switching back to SEPA Direct Debit
         () => frappe.tests.set_form_values(cur_frm, [
-            {payment_method: 'Direct Debit'}
+            {payment_method: 'SEPA Direct Debit'}
         ]),
         () => cur_frm.save(),
         () => frappe.timeout(2),
         () => {
             // Should not create new mandate if IBAN unchanged
-            assert.equal(cur_frm.doc.payment_method, 'Direct Debit', "Should switch back to Direct Debit");
+            assert.equal(cur_frm.doc.payment_method, 'SEPA Direct Debit', "Should switch back to SEPA Direct Debit");
         },
 
         // Test rapid IBAN changes
@@ -1163,7 +1163,7 @@ QUnit.test("test: Member - Complete Workflow Integration", function (assert) {
 
         // Setup payment method
         () => frappe.tests.set_form_values(cur_frm, [
-            {payment_method: 'Direct Debit'}
+            {payment_method: 'SEPA Direct Debit'}
         ]),
         () => frappe.timeout(1),
         () => {
@@ -1218,7 +1218,7 @@ QUnit.test("test: Member - Complete Workflow Integration", function (assert) {
             frappe.model.set_value(payment_row.doctype, payment_row.name, {
                 'amount': 25.00,
                 'transaction_date': frappe.datetime.get_today(),
-                'payment_method': 'Direct Debit'
+                'payment_method': 'SEPA Direct Debit'
             });
         },
         () => frappe.timeout(1),

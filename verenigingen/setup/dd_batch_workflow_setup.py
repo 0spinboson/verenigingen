@@ -1,5 +1,5 @@
 """
-Direct Debit Batch Workflow Setup
+SEPA Direct Debit Batch Workflow Setup
 Implements risk-based approval workflows for SEPA batch processing
 """
 
@@ -7,20 +7,20 @@ import frappe
 from frappe import _
 
 def create_dd_batch_workflow():
-    """Create comprehensive Direct Debit Batch workflow"""
+    """Create comprehensive SEPA Direct Debit Batch workflow"""
     
-    workflow_name = "Direct Debit Batch Approval Workflow"
+    workflow_name = "SEPA Direct Debit Batch Approval Workflow"
     
     if frappe.db.exists("Workflow", workflow_name):
         print(f"   ✓ Workflow '{workflow_name}' already exists")
         return True
     
-    print(f"   📋 Creating Direct Debit Batch workflow: {workflow_name}")
+    print(f"   📋 Creating SEPA Direct Debit Batch workflow: {workflow_name}")
     
     try:
         workflow_doc = frappe.new_doc("Workflow")
         workflow_doc.workflow_name = workflow_name
-        workflow_doc.document_type = "Direct Debit Batch"
+        workflow_doc.document_type = "SEPA Direct Debit Batch"
         workflow_doc.is_active = 1
         workflow_doc.workflow_state_field = "approval_status"  # New field needed
         workflow_doc.send_email_alert = 1
@@ -230,21 +230,21 @@ def create_workflow_conditions():
     # Condition 1: High-value batch (>€5000)
     high_value_condition = {
         "condition_name": "High Value Batch",
-        "document_type": "Direct Debit Batch", 
+        "document_type": "SEPA Direct Debit Batch", 
         "condition": "doc.total_amount > 5000"
     }
     
     # Condition 2: Large batch (>50 invoices)
     large_batch_condition = {
         "condition_name": "Large Batch",
-        "document_type": "Direct Debit Batch",
+        "document_type": "SEPA Direct Debit Batch",
         "condition": "doc.entry_count > 50"
     }
     
     # Condition 3: First-time SEPA batch
     first_time_condition = {
         "condition_name": "First Time Batch",
-        "document_type": "Direct Debit Batch", 
+        "document_type": "SEPA Direct Debit Batch", 
         "condition": "doc.batch_type == 'FRST'"
     }
     
@@ -255,11 +255,11 @@ def add_custom_fields_for_workflow():
     
     print("   🏗️ Adding custom fields for workflow...")
     
-    # Add approval_status field to Direct Debit Batch
-    if not frappe.db.exists("Custom Field", "Direct Debit Batch-approval_status"):
+    # Add approval_status field to SEPA Direct Debit Batch
+    if not frappe.db.exists("Custom Field", "SEPA Direct Debit Batch-approval_status"):
         approval_status_field = frappe.get_doc({
             "doctype": "Custom Field",
-            "dt": "Direct Debit Batch",
+            "dt": "SEPA Direct Debit Batch",
             "fieldname": "approval_status",
             "label": "Approval Status",
             "fieldtype": "Data",
@@ -271,10 +271,10 @@ def add_custom_fields_for_workflow():
         print("      ✓ Added approval_status field")
     
     # Add risk_level field
-    if not frappe.db.exists("Custom Field", "Direct Debit Batch-risk_level"):
+    if not frappe.db.exists("Custom Field", "SEPA Direct Debit Batch-risk_level"):
         risk_level_field = frappe.get_doc({
             "doctype": "Custom Field",
-            "dt": "Direct Debit Batch", 
+            "dt": "SEPA Direct Debit Batch", 
             "fieldname": "risk_level",
             "label": "Risk Level",
             "fieldtype": "Select",
@@ -286,10 +286,10 @@ def add_custom_fields_for_workflow():
         print("      ✓ Added risk_level field")
     
     # Add approval_notes field
-    if not frappe.db.exists("Custom Field", "Direct Debit Batch-approval_notes"):
+    if not frappe.db.exists("Custom Field", "SEPA Direct Debit Batch-approval_notes"):
         approval_notes_field = frappe.get_doc({
             "doctype": "Custom Field",
-            "dt": "Direct Debit Batch",
+            "dt": "SEPA Direct Debit Batch",
             "fieldname": "approval_notes", 
             "label": "Approval Notes",
             "fieldtype": "Text",
@@ -317,9 +317,9 @@ def create_required_roles():
             print(f"      ✓ Role already exists: {role_name}")
 
 def setup_dd_batch_workflow():
-    """Main function to setup Direct Debit Batch workflow"""
+    """Main function to setup SEPA Direct Debit Batch workflow"""
     
-    print("🔄 Setting up Direct Debit Batch workflow...")
+    print("🔄 Setting up SEPA Direct Debit Batch workflow...")
     
     success_count = 0
     
@@ -344,7 +344,7 @@ def setup_dd_batch_workflow():
     # Step 4: Commit changes
     try:
         frappe.db.commit()
-        print(f"   ✅ Successfully setup Direct Debit Batch workflow")
+        print(f"   ✅ Successfully setup SEPA Direct Debit Batch workflow")
         return True
     except Exception as e:
         print(f"   ❌ Setup failed: {str(e)}")
@@ -353,7 +353,7 @@ def setup_dd_batch_workflow():
 
 @frappe.whitelist()
 def setup_production_dd_workflow():
-    """API endpoint for Direct Debit workflow setup"""
+    """API endpoint for SEPA Direct Debit workflow setup"""
     return setup_dd_batch_workflow()
 
 if __name__ == "__main__":

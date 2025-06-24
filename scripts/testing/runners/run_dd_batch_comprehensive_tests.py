@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive Test Runner for Direct Debit Batch System
+Comprehensive Test Runner for SEPA Direct Debit Batch System
 Executes all security, edge case, and performance tests for DD batch functionality
 """
 
@@ -17,7 +17,7 @@ app_dir = Path(__file__).parent
 sys.path.insert(0, str(app_dir))
 
 class DDComprehensiveTestRunner:
-    """Comprehensive test runner for Direct Debit batch system"""
+    """Comprehensive test runner for SEPA Direct Debit batch system"""
     
     def __init__(self):
         self.test_suites = {

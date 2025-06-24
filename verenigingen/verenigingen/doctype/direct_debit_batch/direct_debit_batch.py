@@ -126,7 +126,7 @@ class DirectDebitBatch(Document):
             error_msg = _("Error generating SEPA file: {0}").format(str(e))
             self.add_to_batch_log(error_msg)
             frappe.log_error(f"Error generating SEPA file for batch {self.name}: {str(e)}", 
-                           "Direct Debit Batch Error")
+                           "SEPA Direct Debit Batch Error")
             frappe.throw(error_msg)
     
     def attach_sepa_file(self, file_path):
@@ -151,7 +151,7 @@ class DirectDebitBatch(Document):
             return file_doc.file_url
         except Exception as e:
             frappe.log_error(f"Error attaching SEPA file for batch {self.name}: {str(e)}", 
-                           "Direct Debit Batch Error")
+                           "SEPA Direct Debit Batch Error")
             raise
     
     def add_to_batch_log(self, message):
@@ -185,7 +185,7 @@ class DirectDebitBatch(Document):
             error_msg = _("Error processing batch: {0}").format(str(e))
             self.add_to_batch_log(error_msg)
             frappe.log_error(f"Error processing batch {self.name}: {str(e)}", 
-                           "Direct Debit Batch Error")
+                           "SEPA Direct Debit Batch Error")
             frappe.throw(error_msg)
         
     def update_invoice_status(self, invoice_index, status, result_code=None, result_message=None):
@@ -216,7 +216,7 @@ class DirectDebitBatch(Document):
                 payment_entry = create_payment_entry_for_invoice(
                     invoice=invoice,
                     payment_type="Receive",
-                    mode_of_payment="Direct Debit",
+                    mode_of_payment="SEPA Direct Debit",
                     reference_no=self.name,
                     reference_date=self.batch_date
                 )
@@ -242,7 +242,7 @@ class DirectDebitBatch(Document):
                     f"Error: {str(e)}"
                 )
                 frappe.log_error(f"Error processing payment for invoice {invoice_item.invoice}: {str(e)}", 
-                               "Direct Debit Payment Error")
+                               "SEPA Direct Debit Payment Error")
         
         # Update batch status
         if success_count == len(self.invoices):
@@ -268,7 +268,7 @@ class DirectDebitBatch(Document):
         root.set("xmlns", "urn:iso:std:iso:20022:tech:xsd:pain.008.001.02")
         root.set("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
         
-        # Customer Direct Debit Initiation
+        # Customer SEPA Direct Debit Initiation
         cstmr_drct_dbt_initn = ET.SubElement(root, "CstmrDrctDbtInitn")
         
         # Group Header
@@ -520,7 +520,7 @@ def generate_direct_debit_batch(date=None):
         batch = create_direct_debit_batch(date)
         
         if batch:
-            frappe.msgprint(_("Direct Debit Batch {0} created with {1} entries").format(
+            frappe.msgprint(_("SEPA Direct Debit Batch {0} created with {1} entries").format(
                 batch.name, batch.entry_count))
             return batch.name
         else:
@@ -528,14 +528,14 @@ def generate_direct_debit_batch(date=None):
             return None
     except Exception as e:
         frappe.log_error(f"Error generating direct debit batch: {str(e)}", 
-                      "Direct Debit Batch Generation Error")
+                      "SEPA Direct Debit Batch Generation Error")
         frappe.throw(_("Error generating direct debit batch: {0}").format(str(e)))
 
 @frappe.whitelist()
 def process_batch(batch_name):
     """Process a direct debit batch"""
     try:
-        batch = frappe.get_doc("Direct Debit Batch", batch_name)
+        batch = frappe.get_doc("SEPA Direct Debit Batch", batch_name)
         
         if batch.docstatus != 1:
             frappe.throw(_("Batch must be submitted before processing"))
@@ -548,14 +548,14 @@ def process_batch(batch_name):
         return result
     except Exception as e:
         frappe.log_error(f"Error processing batch {batch_name}: {str(e)}", 
-                      "Direct Debit Batch Processing Error")
+                      "SEPA Direct Debit Batch Processing Error")
         frappe.throw(_("Error processing batch: {0}").format(str(e)))
 
 @frappe.whitelist()
 def mark_invoices_as_paid(batch_name):
     """Mark all invoices in a batch as paid"""
     try:
-        batch = frappe.get_doc("Direct Debit Batch", batch_name)
+        batch = frappe.get_doc("SEPA Direct Debit Batch", batch_name)
         
         if batch.docstatus != 1:
             frappe.throw(_("Batch must be submitted before marking invoices as paid"))
@@ -565,7 +565,7 @@ def mark_invoices_as_paid(batch_name):
         return success_count
     except Exception as e:
         frappe.log_error(f"Error marking invoices as paid for batch {batch_name}: {str(e)}", 
-                      "Direct Debit Payment Error")
+                      "SEPA Direct Debit Payment Error")
         frappe.throw(_("Error marking invoices as paid: {0}").format(str(e)))
 
 @frappe.whitelist()
@@ -577,7 +577,7 @@ def create_direct_debit_batch_for_unpaid_memberships():
     try:
         from verenigingen.verenigingen.doctype.membership.enhanced_subscription import get_unpaid_membership_invoices
         
-        # Get all unpaid invoices for memberships with Direct Debit payment method
+        # Get all unpaid invoices for memberships with SEPA Direct Debit payment method
         unpaid_invoices = get_unpaid_membership_invoices()
         
         if not unpaid_invoices:
@@ -585,7 +585,7 @@ def create_direct_debit_batch_for_unpaid_memberships():
             return None
         
         # Create a new batch
-        batch = frappe.new_doc("Direct Debit Batch")
+        batch = frappe.new_doc("SEPA Direct Debit Batch")
         batch.batch_date = frappe.utils.today()
         batch.batch_description = f"Membership payments batch - {frappe.utils.today()}"
         batch.batch_type = "RCUR"  # Recurring direct debit
@@ -618,5 +618,5 @@ def create_direct_debit_batch_for_unpaid_memberships():
         return batch.name
     except Exception as e:
         frappe.log_error(f"Error creating direct debit batch for unpaid memberships: {str(e)}", 
-                      "Direct Debit Batch Creation Error")
+                      "SEPA Direct Debit Batch Creation Error")
         return None

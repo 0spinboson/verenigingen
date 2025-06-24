@@ -148,7 +148,7 @@ class TestEnvironmentValidator:
         required_doctypes = [
             "Member", "Membership", "Membership Type", "Chapter",
             "Volunteer", "Volunteer Expense", "Team", "SEPA Mandate",
-            "Direct Debit Batch", "Donation", "Donor",
+            "SEPA Direct Debit Batch", "Donation", "Donor",
             "Membership Termination Request", "Contribution Amendment Request"
         ]
         

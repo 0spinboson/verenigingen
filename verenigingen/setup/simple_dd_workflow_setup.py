@@ -1,5 +1,5 @@
 """
-Simplified Direct Debit Batch Workflow Setup
+Simplified SEPA Direct Debit Batch Workflow Setup
 Implements basic approval workflow using existing Frappe states and actions
 """
 
@@ -7,15 +7,15 @@ import frappe
 from frappe import _
 
 def create_simple_dd_batch_workflow():
-    """Create simple Direct Debit Batch workflow using standard Frappe states"""
+    """Create simple SEPA Direct Debit Batch workflow using standard Frappe states"""
     
-    workflow_name = "Direct Debit Batch Simple Workflow"
+    workflow_name = "SEPA Direct Debit Batch Simple Workflow"
     
     if frappe.db.exists("Workflow", workflow_name):
         print(f"   ✓ Workflow '{workflow_name}' already exists")
         return True
     
-    print(f"   📋 Creating Simple Direct Debit Batch workflow: {workflow_name}")
+    print(f"   📋 Creating Simple SEPA Direct Debit Batch workflow: {workflow_name}")
     
     try:
         # First, ensure we have the required workflow states
@@ -42,7 +42,7 @@ def create_simple_dd_batch_workflow():
         
         workflow_doc = frappe.new_doc("Workflow")
         workflow_doc.workflow_name = workflow_name
-        workflow_doc.document_type = "Direct Debit Batch"
+        workflow_doc.document_type = "SEPA Direct Debit Batch"
         workflow_doc.is_active = 1
         workflow_doc.workflow_state_field = "approval_status"
         workflow_doc.send_email_alert = 1
@@ -159,10 +159,10 @@ def add_workflow_custom_fields():
     print("   🏗️ Adding workflow custom fields...")
     
     # Add approval_status field if it doesn't exist
-    if not frappe.db.exists("Custom Field", "Direct Debit Batch-approval_status"):
+    if not frappe.db.exists("Custom Field", "SEPA Direct Debit Batch-approval_status"):
         approval_status_field = frappe.get_doc({
             "doctype": "Custom Field",
-            "dt": "Direct Debit Batch",
+            "dt": "SEPA Direct Debit Batch",
             "fieldname": "approval_status",
             "label": "Approval Status",
             "fieldtype": "Data",
@@ -175,10 +175,10 @@ def add_workflow_custom_fields():
         print("      ✓ Added approval_status field")
     
     # Add workflow_state field for better tracking
-    if not frappe.db.exists("Custom Field", "Direct Debit Batch-workflow_state"):
+    if not frappe.db.exists("Custom Field", "SEPA Direct Debit Batch-workflow_state"):
         workflow_state_field = frappe.get_doc({
             "doctype": "Custom Field",
-            "dt": "Direct Debit Batch",
+            "dt": "SEPA Direct Debit Batch",
             "fieldname": "workflow_state",
             "label": "Workflow State",
             "fieldtype": "Data",
@@ -190,10 +190,10 @@ def add_workflow_custom_fields():
         print("      ✓ Added workflow_state field")
     
     # Add risk_level field for approval routing
-    if not frappe.db.exists("Custom Field", "Direct Debit Batch-risk_level"):
+    if not frappe.db.exists("Custom Field", "SEPA Direct Debit Batch-risk_level"):
         risk_level_field = frappe.get_doc({
             "doctype": "Custom Field",
-            "dt": "Direct Debit Batch",
+            "dt": "SEPA Direct Debit Batch",
             "fieldname": "risk_level", 
             "label": "Risk Level",
             "fieldtype": "Select",
@@ -207,7 +207,7 @@ def add_workflow_custom_fields():
 def setup_simple_dd_workflow():
     """Main function to setup simplified DD batch workflow"""
     
-    print("🔄 Setting up Simple Direct Debit Batch workflow...")
+    print("🔄 Setting up Simple SEPA Direct Debit Batch workflow...")
     
     success_count = 0
     

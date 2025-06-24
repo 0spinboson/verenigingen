@@ -99,8 +99,8 @@ def submit_membership_application(data):
         })
         
         # Handle bank details if provided (for direct debit)
-        if data.get("payment_method") == "Direct Debit" and data.get("iban"):
-            member.payment_method = "Direct Debit"
+        if data.get("payment_method") == "SEPA Direct Debit" and data.get("iban"):
+            member.payment_method = "SEPA Direct Debit"
             member.iban = data.get("iban")
             member.bank_account_name = data.get("bank_account_name", "")
         

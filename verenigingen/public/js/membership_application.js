@@ -673,7 +673,7 @@ class MembershipApplication {
             payment_method: $('input[name="payment_method_selection"]:checked').val() || $('#payment_method').val() || '',
             
             
-            // Bank Account Details (Direct Debit)
+            // Bank Account Details (SEPA Direct Debit)
             iban: $('#iban').val() || '',
             bank_account_name: $('#account_holder_name').val() || $('#bank_account_name').val() || '',
             
@@ -1924,8 +1924,8 @@ class MembershipApplication {
         if (data.payment_method) {
             content += `<p><strong>Payment Method:</strong> ${data.payment_method}</p>`;
             
-            // Show bank details for Direct Debit
-            if (data.payment_method === 'Direct Debit') {
+            // Show bank details for SEPA Direct Debit
+            if (data.payment_method === 'SEPA Direct Debit') {
                 if (data.iban) {
                     content += `<p><strong>IBAN:</strong> ${data.iban}</p>`;
                 }
@@ -2411,7 +2411,7 @@ class MembershipApplication {
         this.handlePaymentMethodChange(methodName);
         
         // Show/hide SEPA notice
-        if (methodName === 'Direct Debit') {
+        if (methodName === 'SEPA Direct Debit') {
             $('#sepa-mandate-notice').show();
         } else {
             $('#sepa-mandate-notice').hide();
@@ -2420,9 +2420,9 @@ class MembershipApplication {
     
     // Implement payment method field switching similar to member doctype UIUtils.handle_payment_method_change
     handlePaymentMethodChange(methodName) {
-        const is_direct_debit = methodName === 'Direct Debit';
+        const is_direct_debit = methodName === 'SEPA Direct Debit';
         const is_bank_transfer = methodName === 'Bank Transfer';
-        const show_bank_details = ['Direct Debit', 'Bank Transfer'].includes(methodName);
+        const show_bank_details = ['SEPA Direct Debit', 'Bank Transfer'].includes(methodName);
         
         console.log('Main app: Handling payment method change to:', methodName);
         console.log('Main app: is_direct_debit:', is_direct_debit, 'is_bank_transfer:', is_bank_transfer);
@@ -2434,7 +2434,7 @@ class MembershipApplication {
         
         // Show appropriate section based on payment method
         if (is_direct_debit) {
-            console.log('Main app: Showing bank account details for Direct Debit');
+            console.log('Main app: Showing bank account details for SEPA Direct Debit');
             $('#bank-account-details').show();
             
             // Set required attributes for bank account fields
@@ -2472,7 +2472,7 @@ class MembershipApplication {
                 requires_mandate: false
             },
             { 
-                name: 'Direct Debit', 
+                name: 'SEPA Direct Debit', 
                 description: 'SEPA Direct Debit (recurring)',
                 icon: 'fa-repeat',
                 processing_time: '5-7 days first collection',
@@ -3078,7 +3078,7 @@ class PaymentStep extends BaseStep {
                 requires_mandate: false
             },
             { 
-                name: 'Direct Debit', 
+                name: 'SEPA Direct Debit', 
                 description: 'SEPA Direct Debit (recurring)',
                 icon: 'fa-repeat',
                 processing_time: '5-7 days first collection',
@@ -3170,7 +3170,7 @@ class PaymentStep extends BaseStep {
             $('#bank-transfer-notice').hide();
             $('#bank-transfer-details').hide();
             
-            if (methodName === 'Direct Debit') {
+            if (methodName === 'SEPA Direct Debit') {
                 console.log('PaymentStep: Showing bank account fields');
                 $('#bank-account-details').show();
             } else if (methodName === 'Bank Transfer') {
@@ -3287,7 +3287,7 @@ class PaymentStep extends BaseStep {
             valid = false;
         } else {
             // Validate payment-specific fields based on selected method
-            if (paymentMethod === 'Direct Debit') {
+            if (paymentMethod === 'SEPA Direct Debit') {
                 // Bank account validation
                 if (!$('#iban').val()) {
                     $('#iban').addClass('is-invalid');

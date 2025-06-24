@@ -30,17 +30,17 @@ QUnit.test("test: Member - Payment Processing", function (assert) {
         
         // Test payment method change
         () => frappe.tests.set_form_values(cur_frm, [
-            {payment_method: 'Direct Debit'}
+            {payment_method: 'SEPA Direct Debit'}
         ]),
         () => frappe.timeout(1),
         () => {
             // Bank details section should be visible
             let bankSection = $(cur_frm.fields_dict.bank_details_section.wrapper);
-            assert.ok(bankSection.is(':visible'), "Bank details section should be visible for Direct Debit");
+            assert.ok(bankSection.is(':visible'), "Bank details section should be visible for SEPA Direct Debit");
             
             // IBAN should be required
             let ibanField = cur_frm.get_field('iban');
-            assert.ok(ibanField.df.reqd, "IBAN should be required for Direct Debit");
+            assert.ok(ibanField.df.reqd, "IBAN should be required for SEPA Direct Debit");
         },
         
         () => done()
@@ -181,12 +181,12 @@ QUnit.test("test: Member - IBAN Validation", function (assert) {
     assert.expect(2);
 
     frappe.run_serially([
-        // Create member with Direct Debit
+        // Create member with SEPA Direct Debit
         () => frappe.tests.make('Member', [
             {first_name: 'IBAN'},
             {last_name: 'Test'},
             {email: 'iban.test@example.com'},
-            {payment_method: 'Direct Debit'}
+            {payment_method: 'SEPA Direct Debit'}
         ]),
         () => cur_frm.save(),
         () => frappe.timeout(1),
@@ -202,7 +202,7 @@ QUnit.test("test: Member - IBAN Validation", function (assert) {
             assert.equal(cur_frm.doc.iban, 'NL91ABNA0417164300', "IBAN should be set correctly");
             
             // Should trigger SEPA mandate check (this would be visible via alerts or dialogs)
-            assert.ok(cur_frm.doc.payment_method === 'Direct Debit', "Payment method should remain Direct Debit");
+            assert.ok(cur_frm.doc.payment_method === 'SEPA Direct Debit', "Payment method should remain SEPA Direct Debit");
         },
         
         () => done()

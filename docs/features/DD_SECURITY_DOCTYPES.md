@@ -2,7 +2,7 @@
 
 ## 1. DD Security Audit Log
 
-**Purpose**: Comprehensive audit logging for all Direct Debit batch operations
+**Purpose**: Comprehensive audit logging for all SEPA Direct Debit batch operations
 
 **Fields**:
 ```json
@@ -370,9 +370,9 @@
 }
 ```
 
-## 5. Enhanced Direct Debit Batch Fields
+## 5. Enhanced SEPA Direct Debit Batch Fields
 
-**Additional fields to add to existing Direct Debit Batch DocType**:
+**Additional fields to add to existing SEPA Direct Debit Batch DocType**:
 
 ```json
 {
@@ -447,7 +447,7 @@
 **New Roles Required**:
 
 1. **DD Administrator**
-   - Full access to Direct Debit batch management
+   - Full access to SEPA Direct Debit batch management
    - Can resolve conflicts and approve high-risk batches
    - Access to security logs and audit trails
 
@@ -465,7 +465,7 @@
 ```json
 {
   "DD Administrator": {
-    "Direct Debit Batch": "all",
+    "SEPA Direct Debit Batch": "all",
     "DD Security Audit Log": "read,create", 
     "DD Security Event Log": "read,write,create",
     "DD Conflict Report": "all",
@@ -477,7 +477,7 @@
     "DD Conflict Report": "read"
   },
   "DD Operator": {
-    "Direct Debit Batch": "read,write,create (if risk_assessment='Low')",
+    "SEPA Direct Debit Batch": "read,write,create (if risk_assessment='Low')",
     "DD Conflict Report": "read"
   }
 }
@@ -500,7 +500,7 @@ scheduler_events = {
 
 # Document events for audit logging
 doc_events = {
-    "Direct Debit Batch": {
+    "SEPA Direct Debit Batch": {
         "before_save": "verenigingen.utils.dd_security_enhancements.log_batch_changes",
         "on_submit": "verenigingen.utils.dd_security_enhancements.log_batch_submission",
         "on_cancel": "verenigingen.utils.dd_security_enhancements.log_batch_cancellation"
@@ -512,7 +512,7 @@ doc_events = {
 
 1. **Phase 1** (Week 1): Create DD Security Audit Log and DD Security Event Log
 2. **Phase 2** (Week 2): Create DD Conflict Report and DD Conflict Member
-3. **Phase 3** (Week 3): Enhance Direct Debit Batch with security fields
+3. **Phase 3** (Week 3): Enhance SEPA Direct Debit Batch with security fields
 4. **Phase 4** (Week 4): Implement roles and permissions
 
-This enhanced DocType structure provides comprehensive security monitoring, audit trails, and conflict resolution capabilities for the Direct Debit batch system while maintaining compliance with financial data protection standards.
+This enhanced DocType structure provides comprehensive security monitoring, audit trails, and conflict resolution capabilities for the SEPA Direct Debit batch system while maintaining compliance with financial data protection standards.

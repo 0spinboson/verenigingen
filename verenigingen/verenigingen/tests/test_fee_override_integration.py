@@ -112,7 +112,7 @@ class TestFeeOverrideLogic(unittest.TestCase):
             "membership_amount": 65.0,  # Custom amount
             "uses_custom_amount": True,
             "custom_amount_reason": "Supporter contribution",
-            "payment_method": "Direct Debit",
+            "payment_method": "SEPA Direct Debit",
             "iban": "NL91ABNA0417164300",
             "bic": "ABNANL2A",
             "bank_account_name": "Test Application User"

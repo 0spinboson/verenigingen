@@ -92,10 +92,10 @@ def process_bank_details_update():
         
         # Update payment method based on direct debit choice
         if enable_dd:
-            member.payment_method = "Direct Debit"
+            member.payment_method = "SEPA Direct Debit"
         else:
-            # Only change if currently Direct Debit, preserve other methods
-            if member.payment_method == "Direct Debit":
+            # Only change if currently SEPA Direct Debit, preserve other methods
+            if member.payment_method == "SEPA Direct Debit":
                 member.payment_method = "Manual"
         
         # Save member changes (members can update their own records)
@@ -523,10 +523,10 @@ def process_bank_details_update_direct(member_name, new_iban, new_bic, new_accou
         
         # Update payment method based on direct debit choice
         if enable_dd:
-            member.payment_method = "Direct Debit"
+            member.payment_method = "SEPA Direct Debit"
         else:
-            # Only change if currently Direct Debit, preserve other methods
-            if member.payment_method == "Direct Debit":
+            # Only change if currently SEPA Direct Debit, preserve other methods
+            if member.payment_method == "SEPA Direct Debit":
                 member.payment_method = "Manual"
         
         # Save member changes

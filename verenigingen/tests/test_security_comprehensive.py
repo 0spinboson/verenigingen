@@ -175,7 +175,7 @@ class TestSecurityComprehensive(unittest.TestCase):
             frappe.get_all("Membership", fields=["annual_fee", "member"])
         
         with self.assertRaises(frappe.PermissionError):
-            frappe.get_all("Direct Debit Batch")
+            frappe.get_all("SEPA Direct Debit Batch")
         
         with self.assertRaises(frappe.PermissionError):
             frappe.get_all("SEPA Mandate")

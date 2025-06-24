@@ -216,7 +216,7 @@ def update_bank_details():
             
             # Payment method change message
             if enable_dd:
-                success_messages.append(_("Payment method changed to Direct Debit"))
+                success_messages.append(_("Payment method changed to SEPA Direct Debit"))
             
             # SEPA mandate messages based on processing result
             if result.get('mandate_result'):

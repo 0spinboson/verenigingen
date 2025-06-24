@@ -141,7 +141,7 @@ def get_application_form_data():
             ],
             "payment_methods": [
                 {"name": "Bank Transfer", "description": "One-time bank transfer"},
-                {"name": "Direct Debit", "description": "SEPA Direct Debit (recurring)"}
+                {"name": "SEPA Direct Debit", "description": "SEPA Direct Debit (recurring)"}
             ]
         }
 

@@ -30,17 +30,17 @@ QUnit.test("test: Member", function (assert) {
 		},
 		// Test payment method change
 		() => frappe.tests.set_form_values(cur_frm, [
-			{payment_method: 'Direct Debit'}
+			{payment_method: 'SEPA Direct Debit'}
 		]),
 		() => frappe.timeout(1),
 		() => {
 			// Check if bank details section is visible
 			let bankSection = $(cur_frm.fields_dict.bank_details_section.wrapper);
-			assert.ok(bankSection.is(':visible'), "Bank details section should be visible for Direct Debit");
+			assert.ok(bankSection.is(':visible'), "Bank details section should be visible for SEPA Direct Debit");
 			
 			// Check if IBAN field is required
 			let ibanField = cur_frm.get_field('iban');
-			assert.ok(ibanField.df.reqd, "IBAN should be required for Direct Debit");
+			assert.ok(ibanField.df.reqd, "IBAN should be required for SEPA Direct Debit");
 		},
 		() => done()
 	]);
@@ -116,9 +116,9 @@ QUnit.test("test: Member - SEPA Mandate Handling", function(assert) {
         () => cur_frm.save(),
         () => frappe.timeout(1),
         
-        // Set Direct Debit and IBAN
+        // Set SEPA Direct Debit and IBAN
         () => frappe.tests.set_form_values(cur_frm, [
-            {payment_method: 'Direct Debit'},
+            {payment_method: 'SEPA Direct Debit'},
             {iban: 'NL02ABNA0123456789'},
             {bank_account_name: 'SEPA Test'}
         ]),

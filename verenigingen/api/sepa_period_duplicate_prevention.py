@@ -199,14 +199,14 @@ def prevent_sepa_batch_period_duplicates(batch_name: str) -> Dict:
     Check if SEPA batch contains invoices that duplicate existing periods
     
     Args:
-        batch_name: Direct Debit Batch name
+        batch_name: SEPA Direct Debit Batch name
     
     Returns:
         Validation result with any period conflicts
     """
     try:
         # Get SEPA batch
-        batch = frappe.get_doc("Direct Debit Batch", batch_name)
+        batch = frappe.get_doc("SEPA Direct Debit Batch", batch_name)
         
         conflicts = []
         validated_items = []

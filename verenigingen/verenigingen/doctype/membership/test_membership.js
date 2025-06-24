@@ -38,17 +38,17 @@ QUnit.test("test: Membership", function (assert) {
 		
 		// Test payment method change
 		() => frappe.tests.set_form_values(cur_frm, [
-			{payment_method: 'Direct Debit'}
+			{payment_method: 'SEPA Direct Debit'}
 		]),
 		() => frappe.timeout(1),
 		() => {
 			// Check if mandate section is visible
 			let mandateField = cur_frm.get_field('sepa_mandate');
-			assert.ok(mandateField.df.reqd, "SEPA Mandate should be required for Direct Debit");
+			assert.ok(mandateField.df.reqd, "SEPA Mandate should be required for SEPA Direct Debit");
 			
 			// Check if mandate section is visible
 			let mandateSection = $(cur_frm.fields_dict.mandate_section.wrapper);
-			assert.ok(mandateSection.is(':visible'), "Mandate section should be visible for Direct Debit");
+			assert.ok(mandateSection.is(':visible'), "Mandate section should be visible for SEPA Direct Debit");
 		},
 		() => done()
 	]);

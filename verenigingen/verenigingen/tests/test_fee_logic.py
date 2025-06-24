@@ -54,7 +54,7 @@ def test_new_application_with_custom_amount():
             "membership_amount": 75.0,  # Custom amount higher than standard (50)
             "uses_custom_amount": True,
             "custom_amount_reason": "Supporter contribution",
-            "payment_method": "Direct Debit",
+            "payment_method": "SEPA Direct Debit",
             "terms": True
         }
         

@@ -1,4 +1,4 @@
-# Direct Debit Batch Enhancement Summary
+# SEPA Direct Debit Batch Enhancement Summary
 
 ## 🔒 Security Enhancements Delivered
 

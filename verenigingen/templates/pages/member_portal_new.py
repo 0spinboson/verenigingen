@@ -195,7 +195,7 @@ def get_quick_actions(member, membership, volunteer):
             "class": "btn-primary",
             "icon": "fa-university"
         })
-    elif member.payment_method != "Direct Debit":
+    elif member.payment_method != "SEPA Direct Debit":
         actions.append({
             "title": _("Enable Auto-Pay"),
             "route": "/bank_details",

@@ -1,5 +1,5 @@
 """
-Direct Debit Batch Workflow Controller
+SEPA Direct Debit Batch Workflow Controller
 Implements business logic for workflow state transitions and validations
 """
 
@@ -16,7 +16,7 @@ def validate_batch_for_approval(batch_name):
         Dict with validation results and recommended next state
     """
     try:
-        batch = frappe.get_doc("Direct Debit Batch", batch_name)
+        batch = frappe.get_doc("SEPA Direct Debit Batch", batch_name)
         
         validation_result = {
             "valid": True,
@@ -194,7 +194,7 @@ def approve_batch(batch_name, approval_notes=None):
         Success status and next state
     """
     try:
-        batch = frappe.get_doc("Direct Debit Batch", batch_name)
+        batch = frappe.get_doc("SEPA Direct Debit Batch", batch_name)
         
         # Validate user has permission to approve
         if not can_user_approve_batch(batch):
@@ -253,7 +253,7 @@ def reject_batch(batch_name, rejection_reason):
         Success status
     """
     try:
-        batch = frappe.get_doc("Direct Debit Batch", batch_name)
+        batch = frappe.get_doc("SEPA Direct Debit Batch", batch_name)
         
         # Add rejection notes
         timestamp = now_datetime().strftime("%Y-%m-%d %H:%M:%S")
@@ -300,7 +300,7 @@ def can_user_approve_batch(batch):
 def get_batch_approval_history(batch_name):
     """Get approval history for a batch"""
     try:
-        batch = frappe.get_doc("Direct Debit Batch", batch_name)
+        batch = frappe.get_doc("SEPA Direct Debit Batch", batch_name)
         
         # Parse approval notes into structured history
         history = []
@@ -354,7 +354,7 @@ def trigger_sepa_generation(batch_name):
         Generation result
     """
     try:
-        batch = frappe.get_doc("Direct Debit Batch", batch_name)
+        batch = frappe.get_doc("SEPA Direct Debit Batch", batch_name)
         
         # Check batch is in approved state
         if batch.approval_status != "Approved":
@@ -413,7 +413,7 @@ def get_batches_pending_approval():
             return {"success": True, "batches": []}
         
         batches = frappe.get_all(
-            "Direct Debit Batch",
+            "SEPA Direct Debit Batch",
             filters=filters,
             fields=[
                 "name", "batch_date", "batch_description", "total_amount", 

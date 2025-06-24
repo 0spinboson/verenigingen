@@ -206,7 +206,7 @@ class TestPaymentFailureScenarios(unittest.TestCase):
         """Test direct debit batch processing failures"""
         # Create direct debit batch
         batch = frappe.get_doc({
-            "doctype": "Direct Debit Batch",
+            "doctype": "SEPA Direct Debit Batch",
             "batch_date": today(),
             "status": "Draft"
         })
@@ -214,7 +214,7 @@ class TestPaymentFailureScenarios(unittest.TestCase):
         
         # Add membership payment to batch
         batch_invoice = frappe.get_doc({
-            "doctype": "Direct Debit Batch Invoice",
+            "doctype": "SEPA Direct Debit Batch Invoice",
             "parent": batch.name,
             "mandate": self.mandate.name,
             "amount": 100.00,
@@ -247,7 +247,7 @@ class TestPaymentFailureScenarios(unittest.TestCase):
         """Test handling of partial batch failures"""
         # Create batch with multiple payments
         batch = frappe.get_doc({
-            "doctype": "Direct Debit Batch",
+            "doctype": "SEPA Direct Debit Batch",
             "batch_date": today(),
             "status": "Draft"
         })
@@ -275,7 +275,7 @@ class TestPaymentFailureScenarios(unittest.TestCase):
         
         # Add valid payment
         batch_invoice1 = frappe.get_doc({
-            "doctype": "Direct Debit Batch Invoice",
+            "doctype": "SEPA Direct Debit Batch Invoice",
             "parent": batch.name,
             "mandate": self.mandate.name,
             "amount": 100.00,
@@ -285,7 +285,7 @@ class TestPaymentFailureScenarios(unittest.TestCase):
         
         # Add invalid payment (will fail)
         batch_invoice2 = frappe.get_doc({
-            "doctype": "Direct Debit Batch Invoice",
+            "doctype": "SEPA Direct Debit Batch Invoice",
             "parent": batch.name,
             "mandate": mandate2.name,
             "amount": -50.00,  # Invalid negative amount
@@ -307,7 +307,7 @@ class TestPaymentFailureScenarios(unittest.TestCase):
             pass
         finally:
             # Clean up
-            if frappe.db.exists("Direct Debit Batch Invoice", batch_invoice2.name):
+            if frappe.db.exists("SEPA Direct Debit Batch Invoice", batch_invoice2.name):
                 batch_invoice2.delete()
             batch_invoice1.delete()
             batch.delete()

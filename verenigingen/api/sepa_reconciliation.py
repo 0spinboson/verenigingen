@@ -71,13 +71,13 @@ def identify_sepa_transactions():
         return {"success": False, "error": str(e)}
 
 def find_matching_sepa_batches(bank_transaction):
-    """Find Direct Debit Batches that might match this bank transaction"""
+    """Find SEPA Direct Debit Batches that might match this bank transaction"""
     
     # Search for batches within 7 days of transaction date
     date_range_start = add_days(bank_transaction.date, -7)
     date_range_end = add_days(bank_transaction.date, 3)
     
-    potential_batches = frappe.get_all("Direct Debit Batch",
+    potential_batches = frappe.get_all("SEPA Direct Debit Batch",
         filters={
             "batch_date": ["between", [date_range_start, date_range_end]],
             "docstatus": 1,  # Submitted batches only
@@ -126,7 +126,7 @@ def process_sepa_transaction_conservative(bank_transaction_name, sepa_batch_name
         check_batch_processing_status(sepa_batch_name, bank_transaction_name)
         
         # Validate batch mandates before processing
-        sepa_batch = frappe.get_doc("Direct Debit Batch", sepa_batch_name)
+        sepa_batch = frappe.get_doc("SEPA Direct Debit Batch", sepa_batch_name)
         batch_validation = validate_batch_mandates({"invoices": sepa_batch.invoices})
         
         if not batch_validation["valid"]:
@@ -147,7 +147,7 @@ def _process_sepa_transaction_conservative_internal(bank_transaction_name, sepa_
     """Conservative processing: Link transaction to batch but handle reconciliation carefully"""
     try:
         bank_transaction = frappe.get_doc("Bank Transaction", bank_transaction_name)
-        sepa_batch = frappe.get_doc("Direct Debit Batch", sepa_batch_name)
+        sepa_batch = frappe.get_doc("SEPA Direct Debit Batch", sepa_batch_name)
         
         # Link bank transaction to SEPA batch
         bank_transaction.custom_sepa_batch = sepa_batch_name
@@ -187,7 +187,7 @@ def reconcile_full_sepa_batch(bank_transaction, sepa_batch):
     """Reconcile all items in SEPA batch when full amount received"""
     
     # Get all batch items
-    batch_items = frappe.get_all("Direct Debit Batch Item",
+    batch_items = frappe.get_all("SEPA Direct Debit Batch Item",
         filters={"parent": sepa_batch.name},
         fields=["name", "sales_invoice", "amount", "customer", "idx"]
     )
@@ -209,7 +209,7 @@ def reconcile_full_sepa_batch(bank_transaction, sepa_batch):
                 "source_exchange_rate": 1,
                 "reference_no": bank_transaction.reference_number,
                 "reference_date": bank_transaction.date,
-                "mode_of_payment": "Direct Debit",
+                "mode_of_payment": "SEPA Direct Debit",
                 "custom_bank_transaction": bank_transaction.name,
                 "custom_sepa_batch": sepa_batch.name,
                 "custom_sepa_batch_item": item.name,
@@ -280,7 +280,7 @@ Action Required:
         """,
         "priority": "High",
         "status": "Open",
-        "reference_type": "Direct Debit Batch",
+        "reference_type": "SEPA Direct Debit Batch",
         "reference_name": sepa_batch.name,
         "assigned_by": frappe.session.user
     })
@@ -326,7 +326,7 @@ Action Required: Investigate source of excess payment
         """,
         "priority": "Medium",
         "status": "Open",
-        "reference_type": "Direct Debit Batch", 
+        "reference_type": "SEPA Direct Debit Batch", 
         "reference_name": sepa_batch.name,
         "assigned_by": frappe.session.user
     })
@@ -472,7 +472,7 @@ def reverse_failed_sepa_payment(invoice_name, return_item):
         payment_entry = frappe.get_doc("Payment Entry", pe_ref.parent)
         
         # Check if this was a SEPA payment
-        if payment_entry.mode_of_payment == "Direct Debit" and payment_entry.docstatus == 1:
+        if payment_entry.mode_of_payment == "SEPA Direct Debit" and payment_entry.docstatus == 1:
             
             # Create cancellation entry
             cancellation_entry = frappe.get_doc({
@@ -485,7 +485,7 @@ def reverse_failed_sepa_payment(invoice_name, return_item):
                 "received_amount": payment_entry.received_amount,
                 "reference_no": f"SEPA RETURN - {payment_entry.reference_no}",
                 "reference_date": getdate(),
-                "mode_of_payment": "Direct Debit Return",
+                "mode_of_payment": "SEPA Direct Debit Return",
                 "custom_original_payment": payment_entry.name,
                 "custom_return_reason": return_item.get("return_reason", ""),
                 "references": [{
@@ -613,7 +613,7 @@ def find_original_sepa_batch_for_return(return_transaction):
     search_start = add_days(return_transaction.date, -14)
     search_end = add_days(return_transaction.date, -1)
     
-    potential_batches = frappe.get_all("Direct Debit Batch",
+    potential_batches = frappe.get_all("SEPA Direct Debit Batch",
         filters={
             "batch_date": ["between", [search_start, search_end]],
             "docstatus": 1
@@ -623,7 +623,7 @@ def find_original_sepa_batch_for_return(return_transaction):
     
     # Look for amount matches within the batch items
     for batch in potential_batches:
-        batch_items = frappe.get_all("Direct Debit Batch Item",
+        batch_items = frappe.get_all("SEPA Direct Debit Batch Item",
             filters={"parent": batch.name},
             fields=["amount", "customer", "sales_invoice"]
         )
@@ -648,7 +648,7 @@ def get_sepa_reconciliation_dashboard():
     """Get dashboard data for SEPA reconciliation status"""
     try:
         # Recent SEPA batches
-        recent_batches = frappe.get_all("Direct Debit Batch",
+        recent_batches = frappe.get_all("SEPA Direct Debit Batch",
             filters={
                 "batch_date": [">=", add_days(getdate(), -30)],
                 "docstatus": 1
@@ -668,7 +668,7 @@ def get_sepa_reconciliation_dashboard():
         # Manual review tasks
         pending_reviews = frappe.get_all("ToDo",
             filters={
-                "reference_type": "Direct Debit Batch",
+                "reference_type": "SEPA Direct Debit Batch",
                 "status": "Open",
                 "creation": [">=", add_days(getdate(), -30)]
             },
@@ -732,7 +732,7 @@ def create_manual_payment_entry(bank_transaction, batch_item):
         "received_amount": batch_item["amount"],
         "reference_no": bank_transaction.reference_number,
         "reference_date": bank_transaction.date,
-        "mode_of_payment": "Direct Debit",
+        "mode_of_payment": "SEPA Direct Debit",
         "custom_bank_transaction": bank_transaction.name,
         "custom_manual_reconciliation": 1,
         "references": [{

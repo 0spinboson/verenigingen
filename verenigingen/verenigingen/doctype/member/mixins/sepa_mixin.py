@@ -130,11 +130,11 @@ def check_sepa_mandate_discrepancies():
     frappe.logger().info("Starting scheduled SEPA mandate discrepancy check")
     
     try:
-        # Find members with Direct Debit or SEPA DD payment method
+        # Find members with SEPA Direct Debit or SEPA Direct Debit payment method
         members_with_direct_debit = frappe.get_all(
             "Member",
             filters={
-                "payment_method": ["in", ["Direct Debit", "SEPA DD"]],
+                "payment_method": "SEPA Direct Debit",
                 "docstatus": ["!=", 2]  # Not cancelled
             },
             fields=["name", "full_name", "iban", "bic", "bank_account_name"]

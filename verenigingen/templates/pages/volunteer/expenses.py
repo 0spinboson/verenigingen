@@ -231,7 +231,7 @@ def update_workspace_links():
             # Payment Processing section - Card Break first, then links
             {"label": "Payment Processing", "link_count": 2, "link_type": "DocType", "type": "Card Break"},
             {"label": "SEPA Mandate", "link_to": "SEPA Mandate", "link_type": "DocType", "type": "Link"},
-            {"label": "Direct Debit Batch", "link_to": "Direct Debit Batch", "link_type": "DocType", "type": "Link"},
+            {"label": "SEPA Direct Debit Batch", "link_to": "SEPA Direct Debit Batch", "link_type": "DocType", "type": "Link"},
             
             # Reports section - Card Break first, then links
             {"label": "Reports", "link_count": 9, "link_type": "Report", "type": "Card Break"},

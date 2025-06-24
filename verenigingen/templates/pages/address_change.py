@@ -79,7 +79,7 @@ def get_context(context):
     # Portal navigation
     context.show_sidebar = True
     context.portal_links = [
-        {"title": _("Dashboard"), "route": "/my-account"},
+        {"title": _("Dashboard"), "route": "/member_portal"},
         {"title": _("Update Address"), "route": "/address_change"},
         {"title": _("Adjust Fee"), "route": "/membership_fee_adjustment"},
         {"title": _("Personal Details"), "route": "/personal_details"},

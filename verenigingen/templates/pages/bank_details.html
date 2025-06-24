@@ -87,7 +87,7 @@
                            class="mt-1 mr-3 h-4 w-4 text-red-600 focus:ring-red-500 border-gray-300 rounded" 
                            id="enable_direct_debit" 
                            name="enable_direct_debit"
-                           {% if member.payment_method == "Direct Debit" or current_mandate %}checked{% endif %}>
+                           {% if member.payment_method == "SEPA Direct Debit" or current_mandate %}checked{% endif %}>
                     <div>
                         <label class="text-sm font-medium text-gray-700" for="enable_direct_debit">
                             {{ _("Enable automatic payment via SEPA Direct Debit") }}
@@ -102,7 +102,7 @@
                 <div class="flex items-start">
                     <i class="fa fa-exclamation-triangle mr-2 mt-0.5"></i>
                     <div>
-                        <strong>{{ _("Note:") }}</strong> {{ _("Enabling Direct Debit will create a new SEPA mandate that you'll need to authorize.") }}
+                        <strong>{{ _("Note:") }}</strong> {{ _("Enabling SEPA Direct Debit will create a new SEPA mandate that you'll need to authorize.") }}
                     </div>
                 </div>
             </div>

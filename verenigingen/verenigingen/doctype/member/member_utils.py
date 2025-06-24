@@ -405,7 +405,7 @@ def check_mandate_iban_mismatch(member, current_iban):
             "show_popup": True,
             "reason": "no_existing_mandates",
             "scenario": "first_time_setup",
-            "message": "No SEPA mandate found. Create one for Direct Debit payments?"
+            "message": "No SEPA mandate found. Create one for SEPA Direct Debit payments?"
         }
     
     for mandate in existing_mandates:

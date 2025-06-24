@@ -75,12 +75,12 @@ For unmatched transactions:
 
 3. **Result**: Payment Entry created linking bank transaction to invoice
 
-#### B. Direct Debit Reconciliation  
+#### B. SEPA Direct Debit Reconciliation  
 **Scenario**: SEPA Direct Debit batch processed
 
 1. **Batch Processing**:
    ```
-   Direct Debit Batch → Multiple Bank Transactions
+   SEPA Direct Debit Batch → Multiple Bank Transactions
    ```
 
 2. **Bulk Reconciliation**:
@@ -189,7 +189,7 @@ With the recent workspace updates, you now have quick access to:
 - Bank Statement Import
 - Payment Entry
 - SEPA Mandate
-- Direct Debit Batch
+- SEPA Direct Debit Batch
 
 **Quick Shortcuts:**
 - Bank Reconciliation (one-click access)
@@ -209,7 +209,7 @@ Use consistent description patterns:
 ```
 Member Payment - ID: 12345 - Invoice: INV-2024-001
 Expense Claim - EXP-001 - Volunteer: Jane Smith  
-Direct Debit - Batch: DD-2024-03 - Multiple invoices
+SEPA Direct Debit - Batch: DD-2024-03 - Multiple invoices
 ```
 
 ### 3. Exception Handling

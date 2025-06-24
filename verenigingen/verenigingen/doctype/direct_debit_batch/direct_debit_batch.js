@@ -1,4 +1,4 @@
-frappe.ui.form.on('Direct Debit Batch', {
+frappe.ui.form.on('SEPA Direct Debit Batch', {
     refresh: function(frm) {
         // Add buttons based on document state
         if (frm.doc.docstatus === 0) {
@@ -96,10 +96,10 @@ frappe.ui.form.on('Direct Debit Batch', {
         // Update description based on batch type
         if (frm.doc.batch_type) {
             let descriptions = {
-                'CORE': __('Core Direct Debit - Standard for consumers'),
-                'B2B': __('Business to Business Direct Debit'),
-                'FRST': __('First Direct Debit - For first payment of a recurring series'),
-                'RCUR': __('Recurring Direct Debit - For subsequent payments')
+                'CORE': __('Core SEPA Direct Debit - Standard for consumers'),
+                'B2B': __('Business to Business SEPA Direct Debit'),
+                'FRST': __('First SEPA Direct Debit - For first payment of a recurring series'),
+                'RCUR': __('Recurring SEPA Direct Debit - For subsequent payments')
             };
             
             if (descriptions[frm.doc.batch_type]) {

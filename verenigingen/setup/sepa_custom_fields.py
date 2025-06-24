@@ -13,7 +13,7 @@ def create_sepa_custom_fields():
             'fieldname': 'custom_sepa_batch',
             'label': 'SEPA Batch',
             'fieldtype': 'Link',
-            'options': 'Direct Debit Batch',
+            'options': 'SEPA Direct Debit Batch',
             'insert_after': 'bank_account',
             'read_only': 0,
             'description': 'Related SEPA Direct Debit Batch'
@@ -53,7 +53,7 @@ def create_sepa_custom_fields():
             'fieldname': 'custom_sepa_batch',
             'label': 'SEPA Batch',
             'fieldtype': 'Link',
-            'options': 'Direct Debit Batch', 
+            'options': 'SEPA Direct Debit Batch', 
             'insert_after': 'custom_bank_transaction',
             'read_only': 0,
             'description': 'Related SEPA batch'
@@ -94,7 +94,7 @@ def create_sepa_custom_fields():
         }
     ]
     
-    # Custom fields for Direct Debit Batch
+    # Custom fields for SEPA Direct Debit Batch
     direct_debit_batch_fields = [
         {
             'fieldname': 'custom_reconciliation_status',
@@ -118,7 +118,7 @@ def create_sepa_custom_fields():
     # Create the custom fields
     create_custom_fields("Bank Transaction", bank_transaction_fields)
     create_custom_fields("Payment Entry", payment_entry_fields)
-    create_custom_fields("Direct Debit Batch", direct_debit_batch_fields)
+    create_custom_fields("SEPA Direct Debit Batch", direct_debit_batch_fields)
 
 def create_custom_fields(doctype, fields):
     """Create custom fields for a specific doctype"""
@@ -220,7 +220,7 @@ def setup_sepa_custom_fields():
 
 @frappe.whitelist()
 def create_direct_debit_fields_only():
-    """Create only Direct Debit Batch custom fields"""
+    """Create only SEPA Direct Debit Batch custom fields"""
     try:
         fields = [
             {
@@ -243,12 +243,12 @@ def create_direct_debit_fields_only():
         ]
         
         for field in fields:
-            existing = frappe.db.exists("Custom Field", {"dt": "Direct Debit Batch", "fieldname": field["fieldname"]})
+            existing = frappe.db.exists("Custom Field", {"dt": "SEPA Direct Debit Batch", "fieldname": field["fieldname"]})
             
             if not existing:
                 custom_field = frappe.get_doc({
                     "doctype": "Custom Field",
-                    "dt": "Direct Debit Batch",
+                    "dt": "SEPA Direct Debit Batch",
                     "fieldname": field["fieldname"],
                     "label": field["label"],
                     "fieldtype": field["fieldtype"],
@@ -260,7 +260,7 @@ def create_direct_debit_fields_only():
                 custom_field.insert()
         
         frappe.db.commit()
-        return {"success": True, "message": "Direct Debit Batch fields created"}
+        return {"success": True, "message": "SEPA Direct Debit Batch fields created"}
         
     except Exception as e:
         return {"success": False, "error": str(e)}

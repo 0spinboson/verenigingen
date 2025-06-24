@@ -1,5 +1,5 @@
 /**
- * Enhanced Direct Debit Batch Management Interface
+ * Enhanced SEPA Direct Debit Batch Management Interface
  * Provides comprehensive batch management with security validation and conflict resolution
  */
 
@@ -26,7 +26,7 @@ class DDBatchManagementDashboard {
             <div id="dd-batch-dashboard" class="dd-batch-dashboard">
                 <!-- Header Section -->
                 <div class="dashboard-header">
-                    <h2>Direct Debit Batch Management</h2>
+                    <h2>SEPA Direct Debit Batch Management</h2>
                     <div class="header-actions">
                         <button class="btn btn-primary" id="create-new-batch">
                             <i class="fa fa-plus"></i> Create New Batch
@@ -1050,7 +1050,7 @@ class BatchCreationWizard {
                 <div class="modal-dialog modal-xl">
                     <div class="modal-content">
                         <div class="modal-header">
-                            <h4 class="modal-title">Create New Direct Debit Batch</h4>
+                            <h4 class="modal-title">Create New SEPA Direct Debit Batch</h4>
                             <button type="button" class="close" data-dismiss="modal">
                                 <span>&times;</span>
                             </button>

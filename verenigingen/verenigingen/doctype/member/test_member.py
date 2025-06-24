@@ -121,7 +121,7 @@ class TestMember(FrappeTestCase):
             "last_name": "Member",
             "email": f"testmember{unique_id}@example.com",
             "contact_number": "+31612345678",
-            "payment_method": "Direct Debit",
+            "payment_method": "SEPA Direct Debit",
             "iban": "NL02ABNA0123456789",
             "bank_account_name": f"Test{unique_id} Member"
         }
@@ -456,7 +456,7 @@ class TestMember(FrappeTestCase):
             "last_name": "Member",
             "email": f"testmember{unique_id}@example.com",
             "contact_number": "+31612345678",
-            "payment_method": "Direct Debit",
+            "payment_method": "SEPA Direct Debit",
             "iban": "NL02ABNA0123456789",
             "bic": "ABNANL2A",
             "bank_account_name": f"Test{unique_id} Member"
@@ -470,7 +470,7 @@ class TestMember(FrappeTestCase):
         self.assertEqual(member.iban, "NL02 ABNA 0123 4567 89")  # Should be formatted
         self.assertEqual(member.bic, "ABNANL2A")
         self.assertEqual(member.bank_account_name, f"Test{unique_id} Member")
-        self.assertEqual(member.payment_method, "Direct Debit")
+        self.assertEqual(member.payment_method, "SEPA Direct Debit")
     
     def test_subscription_details_retrieval(self):
         """Test that subscription details are retrieved correctly"""

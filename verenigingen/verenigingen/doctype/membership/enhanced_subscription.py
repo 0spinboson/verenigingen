@@ -112,7 +112,7 @@ def create_direct_debit_batch(date=None):
             "status": "Active",
             "payment_status": "Unpaid",
             "subscription": ["is", "set"],
-            "payment_method": "Direct Debit"
+            "payment_method": "SEPA Direct Debit"
         },
         fields=["name", "subscription", "member", "member_name"]
     )
@@ -152,7 +152,7 @@ def create_direct_debit_batch(date=None):
         return None
         
     # Create a batch entry
-    batch = frappe.new_doc("Direct Debit Batch")
+    batch = frappe.new_doc("SEPA Direct Debit Batch")
     batch.batch_date = date
     batch.batch_description = f"Membership payments batch - {date}"
     batch.batch_type = "CORE"  # Dutch direct debit type
@@ -199,7 +199,7 @@ def get_member_bank_details(member_name):
 def get_unpaid_membership_invoices():
     """
     Get all unpaid invoices related to memberships
-    Used by Direct Debit Batch for selecting invoices
+    Used by SEPA Direct Debit Batch for selecting invoices
     """
     # Get all active memberships with subscriptions
     memberships = frappe.get_all(
@@ -208,7 +208,7 @@ def get_unpaid_membership_invoices():
             "status": ["in", ["Active", "Pending"]],
             "payment_status": "Unpaid",
             "subscription": ["is", "set"],
-            "payment_method": "Direct Debit"
+            "payment_method": "SEPA Direct Debit"
         },
         fields=["name", "subscription", "member", "member_name"]
     )
@@ -282,8 +282,8 @@ def add_to_direct_debit_batch(membership_name):
     if membership.payment_status != "Unpaid":
         frappe.throw(_("Membership is already paid"))
         
-    if membership.payment_method != "Direct Debit":
-        frappe.throw(_("Membership payment method must be Direct Debit"))
+    if membership.payment_method != "SEPA Direct Debit":
+        frappe.throw(_("Membership payment method must be SEPA Direct Debit"))
         
     # Get unpaid invoices for this membership
     invoices = []
@@ -326,7 +326,7 @@ def add_to_direct_debit_batch(membership_name):
     # Check for existing draft batch
     batch = None
     existing_batches = frappe.get_all(
-        "Direct Debit Batch",
+        "SEPA Direct Debit Batch",
         filters={
             "docstatus": 0,
             "status": "Draft"
@@ -336,10 +336,10 @@ def add_to_direct_debit_batch(membership_name):
     )
     
     if existing_batches:
-        batch = frappe.get_doc("Direct Debit Batch", existing_batches[0].name)
+        batch = frappe.get_doc("SEPA Direct Debit Batch", existing_batches[0].name)
     else:
         # Create new batch
-        batch = frappe.new_doc("Direct Debit Batch")
+        batch = frappe.new_doc("SEPA Direct Debit Batch")
         batch.batch_date = today()
         batch.batch_description = f"Membership payments batch - {today()}"
         batch.batch_type = "RCUR"

@@ -240,8 +240,8 @@ function setup_member_id_display(frm) {
 }
 
 function handle_payment_method_change(frm) {
-    const is_direct_debit = frm.doc.payment_method === 'Direct Debit' || frm.doc.payment_method === 'SEPA DD';
-    const show_bank_details = ['Direct Debit', 'SEPA DD', 'Bank Transfer'].includes(frm.doc.payment_method);
+    const is_direct_debit = frm.doc.payment_method === 'SEPA Direct Debit';
+    const show_bank_details = ['SEPA Direct Debit', 'Bank Transfer'].includes(frm.doc.payment_method);
     
     // Show/hide bank details based on payment method
     frm.toggle_reqd('iban', is_direct_debit);
