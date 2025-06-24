@@ -37,6 +37,11 @@ def run_all_tests():
             "module": "verenigingen.tests.test_doctype_validation_comprehensive"
         },
         {
+            "name": "Contribution Amendment Conflicts",
+            "function": "run_amendment_tests",
+            "module": "verenigingen.tests.test_contribution_amendment_conflicts"
+        },
+        {
             "name": "Termination System Tests",
             "function": "run_termination_tests",
             "module": "verenigingen.verenigingen.tests.test_termination_system"

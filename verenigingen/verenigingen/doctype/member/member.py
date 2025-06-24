@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import getdate, today, add_days, date_diff, now
+from frappe.utils import getdate, today, add_days, date_diff, now, now_datetime
 import random
 
 from verenigingen.verenigingen.doctype.member.member_id_manager import (
@@ -464,6 +464,50 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         # Save the member
         self.save()
         
+        # Activate pending Chapter Member records
+        try:
+            from verenigingen.utils.application_helpers import activate_pending_chapter_membership
+            
+            # First, try to find existing pending chapter memberships for this member
+            pending_chapters = frappe.db.sql("""
+                SELECT c.name as chapter_name
+                FROM `tabChapter` c
+                JOIN `tabChapter Member` cm ON cm.parent = c.name
+                WHERE cm.member = %s AND cm.status = 'Pending'
+            """, self.name, as_dict=True)
+            
+            activated_count = 0
+            for chapter_info in pending_chapters:
+                chapter_member = activate_pending_chapter_membership(self, chapter_info.chapter_name)
+                if chapter_member:
+                    frappe.logger().info(f"Activated chapter membership for {self.name} in {chapter_info.chapter_name}")
+                    activated_count += 1
+                else:
+                    frappe.logger().warning(f"Failed to activate chapter membership for {self.name} in {chapter_info.chapter_name}")
+            
+            if activated_count == 0:
+                # Fallback: Check for suggested chapter or current chapter display fields
+                chapter_to_activate = None
+                if hasattr(self, 'suggested_chapter') and self.suggested_chapter:
+                    chapter_to_activate = self.suggested_chapter
+                elif hasattr(self, 'current_chapter_display') and self.current_chapter_display:
+                    chapter_to_activate = self.current_chapter_display
+                
+                if chapter_to_activate:
+                    chapter_member = activate_pending_chapter_membership(self, chapter_to_activate)
+                    if chapter_member:
+                        frappe.logger().info(f"Activated chapter membership for {self.name} in {chapter_to_activate} (fallback)")
+                        activated_count += 1
+                    else:
+                        frappe.logger().warning(f"Failed to activate chapter membership for {self.name} in {chapter_to_activate} (fallback)")
+                        
+            if activated_count == 0:
+                frappe.logger().warning(f"No chapter memberships were activated for {self.name} - no pending chapter memberships found")
+                
+        except Exception as e:
+            frappe.log_error(f"Error activating chapter membership for {self.name}: {str(e)}", "Chapter Membership Activation")
+            # Don't fail the approval if chapter membership activation fails
+        
         # Create membership - this should trigger the subscription logic
         return self.create_membership_on_approval()
     
@@ -502,6 +546,53 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         except Exception as e:
             frappe.log_error(f"Error creating membership on approval: {str(e)}")
             frappe.throw(_("Error creating membership: {0}").format(str(e)))
+    
+    @frappe.whitelist()
+    def reject_application(self, reason):
+        """Reject this application and clean up pending records"""
+        if not self.is_application_member():
+            frappe.throw(_("This is not an application member"))
+        
+        if self.application_status == 'Rejected':
+            frappe.throw(_("Application is already rejected"))
+        
+        # Update status
+        self.application_status = 'Rejected'
+        self.status = 'Rejected'
+        self.reviewed_by = frappe.session.user
+        self.review_date = now_datetime()
+        self.rejection_reason = reason
+        
+        # Save the member
+        self.save()
+        
+        # Remove pending Chapter Member records
+        try:
+            from verenigingen.utils.application_helpers import remove_pending_chapter_membership
+            
+            # Check for suggested chapter or current chapter display
+            chapter_to_remove = None
+            if hasattr(self, 'suggested_chapter') and self.suggested_chapter:
+                chapter_to_remove = self.suggested_chapter
+            elif hasattr(self, 'current_chapter_display') and self.current_chapter_display:
+                chapter_to_remove = self.current_chapter_display
+            
+            if chapter_to_remove:
+                success = remove_pending_chapter_membership(self, chapter_to_remove)
+                if success:
+                    frappe.logger().info(f"Removed pending chapter membership for {self.name} from {chapter_to_remove}")
+                else:
+                    frappe.logger().warning(f"Failed to remove pending chapter membership for {self.name} from {chapter_to_remove}")
+            else:
+                # Try to remove from any chapter (fallback)
+                remove_pending_chapter_membership(self)
+                
+        except Exception as e:
+            frappe.log_error(f"Error removing pending chapter membership for {self.name}: {str(e)}", "Chapter Membership Removal")
+            # Don't fail the rejection if chapter membership removal fails
+        
+        frappe.logger().info(f"Rejected application for {self.name}")
+        return True
     
     def validate(self):
         """Validate document data"""

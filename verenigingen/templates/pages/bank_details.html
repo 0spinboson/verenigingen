@@ -40,7 +40,7 @@
         {% endif %}
 
         <form method="post" action="/api/method/verenigingen.templates.pages.bank_details.update_bank_details" id="bank-details-form" class="space-y-6">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="csrf_token" value="{{ frappe.session.csrf_token }}">
             
             <div>
                 <label for="iban" class="block text-sm font-medium text-gray-700 mb-2">

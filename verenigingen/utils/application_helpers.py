@@ -302,6 +302,27 @@ def create_member_from_application(data, application_id, address=None):
             frappe.log_error(f"Error storing custom amount data: {str(e)}", "Custom Amount Storage Error")
             pass
     
+    # Add chapter information to notes for approver visibility
+    try:
+        selected_chapter = data.get("selected_chapter")
+        if selected_chapter:
+            existing_notes = member.notes or ""
+            if existing_notes:
+                existing_notes += "\n\n"
+            
+            # Get chapter display name if possible
+            try:
+                chapter_doc = frappe.get_doc("Chapter", selected_chapter)
+                chapter_display = f"{chapter_doc.chapter_name} ({selected_chapter})"
+            except:
+                chapter_display = selected_chapter
+            
+            member.notes = existing_notes + f"Selected Chapter: {chapter_display}"
+    except Exception as e:
+        # Log the error for debugging but don't fail the submission
+        frappe.log_error(f"Error storing chapter information: {str(e)}", "Chapter Info Storage Error")
+        pass
+    
     # Suppress customer creation messages during application submission
     member._suppress_customer_messages = True
     member.flags.ignore_permissions = True
@@ -657,3 +678,176 @@ def check_application_status(application_id):
             "error": str(e),
             "message": _("Error checking application status")
         }
+
+
+def create_pending_chapter_membership(member, chapter_name):
+    """Create pending Chapter Member record during application submission"""
+    if not member or not chapter_name:
+        return None
+    
+    try:
+        # Check if chapter exists and is valid
+        if not frappe.db.exists("Chapter", chapter_name):
+            frappe.log_error(f"Chapter {chapter_name} does not exist", "Chapter Membership Creation")
+            return None
+        
+        # Check if Chapter Member record already exists for this member and chapter
+        existing = frappe.db.exists("Chapter Member", {"member": member.name, "parent": chapter_name})
+        if existing:
+            frappe.log_error(f"Chapter Member record already exists for {member.name} in {chapter_name}", "Chapter Membership Creation")
+            return existing
+        
+        # Get the chapter document to add member to the child table
+        chapter_doc = frappe.get_doc("Chapter", chapter_name)
+        
+        # Add member to the chapter members child table with Pending status
+        chapter_member = chapter_doc.append("members", {
+            "member": member.name,
+            "chapter_join_date": today(),
+            "enabled": 1,
+            "status": "Pending"
+        })
+        
+        # Save the chapter document
+        chapter_doc.save()
+        
+        frappe.logger().info(f"Created pending Chapter Member record for {member.name} in {chapter_name}")
+        return chapter_member
+        
+    except Exception as e:
+        frappe.log_error(f"Error creating pending chapter membership for {member.name} in {chapter_name}: {str(e)}", "Chapter Membership Creation Error")
+        return None
+
+
+def activate_pending_chapter_membership(member, chapter_name):
+    """Activate pending Chapter Member record during application approval"""
+    if not member or not chapter_name:
+        return None
+    
+    try:
+        # Check if chapter exists
+        if not frappe.db.exists("Chapter", chapter_name):
+            frappe.log_error(f"Chapter {chapter_name} does not exist", "Chapter Membership Activation")
+            return None
+        
+        # Get the chapter document
+        chapter_doc = frappe.get_doc("Chapter", chapter_name)
+        
+        # Find the pending Chapter Member record
+        pending_member = None
+        for cm in chapter_doc.members:
+            if cm.member == member.name and cm.status == "Pending":
+                pending_member = cm
+                break
+        
+        if not pending_member:
+            # No pending record found, create a new active one
+            frappe.logger().info(f"No pending Chapter Member found for {member.name} in {chapter_name}, creating new active record")
+            return create_active_chapter_membership(member, chapter_name)
+        
+        # Activate the pending record
+        pending_member.status = "Active"
+        pending_member.chapter_join_date = today()  # Update join date to approval date
+        
+        # Save the chapter document
+        chapter_doc.save()
+        
+        frappe.logger().info(f"Activated Chapter Member record for {member.name} in {chapter_name}")
+        return pending_member
+        
+    except Exception as e:
+        frappe.log_error(f"Error activating chapter membership for {member.name} in {chapter_name}: {str(e)}", "Chapter Membership Activation Error")
+        return None
+
+
+def create_active_chapter_membership(member, chapter_name):
+    """Create active Chapter Member record directly (fallback for when no pending record exists)"""
+    if not member or not chapter_name:
+        return None
+    
+    try:
+        # Check if chapter exists
+        if not frappe.db.exists("Chapter", chapter_name):
+            frappe.log_error(f"Chapter {chapter_name} does not exist", "Chapter Membership Creation")
+            return None
+        
+        # Check if Chapter Member record already exists
+        existing = frappe.db.exists("Chapter Member", {"member": member.name, "parent": chapter_name})
+        if existing:
+            # Update existing record to Active if it's not already
+            chapter_doc = frappe.get_doc("Chapter", chapter_name)
+            for cm in chapter_doc.members:
+                if cm.member == member.name:
+                    if cm.status != "Active":
+                        cm.status = "Active"
+                        cm.chapter_join_date = today()
+                        chapter_doc.save()
+                        frappe.logger().info(f"Updated existing Chapter Member record to Active for {member.name} in {chapter_name}")
+                    return cm
+        
+        # Create new active record
+        chapter_doc = frappe.get_doc("Chapter", chapter_name)
+        
+        chapter_member = chapter_doc.append("members", {
+            "member": member.name,
+            "chapter_join_date": today(),
+            "enabled": 1,
+            "status": "Active"
+        })
+        
+        chapter_doc.save()
+        
+        frappe.logger().info(f"Created active Chapter Member record for {member.name} in {chapter_name}")
+        return chapter_member
+        
+    except Exception as e:
+        frappe.log_error(f"Error creating active chapter membership for {member.name} in {chapter_name}: {str(e)}", "Chapter Membership Creation Error")
+        return None
+
+
+def remove_pending_chapter_membership(member, chapter_name=None):
+    """Remove pending Chapter Member record when application is rejected"""
+    if not member:
+        return False
+    
+    try:
+        # If no specific chapter provided, look at member's suggested chapter or current chapter display
+        if not chapter_name:
+            if hasattr(member, 'suggested_chapter') and member.suggested_chapter:
+                chapter_name = member.suggested_chapter
+            elif hasattr(member, 'current_chapter_display') and member.current_chapter_display:
+                chapter_name = member.current_chapter_display
+            else:
+                # No chapter to remove from
+                return True
+        
+        # Check if chapter exists
+        if not frappe.db.exists("Chapter", chapter_name):
+            frappe.logger().warning(f"Chapter {chapter_name} does not exist, cannot remove pending membership")
+            return False
+        
+        # Get the chapter document
+        chapter_doc = frappe.get_doc("Chapter", chapter_name)
+        
+        # Find and remove the pending Chapter Member record
+        members_to_remove = []
+        for i, cm in enumerate(chapter_doc.members):
+            if cm.member == member.name and cm.status == "Pending":
+                members_to_remove.append(i)
+        
+        # Remove in reverse order to maintain correct indices
+        for i in reversed(members_to_remove):
+            chapter_doc.remove(chapter_doc.members[i])
+        
+        if members_to_remove:
+            # Save the chapter document
+            chapter_doc.save()
+            frappe.logger().info(f"Removed {len(members_to_remove)} pending Chapter Member record(s) for {member.name} from {chapter_name}")
+            return True
+        else:
+            frappe.logger().info(f"No pending Chapter Member record found for {member.name} in {chapter_name}")
+            return True
+        
+    except Exception as e:
+        frappe.log_error(f"Error removing pending chapter membership for {member.name} from {chapter_name}: {str(e)}", "Chapter Membership Removal Error")
+        return False

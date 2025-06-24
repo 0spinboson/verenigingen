@@ -288,6 +288,15 @@
    "report": 1,
    "role": "Verenigingen Administrator",
    "share": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Verenigingen Member",
+   "share": 1,
+   "write": 1
   }
  ],
  "sort_field": "modified",

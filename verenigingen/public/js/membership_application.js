@@ -477,6 +477,20 @@ class MembershipApplication {
                     if (usesCustomAmount && (!membershipAmount || membershipAmount <= 0)) {
                         $('#membership-type-error').text('Please enter a valid membership amount').show();
                         isValid = false;
+                    } else if (usesCustomAmount && membershipAmount > 0) {
+                        // Validate minimum fee requirement
+                        const currentType = selectedType || (membership && membership.type);
+                        if (currentType && this.membershipTypes && this.membershipTypes.length > 0) {
+                            const typeData = this.membershipTypes.find(t => t.name === currentType);
+                            if (typeData && typeData.amount) {
+                                const minAmount = typeData.amount * 0.5; // 50% minimum
+                                if (membershipAmount < minAmount) {
+                                    const formattedMin = this.formatCurrency(minAmount);
+                                    $('#membership-type-error').text(`Minimum contribution is ${formattedMin} (50% of standard amount)`).show();
+                                    isValid = false;
+                                }
+                            }
+                        }
                     }
                 }
                 break;
@@ -3718,6 +3732,14 @@ class ConfirmationStep extends BaseStep {
         }
         
         return valid;
+    }
+    
+    formatCurrency(amount) {
+        // Format currency with EUR symbol and 2 decimal places
+        if (typeof amount !== 'number' || isNaN(amount)) {
+            return '€0.00';
+        }
+        return '€' + amount.toFixed(2);
     }
 }
 

@@ -170,3 +170,41 @@ def cancel_mandate(self, reason=None, cancellation_date=None):
     self.save()
     
     frappe.logger().info(f"Cancelled SEPA mandate {self.mandate_id}")
+
+def has_permission(doc, user=None, ptype=None):
+    """Custom permission check for SEPA Mandate"""
+    if not user:
+        user = frappe.session.user
+    
+    # Admin roles have full access
+    if frappe.db.get_value("Has Role", {"parent": user, "role": ["in", ["System Manager", "Membership Manager", "Verenigingen Administrator"]]}, "name"):
+        return True
+    
+    # Members can only access their own mandates
+    if frappe.db.get_value("Has Role", {"parent": user, "role": "Verenigingen Member"}, "name"):
+        if not doc or not doc.member:
+            return False
+        
+        # Check if the mandate belongs to this member
+        member = frappe.db.get_value("Member", {"email": user}, "name") or frappe.db.get_value("Member", {"user": user}, "name")
+        return doc.member == member
+    
+    return False
+
+def get_permission_query_conditions(user=None):
+    """Custom permission query conditions for SEPA Mandate"""
+    if not user:
+        user = frappe.session.user
+    
+    # Admin roles can see all mandates
+    if frappe.db.get_value("Has Role", {"parent": user, "role": ["in", ["System Manager", "Membership Manager", "Verenigingen Administrator"]]}, "name"):
+        return ""
+    
+    # Members can only see their own mandates
+    if frappe.db.get_value("Has Role", {"parent": user, "role": "Verenigingen Member"}, "name"):
+        member = frappe.db.get_value("Member", {"email": user}, "name") or frappe.db.get_value("Member", {"user": user}, "name")
+        if member:
+            return f"`tabSEPA Mandate`.member = '{member}'"
+    
+    # Default: no access
+    return "1=0"
