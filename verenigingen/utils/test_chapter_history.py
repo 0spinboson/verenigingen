@@ -79,3 +79,35 @@ def create_test_pending_membership(member_id, chapter_name):
             "member_id": member_id,
             "chapter_name": chapter_name
         }
+
+@frappe.whitelist()
+def test_update_membership_status(member_id, chapter_name, new_status, reason=None):
+    """Test updating membership status from Pending to Active"""
+    
+    try:
+        result = ChapterMembershipHistoryManager.update_membership_status(
+            member_id=member_id,
+            chapter_name=chapter_name,
+            assignment_type="Member",
+            new_status=new_status,
+            reason=reason
+        )
+        
+        frappe.logger().info(f"Updated membership status for {member_id} in {chapter_name} to {new_status}: {result}")
+        
+        return {
+            "success": True,
+            "member_id": member_id,
+            "chapter_name": chapter_name,
+            "new_status": new_status,
+            "update_result": result
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error updating membership status for {member_id}: {str(e)}", "Chapter History Test")
+        return {
+            "success": False,
+            "error": str(e),
+            "member_id": member_id,
+            "chapter_name": chapter_name
+        }
