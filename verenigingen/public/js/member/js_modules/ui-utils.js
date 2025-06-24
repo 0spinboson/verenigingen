@@ -124,13 +124,25 @@ function show_debug_postal_code_info(frm) {
 }
 
 function show_board_memberships(frm) {
+    // First, always remove any existing board memberships display to prevent stale data
+    $('.board-memberships').remove();
+    
+    // Only proceed if we have a valid member name
+    if (!frm.doc.name) {
+        return;
+    }
+    
     frappe.call({
         method: 'verenigingen.verenigingen.doctype.member.member.get_board_memberships',
         args: {
             member_name: frm.doc.name
         },
         callback: function(r) {
-            if (r.message && r.message.length > 0) {
+            // Debug logging to help diagnose the issue
+            console.log('Board memberships for', frm.doc.name, ':', r.message);
+            
+            // Only show board memberships if we actually have results
+            if (r.message && Array.isArray(r.message) && r.message.length > 0) {
                 var html = '<div class="board-memberships"><h4>Board Positions</h4><ul>';
                 r.message.forEach(function(membership) {
                     html += `<li><strong>${membership.chapter}:</strong> ${membership.role} 
@@ -140,13 +152,21 @@ function show_board_memberships(frm) {
                 html += '</ul></div>';
                 
                 // Insert after a suitable field, or create a dedicated section
-                if (!$('.board-memberships').length && frm.fields_dict.current_chapter_display) {
+                if (frm.fields_dict.current_chapter_display) {
                     $(frm.fields_dict.current_chapter_display.wrapper).after(html);
-                } else if (!$('.board-memberships').length) {
+                } else {
                     // Fallback: add to end of form if no suitable field found
                     $(frm.wrapper).find('.form-layout').append(html);
                 }
+            } else {
+                // No board memberships found - ensure no stale HTML is displayed
+                console.log('No board memberships found for', frm.doc.name);
             }
+        },
+        error: function(r) {
+            console.error('Error fetching board memberships for', frm.doc.name, ':', r);
+            // Remove any existing display on error
+            $('.board-memberships').remove();
         }
     });
 }

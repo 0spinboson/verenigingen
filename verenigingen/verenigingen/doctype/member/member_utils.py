@@ -18,16 +18,37 @@ def get_board_memberships(member_name):
     """Get board memberships for a member with proper permission handling"""
     if not is_chapter_management_enabled():
         return []
+    
+    # Validate input
+    if not member_name:
+        frappe.log_error("get_board_memberships called with empty member_name", "Board Memberships API")
+        return []
         
+    # Debug logging to track the issue
+    frappe.logger().info(f"Getting board memberships for member: {member_name}")
+    
     board_memberships = frappe.db.sql("""
         SELECT cbm.parent as chapter, cbm.chapter_role as role,
-               cbm.from_date as start_date, cbm.to_date as end_date
+               cbm.from_date as start_date, cbm.to_date as end_date,
+               v.name as volunteer_name, v.member as member_check
         FROM `tabChapter Board Member` cbm
         JOIN `tabVolunteer` v ON cbm.volunteer = v.name
         WHERE v.member = %s AND cbm.is_active = 1
     """, (member_name,), as_dict=True)
     
-    return board_memberships
+    # Additional validation - ensure the member matches
+    validated_memberships = []
+    for membership in board_memberships:
+        if membership.get('member_check') == member_name:
+            # Remove the debug fields before returning
+            del membership['volunteer_name']
+            del membership['member_check']
+            validated_memberships.append(membership)
+        else:
+            frappe.log_error(f"Board membership data integrity issue: Expected member {member_name} but got {membership.get('member_check')}", "Board Memberships API")
+    
+    frappe.logger().info(f"Found {len(validated_memberships)} board memberships for member: {member_name}")
+    return validated_memberships
 
 
 @frappe.whitelist()
