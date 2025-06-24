@@ -16,9 +16,9 @@ class ChapterMembershipHistoryManager:
     @staticmethod
     def add_membership_history(member_id: str, chapter_name: str, 
                               assignment_type: str, start_date: str,
-                              reason: str = None) -> bool:
+                              reason: str = None, status: str = "Active") -> bool:
         """
-        Add active membership to member history when starting a chapter relationship
+        Add membership to member history when starting a chapter relationship
         
         Args:
             member_id: Member ID
@@ -26,6 +26,7 @@ class ChapterMembershipHistoryManager:
             assignment_type: Type of assignment ("Member" or "Board Member")
             start_date: Start date of membership
             reason: Reason for assignment (optional)
+            status: Status of the membership ("Active", "Pending", etc.)
             
         Returns:
             bool: Success status
@@ -33,21 +34,21 @@ class ChapterMembershipHistoryManager:
         try:
             member = frappe.get_doc("Member", member_id)
 
-            # Check if this exact membership already exists as active
+            # Check if this exact membership already exists with the same status
             for membership in member.chapter_membership_history or []:
                 if (membership.chapter_name == chapter_name and 
                     membership.assignment_type == assignment_type and
-                    membership.status == "Active" and
+                    membership.status == status and
                     str(membership.start_date) == str(start_date)):
                     print(f"Membership already exists in history for member {member_id}")
                     return True  # This exact membership already exists
 
-            # Add new active membership
+            # Add new membership with specified status
             member.append("chapter_membership_history", {
                 "chapter_name": chapter_name,
                 "assignment_type": assignment_type,
                 "start_date": start_date,
-                "status": "Active",
+                "status": status,
                 "reason": reason or f"Assigned to {chapter_name} as {assignment_type}"
             })
 
@@ -335,3 +336,52 @@ class ChapterMembershipHistoryManager:
                 "chapters_associated": [],
                 "error": str(e)
             }
+
+    @staticmethod
+    def update_membership_status(member_id: str, chapter_name: str,
+                               assignment_type: str, new_status: str, 
+                               reason: str = None) -> bool:
+        """
+        Update the status of an existing membership history entry
+        
+        Args:
+            member_id: Member ID
+            chapter_name: Chapter name
+            assignment_type: Type of assignment ("Member" or "Board Member")
+            new_status: New status ("Active", "Pending", "Completed", etc.)
+            reason: Reason for status change (optional)
+            
+        Returns:
+            bool: Success status
+        """
+        try:
+            member = frappe.get_doc("Member", member_id)
+
+            # Look for existing pending membership to update
+            target_membership = None
+            for membership in member.chapter_membership_history or []:
+                if (membership.chapter_name == chapter_name and 
+                    membership.assignment_type == assignment_type and
+                    membership.status == "Pending"):
+                    target_membership = membership
+                    break
+
+            if target_membership:
+                # Update the existing pending membership to new status
+                target_membership.status = new_status
+                if reason:
+                    target_membership.reason = reason
+                
+                member.save(ignore_permissions=True)
+                
+                print(f"Updated membership status for member {member_id}: {assignment_type} at {chapter_name} from Pending to {new_status}")
+                return True
+            else:
+                print(f"No pending membership found to update for member {member_id} in {chapter_name}")
+                return False
+
+        except Exception as e:
+            print(f"Error updating membership status for member {member_id}: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return False

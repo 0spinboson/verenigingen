@@ -711,6 +711,17 @@ def create_pending_chapter_membership(member, chapter_name):
         # Save the chapter document
         chapter_doc.save()
         
+        # Add membership history tracking for pending membership
+        from verenigingen.utils.chapter_membership_history_manager import ChapterMembershipHistoryManager
+        ChapterMembershipHistoryManager.add_membership_history(
+            member_id=member.name,
+            chapter_name=chapter_name,
+            assignment_type="Member",
+            start_date=today(),
+            status="Pending",
+            reason=f"Applied for membership in {chapter_name} chapter"
+        )
+        
         frappe.logger().info(f"Created pending Chapter Member record for {member.name} in {chapter_name}")
         return chapter_member
         
@@ -751,6 +762,16 @@ def activate_pending_chapter_membership(member, chapter_name):
         
         # Save the chapter document
         chapter_doc.save()
+        
+        # Update membership history to reflect activation
+        from verenigingen.utils.chapter_membership_history_manager import ChapterMembershipHistoryManager
+        ChapterMembershipHistoryManager.update_membership_status(
+            member_id=member.name,
+            chapter_name=chapter_name,
+            assignment_type="Member",
+            new_status="Active",
+            reason=f"Membership application approved for {chapter_name} chapter"
+        )
         
         frappe.logger().info(f"Activated Chapter Member record for {member.name} in {chapter_name}")
         return pending_member
@@ -796,6 +817,17 @@ def create_active_chapter_membership(member, chapter_name):
         })
         
         chapter_doc.save()
+        
+        # Add membership history tracking for active membership
+        from verenigingen.utils.chapter_membership_history_manager import ChapterMembershipHistoryManager
+        ChapterMembershipHistoryManager.add_membership_history(
+            member_id=member.name,
+            chapter_name=chapter_name,
+            assignment_type="Member",
+            start_date=today(),
+            status="Active",
+            reason=f"Direct activation for {chapter_name} chapter"
+        )
         
         frappe.logger().info(f"Created active Chapter Member record for {member.name} in {chapter_name}")
         return chapter_member

@@ -1654,6 +1654,7 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
                 SELECT 
                     cm.parent as chapter,
                     cm.chapter_join_date,
+                    cm.status,
                     c.region,
                     cbm.volunteer as board_volunteer,
                     cbm.is_active as is_board_member
@@ -1670,6 +1671,7 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
                 chapters.append({
                     "chapter": chapter_data.chapter,
                     "chapter_join_date": chapter_data.chapter_join_date,
+                    "status": chapter_data.status,
                     "region": chapter_data.region,
                     "is_primary": idx == 0,  # First one is primary
                     "is_board": bool(chapter_data.is_board_member)
@@ -1690,13 +1692,14 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         try:
             # Get chapters where this member is listed in the Chapter Member child table
             # Use ignore_permissions since this is called within member doc context
+            # Include both Active and Pending memberships to show complete picture
             chapter_members = frappe.get_all(
                 "Chapter Member",
                 filters={
                     "member": self.name,
                     "enabled": 1
                 },
-                fields=["parent", "chapter_join_date"],
+                fields=["parent", "chapter_join_date", "status"],
                 order_by="chapter_join_date desc",
                 ignore_permissions=True
             )
@@ -1706,6 +1709,7 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
                 chapters.append({
                     "chapter": cm.parent,
                     "chapter_join_date": cm.chapter_join_date,
+                    "status": cm.status,
                     "is_primary": len(chapters) == 0,  # First one is primary
                     "is_board": self.is_board_member(cm.parent)
                 })
@@ -1792,10 +1796,28 @@ def get_member_chapter_display_html(member_name):
                 chapter_display += f" ({chapter_info.region})"
             
             status_badges = []
-            # Removed the Primary badge as requested
+            
+            # Add status badge with appropriate styling
+            chapter_status = chapter.get('status', 'Unknown')
+            if chapter_status == 'Active':
+                status_badges.append('<span class="badge badge-success" style="margin-right: 5px;">Active</span>')
+                border_color = '#007bff'  # Blue for active
+                bg_color = '#f8f9fa'  # Light blue background
+            elif chapter_status == 'Pending':
+                status_badges.append('<span class="badge badge-warning" style="margin-right: 5px;">Pending</span>')
+                border_color = '#ffc107'  # Yellow for pending
+                bg_color = '#fff3cd'  # Light yellow background
+            else:
+                status_badges.append(f'<span class="badge badge-secondary" style="margin-right: 5px;">{chapter_status}</span>')
+                border_color = '#6c757d'  # Gray for other statuses
+                bg_color = '#f8f9fa'  # Default background
+            
+            # Board member badge
             if chapter.get('is_board'):
                 status_badges.append('<span class="badge badge-info" style="margin-right: 5px;">Board Member</span>')
-            if chapter.get('chapter_join_date'):
+            
+            # Join date badge (only for active memberships)
+            if chapter.get('chapter_join_date') and chapter_status == 'Active':
                 status_badges.append(f'<span class="badge badge-light" style="margin-right: 5px;">Joined: {chapter["chapter_join_date"]}</span>')
             
             badges_html = ''.join(status_badges)
@@ -1804,7 +1826,7 @@ def get_member_chapter_display_html(member_name):
             chapter_link = f'<a href="/app/chapter/{chapter["chapter"]}" target="_blank" style="color: #007bff; text-decoration: none; font-weight: bold;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">{chapter_display}</a>'
             
             html_parts.append(f'''
-                <div class="chapter-item" style="margin-bottom: 8px; padding: 10px; border-left: 3px solid #007bff; background-color: #f8f9fa; border-radius: 4px;">
+                <div class="chapter-item" style="margin-bottom: 8px; padding: 10px; border-left: 3px solid {border_color}; background-color: {bg_color}; border-radius: 4px;">
                     {chapter_link}
                     {f'<br><div style="margin-top: 5px;">{badges_html}</div>' if badges_html else ''}
                 </div>
