@@ -145,9 +145,9 @@ function show_board_memberships(frm) {
             if (r.message && Array.isArray(r.message) && r.message.length > 0) {
                 var html = '<div class="board-memberships"><h4>Board Positions</h4><ul>';
                 r.message.forEach(function(membership) {
-                    html += `<li><strong>${membership.chapter}:</strong> ${membership.role} 
-                             (${frappe.datetime.str_to_user(membership.start_date)} - 
-                             ${membership.end_date ? frappe.datetime.str_to_user(membership.end_date) : 'Current'})</li>`;
+                    html += '<li><strong>' + membership.chapter + ':</strong> ' + membership.role + 
+                            ' (' + frappe.datetime.str_to_user(membership.start_date) + ' - ' + 
+                            (membership.end_date ? frappe.datetime.str_to_user(membership.end_date) : 'Current') + ')</li>';
                 });
                 html += '</ul></div>';
                 

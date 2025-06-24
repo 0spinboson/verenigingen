@@ -806,47 +806,8 @@ function add_member_id_buttons(frm) {
             }, __('Member ID'));
         }
     }
-}
 
-function show_member_id_statistics_dialog() {
-    frappe.call({
-        method: 'verenigingen.verenigingen.doctype.member.member_id_manager.get_member_id_statistics',
-        callback: function(r) {
-            if (r.message) {
-                const stats = r.message;
-                let html = `
-                    <div class="member-id-stats">
-                        <h4>Member ID Statistics</h4>
-                        <table class="table table-bordered">
-                            <tr><td><strong>Next ID to be assigned:</strong></td><td>${stats.next_id}</td></tr>
-                            <tr><td><strong>Current counter value:</strong></td><td>${stats.current_counter}</td></tr>
-                            <tr><td><strong>Highest assigned ID:</strong></td><td>${stats.highest_assigned}</td></tr>
-                            <tr><td><strong>Total members with numeric IDs:</strong></td><td>${stats.total_with_numeric_ids}</td></tr>
-                            <tr><td><strong>Gap count:</strong></td><td>${stats.gap_count}</td></tr>
-                `;
-                
-                if (stats.gaps && stats.gaps.length > 0) {
-                    html += `<tr><td><strong>Available gaps (first 10):</strong></td><td>${stats.gaps.join(', ')}</td></tr>`;
-                }
-                
-                html += `</table></div>`;
-                
-                const dialog = new frappe.ui.Dialog({
-                    title: __('Member ID Statistics'),
-                    size: 'large',
-                    fields: [
-                        {
-                            fieldtype: 'HTML',
-                            options: html
-                        }
-                    ]
-                });
-                
-                dialog.show();
-            }
-        }
-    });
-}
+// show_member_id_statistics_dialog function removed as the button was removed
 
 function add_fee_management_buttons(frm) {
     if (frm.doc.docstatus === 1) {
