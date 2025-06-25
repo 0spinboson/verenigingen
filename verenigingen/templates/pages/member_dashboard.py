@@ -72,7 +72,7 @@ def get_context(context):
     context.portal_links = [
         {"title": _("Member Portal"), "route": "/member_portal", "featured": True},
         {"title": _("Personal Details"), "route": "/personal_details"},
-        {"title": _("Account Settings"), "route": "/my-account"},
+        {"title": _("Account Settings"), "route": "/member_portal"},
         {"title": _("Update Address"), "route": "/address_change"},
         {"title": _("Bank Details"), "route": "/bank_details"},
         {"title": _("Adjust Fee"), "route": "/membership_fee_adjustment"},

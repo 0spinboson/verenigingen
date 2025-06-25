@@ -1,5 +1,5 @@
 """
-Direct Debit Batch Scheduler
+SEPA Direct Debit Batch Scheduler
 Automated scheduling and management of optimized batch creation
 """
 
@@ -136,7 +136,7 @@ def send_batch_creation_notification(result):
             return
         
         # Prepare email content
-        subject = f"Auto-created {result['batches_created']} Direct Debit batches"
+        subject = f"Auto-created {result['batches_created']} SEPA Direct Debit batches"
         
         optimization_report = result.get("optimization_report", {})
         summary = optimization_report.get("summary", {})
@@ -209,7 +209,7 @@ def create_system_notification(result):
             "doctype": "Notification Log",
             "subject": f"Auto-created {result['batches_created']} DD batches",
             "type": "Alert", 
-            "document_type": "Direct Debit Batch",
+            "document_type": "SEPA Direct Debit Batch",
             "document_name": result.get("batch_names", [None])[0] if result.get("batch_names") else None,
             "from_user": "Administrator",
             "for_user": "",  # Will be set per user below
@@ -264,7 +264,7 @@ def run_batch_creation_now():
     """Manually trigger batch creation (for testing/emergency use)"""
     try:
         # Check permissions
-        if not frappe.has_permission("Direct Debit Batch", "create"):
+        if not frappe.has_permission("SEPA Direct Debit Batch", "create"):
             frappe.throw(_("You don't have permission to create batches"))
         
         # Get configuration
@@ -308,7 +308,7 @@ def get_batch_optimization_stats():
     try:
         # Get batches created in last 30 days
         recent_batches = frappe.get_all(
-            "Direct Debit Batch",
+            "SEPA Direct Debit Batch",
             filters={
                 "creation": [">=", add_days(getdate(), -30)],
                 "batch_description": ["like", "%Auto-optimized%"]

@@ -6,8 +6,8 @@ This directory contains organized documentation for the Verenigingen app.
 
 ### `/features/`
 Documentation for major features and enhancements:
-- `DD_BATCH_ENHANCEMENT_SUMMARY.md` - Direct Debit batch processing enhancements
-- `DD_SECURITY_DOCTYPES.md` - Direct Debit security and doctypes documentation
+- `DD_BATCH_ENHANCEMENT_SUMMARY.md` - SEPA Direct Debit batch processing enhancements
+- `DD_SECURITY_DOCTYPES.md` - SEPA Direct Debit security and doctypes documentation
 
 ### `/fixes/`
 Documentation for bug fixes and performance improvements:

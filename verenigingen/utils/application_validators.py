@@ -131,21 +131,43 @@ def validate_name(name, field_name="Name"):
     if not name:
         return {"valid": False, "message": _(f"{field_name} is required")}
     
+    # Sanitize the name by stripping whitespace and normalizing
+    sanitized_name = name.strip()
+    
     # Check length
-    if len(name.strip()) < 2:
+    if len(sanitized_name) < 2:
         return {"valid": False, "message": _(f"{field_name} must be at least 2 characters")}
     
-    if len(name.strip()) > 50:
+    if len(sanitized_name) > 50:
         return {"valid": False, "message": _(f"{field_name} must be less than 50 characters")}
     
-    # Check for valid characters (letters, spaces, hyphens, apostrophes)
-    if not re.match(r"^[a-zA-ZÀ-ÿ\s\-\'\.]+$", name):
+    # Enhanced regex pattern to handle more special characters commonly found in names
+    # Includes: letters (including accented), spaces, hyphens, apostrophes, periods, and common name characters
+    # Also handles Unicode characters properly
+    name_pattern = r"^[\w\s\-\'\.\u00C0-\u017F\u0100-\u024F\u1E00-\u1EFF]+$"
+    
+    if not re.match(name_pattern, sanitized_name, re.UNICODE):
         return {
             "valid": False,
-            "message": _(f"{field_name} can only contain letters, spaces, hyphens, and apostrophes")
+            "message": _(f"{field_name} contains invalid characters. Only letters, spaces, hyphens, apostrophes, and periods are allowed")
         }
     
-    return {"valid": True, "message": _("Valid name")}
+    # Check for potentially dangerous patterns (basic security)
+    dangerous_patterns = [
+        r'<[^>]*>',  # HTML tags
+        r'javascript:',  # JavaScript
+        r'on\w+\s*=',  # Event handlers
+        r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]'  # Control characters
+    ]
+    
+    for pattern in dangerous_patterns:
+        if re.search(pattern, sanitized_name, re.IGNORECASE):
+            return {
+                "valid": False,
+                "message": _(f"{field_name} contains invalid characters")
+            }
+    
+    return {"valid": True, "message": _("Valid name"), "sanitized": sanitized_name}
 
 
 def validate_address(data):

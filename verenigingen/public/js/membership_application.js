@@ -477,6 +477,20 @@ class MembershipApplication {
                     if (usesCustomAmount && (!membershipAmount || membershipAmount <= 0)) {
                         $('#membership-type-error').text('Please enter a valid membership amount').show();
                         isValid = false;
+                    } else if (usesCustomAmount && membershipAmount > 0) {
+                        // Validate minimum fee requirement
+                        const currentType = selectedType || (membership && membership.type);
+                        if (currentType && this.membershipTypes && this.membershipTypes.length > 0) {
+                            const typeData = this.membershipTypes.find(t => t.name === currentType);
+                            if (typeData && typeData.amount) {
+                                const minAmount = typeData.amount * 0.5; // 50% minimum
+                                if (membershipAmount < minAmount) {
+                                    const formattedMin = this.formatCurrency(minAmount);
+                                    $('#membership-type-error').text(`Minimum contribution is ${formattedMin} (50% of standard amount)`).show();
+                                    isValid = false;
+                                }
+                            }
+                        }
                     }
                 }
                 break;
@@ -659,7 +673,7 @@ class MembershipApplication {
             payment_method: $('input[name="payment_method_selection"]:checked').val() || $('#payment_method').val() || '',
             
             
-            // Bank Account Details (Direct Debit)
+            // Bank Account Details (SEPA Direct Debit)
             iban: $('#iban').val() || '',
             bank_account_name: $('#account_holder_name').val() || $('#bank_account_name').val() || '',
             
@@ -1665,7 +1679,26 @@ class MembershipApplication {
         const membershipTypes = this.state.get('membershipTypes') || this.membershipTypes || [];
         console.log('Available membership types:', membershipTypes.length, membershipTypes);
         
-        // Define interval matching logic
+        // Define direct subscription period mapping (most reliable method)
+        const subscriptionPeriodMapping = {
+            'monthly': 'Monthly',
+            'quarterly': 'Quarterly', 
+            'annually': 'Annual'
+        };
+        
+        // First try: Match by subscription_period field (most reliable)
+        const targetPeriod = subscriptionPeriodMapping[paymentInterval];
+        if (targetPeriod) {
+            for (const membershipType of membershipTypes) {
+                const subscriptionPeriod = membershipType.subscription_period;
+                if (subscriptionPeriod && subscriptionPeriod.toLowerCase() === targetPeriod.toLowerCase()) {
+                    console.log('Found matching membership type by subscription_period:', membershipType);
+                    return membershipType;
+                }
+            }
+        }
+        
+        // Second try: Fallback to name/description matching for legacy support
         const intervalMatchers = {
             'monthly': ['month', 'maand', 'monthly'],
             'quarterly': ['quarter', 'kwartaal', 'quarterly', 'driemaandelijk'],
@@ -1674,21 +1707,33 @@ class MembershipApplication {
         
         const matchers = intervalMatchers[paymentInterval] || [];
         
-        // Find first membership type that matches the interval
+        // Find first membership type that matches the interval in name or description
         for (const membershipType of membershipTypes) {
             const name = (membershipType.name || membershipType.membership_type_name || '').toLowerCase();
             const description = (membershipType.description || '').toLowerCase();
             
             for (const matcher of matchers) {
                 if (name.includes(matcher) || description.includes(matcher)) {
-                    console.log('Found matching membership type:', membershipType);
+                    console.log('Found matching membership type by name/description:', membershipType);
                     return membershipType;
                 }
             }
         }
         
-        // If no specific match, return the first available membership type
+        // Third try: Smart fallback based on interval preference
         if (membershipTypes.length > 0) {
+            // For annually, prefer the type with highest amount (typically annual)
+            if (paymentInterval === 'annually') {
+                const highestAmount = membershipTypes.reduce((prev, current) => {
+                    const prevAmount = parseFloat(prev.amount || 0);
+                    const currentAmount = parseFloat(current.amount || 0);
+                    return currentAmount > prevAmount ? current : prev;
+                });
+                console.log('Using highest amount membership type for annual:', highestAmount);
+                return highestAmount;
+            }
+            
+            // For monthly/quarterly, use first available
             console.log('Using first available membership type:', membershipTypes[0]);
             return membershipTypes[0];
         }
@@ -1879,8 +1924,8 @@ class MembershipApplication {
         if (data.payment_method) {
             content += `<p><strong>Payment Method:</strong> ${data.payment_method}</p>`;
             
-            // Show bank details for Direct Debit
-            if (data.payment_method === 'Direct Debit') {
+            // Show bank details for SEPA Direct Debit
+            if (data.payment_method === 'SEPA Direct Debit') {
                 if (data.iban) {
                     content += `<p><strong>IBAN:</strong> ${data.iban}</p>`;
                 }
@@ -2366,7 +2411,7 @@ class MembershipApplication {
         this.handlePaymentMethodChange(methodName);
         
         // Show/hide SEPA notice
-        if (methodName === 'Direct Debit') {
+        if (methodName === 'SEPA Direct Debit') {
             $('#sepa-mandate-notice').show();
         } else {
             $('#sepa-mandate-notice').hide();
@@ -2375,9 +2420,9 @@ class MembershipApplication {
     
     // Implement payment method field switching similar to member doctype UIUtils.handle_payment_method_change
     handlePaymentMethodChange(methodName) {
-        const is_direct_debit = methodName === 'Direct Debit';
+        const is_direct_debit = methodName === 'SEPA Direct Debit';
         const is_bank_transfer = methodName === 'Bank Transfer';
-        const show_bank_details = ['Direct Debit', 'Bank Transfer'].includes(methodName);
+        const show_bank_details = ['SEPA Direct Debit', 'Bank Transfer'].includes(methodName);
         
         console.log('Main app: Handling payment method change to:', methodName);
         console.log('Main app: is_direct_debit:', is_direct_debit, 'is_bank_transfer:', is_bank_transfer);
@@ -2389,7 +2434,7 @@ class MembershipApplication {
         
         // Show appropriate section based on payment method
         if (is_direct_debit) {
-            console.log('Main app: Showing bank account details for Direct Debit');
+            console.log('Main app: Showing bank account details for SEPA Direct Debit');
             $('#bank-account-details').show();
             
             // Set required attributes for bank account fields
@@ -2427,7 +2472,7 @@ class MembershipApplication {
                 requires_mandate: false
             },
             { 
-                name: 'Direct Debit', 
+                name: 'SEPA Direct Debit', 
                 description: 'SEPA Direct Debit (recurring)',
                 icon: 'fa-repeat',
                 processing_time: '5-7 days first collection',
@@ -3033,7 +3078,7 @@ class PaymentStep extends BaseStep {
                 requires_mandate: false
             },
             { 
-                name: 'Direct Debit', 
+                name: 'SEPA Direct Debit', 
                 description: 'SEPA Direct Debit (recurring)',
                 icon: 'fa-repeat',
                 processing_time: '5-7 days first collection',
@@ -3125,7 +3170,7 @@ class PaymentStep extends BaseStep {
             $('#bank-transfer-notice').hide();
             $('#bank-transfer-details').hide();
             
-            if (methodName === 'Direct Debit') {
+            if (methodName === 'SEPA Direct Debit') {
                 console.log('PaymentStep: Showing bank account fields');
                 $('#bank-account-details').show();
             } else if (methodName === 'Bank Transfer') {
@@ -3242,7 +3287,7 @@ class PaymentStep extends BaseStep {
             valid = false;
         } else {
             // Validate payment-specific fields based on selected method
-            if (paymentMethod === 'Direct Debit') {
+            if (paymentMethod === 'SEPA Direct Debit') {
                 // Bank account validation
                 if (!$('#iban').val()) {
                     $('#iban').addClass('is-invalid');
@@ -3687,6 +3732,14 @@ class ConfirmationStep extends BaseStep {
         }
         
         return valid;
+    }
+    
+    formatCurrency(amount) {
+        // Format currency with EUR symbol and 2 decimal places
+        if (typeof amount !== 'number' || isNaN(amount)) {
+            return '€0.00';
+        }
+        return '€' + amount.toFixed(2);
     }
 }
 

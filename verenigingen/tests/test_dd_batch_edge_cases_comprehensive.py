@@ -1,5 +1,5 @@
 """
-Comprehensive Edge Case Test Suite for Direct Debit Batch Processing
+Comprehensive Edge Case Test Suite for SEPA Direct Debit Batch Processing
 Focuses on member identity confusion, shared accounts, and security vulnerabilities
 """
 

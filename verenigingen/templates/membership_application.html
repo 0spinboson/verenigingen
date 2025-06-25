@@ -154,12 +154,12 @@
                         <select class="form-control" id="payment_method" name="payment_method" required>
                             <option value="">{{ _("Select...") }}</option>
                             <option value="Bank Transfer">{{ _("Bank Transfer") }}</option>
-                            <option value="Direct Debit">{{ _("Direct Debit (SEPA)") }}</option>
+                            <option value="SEPA Direct Debit">{{ _("SEPA Direct Debit (SEPA)") }}</option>
                         </select>
                     </div>
                 </div>
                 
-                <!-- Direct Debit Fields -->
+                <!-- SEPA Direct Debit Fields -->
                 <div id="direct-debit-fields" style="display: none;">
                     <div class="alert alert-info">
                         {{ _("By providing your bank details, you authorize us to collect membership fees via SEPA Direct Debit.") }}
@@ -417,7 +417,7 @@ $(document).ready(function() {
         $('#iban').prop('required', false);
         
         // Show relevant fields based on selection
-        if (paymentMethod === 'Direct Debit') {
+        if (paymentMethod === 'SEPA Direct Debit') {
             $('#direct-debit-fields').show();
             $('#iban').prop('required', true);
         }

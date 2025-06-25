@@ -29,7 +29,7 @@ frappe.ui.form.on('Membership', {
     },
 
     payment_method: function(frm) {
-        const is_direct_debit = frm.doc.payment_method === 'Direct Debit';
+        const is_direct_debit = frm.doc.payment_method === 'SEPA Direct Debit';
         frm.toggle_reqd(['sepa_mandate'], is_direct_debit);
     }
 });

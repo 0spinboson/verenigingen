@@ -225,7 +225,7 @@ class TestDirectDebitBatch(FrappeTestCase):
             # Create a membership and invoice if we don't have any
             self.create_test_membership_and_invoice()
         
-        batch = frappe.new_doc("Direct Debit Batch")
+        batch = frappe.new_doc("SEPA Direct Debit Batch")
         batch.batch_date = today()
         batch.batch_description = f"Test Batch {self.unique_id}"
         batch.batch_type = "RCUR"
@@ -251,13 +251,13 @@ class TestDirectDebitBatch(FrappeTestCase):
     def cleanup_test_data(self):
         """Clean up all test data"""
         # Clean up batches
-        for b in frappe.get_all("Direct Debit Batch", 
+        for b in frappe.get_all("SEPA Direct Debit Batch", 
                 filters={"batch_description": ["like", f"Test Batch {self.unique_id}%"]}):
             try:
-                batch_doc = frappe.get_doc("Direct Debit Batch", b.name)
+                batch_doc = frappe.get_doc("SEPA Direct Debit Batch", b.name)
                 if batch_doc.docstatus == 1:
                     batch_doc.cancel()
-                frappe.delete_doc("Direct Debit Batch", b.name, force=True)
+                frappe.delete_doc("SEPA Direct Debit Batch", b.name, force=True)
             except Exception as e:
                 print(f"Error cleaning up batch {b.name}: {str(e)}")
         
@@ -344,7 +344,7 @@ class TestDirectDebitBatch(FrappeTestCase):
     def test_batch_calculation(self):
         """Test batch total amount and entry count calculation"""
         # Create a batch with multiple invoices
-        batch = frappe.new_doc("Direct Debit Batch")
+        batch = frappe.new_doc("SEPA Direct Debit Batch")
         batch.batch_date = today()
         batch.batch_description = f"Test Batch {self.unique_id}"
         batch.batch_type = "RCUR"
@@ -403,7 +403,7 @@ class TestDirectDebitBatch(FrappeTestCase):
             
             # Force reload to get the updated document
             frappe.db.commit()
-            batch = frappe.get_doc("Direct Debit Batch", batch.name)
+            batch = frappe.get_doc("SEPA Direct Debit Batch", batch.name)
             
             # Verify sepa_file_generated flag set after submission
             self.assertTrue(batch.sepa_file_generated, "SEPA file not generated on submit")
@@ -412,16 +412,16 @@ class TestDirectDebitBatch(FrappeTestCase):
             # Cancel the batch - make sure to reload first
             if batch.docstatus == 1:
                 # Get fresh copy of the document to prevent timestamp mismatch
-                batch = frappe.get_doc("Direct Debit Batch", batch.name)
+                batch = frappe.get_doc("SEPA Direct Debit Batch", batch.name)
                 batch.cancel()
             
             # Delete using frappe.delete_doc to properly clean up
-            frappe.delete_doc("Direct Debit Batch", batch.name, force=True)
+            frappe.delete_doc("SEPA Direct Debit Batch", batch.name, force=True)
     
     def test_invoice_validation(self):
         """Test invoice validation"""
         # Create a batch without required fields
-        batch = frappe.new_doc("Direct Debit Batch")
+        batch = frappe.new_doc("SEPA Direct Debit Batch")
         batch.batch_date = today()
         batch.batch_description = f"Test Batch {self.unique_id}"
         batch.batch_type = "RCUR"

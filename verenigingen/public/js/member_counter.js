@@ -46,9 +46,7 @@ frappe.ui.form.on('Member', {
 
 function setup_member_counter_section(frm) {
     // Add custom buttons for counter management
-    frm.add_custom_button(__('Counter Statistics'), function() {
-        show_counter_statistics_dialog();
-    }, __('Member ID Management'));
+    // Counter Statistics button removed as requested
     
     frm.add_custom_button(__('Reset Counter'), function() {
         show_counter_reset_dialog(frm);

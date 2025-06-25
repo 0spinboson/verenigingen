@@ -1,6 +1,6 @@
 """
 Batch Optimizer Web Interface
-User-friendly interface for creating optimized Direct Debit batches
+User-friendly interface for creating optimized SEPA Direct Debit batches
 """
 
 import frappe
@@ -9,12 +9,12 @@ from frappe import _
 def get_context(context):
     """Set up context for batch optimizer page"""
     
-    context.title = _("Direct Debit Batch Optimizer")
+    context.title = _("SEPA Direct Debit Batch Optimizer")
     context.parents = [{"title": _("Financial Management"), "name": "financial-management"}]
     
     # Check permissions
-    if not frappe.has_permission("Direct Debit Batch", "create"):
-        frappe.throw(_("You don't have permission to create Direct Debit Batches"))
+    if not frappe.has_permission("SEPA Direct Debit Batch", "create"):
+        frappe.throw(_("You don't have permission to create SEPA Direct Debit Batches"))
     
     # Get current settings
     try:

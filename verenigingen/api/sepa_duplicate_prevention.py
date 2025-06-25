@@ -95,7 +95,7 @@ def check_batch_processing_status(batch_name: str, transaction_name: str) -> Non
     Check if SEPA batch has already been processed
     
     Args:
-        batch_name: Direct Debit Batch name
+        batch_name: SEPA Direct Debit Batch name
         transaction_name: Bank Transaction name
     
     Raises:
@@ -271,7 +271,7 @@ def identify_split_payment_scenario(bank_transaction) -> List[Dict]:
     date_range_end = date_range_start  # Same day for split payments
     
     potential_batches = frappe.get_all(
-        "Direct Debit Batch",
+        "SEPA Direct Debit Batch",
         filters={
             "batch_date": ["between", [date_range_start, date_range_end]],
             "docstatus": 1,

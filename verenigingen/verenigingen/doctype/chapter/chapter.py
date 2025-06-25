@@ -931,3 +931,114 @@ def leave_chapter(member_name, chapter_name, leave_reason=None):
     )
     
     return {"success": result.get('success', False), "removed": result.get('action') in ['removed', 'disabled']}
+
+@frappe.whitelist()
+def assign_member_to_chapter_with_cleanup(member, chapter, note=None):
+    """Assign a member to a chapter with automatic cleanup of existing memberships"""
+    if not member or not chapter:
+        frappe.throw(_("Member and Chapter are required"))
+        
+    try:
+        cleanup_performed = False
+        
+        # 1. Check for existing chapter memberships and end them
+        existing_memberships = frappe.get_all(
+            "Chapter Member",
+            filters={
+                "member": member,
+                "enabled": 1
+            },
+            fields=["parent", "name"]
+        )
+        
+        for membership in existing_memberships:
+            if membership.parent != chapter:  # Don't remove from target chapter
+                try:
+                    # Try to use chapter's remove_member method first
+                    old_chapter_doc = frappe.get_doc("Chapter", membership.parent)
+                    old_chapter_doc.remove_member(member, leave_reason=f"Reassigned to {chapter}")
+                    cleanup_performed = True
+                    
+                    frappe.logger().info(f"Removed member {member} from chapter {membership.parent}")
+                except Exception as e:
+                    # If chapter method fails, disable the membership directly
+                    try:
+                        frappe.db.set_value("Chapter Member", membership.name, "enabled", 0)
+                        frappe.db.set_value("Chapter Member", membership.name, "leave_reason", f"Reassigned to {chapter}")
+                        frappe.db.commit()
+                        cleanup_performed = True
+                        
+                        frappe.logger().info(f"Directly disabled membership {membership.name} for member {member}")
+                    except Exception as e2:
+                        frappe.logger().error(f"Error removing member from chapter {membership.parent}: {str(e)} and {str(e2)}")
+            else:
+                # Member is already in target chapter, just note this
+                frappe.logger().info(f"Member {member} is already in target chapter {chapter}")
+        
+        # 2. Check for board memberships and end them
+        board_memberships = frappe.get_all(
+            "Chapter Board Member",
+            filters={
+                "volunteer": member,
+                "is_active": 1
+            },
+            fields=["name", "parent"]
+        )
+        
+        for board_membership in board_memberships:
+            try:
+                board_doc = frappe.get_doc("Chapter Board Member", board_membership.name)
+                board_doc.is_active = 0
+                board_doc.to_date = today()
+                board_doc.notes = (board_doc.notes or "") + f"\nEnded due to member reassignment to {chapter}"
+                board_doc.save()
+                cleanup_performed = True
+                
+                frappe.logger().info(f"Ended board membership {board_membership.name} for member {member}")
+            except Exception as e:
+                frappe.logger().error(f"Error ending board membership {board_membership.name}: {str(e)}")
+        
+        # 3. Check if member is already in target chapter
+        already_in_target = any(m.parent == chapter for m in existing_memberships)
+        
+        if already_in_target and len(existing_memberships) == 1:
+            # Member is already in target chapter and it's their only chapter
+            result = {
+                "success": True,
+                "added_to_members": False,
+                "cleanup_performed": cleanup_performed
+            }
+            
+            if cleanup_performed:
+                result["message"] = _("Member was already in {0}. Board roles have been ended.").format(chapter)
+            else:
+                result["message"] = _("Member is already assigned to {0}").format(chapter)
+        elif already_in_target and len(existing_memberships) > 1:
+            # Member is in target chapter plus others - cleanup was performed
+            result = {
+                "success": True,
+                "added_to_members": False,
+                "cleanup_performed": True  # Force true since we cleaned up other chapters
+            }
+            result["message"] = _("Member was already in {0}. Other chapter memberships and board roles have been ended.").format(chapter)
+        else:
+            # Assign to new chapter
+            result = assign_member_to_chapter(member, chapter, note)
+            
+            if result.get("success"):
+                result["cleanup_performed"] = cleanup_performed
+                
+                # Add detailed message
+                if cleanup_performed:
+                    result["message"] = _("Member successfully assigned to {0}. Previous memberships and board roles have been ended.").format(chapter)
+                else:
+                    result["message"] = _("Member successfully assigned to {0}").format(chapter)
+        
+        return result
+        
+    except Exception as e:
+        frappe.logger().error(f"Error in assign_member_to_chapter_with_cleanup: {str(e)}")
+        return {
+            "success": False,
+            "message": str(e)
+        }

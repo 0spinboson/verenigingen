@@ -143,9 +143,10 @@
             <ul>
                 <li>{{ _("Your updated bank details are now active in your member profile") }}</li>
                 {% if sepa_enabled %}
-                <li>{{ _("You will receive a confirmation email about your SEPA Direct Debit mandate") }}</li>
-                <li>{{ _("Future membership fees will be automatically collected from your bank account") }}</li>
-                <li>{{ _("You'll receive advance notification before each collection") }}</li>
+                <li>{{ _("Your membership fees will be automatically collected from your bank account") }}</li>
+                <li>{{ _("First automatic collection will occur with your next billing cycle") }}</li>
+                <li>{{ _("You'll receive email notifications before each collection") }}</li>
+                <li>{{ _("You can view your payment history and mandate status in your member dashboard") }}</li>
                 {% else %}
                 <li>{{ _("You will continue to receive invoices for membership fees via your preferred payment method") }}</li>
                 {% endif %}

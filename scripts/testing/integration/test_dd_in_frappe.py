@@ -128,18 +128,18 @@ def run_dd_validation_tests():
         results['failed'] += 1
         results['errors'].append(f"Member DocType test: {str(e)}")
     
-    # Test 5: Direct Debit Batch DocType
+    # Test 5: SEPA Direct Debit Batch DocType
     try:
-        print("\n5️⃣  Testing Direct Debit Batch DocType")
+        print("\n5️⃣  Testing SEPA Direct Debit Batch DocType")
         
-        # Check if Direct Debit Batch doctype exists
-        dd_batch_exists = frappe.db.exists("DocType", "Direct Debit Batch")
+        # Check if SEPA Direct Debit Batch doctype exists
+        dd_batch_exists = frappe.db.exists("DocType", "SEPA Direct Debit Batch")
         if dd_batch_exists:
-            print("   ✅ Direct Debit Batch DocType exists")
+            print("   ✅ SEPA Direct Debit Batch DocType exists")
             
             # Try to get batch meta
-            batch_meta = frappe.get_meta("Direct Debit Batch")
-            print(f"   ✅ Direct Debit Batch has {len(batch_meta.fields)} fields")
+            batch_meta = frappe.get_meta("SEPA Direct Debit Batch")
+            print(f"   ✅ SEPA Direct Debit Batch has {len(batch_meta.fields)} fields")
             
             # Check for key fields
             key_fields = ['batch_date', 'total_amount', 'entry_count', 'status']
@@ -150,7 +150,7 @@ def run_dd_validation_tests():
             
             print(f"   ✅ Key fields found: {', '.join(found_fields)}")
         else:
-            raise Exception("Direct Debit Batch DocType not found")
+            raise Exception("SEPA Direct Debit Batch DocType not found")
         
         results['tests_run'] += 1
         results['passed'] += 1

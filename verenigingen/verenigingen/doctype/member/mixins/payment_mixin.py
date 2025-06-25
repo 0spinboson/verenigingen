@@ -214,11 +214,11 @@ class PaymentMixin:
             )
             
             for membership in memberships:
-                if membership.payment_method in ["Direct Debit", "SEPA DD"]:
+                if membership.payment_method == "SEPA Direct Debit":
                     default_mandate = self.get_default_sepa_mandate()
                     if not default_mandate:
                         frappe.msgprint(
-                            _("Member {0} has a membership with Direct Debit payment method but no active SEPA mandate.")
+                            _("Member {0} has a membership with SEPA Direct Debit payment method but no active SEPA mandate.")
                             .format(self.name),
                             indicator='yellow'
                         )
@@ -232,16 +232,16 @@ class PaymentMixin:
             self.payment_reference = self.name
     
     def validate_bank_details(self):
-        """Validate bank details if payment method is Direct Debit"""
-        if getattr(self, 'payment_method', None) in ["Direct Debit", "SEPA DD"]:
+        """Validate bank details if payment method is SEPA Direct Debit"""
+        if getattr(self, 'payment_method', None) == "SEPA Direct Debit":
             if self.iban:
                 self.iban = self.validate_iban_format(self.iban)
             
             if not self.iban:
-                frappe.throw(_("IBAN is required for Direct Debit payment method"))
+                frappe.throw(_("IBAN is required for SEPA Direct Debit payment method"))
             
             if not self.bank_account_name:
-                frappe.throw(_("Account Holder Name is required for Direct Debit payment method"))
+                frappe.throw(_("Account Holder Name is required for SEPA Direct Debit payment method"))
     
     def validate_iban_format(self, iban):
         """Basic IBAN validation and formatting"""
@@ -315,7 +315,7 @@ class PaymentMixin:
         if payment_method:
             self.payment_method = payment_method
         
-        if self.payment_method in ["Direct Debit", "SEPA DD"]:
+        if self.payment_method == "SEPA Direct Debit":
             batch = self.add_to_direct_debit_batch()
             self.payment_status = "Pending"
             self.db_set('payment_status', 'Pending')
@@ -327,15 +327,15 @@ class PaymentMixin:
     def add_to_direct_debit_batch(self):
         """Add this membership to a direct debit batch"""
         open_batch = frappe.get_all(
-            "Direct Debit Batch",
+            "SEPA Direct Debit Batch",
             filters={"status": "Draft", "docstatus": 0},
             limit=1
         )
         
         if open_batch:
-            batch = frappe.get_doc("Direct Debit Batch", open_batch[0].name)
+            batch = frappe.get_doc("SEPA Direct Debit Batch", open_batch[0].name)
         else:
-            batch = frappe.new_doc("Direct Debit Batch")
+            batch = frappe.new_doc("SEPA Direct Debit Batch")
             batch.batch_date = today()
             batch.batch_description = f"Membership payments - {today()}"
             batch.batch_type = "RCUR"

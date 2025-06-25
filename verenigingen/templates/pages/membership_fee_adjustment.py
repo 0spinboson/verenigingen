@@ -103,7 +103,7 @@ def get_context(context):
     # Add member portal links
     context.portal_links = [
         {"title": _("Dashboard"), "route": "/member_dashboard"},
-        {"title": _("Profile"), "route": "/my-account"}, 
+        {"title": _("Profile"), "route": "/member_portal"}, 
         {"title": _("Personal Details"), "route": "/personal_details"},
         {"title": _("Fee Adjustment"), "route": "/membership_fee_adjustment", "active": True},
     ]
@@ -162,7 +162,7 @@ def get_fee_adjustment_settings():
         settings = frappe.get_single("Verenigingen Settings")
         return {
             "enable_member_fee_adjustment": getattr(settings, 'enable_member_fee_adjustment', 1),
-            "max_adjustments_per_year": getattr(settings, 'max_adjustments_per_year', 2),
+            "max_adjustments_per_year": getattr(settings, 'max_adjustments_per_year', 3),
             "require_approval_for_increases": getattr(settings, 'require_approval_for_increases', 0),
             "require_approval_for_decreases": getattr(settings, 'require_approval_for_decreases', 1),
             "adjustment_reason_required": getattr(settings, 'adjustment_reason_required', 1)
@@ -171,7 +171,7 @@ def get_fee_adjustment_settings():
         # Default settings if Verenigingen Settings doesn't exist or lacks fields
         return {
             "enable_member_fee_adjustment": 1,
-            "max_adjustments_per_year": 2,
+            "max_adjustments_per_year": 3,
             "require_approval_for_increases": 0,
             "require_approval_for_decreases": 1,
             "adjustment_reason_required": 1
@@ -237,7 +237,8 @@ def submit_fee_adjustment_request(new_amount, reason=""):
     # Get maximum fee multiplier from settings
     verenigingen_settings = frappe.get_single("Verenigingen Settings")
     maximum_fee_multiplier = getattr(verenigingen_settings, 'maximum_fee_multiplier', 10)
-    maximum_fee = minimum_fee * maximum_fee_multiplier
+    # Use membership type amount as base (not minimum fee) for calculating maximum
+    maximum_fee = membership_type.amount * maximum_fee_multiplier
     
     if new_amount < minimum_fee:
         frappe.throw(_("Amount cannot be less than minimum fee of {0}").format(

@@ -9,6 +9,7 @@ class ContributionAmendmentRequest(Document):
         self.validate_membership_exists()
         self.validate_effective_date()
         self.validate_amount_changes()
+        self.validate_no_conflicting_amendments()
         self.set_current_details()
         self.set_default_effective_date()
         self.set_requested_by()
@@ -36,6 +37,32 @@ class ContributionAmendmentRequest(Document):
             # Check if amount is significantly different (to avoid accidental changes)
             if self.current_amount and abs(self.requested_amount - self.current_amount) < 0.01:
                 frappe.throw(_("Requested amount is the same as current amount"))
+    
+    def validate_no_conflicting_amendments(self):
+        """Validate that there are no existing pending amendments for this member"""
+        if not self.member or not self.is_new():
+            return  # Only check for new documents
+        
+        # Check for existing pending or approved amendments
+        existing_amendments = frappe.get_all(
+            "Contribution Amendment Request",
+            filters={
+                "member": self.member,
+                "name": ["!=", self.name],  # Exclude current amendment
+                "status": ["in", ["Pending Approval", "Approved"]]
+            },
+            fields=["name", "status", "requested_amount"]
+        )
+        
+        if existing_amendments:
+            amendment_details = []
+            for amendment in existing_amendments:
+                amendment_details.append(f"{amendment['name']} ({amendment['status']})")
+            
+            frappe.throw(_(
+                "Cannot create new amendment. Member {0} already has pending amendments: {1}. "
+                "Please cancel or apply existing amendments before creating new ones."
+            ).format(self.member, ", ".join(amendment_details)))
     
     def set_current_details(self):
         """Set current membership details"""
@@ -103,11 +130,21 @@ class ContributionAmendmentRequest(Document):
                 self.approved_by = frappe.session.user
                 self.approved_date = now_datetime()
     
+    def after_insert(self):
+        """Handle post-insertion tasks"""
+        # If this amendment was auto-approved in before_insert, cancel conflicting amendments
+        if self.status == "Approved":
+            self.cancel_conflicting_amendments()
+            self.save()
+    
     @frappe.whitelist()
     def approve_amendment(self, approval_notes=None):
         """Approve the amendment request"""
         if self.status != "Pending Approval":
             frappe.throw(_("Only pending amendments can be approved"))
+        
+        # Cancel any other pending or approved amendments for the same member
+        self.cancel_conflicting_amendments()
         
         self.status = "Approved"
         self.approved_by = frappe.session.user
@@ -226,6 +263,45 @@ class ContributionAmendmentRequest(Document):
         # Implementation depends on specific requirements
         frappe.throw(_("Billing interval changes are not yet implemented"))
     
+    def cancel_conflicting_amendments(self):
+        """Cancel any other pending or approved amendments for the same member"""
+        if not self.member:
+            return
+        
+        # Find all other amendments for this member that are pending approval or approved but not applied
+        conflicting_amendments = frappe.get_all(
+            "Contribution Amendment Request",
+            filters={
+                "member": self.member,
+                "name": ["!=", self.name],  # Exclude current amendment
+                "status": ["in", ["Pending Approval", "Approved"]]
+            },
+            fields=["name", "status", "requested_amount", "effective_date"]
+        )
+        
+        cancelled_count = 0
+        for amendment_data in conflicting_amendments:
+            try:
+                amendment = frappe.get_doc("Contribution Amendment Request", amendment_data.name)
+                
+                # Add cancellation note
+                cancellation_note = f"Cancelled due to approval of newer amendment {self.name}"
+                amendment.internal_notes = (amendment.internal_notes or "") + f"\n{cancellation_note}"
+                
+                # Set status to cancelled
+                amendment.status = "Cancelled"
+                amendment.flags.ignore_validate_update_after_submit = True
+                amendment.save()
+                
+                cancelled_count += 1
+                
+            except Exception as e:
+                frappe.log_error(f"Error cancelling conflicting amendment {amendment_data.name}: {str(e)}", "Amendment Cancellation Error")
+        
+        if cancelled_count > 0:
+            self.internal_notes = (self.internal_notes or "") + f"\nCancelled {cancelled_count} conflicting amendment(s) upon approval"
+            frappe.logger().info(f"Cancelled {cancelled_count} conflicting amendments for member {self.member}")
+
     def send_rejection_notification(self):
         """Send notification to requester about rejection"""
         if not self.requested_by:

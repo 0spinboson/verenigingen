@@ -1,5 +1,5 @@
 """
-Direct Debit Batch Optimization System
+SEPA Direct Debit Batch Optimization System
 Automatically creates optimally-sized batches for efficient processing
 """
 
@@ -27,7 +27,7 @@ DEFAULT_CONFIG = {
 @frappe.whitelist()
 def create_optimal_batches(target_date=None, config=None):
     """
-    Create optimally-sized Direct Debit batches automatically
+    Create optimally-sized SEPA Direct Debit batches automatically
     
     Args:
         target_date: Date for batch processing (default: tomorrow)
@@ -105,7 +105,7 @@ def create_optimal_batches(target_date=None, config=None):
         }
 
 def get_eligible_invoices_for_batching():
-    """Get all invoices eligible for Direct Debit batching"""
+    """Get all invoices eligible for SEPA Direct Debit batching"""
     
     # Get unpaid invoices with SEPA mandates
     invoices = frappe.db.sql("""
@@ -132,7 +132,7 @@ def get_eligible_invoices_for_batching():
             si.docstatus = 1
             AND si.status IN ('Unpaid', 'Overdue')
             AND si.outstanding_amount > 0
-            AND mem.payment_method IN ('Direct Debit', 'SEPA DD')
+            AND mem.payment_method = 'SEPA Direct Debit'
             AND mem.iban IS NOT NULL
             AND mem.iban != ''
             AND sm.mandate_id IS NOT NULL
@@ -361,7 +361,7 @@ def create_amount_optimized_batches(invoices, config):
     return batches
 
 def create_dd_batch_document(batch_invoices, target_date, batch_number, config):
-    """Create actual Direct Debit Batch document"""
+    """Create actual SEPA Direct Debit Batch document"""
     
     total_amount = sum(flt(inv["amount"]) for inv in batch_invoices)
     
@@ -370,7 +370,7 @@ def create_dd_batch_document(batch_invoices, target_date, batch_number, config):
     
     # Create batch document
     batch_doc = frappe.get_doc({
-        "doctype": "Direct Debit Batch",
+        "doctype": "SEPA Direct Debit Batch",
         "batch_date": target_date,
         "batch_description": f"Auto-optimized batch #{batch_number} - {target_date}",
         "batch_type": batch_type,

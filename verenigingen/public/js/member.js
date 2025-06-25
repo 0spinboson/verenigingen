@@ -109,8 +109,8 @@ window.UIUtils = window.UIUtils || {
     },
     handle_payment_method_change: function(frm) {
         // Basic implementation
-        const is_direct_debit = frm.doc.payment_method === 'Direct Debit';
-        const show_bank_details = ['Direct Debit', 'Bank Transfer'].includes(frm.doc.payment_method);
+        const is_direct_debit = frm.doc.payment_method === 'SEPA Direct Debit';
+        const show_bank_details = ['SEPA Direct Debit', 'Bank Transfer'].includes(frm.doc.payment_method);
         
         frm.toggle_reqd('iban', is_direct_debit);
         frm.toggle_display('iban', show_bank_details);
@@ -310,7 +310,7 @@ frappe.ui.form.on('Member', {
     },
     
     iban: function(frm) {
-        if (frm.doc.iban && frm.doc.payment_method === 'Direct Debit' && window.SepaUtils) {
+        if (frm.doc.iban && frm.doc.payment_method === 'SEPA Direct Debit' && window.SepaUtils) {
             SepaUtils.check_sepa_mandate_status(frm);
         }
     },
@@ -812,7 +812,7 @@ verenigingen.member_form = {
         this.setup_all_buttons(frm);
         
         // Check SEPA mandate status
-        if (frm.doc.payment_method === 'Direct Debit' && frm.doc.iban && window.SepaUtils) {
+        if (frm.doc.payment_method === 'SEPA Direct Debit' && frm.doc.iban && window.SepaUtils) {
             SepaUtils.check_sepa_mandate_status(frm);
         }
         

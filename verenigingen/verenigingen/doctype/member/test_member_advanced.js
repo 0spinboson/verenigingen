@@ -212,7 +212,7 @@ QUnit.test("test: Member - Concurrency and Race Conditions", function (assert) {
         // Test payment method switching race condition
         () => {
             let methodPromises = [];
-            const methods = ['Direct Debit', 'Bank Transfer', 'Direct Debit', 'Bank Transfer'];
+            const methods = ['SEPA Direct Debit', 'Bank Transfer', 'SEPA Direct Debit', 'Bank Transfer'];
             
             methods.forEach((method, index) => {
                 methodPromises.push(new Promise(resolve => {
@@ -229,7 +229,7 @@ QUnit.test("test: Member - Concurrency and Race Conditions", function (assert) {
         },
         () => frappe.timeout(1),
         () => {
-            assert.ok(['Direct Debit', 'Bank Transfer'].includes(cur_frm.doc.payment_method), "Should handle payment method race conditions");
+            assert.ok(['SEPA Direct Debit', 'Bank Transfer'].includes(cur_frm.doc.payment_method), "Should handle payment method race conditions");
         },
 
         // Test form refresh during updates
@@ -303,7 +303,7 @@ QUnit.test("test: Member - Concurrency and Race Conditions", function (assert) {
             
             // Try operation that would trigger call
             frappe.tests.set_form_values(cur_frm, [
-                {payment_method: 'Direct Debit'},
+                {payment_method: 'SEPA Direct Debit'},
                 {iban: 'NL91ABNA0417164300'}
             ]);
             
@@ -491,14 +491,14 @@ QUnit.test("test: Member - Data Integrity and Consistency", function (assert) {
 
         // Test field dependency consistency
         () => frappe.tests.set_form_values(cur_frm, [
-            {payment_method: 'Direct Debit'}
+            {payment_method: 'SEPA Direct Debit'}
         ]),
         () => frappe.timeout(1),
         () => {
             let ibanField = cur_frm.get_field('iban');
             let bankSection = $(cur_frm.fields_dict.bank_details_section.wrapper);
-            assert.ok(ibanField.df.reqd, "IBAN should be required for Direct Debit");
-            assert.ok(bankSection.is(':visible'), "Bank section should be visible for Direct Debit");
+            assert.ok(ibanField.df.reqd, "IBAN should be required for SEPA Direct Debit");
+            assert.ok(bankSection.is(':visible'), "Bank section should be visible for SEPA Direct Debit");
         },
 
         // Test data consistency after multiple updates
@@ -553,7 +553,7 @@ QUnit.test("test: Member - Data Integrity and Consistency", function (assert) {
         ]),
         () => frappe.timeout(1),
         () => {
-            assert.equal(cur_frm.doc.payment_method, 'Direct Debit', "Payment method should remain consistent with IBAN presence");
+            assert.equal(cur_frm.doc.payment_method, 'SEPA Direct Debit', "Payment method should remain consistent with IBAN presence");
         },
 
         // Test date consistency
@@ -664,7 +664,7 @@ QUnit.test("test: Member - Utility Module Integration", function (assert) {
 
         // Test SepaUtils functionality
         () => frappe.tests.set_form_values(cur_frm, [
-            {payment_method: 'Direct Debit'},
+            {payment_method: 'SEPA Direct Debit'},
             {iban: 'NL91ABNA0417164300'}
         ]),
         () => frappe.timeout(1),

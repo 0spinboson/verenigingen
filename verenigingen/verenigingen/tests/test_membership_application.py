@@ -523,7 +523,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         """Test that IBAN data from application is properly saved to member"""
         # Application data with IBAN details
         iban_data = self.application_data.copy()
-        iban_data["payment_method"] = "Direct Debit"
+        iban_data["payment_method"] = "SEPA Direct Debit"
         iban_data["iban"] = "NL02ABNA0123456789"
         iban_data["bic"] = "ABNANL2A"
         # Use bank_account_name as that's what the backend expects from form mapping
@@ -544,7 +544,7 @@ class TestMembershipApplicationLoad(unittest.TestCase):
         self.assertEqual(member.iban, "NL02 ABNA 0123 4567 89")  # Should be formatted
         self.assertEqual(member.bic, "ABNANL2A")
         self.assertEqual(member.bank_account_name, "Test Account Holder")
-        self.assertEqual(member.payment_method, "Direct Debit")
+        self.assertEqual(member.payment_method, "SEPA Direct Debit")
         
         print(f"✅ IBAN data properly transferred for {member.name}")
         

@@ -1,5 +1,5 @@
 """
-Direct Debit Security Enhancements
+SEPA Direct Debit Security Enhancements
 Comprehensive security framework for DD batch processing with focus on:
 - Member identity validation and duplicate detection
 - Bank account sharing validation  
@@ -392,7 +392,7 @@ class MemberIdentityValidator:
 
 
 class DDSecurityAuditLogger:
-    """Enhanced audit logging for Direct Debit operations"""
+    """Enhanced audit logging for SEPA Direct Debit operations"""
     
     def log_batch_action(self, action: str, batch_id: str, user: str = None, details: Dict = None):
         """Log batch-related actions with comprehensive context"""

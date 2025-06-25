@@ -5,6 +5,44 @@ import traceback
 import base64
 import tempfile
 import os
+import hashlib
+
+
+# Dutch Banking Transaction Type Mapping (ING, Triodos, ABN AMRO, Rabobank)
+DUTCH_BOOKING_CODES = {
+    "005": "Transfer/Wire",
+    "020": "Check Payment", 
+    "051": "Periodic Transfer",
+    "115": "POS Payment",
+    "152": "ATM Withdrawal",
+    "186": "Direct Debit",
+    "199": "Cash Deposit",
+    "202": "Bank Transfer",
+    "544": "SEPA Credit Transfer",
+    "694": "SEPA Direct Debit",
+    "805": "Bank Costs",
+    "806": "Bank Charges",
+    "901": "Cash Withdrawal",
+    "904": "Interest Credit",
+    "905": "Interest Debit"
+}
+
+# SEPA Transaction Types for enhanced classification
+SEPA_TRANSACTION_TYPES = {
+    "SALA": "Salary Payment",
+    "PENS": "Pension Payment", 
+    "DIVD": "Dividend Payment",
+    "GOVT": "Government Payment",
+    "TRAD": "Trade Payment",
+    "LOAN": "Loan Payment",
+    "RENT": "Rent Payment",
+    "UTIL": "Utility Payment",
+    "TELE": "Telephone Payment",
+    "INSUR": "Insurance Payment",
+    "TAXES": "Tax Payment",
+    "CHAR": "Charity Payment",
+    "SECU": "Securities Purchase/Sale"
+}
 
 
 @frappe.whitelist()
@@ -58,6 +96,182 @@ def import_mt940_file(bank_account, file_content, company=None):
         }
 
 
+def extract_sepa_data_enhanced(mt940_transaction):
+    """
+    Extract SEPA data from MT940 transaction using Banking app approach.
+    
+    Attempts to access SEPA fields (EREF, MREF, CRED, SVWZ, ABWA) if available
+    in the mt940 library, with fallbacks to standard MT940 fields.
+    """
+    transaction_data = mt940_transaction.data
+    
+    # Try to access SEPA fields if available in mt940 library
+    sepa_data = getattr(mt940_transaction, 'sepa', {}) or {}
+    
+    # Extract enhanced SEPA information with fallbacks
+    eref = (
+        sepa_data.get('EREF') or 
+        transaction_data.get('transaction_reference') or
+        transaction_data.get('reference') or
+        ''
+    )
+    
+    # Mandate Reference - crucial for direct debit processing
+    mref = (
+        sepa_data.get('MREF') or
+        transaction_data.get('mandate_reference') or
+        ''
+    )
+    
+    # Payment purpose (Verwendungszweck) - enhanced description
+    svwz = (
+        sepa_data.get('SVWZ') or
+        transaction_data.get('purpose') or
+        transaction_data.get('description') or
+        ''
+    )
+    
+    # Creditor Reference
+    creditor_ref = (
+        sepa_data.get('CRED') or
+        transaction_data.get('creditor_reference') or
+        ''
+    )
+    
+    # Counterparty name (ABWA = Abweichender Auftraggeber/Begünstigter)
+    counterparty = (
+        sepa_data.get('ABWA') or
+        transaction_data.get('counterparty_name') or
+        transaction_data.get('name') or
+        ''
+    )
+    
+    # Additional SEPA data extraction
+    counterparty_iban = (
+        transaction_data.get('counterparty_account') or
+        transaction_data.get('iban') or
+        transaction_data.get('account') or
+        ''
+    )
+    
+    return {
+        'eref': eref,
+        'mref': mref, 
+        'svwz': svwz,
+        'creditor_ref': creditor_ref,
+        'counterparty': counterparty,
+        'counterparty_iban': counterparty_iban,
+        'raw_sepa': sepa_data  # Keep raw SEPA data for debugging
+    }
+
+
+def get_enhanced_transaction_type(mt940_transaction):
+    """
+    Enhanced transaction type classification using Banking app approach.
+    
+    Priority order:
+    1. booking_text (human-readable bank description)
+    2. Dutch booking code mapping  
+    3. SEPA transaction type classification
+    4. Amount-based fallback
+    """
+    transaction_data = mt940_transaction.data
+    
+    # Priority 1: Use booking_text if available (Banking app approach)
+    booking_text = transaction_data.get('booking_text')
+    if booking_text and booking_text.strip():
+        return booking_text.strip()[:50]  # ERPNext field limit
+    
+    # Priority 2: Map Dutch banking codes
+    booking_key = transaction_data.get('booking_key') or transaction_data.get('gv_code')
+    if booking_key and str(booking_key) in DUTCH_BOOKING_CODES:
+        return DUTCH_BOOKING_CODES[str(booking_key)]
+    
+    # Priority 3: SEPA transaction type classification
+    sepa_data = extract_sepa_data_enhanced(mt940_transaction)
+    purpose = sepa_data['svwz'].upper()
+    
+    for sepa_code, sepa_type in SEPA_TRANSACTION_TYPES.items():
+        if sepa_code in purpose:
+            return sepa_type
+    
+    # Priority 4: Amount-based fallback with transaction direction
+    amount_obj = transaction_data.get('amount')
+    if amount_obj:
+        amount = float(amount_obj.amount) if hasattr(amount_obj, 'amount') else float(amount_obj)
+    else:
+        amount = 0
+    
+    if amount > 0:
+        return "Incoming Transfer"
+    else:
+        return "Outgoing Transfer"
+
+
+def get_enhanced_duplicate_hash(mt940_transaction, sepa_data):
+    """
+    Enhanced duplicate detection using Banking app strategy.
+    
+    Includes transaction type and SEPA data for more robust duplicate detection.
+    """
+    transaction_data = mt940_transaction.data
+    
+    # Enhanced hash components following Banking app approach
+    # Extract date and amount from transaction data
+    trans_date = transaction_data.get('date', '')
+    amount_obj = transaction_data.get('amount')
+    if amount_obj:
+        amount_val = amount_obj.amount if hasattr(amount_obj, 'amount') else amount_obj
+        currency_val = getattr(amount_obj, 'currency', 'EUR') if hasattr(amount_obj, 'currency') else 'EUR'
+    else:
+        amount_val = 0
+        currency_val = 'EUR'
+    
+    values_to_hash = [
+        str(trans_date),                                # Transaction date
+        str(amount_val),                                # Amount
+        str(currency_val),                              # Currency
+        sepa_data['eref'],                              # SEPA End-to-end reference
+        sepa_data['counterparty'],                      # Counterparty name
+        sepa_data['counterparty_iban'],                 # Counterparty IBAN
+        get_enhanced_transaction_type(mt940_transaction), # Transaction type
+        sepa_data['svwz'],                              # SEPA payment purpose
+        transaction_data.get('booking_key', ''),        # Bank booking code
+        transaction_data.get('bank_reference', ''),     # Bank reference
+    ]
+    
+    # Create SHA256 hash
+    sha = hashlib.sha256()
+    for value in values_to_hash:
+        if value:
+            sha.update(str(value).encode('utf-8'))
+    
+    return sha.hexdigest()
+
+
+def extract_sepa_purpose_code(purpose_text):
+    """
+    Extract SEPA purpose code from payment purpose text.
+    
+    Args:
+        purpose_text: Payment purpose text from SVWZ field
+        
+    Returns:
+        str: SEPA purpose code (e.g., SALA, PENS, GOVT) or empty string
+    """
+    if not purpose_text:
+        return ""
+    
+    purpose_upper = purpose_text.upper()
+    
+    # Check for SEPA purpose codes in the text
+    for code in SEPA_TRANSACTION_TYPES.keys():
+        if code in purpose_upper:
+            return code
+    
+    return ""
+
+
 def process_mt940_document(mt940_content, bank_account, company):
     """
     Process MT940 document content using the WoLpH/mt940 library.
@@ -101,6 +315,9 @@ def process_mt940_document(mt940_content, bank_account, company):
             errors = []
             statement_iban = None
             
+            # Process transactions - avoid double counting by processing all transactions directly
+            processed_transaction_ids = set()  # Track processed transactions to avoid duplicates
+            
             for statement in transaction_list:
                 # Extract IBAN from statement
                 if hasattr(statement, 'data') and 'account_identification' in statement.data:
@@ -113,30 +330,50 @@ def process_mt940_document(mt940_content, bank_account, company):
                         "message": f"IBAN mismatch: Bank Account IBAN {bank_account_iban} does not match MT940 IBAN {statement_iban}"
                     }
                 
-                # Process each transaction in the statement
-                statement_transactions = []
-                if hasattr(statement, 'transactions'):
-                    statement_transactions = statement.transactions
-                elif hasattr(statement, '__iter__'):
-                    try:
-                        statement_transactions = list(statement)
-                    except:
-                        statement_transactions = [statement]
-                else:
-                    statement_transactions = [statement]
-                
-                for transaction in statement_transactions:
-                    try:
-                        # Create bank transaction
-                        if create_bank_transaction_from_mt940(transaction, bank_account, company):
-                            transactions_created += 1
-                        else:
-                            transactions_skipped += 1
-                            
-                    except Exception as e:
-                        errors.append(f"Transaction error: {str(e)}")
-                        frappe.logger().error(f"Error processing MT940 transaction: {str(e)}")
+                # In MT940 library, each statement object IS a transaction, not a container
+                # The library structure treats each parsed item as a single transaction
+                try:
+                    # Generate transaction ID to check for duplicates within this import
+                    from verenigingen.utils.mt940_import import extract_sepa_data_enhanced, get_enhanced_duplicate_hash
+                    sepa_data = extract_sepa_data_enhanced(statement)
+                    transaction_id = get_enhanced_duplicate_hash(statement, sepa_data)[:16]
+                    
+                    # Skip if we've already processed this exact transaction in this import
+                    if transaction_id in processed_transaction_ids:
+                        continue
+                    
+                    processed_transaction_ids.add(transaction_id)
+                    
+                    # Create bank transaction using enhanced method
+                    if create_enhanced_bank_transaction_from_mt940(statement, bank_account, company):
+                        transactions_created += 1
+                    else:
+                        transactions_skipped += 1
+                        
+                except Exception as e:
+                    errors.append(f"Transaction error: {str(e)}")
+                    frappe.logger().error(f"Error processing MT940 transaction: {str(e)}")
             
+            # Calculate date range from processed transactions - each statement IS a transaction
+            transaction_dates = []
+            processed_dates = set()  # Track unique dates to avoid duplicates
+            
+            for statement in transaction_list:
+                # Extract date from statement data
+                transaction_data = getattr(statement, 'data', {})
+                if transaction_data and 'date' in transaction_data:
+                    date_obj = transaction_data['date']
+                    date_str = str(date_obj)
+                    
+                    # Only add unique dates to avoid counting the same date multiple times
+                    if date_str not in processed_dates:
+                        transaction_dates.append(date_obj)
+                        processed_dates.add(date_str)
+            
+            # Determine date range
+            from_date = min(transaction_dates) if transaction_dates else getdate(today())
+            to_date = max(transaction_dates) if transaction_dates else getdate(today())
+
             return {
                 "success": True,
                 "message": f"Import completed: {transactions_created} transactions created, {transactions_skipped} skipped",
@@ -144,7 +381,10 @@ def process_mt940_document(mt940_content, bank_account, company):
                 "transactions_skipped": transactions_skipped,
                 "errors": errors[:10],  # Limit errors shown
                 "iban": statement_iban,
-                "statement_date": str(getdate(today()))
+                "statement_date": str(getdate(today())),
+                "statement_from_date": str(from_date),
+                "statement_to_date": str(to_date),
+                "transaction_count": len(transaction_dates)
             }
             
         finally:
@@ -159,24 +399,24 @@ def process_mt940_document(mt940_content, bank_account, company):
         }
 
 
-def create_bank_transaction_from_mt940(mt940_transaction, bank_account, company):
+def create_enhanced_bank_transaction_from_mt940(mt940_transaction, bank_account, company):
     """
-    Create ERPNext Bank Transaction from MT940 transaction.
-    Adapted from banking app's _create_bank_transaction function.
+    Enhanced Bank Transaction creation inspired by Banking app approach.
+    
+    Features:
+    - Advanced SEPA data extraction (EREF, MREF, SVWZ, ABWA)
+    - Sophisticated transaction type classification  
+    - Enhanced duplicate detection using multiple fields
+    - Better handling of Dutch banking codes
     """
     try:
-        import hashlib
         import contextlib
         
-        # Extract transaction data from MT940 transaction
-        transaction_data = mt940_transaction.data
+        # Extract enhanced SEPA data
+        sepa_data = extract_sepa_data_enhanced(mt940_transaction)
         
-        # Generate transaction ID
-        transaction_id = (
-            transaction_data.get('transaction_reference', '') or
-            transaction_data.get('bank_reference', '') or
-            generate_mt940_transaction_hash(mt940_transaction)
-        )
+        # Generate enhanced transaction ID using Banking app strategy
+        transaction_id = get_enhanced_duplicate_hash(mt940_transaction, sepa_data)[:16]
         
         # Check if transaction already exists
         if transaction_id and frappe.db.exists(
@@ -185,50 +425,107 @@ def create_bank_transaction_from_mt940(mt940_transaction, bank_account, company)
         ):
             return False  # Already exists
         
-        # Create new Bank Transaction
+        # Create new Bank Transaction with enhanced data
         bt = frappe.new_doc("Bank Transaction")
-        bt.date = mt940_transaction.date
+        
+        # Extract date from transaction data
+        transaction_data = mt940_transaction.data
+        bt.date = transaction_data.get('date') or getdate(today())
         bt.bank_account = bank_account
         bt.company = company
         
-        # Handle amount and direction
-        amount = float(mt940_transaction.amount.amount)
+        # Handle amount and direction - amount is in the data structure
+        amount_obj = transaction_data.get('amount')
+        if amount_obj:
+            amount = float(amount_obj.amount) if hasattr(amount_obj, 'amount') else float(amount_obj)
+            bt.currency = getattr(amount_obj, 'currency', 'EUR') if hasattr(amount_obj, 'currency') else 'EUR'
+        else:
+            amount = 0.0
+            bt.currency = 'EUR'
+            
         bt.deposit = max(amount, 0)
         bt.withdrawal = abs(min(amount, 0))
-        bt.currency = getattr(mt940_transaction.amount, 'currency', 'EUR')
         
-        # Set description from available fields
-        description_parts = []
-        if hasattr(mt940_transaction, 'purpose_code') and mt940_transaction.purpose_code:
-            description_parts.append(mt940_transaction.purpose_code)
-        if transaction_data.get('purpose'):
-            description_parts.append(transaction_data['purpose'])
-        if transaction_data.get('extra_details'):
-            description_parts.append(transaction_data['extra_details'])
+        # Enhanced description using SEPA SVWZ field (Banking app approach)
+        description = sepa_data['svwz']
+        if not description:
+            # Fallback to other description sources
+            transaction_data = mt940_transaction.data
+            description_parts = []
+            if transaction_data.get('purpose'):
+                description_parts.append(str(transaction_data['purpose']))
+            if transaction_data.get('extra_details'):
+                description_parts.append(str(transaction_data['extra_details']))
+            description = " | ".join(filter(None, description_parts))
         
-        bt.description = "\n".join(filter(None, description_parts)) or "MT940 Transaction"
+        bt.description = description or "MT940 Transaction"
         
-        # Set reference and party information
-        bt.reference_number = transaction_data.get('transaction_reference', '')
+        # Enhanced transaction type using Banking app approach
+        bt.transaction_type = get_enhanced_transaction_type(mt940_transaction)
+        
+        # Enhanced reference using SEPA EREF (Banking app approach)
+        reference = sepa_data['eref']
+        bt.reference_number = reference if reference != "NONREF" else ""
         bt.transaction_id = transaction_id
         
-        # Extract counterparty information
-        if transaction_data.get('counterparty_name'):
-            bt.bank_party_name = transaction_data['counterparty_name']
-        if transaction_data.get('counterparty_account'):
-            bt.bank_party_iban = transaction_data['counterparty_account']
+        # Enhanced party information using SEPA ABWA field
+        bt.bank_party_name = sepa_data['counterparty']
+        bt.bank_party_iban = sepa_data['counterparty_iban']
         
-        # Insert and submit
+        # Store additional SEPA data in custom fields (if available)
+        try:
+            from verenigingen.utils.mt940_enhanced_fields import populate_enhanced_mt940_fields, validate_enhanced_fields_exist
+            
+            if validate_enhanced_fields_exist():
+                enhanced_data = {
+                    'mandate_reference': sepa_data['mref'],
+                    'creditor_reference': sepa_data['creditor_ref'],
+                    'booking_key': mt940_transaction.data.get('booking_key', ''),
+                    'bank_reference': mt940_transaction.data.get('bank_reference', ''),
+                    'enhanced_transaction_type': bt.transaction_type,
+                    'sepa_purpose_code': extract_sepa_purpose_code(sepa_data['svwz'])
+                }
+                
+                populate_enhanced_mt940_fields(bt, enhanced_data)
+            else:
+                # Store in temporary attribute for debugging if fields don't exist
+                bt._enhanced_data = {
+                    'mandate_reference': sepa_data['mref'],
+                    'creditor_reference': sepa_data['creditor_ref'],
+                    'booking_key': mt940_transaction.data.get('booking_key', ''),
+                    'bank_reference': mt940_transaction.data.get('bank_reference', ''),
+                    'raw_sepa': sepa_data['raw_sepa']
+                }
+        except ImportError:
+            # Enhanced fields module not available
+            pass
+        
+        # Insert and submit with enhanced error handling
         with contextlib.suppress(frappe.exceptions.UniqueValidationError):
             bt.insert()
             bt.submit()
+            
+            # Log enhanced transaction creation for debugging
+            frappe.logger().info(
+                f"Enhanced MT940 transaction created: {transaction_id} - "
+                f"{bt.transaction_type} - {amount} {bt.currency} - {sepa_data['counterparty']}"
+            )
             return True
             
     except Exception as e:
-        frappe.logger().error(f"Error creating bank transaction from MT940: {str(e)}")
+        frappe.logger().error(f"Error creating enhanced bank transaction from MT940: {str(e)}")
+        # Log additional debug information
+        frappe.logger().error(f"Transaction data: {getattr(mt940_transaction, 'data', {})}")
         raise
     
     return False
+
+
+def create_bank_transaction_from_mt940(mt940_transaction, bank_account, company):
+    """
+    Legacy function - redirects to enhanced version for backwards compatibility.
+    """
+    return create_enhanced_bank_transaction_from_mt940(mt940_transaction, bank_account, company)
 
 
 def generate_mt940_transaction_hash(transaction):

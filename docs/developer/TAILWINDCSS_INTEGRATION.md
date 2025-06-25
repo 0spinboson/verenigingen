@@ -792,7 +792,7 @@ async submitForm(e) {
     }
     
     // Fix payment method values for backend validation
-    data.payment_method = data.payment_method === 'sepa_direct_debit' ? 'Direct Debit' : 'Bank Transfer';
+    data.payment_method = data.payment_method === 'sepa_direct_debit' ? 'SEPA Direct Debit' : 'Bank Transfer';
     
     const response = await fetch('/api/method/verenigingen.api.membership_application.submit_application', {
         method: 'POST',

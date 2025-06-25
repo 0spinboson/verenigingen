@@ -916,9 +916,9 @@ def update_workspace_links():
                 "dependencies": "",
                 "hidden": 0,
                 "is_query_report": 0,
-                "label": "Direct Debit Batch", 
+                "label": "SEPA Direct Debit Batch", 
                 "link_count": 0,
-                "link_to": "Direct Debit Batch",
+                "link_to": "SEPA Direct Debit Batch",
                 "link_type": "DocType",
                 "onboard": 0,
                 "type": "Link"

@@ -185,7 +185,7 @@ frappe.ui.form.on('Member', {
         // No real-time processing needed here
         
         // Still show basic UI updates after save
-        if ((frm.doc.payment_method === 'Direct Debit' || frm.doc.payment_method === 'SEPA DD') && frm.doc.iban && !frm.doc.__islocal) {
+        if (frm.doc.payment_method === 'SEPA Direct Debit' && frm.doc.iban && !frm.doc.__islocal) {
             // Just update the UI to show current SEPA status
             check_sepa_mandate_status_debounced(frm);
         }
@@ -499,7 +499,7 @@ function add_chapter_assignment_button(frm) {
         callback: function(r) {
             if (r.message) {
                 frm.add_custom_button(__('Assign Chapter'), function() {
-                    ChapterUtils.suggest_chapter_for_member(frm);
+                    ChapterUtils.assign_chapter_for_member(frm);
                 }, __('Member Actions'));
                 
                 // Add simple chapter suggestion when no chapter is assigned
@@ -607,22 +607,7 @@ function add_member_id_management_buttons(frm) {
         }, __('Member ID'));
     }
     
-    if (user_roles.includes('System Manager')) {
-        frm.add_custom_button(__('Member ID Statistics'), function() {
-            show_member_id_statistics_dialog();
-        }, __('Member ID'));
-        
-        frm.add_custom_button(__('Preview Next ID'), function() {
-            frappe.call({
-                method: 'verenigingen.verenigingen.doctype.member.member_id_manager.get_next_member_id_preview',
-                callback: function(r) {
-                    if (r.message) {
-                        frappe.msgprint(__('Next member ID that will be assigned: {0}', [r.message.next_id]));
-                    }
-                }
-            });
-        }, __('Member ID'));
-    }
+    // Member ID Statistics and Preview Next ID buttons removed as requested
 }
 
 function create_user_account_dialog(frm) {
@@ -769,22 +754,7 @@ function add_member_id_buttons(frm) {
         }, __('Member ID'));
     }
     
-    // Add "View Member ID Statistics" button for System Managers
-    if (user_roles.includes('System Manager')) {
-        frm.add_custom_button(__('Member ID Statistics'), function() {
-            show_member_id_statistics_dialog();
-        }, __('Member ID'));
-        
-        frm.add_custom_button(__('Preview Next ID'), function() {
-            frappe.call({
-                method: 'verenigingen.verenigingen.doctype.member.member_id_manager.get_next_member_id_preview',
-                callback: function(r) {
-                    if (r.message) {
-                        frappe.msgprint(__('Next member ID that will be assigned: {0}', [r.message.next_id]));
-                    }
-                }
-            });
-        }, __('Member ID'));
+    // Member ID Statistics and Preview Next ID buttons removed as requested
         
         frm.add_custom_button(__('Debug Member ID Assignment'), function() {
             frappe.call({
@@ -836,47 +806,8 @@ function add_member_id_buttons(frm) {
             }, __('Member ID'));
         }
     }
-}
 
-function show_member_id_statistics_dialog() {
-    frappe.call({
-        method: 'verenigingen.verenigingen.doctype.member.member_id_manager.get_member_id_statistics',
-        callback: function(r) {
-            if (r.message) {
-                const stats = r.message;
-                let html = `
-                    <div class="member-id-stats">
-                        <h4>Member ID Statistics</h4>
-                        <table class="table table-bordered">
-                            <tr><td><strong>Next ID to be assigned:</strong></td><td>${stats.next_id}</td></tr>
-                            <tr><td><strong>Current counter value:</strong></td><td>${stats.current_counter}</td></tr>
-                            <tr><td><strong>Highest assigned ID:</strong></td><td>${stats.highest_assigned}</td></tr>
-                            <tr><td><strong>Total members with numeric IDs:</strong></td><td>${stats.total_with_numeric_ids}</td></tr>
-                            <tr><td><strong>Gap count:</strong></td><td>${stats.gap_count}</td></tr>
-                `;
-                
-                if (stats.gaps && stats.gaps.length > 0) {
-                    html += `<tr><td><strong>Available gaps (first 10):</strong></td><td>${stats.gaps.join(', ')}</td></tr>`;
-                }
-                
-                html += `</table></div>`;
-                
-                const dialog = new frappe.ui.Dialog({
-                    title: __('Member ID Statistics'),
-                    size: 'large',
-                    fields: [
-                        {
-                            fieldtype: 'HTML',
-                            options: html
-                        }
-                    ]
-                });
-                
-                dialog.show();
-            }
-        }
-    });
-}
+// show_member_id_statistics_dialog function removed as the button was removed
 
 function add_fee_management_buttons(frm) {
     if (frm.doc.docstatus === 1) {
@@ -1710,7 +1641,7 @@ function check_sepa_mandate_status_debounced(frm) {
     
     // Set a new timeout to check SEPA status after 300ms of inactivity
     sepa_check_timeout = setTimeout(function() {
-        if ((frm.doc.payment_method === 'Direct Debit' || frm.doc.payment_method === 'SEPA DD') && frm.doc.iban) {
+        if (frm.doc.payment_method === 'SEPA Direct Debit' && frm.doc.iban) {
             SepaUtils.check_sepa_mandate_status(frm);
         } else {
             // Clear SEPA UI if conditions aren't met
@@ -1725,7 +1656,7 @@ function check_sepa_mandate_and_prompt_creation(frm, context = 'general') {
     // Simplified function - only update UI, no more real-time prompting
     // SEPA mandate discrepancy checking is now handled by scheduled task
     
-    if (!frm.doc.iban || (frm.doc.payment_method !== 'Direct Debit' && frm.doc.payment_method !== 'SEPA DD')) {
+    if (!frm.doc.iban || frm.doc.payment_method !== 'SEPA Direct Debit') {
         return;
     }
     

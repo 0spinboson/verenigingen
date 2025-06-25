@@ -266,5 +266,14 @@ def bulk_suspend_members(member_list, suspension_reason, suspend_user=True, susp
             _("Bulk suspension failed: No members were suspended"),
             indicator='red'
         )
+
+@frappe.whitelist()
+def test_bank_details_debug():
+    """Test function to debug bank details issue"""
+    return {
+        "status": "working_from_api_file",
+        "user": frappe.session.user,
+        "form_data": dict(frappe.local.form_dict) if hasattr(frappe.local, 'form_dict') else {}
+    }
     
     return results

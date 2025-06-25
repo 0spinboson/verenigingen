@@ -1,7 +1,7 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import getdate, today, add_days, date_diff, now
+from frappe.utils import getdate, today, add_days, date_diff, now, now_datetime
 import random
 
 from verenigingen.verenigingen.doctype.member.member_id_manager import (
@@ -464,6 +464,50 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         # Save the member
         self.save()
         
+        # Activate pending Chapter Member records
+        try:
+            from verenigingen.utils.application_helpers import activate_pending_chapter_membership
+            
+            # First, try to find existing pending chapter memberships for this member
+            pending_chapters = frappe.db.sql("""
+                SELECT c.name as chapter_name
+                FROM `tabChapter` c
+                JOIN `tabChapter Member` cm ON cm.parent = c.name
+                WHERE cm.member = %s AND cm.status = 'Pending'
+            """, self.name, as_dict=True)
+            
+            activated_count = 0
+            for chapter_info in pending_chapters:
+                chapter_member = activate_pending_chapter_membership(self, chapter_info.chapter_name)
+                if chapter_member:
+                    frappe.logger().info(f"Activated chapter membership for {self.name} in {chapter_info.chapter_name}")
+                    activated_count += 1
+                else:
+                    frappe.logger().warning(f"Failed to activate chapter membership for {self.name} in {chapter_info.chapter_name}")
+            
+            if activated_count == 0:
+                # Fallback: Check for suggested chapter or current chapter display fields
+                chapter_to_activate = None
+                if hasattr(self, 'suggested_chapter') and self.suggested_chapter:
+                    chapter_to_activate = self.suggested_chapter
+                elif hasattr(self, 'current_chapter_display') and self.current_chapter_display:
+                    chapter_to_activate = self.current_chapter_display
+                
+                if chapter_to_activate:
+                    chapter_member = activate_pending_chapter_membership(self, chapter_to_activate)
+                    if chapter_member:
+                        frappe.logger().info(f"Activated chapter membership for {self.name} in {chapter_to_activate} (fallback)")
+                        activated_count += 1
+                    else:
+                        frappe.logger().warning(f"Failed to activate chapter membership for {self.name} in {chapter_to_activate} (fallback)")
+                        
+            if activated_count == 0:
+                frappe.logger().warning(f"No chapter memberships were activated for {self.name} - no pending chapter memberships found")
+                
+        except Exception as e:
+            frappe.log_error(f"Error activating chapter membership for {self.name}: {str(e)}", "Chapter Membership Activation")
+            # Don't fail the approval if chapter membership activation fails
+        
         # Create membership - this should trigger the subscription logic
         return self.create_membership_on_approval()
     
@@ -502,6 +546,53 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         except Exception as e:
             frappe.log_error(f"Error creating membership on approval: {str(e)}")
             frappe.throw(_("Error creating membership: {0}").format(str(e)))
+    
+    @frappe.whitelist()
+    def reject_application(self, reason):
+        """Reject this application and clean up pending records"""
+        if not self.is_application_member():
+            frappe.throw(_("This is not an application member"))
+        
+        if self.application_status == 'Rejected':
+            frappe.throw(_("Application is already rejected"))
+        
+        # Update status
+        self.application_status = 'Rejected'
+        self.status = 'Rejected'
+        self.reviewed_by = frappe.session.user
+        self.review_date = now_datetime()
+        self.rejection_reason = reason
+        
+        # Save the member
+        self.save()
+        
+        # Remove pending Chapter Member records
+        try:
+            from verenigingen.utils.application_helpers import remove_pending_chapter_membership
+            
+            # Check for suggested chapter or current chapter display
+            chapter_to_remove = None
+            if hasattr(self, 'suggested_chapter') and self.suggested_chapter:
+                chapter_to_remove = self.suggested_chapter
+            elif hasattr(self, 'current_chapter_display') and self.current_chapter_display:
+                chapter_to_remove = self.current_chapter_display
+            
+            if chapter_to_remove:
+                success = remove_pending_chapter_membership(self, chapter_to_remove)
+                if success:
+                    frappe.logger().info(f"Removed pending chapter membership for {self.name} from {chapter_to_remove}")
+                else:
+                    frappe.logger().warning(f"Failed to remove pending chapter membership for {self.name} from {chapter_to_remove}")
+            else:
+                # Try to remove from any chapter (fallback)
+                remove_pending_chapter_membership(self)
+                
+        except Exception as e:
+            frappe.log_error(f"Error removing pending chapter membership for {self.name}: {str(e)}", "Chapter Membership Removal")
+            # Don't fail the rejection if chapter membership removal fails
+        
+        frappe.logger().info(f"Rejected application for {self.name}")
+        return True
     
     def validate(self):
         """Validate document data"""
@@ -715,9 +806,30 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         for field in ['first_name', 'middle_name', 'last_name']:
             if not hasattr(self, field) or not getattr(self, field):
                 continue
-            if not getattr(self, field).isalnum() and not all(c.isalnum() or c.isspace() for c in getattr(self, field)):
-                frappe.throw(_("{0} name should not contain special characters")
-                    .format(field.replace('_', ' ').title()))
+            
+            # Use the improved validation from application_validators
+            try:
+                from verenigingen.utils.application_validators import validate_name
+                field_value = getattr(self, field)
+                field_name = field.replace('_', ' ').title()
+                
+                validation_result = validate_name(field_value, field_name)
+                
+                if not validation_result["valid"]:
+                    frappe.throw(_(validation_result["message"]))
+                    
+                # Use sanitized version if available
+                if validation_result.get("sanitized"):
+                    setattr(self, field, validation_result["sanitized"])
+                    
+            except ImportError:
+                # Fallback to basic validation if import fails
+                field_value = getattr(self, field)
+                # Allow letters, spaces, hyphens, apostrophes, and accented characters
+                import re
+                if not re.match(r"^[\w\s\-\'\.\u00C0-\u017F\u0100-\u024F\u1E00-\u1EFF]+$", field_value, re.UNICODE):
+                    frappe.throw(_("{0} contains invalid characters")
+                        .format(field.replace('_', ' ').title()))
                     
     def update_full_name(self):
         """Update the full name based on first names, name particles (tussenvoegsels), and last name"""
@@ -1542,6 +1654,7 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
                 SELECT 
                     cm.parent as chapter,
                     cm.chapter_join_date,
+                    cm.status,
                     c.region,
                     cbm.volunteer as board_volunteer,
                     cbm.is_active as is_board_member
@@ -1558,6 +1671,7 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
                 chapters.append({
                     "chapter": chapter_data.chapter,
                     "chapter_join_date": chapter_data.chapter_join_date,
+                    "status": chapter_data.status,
                     "region": chapter_data.region,
                     "is_primary": idx == 0,  # First one is primary
                     "is_board": bool(chapter_data.is_board_member)
@@ -1578,13 +1692,14 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         try:
             # Get chapters where this member is listed in the Chapter Member child table
             # Use ignore_permissions since this is called within member doc context
+            # Include both Active and Pending memberships to show complete picture
             chapter_members = frappe.get_all(
                 "Chapter Member",
                 filters={
                     "member": self.name,
                     "enabled": 1
                 },
-                fields=["parent", "chapter_join_date"],
+                fields=["parent", "chapter_join_date", "status"],
                 order_by="chapter_join_date desc",
                 ignore_permissions=True
             )
@@ -1594,6 +1709,7 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
                 chapters.append({
                     "chapter": cm.parent,
                     "chapter_join_date": cm.chapter_join_date,
+                    "status": cm.status,
                     "is_primary": len(chapters) == 0,  # First one is primary
                     "is_board": self.is_board_member(cm.parent)
                 })
@@ -1680,10 +1796,28 @@ def get_member_chapter_display_html(member_name):
                 chapter_display += f" ({chapter_info.region})"
             
             status_badges = []
-            # Removed the Primary badge as requested
+            
+            # Add status badge with appropriate styling
+            chapter_status = chapter.get('status', 'Unknown')
+            if chapter_status == 'Active':
+                status_badges.append('<span class="badge badge-success" style="margin-right: 5px;">Active</span>')
+                border_color = '#007bff'  # Blue for active
+                bg_color = '#f8f9fa'  # Light blue background
+            elif chapter_status == 'Pending':
+                status_badges.append('<span class="badge badge-warning" style="margin-right: 5px;">Pending</span>')
+                border_color = '#ffc107'  # Yellow for pending
+                bg_color = '#fff3cd'  # Light yellow background
+            else:
+                status_badges.append(f'<span class="badge badge-secondary" style="margin-right: 5px;">{chapter_status}</span>')
+                border_color = '#6c757d'  # Gray for other statuses
+                bg_color = '#f8f9fa'  # Default background
+            
+            # Board member badge
             if chapter.get('is_board'):
                 status_badges.append('<span class="badge badge-info" style="margin-right: 5px;">Board Member</span>')
-            if chapter.get('chapter_join_date'):
+            
+            # Join date badge (only for active memberships)
+            if chapter.get('chapter_join_date') and chapter_status == 'Active':
                 status_badges.append(f'<span class="badge badge-light" style="margin-right: 5px;">Joined: {chapter["chapter_join_date"]}</span>')
             
             badges_html = ''.join(status_badges)
@@ -1692,7 +1826,7 @@ def get_member_chapter_display_html(member_name):
             chapter_link = f'<a href="/app/chapter/{chapter["chapter"]}" target="_blank" style="color: #007bff; text-decoration: none; font-weight: bold;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">{chapter_display}</a>'
             
             html_parts.append(f'''
-                <div class="chapter-item" style="margin-bottom: 8px; padding: 10px; border-left: 3px solid #007bff; background-color: #f8f9fa; border-radius: 4px;">
+                <div class="chapter-item" style="margin-bottom: 8px; padding: 10px; border-left: 3px solid {border_color}; background-color: {bg_color}; border-radius: 4px;">
                     {chapter_link}
                     {f'<br><div style="margin-top: 5px;">{badges_html}</div>' if badges_html else ''}
                 </div>

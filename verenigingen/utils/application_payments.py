@@ -13,6 +13,12 @@ def create_membership_invoice_with_amount(member, membership, amount):
     except ImportError:
         DutchTaxExemptionHandler = None
     
+    try:
+        from verenigingen.utils.subscription_period_calculator import get_aligned_subscription_dates, format_subscription_period_description
+    except ImportError:
+        get_aligned_subscription_dates = None
+        format_subscription_period_description = None
+    
     settings = frappe.get_single("Verenigingen Settings")
     
     # Create or get customer
@@ -22,7 +28,16 @@ def create_membership_invoice_with_amount(member, membership, amount):
     
     membership_type = frappe.get_doc("Membership Type", membership.membership_type)
     
-    # Determine invoice description based on amount type
+    # Calculate subscription period dates for alignment
+    subscription_dates = None
+    if get_aligned_subscription_dates and membership.start_date:
+        subscription_dates = get_aligned_subscription_dates(
+            membership.start_date, 
+            membership_type, 
+            has_application_invoice=True
+        )
+    
+    # Determine invoice description based on amount type and subscription period
     description = f"Membership Fee - {membership_type.membership_type_name}"
     if hasattr(membership, 'uses_custom_amount') and membership.uses_custom_amount:
         if amount > membership_type.amount:
@@ -30,8 +45,17 @@ def create_membership_invoice_with_amount(member, membership, amount):
         elif amount < membership_type.amount:
             description += " (Reduced Rate)"
     
-    # Create invoice
-    invoice = frappe.get_doc({
+    # Add subscription period to description if available
+    if subscription_dates and format_subscription_period_description:
+        period_desc = format_subscription_period_description(
+            subscription_dates['application_invoice_period']['start'],
+            subscription_dates['application_invoice_period']['end'],
+            membership_type.subscription_period
+        )
+        description = period_desc
+    
+    # Create invoice with subscription period dates
+    invoice_data = {
         "doctype": "Sales Invoice",
         "customer": member.customer,
         "member": member.name,
@@ -45,7 +69,14 @@ def create_membership_invoice_with_amount(member, membership, amount):
             "description": description
         }],
         "remarks": f"Membership application invoice for {member.full_name}"
-    })
+    }
+    
+    # Add subscription period dates if calculated
+    if subscription_dates:
+        invoice_data["subscription_period_start"] = subscription_dates['application_invoice_period']['start']
+        invoice_data["subscription_period_end"] = subscription_dates['application_invoice_period']['end']
+    
+    invoice = frappe.get_doc(invoice_data)
     
     # Apply tax exemption if configured
     if settings.tax_exempt_for_contributions and DutchTaxExemptionHandler:

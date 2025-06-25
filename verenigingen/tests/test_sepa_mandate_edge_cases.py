@@ -313,7 +313,7 @@ class TestSEPAMandateEdgeCases(unittest.TestCase):
         
         # Create direct debit batch
         batch = frappe.get_doc({
-            "doctype": "Direct Debit Batch",
+            "doctype": "SEPA Direct Debit Batch",
             "batch_date": today(),
             "status": "Draft"
         })
@@ -321,7 +321,7 @@ class TestSEPAMandateEdgeCases(unittest.TestCase):
         
         # Add mandate to batch
         batch_invoice = frappe.get_doc({
-            "doctype": "Direct Debit Batch Invoice",
+            "doctype": "SEPA Direct Debit Batch Invoice",
             "parent": batch.name,
             "mandate": mandate.name,
             "amount": 100.00,
@@ -434,7 +434,7 @@ class TestSEPAMandateEdgeCases(unittest.TestCase):
         with self.assertRaises(frappe.ValidationError):
             # SEPA requires minimum 5 working days pre-notification
             batch = frappe.get_doc({
-                "doctype": "Direct Debit Batch",
+                "doctype": "SEPA Direct Debit Batch",
                 "batch_date": today(),
                 "execution_date": debit_date,  # Too soon
                 "status": "Draft"

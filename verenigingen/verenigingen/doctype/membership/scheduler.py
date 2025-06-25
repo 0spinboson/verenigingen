@@ -235,7 +235,7 @@ def generate_direct_debit_batch():
         "Membership",
         filters={
             "status": "Pending",
-            "payment_method": "Direct Debit",
+            "payment_method": "SEPA Direct Debit",
             "docstatus": 1
         },
         fields=["name", "member", "member_name", "fee_amount", "currency"]

@@ -34,7 +34,7 @@ De Member page toont nu alle gerelateerde documenten in de "Connections" sectie:
 #### Financial Groep:
 - **Sales Invoice**: Facturen
 - **SEPA Mandate**: SEPA machtigingen
-- **Direct Debit Batch Entry**: Incasso batch entries
+- **SEPA Direct Debit Batch Entry**: Incasso batch entries
 
 #### Volunteer Groep:
 - **Volunteer**: Vrijwilliger profiel
