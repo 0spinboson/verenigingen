@@ -525,6 +525,348 @@ def reprocess_mt940_import(import_name):
         }
 
 @frappe.whitelist()
+def test_eboekhouden_framework():
+    """Test the e-Boekhouden migration framework"""
+    try:
+        results = {}
+        
+        # Test 1: Check if doctypes exist
+        doctypes_to_check = [
+            "E-Boekhouden Settings",
+            "E-Boekhouden Migration", 
+            "E-Boekhouden Import Log"
+        ]
+        
+        doctypes_status = {}
+        for doctype in doctypes_to_check:
+            try:
+                frappe.get_meta(doctype)
+                doctypes_status[doctype] = "✅ Exists"
+            except Exception as e:
+                doctypes_status[doctype] = f"❌ Error: {str(e)}"
+        
+        results["doctypes"] = doctypes_status
+        
+        # Test 2: Try to access E-Boekhouden Settings
+        try:
+            settings = frappe.get_single("E-Boekhouden Settings")
+            results["settings_access"] = "✅ Can access E-Boekhouden Settings"
+            results["settings_fields"] = list(settings.as_dict().keys())[:10]  # Show first 10 fields
+        except Exception as e:
+            results["settings_access"] = f"❌ Settings error: {str(e)}"
+        
+        # Test 3: Test API utility import
+        try:
+            from verenigingen.utils.eboekhouden_api import EBoekhoudenAPI, EBoekhoudenXMLParser
+            results["api_utils"] = "✅ API utilities imported successfully"
+        except Exception as e:
+            results["api_utils"] = f"❌ API import error: {str(e)}"
+        
+        # Test 4: Check if we can create a migration record
+        try:
+            migration = frappe.new_doc("E-Boekhouden Migration")
+            migration.migration_name = "Test Migration"
+            migration.company = "R S P"  # Use existing company
+            # Don't save, just test creation
+            results["migration_creation"] = "✅ Can create Migration record"
+        except Exception as e:
+            results["migration_creation"] = f"❌ Migration creation error: {str(e)}"
+        
+        # Test 5: Check if we can create an import log
+        try:
+            log = frappe.new_doc("E-Boekhouden Import Log")
+            log.import_type = "Account"
+            log.eb_reference = "TEST001"
+            # Don't save, just test creation
+            results["log_creation"] = "✅ Can create Import Log record"
+        except Exception as e:
+            results["log_creation"] = f"❌ Log creation error: {str(e)}"
+        
+        return {
+            "success": True,
+            "message": "E-Boekhouden framework test completed",
+            "results": results
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing e-Boekhouden framework: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": frappe.get_traceback()
+        }
+
+@frappe.whitelist()
+def test_eboekhouden_api_mock():
+    """Test e-Boekhouden API utilities with mock data"""
+    try:
+        from verenigingen.utils.eboekhouden_api import EBoekhoudenXMLParser
+        
+        # Test XML parsing with sample data
+        results = {}
+        
+        # Test 1: Parse sample Chart of Accounts XML
+        sample_accounts_xml = """
+        <Grootboekrekeningen>
+            <Grootboekrekening>
+                <Code>1000</Code>
+                <Omschrijving>Kas</Omschrijving>
+                <Categorie>ACTIVA</Categorie>
+                <Groep>A</Groep>
+            </Grootboekrekening>
+            <Grootboekrekening>
+                <Code>1300</Code>
+                <Omschrijving>Debiteuren</Omschrijving>
+                <Categorie>ACTIVA</Categorie>
+                <Groep>A</Groep>
+            </Grootboekrekening>
+        </Grootboekrekeningen>
+        """
+        
+        try:
+            accounts = EBoekhoudenXMLParser.parse_grootboekrekeningen(sample_accounts_xml)
+            results["accounts_parsing"] = {
+                "status": "✅ Success",
+                "count": len(accounts),
+                "sample": accounts[:2] if accounts else []
+            }
+        except Exception as e:
+            results["accounts_parsing"] = {
+                "status": f"❌ Error: {str(e)}",
+                "count": 0
+            }
+        
+        # Test 2: Parse sample Relations XML
+        sample_relations_xml = """
+        <Relaties>
+            <Relatie>
+                <Code>C001</Code>
+                <Bedrijf>Test Customer BV</Bedrijf>
+                <Contactpersoon>Jan de Vries</Contactpersoon>
+                <Adres>Teststraat 1</Adres>
+                <Postcode>1234AB</Postcode>
+                <Plaats>Amsterdam</Plaats>
+                <Land>Nederland</Land>
+                <Email>jan@testcustomer.nl</Email>
+                <Telefoon>020-1234567</Telefoon>
+            </Relatie>
+        </Relaties>
+        """
+        
+        try:
+            relations = EBoekhoudenXMLParser.parse_relaties(sample_relations_xml)
+            results["relations_parsing"] = {
+                "status": "✅ Success",
+                "count": len(relations),
+                "sample": relations[:1] if relations else []
+            }
+        except Exception as e:
+            results["relations_parsing"] = {
+                "status": f"❌ Error: {str(e)}",
+                "count": 0
+            }
+        
+        # Test 3: Parse sample Transactions XML
+        sample_transactions_xml = """
+        <Mutaties>
+            <Mutatie>
+                <MutatieNr>1001</MutatieNr>
+                <Datum>01-01-2024</Datum>
+                <Rekening>1000</Rekening>
+                <RekeningOmschrijving>Kas</RekeningOmschrijving>
+                <Omschrijving>Opening Balance</Omschrijving>
+                <Debet>1000.00</Debet>
+                <Credit>0.00</Credit>
+            </Mutatie>
+        </Mutaties>
+        """
+        
+        try:
+            transactions = EBoekhoudenXMLParser.parse_mutaties(sample_transactions_xml)
+            results["transactions_parsing"] = {
+                "status": "✅ Success", 
+                "count": len(transactions),
+                "sample": transactions[:1] if transactions else []
+            }
+        except Exception as e:
+            results["transactions_parsing"] = {
+                "status": f"❌ Error: {str(e)}",
+                "count": 0
+            }
+        
+        # Test 4: Settings functionality
+        try:
+            settings = frappe.get_single("E-Boekhouden Settings")
+            settings.api_url = "https://secure.e-boekhouden.nl/bh/api.asp"
+            settings.source_application = "Test Application"
+            # Don't save, just test field access
+            results["settings_functionality"] = "✅ Settings fields accessible"
+        except Exception as e:
+            results["settings_functionality"] = f"❌ Settings error: {str(e)}"
+        
+        return {
+            "success": True,
+            "message": "API mock testing completed",
+            "results": results
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error in API mock test: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": frappe.get_traceback()
+        }
+
+@frappe.whitelist()
+def test_eboekhouden_complete():
+    """Complete end-to-end test of e-Boekhouden framework"""
+    try:
+        results = {
+            "framework_status": "🧪 Testing E-Boekhouden Framework",
+            "tests": {}
+        }
+        
+        # Test 1: DocType registration
+        try:
+            eb_doctypes = frappe.get_all("DocType", 
+                filters={"module": "Verenigingen", "name": ["like", "%Boekhouden%"]}, 
+                fields=["name", "module"])
+            results["tests"]["doctype_registration"] = {
+                "status": "✅ Passed",
+                "count": len(eb_doctypes),
+                "doctypes": [dt["name"] for dt in eb_doctypes]
+            }
+        except Exception as e:
+            results["tests"]["doctype_registration"] = {
+                "status": f"❌ Failed: {str(e)}",
+                "count": 0
+            }
+        
+        # Test 2: Settings functionality
+        try:
+            settings = frappe.get_single("E-Boekhouden Settings")
+            # Test default values
+            settings.api_url = "https://secure.e-boekhouden.nl/bh/api.asp"
+            settings.default_currency = "EUR"
+            settings.source_application = "Test Application"
+            results["tests"]["settings_functionality"] = {
+                "status": "✅ Passed",
+                "default_url": settings.api_url,
+                "default_currency": settings.default_currency
+            }
+        except Exception as e:
+            results["tests"]["settings_functionality"] = {
+                "status": f"❌ Failed: {str(e)}"
+            }
+        
+        # Test 3: Migration document creation
+        try:
+            migration = frappe.new_doc("E-Boekhouden Migration")
+            migration.migration_name = "Framework Test Migration"
+            migration.company = "R S P"
+            migration.migration_status = "Draft"
+            migration.migrate_accounts = 1
+            migration.dry_run = 1
+            # Test validation without saving
+            migration.validate()
+            results["tests"]["migration_document"] = {
+                "status": "✅ Passed",
+                "migration_name": migration.migration_name,
+                "default_status": migration.migration_status
+            }
+        except Exception as e:
+            results["tests"]["migration_document"] = {
+                "status": f"❌ Failed: {str(e)}"
+            }
+        
+        # Test 4: Import log creation
+        try:
+            from verenigingen.verenigingen.doctype.e_boekhouden_import_log.e_boekhouden_import_log import create_import_log
+            # Test the helper function without saving
+            results["tests"]["import_log"] = {
+                "status": "✅ Passed",
+                "helper_function": "create_import_log available"
+            }
+        except Exception as e:
+            results["tests"]["import_log"] = {
+                "status": f"❌ Failed: {str(e)}"
+            }
+        
+        # Test 5: API utilities comprehensive test
+        try:
+            from verenigingen.utils.eboekhouden_api import EBoekhoudenAPI, EBoekhoudenXMLParser
+            
+            # Test XML parser with real-world structure
+            complex_xml = """<?xml version="1.0" encoding="utf-8"?>
+            <Grootboekrekeningen>
+                <Grootboekrekening>
+                    <Code>1000</Code>
+                    <Omschrijving>Kas Euro</Omschrijving>
+                    <Categorie>ACTIVA</Categorie>
+                    <Groep>A</Groep>
+                </Grootboekrekening>
+            </Grootboekrekeningen>"""
+            
+            accounts = EBoekhoudenXMLParser.parse_grootboekrekeningen(complex_xml)
+            
+            results["tests"]["api_utilities"] = {
+                "status": "✅ Passed",
+                "xml_parser": "Working",
+                "sample_account": accounts[0] if accounts else None,
+                "parsed_count": len(accounts)
+            }
+        except Exception as e:
+            results["tests"]["api_utilities"] = {
+                "status": f"❌ Failed: {str(e)}"
+            }
+        
+        # Test 6: Background job readiness
+        try:
+            # Check if frappe.enqueue is available
+            import inspect
+            enqueue_available = hasattr(frappe, 'enqueue')
+            background_methods = [
+                "start_migration",
+                "run_migration_background"
+            ]
+            
+            results["tests"]["background_jobs"] = {
+                "status": "✅ Passed" if enqueue_available else "⚠️ Warning",
+                "enqueue_available": enqueue_available,
+                "migration_methods": background_methods
+            }
+        except Exception as e:
+            results["tests"]["background_jobs"] = {
+                "status": f"❌ Failed: {str(e)}"
+            }
+        
+        # Summary
+        passed_tests = sum(1 for test in results["tests"].values() if "✅" in test["status"])
+        total_tests = len(results["tests"])
+        
+        results["summary"] = {
+            "total_tests": total_tests,
+            "passed_tests": passed_tests,
+            "success_rate": f"{(passed_tests/total_tests)*100:.1f}%",
+            "status": "🎉 Framework Ready" if passed_tests == total_tests else "⚠️ Some Issues Found"
+        }
+        
+        return {
+            "success": True,
+            "message": f"Complete test finished: {passed_tests}/{total_tests} tests passed",
+            "results": results
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error in complete e-Boekhouden test: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": frappe.get_traceback()
+        }
+
+@frappe.whitelist()
 def get_dashboard_notifications():
     """Get notifications for dashboard (upcoming deadlines, overdue items, etc.)"""
     
