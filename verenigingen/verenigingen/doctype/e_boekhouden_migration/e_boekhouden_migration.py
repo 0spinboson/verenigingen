@@ -13,6 +13,9 @@ import time
 class EBoekhoudenMigration(Document):
     def validate(self):
         """Validate migration settings"""
+        # Debug logging
+        frappe.log_error(f"Validating migration: {self.migration_name}, Status: {self.migration_status}", "Migration Validation")
+        
         if getattr(self, 'migrate_transactions', 0) and not (self.date_from and self.date_to):
             frappe.throw("Date range is required when migrating transactions")
         
@@ -21,6 +24,7 @@ class EBoekhoudenMigration(Document):
     
     def on_submit(self):
         """Start migration process when document is submitted"""
+        frappe.log_error(f"Migration submitted: {self.migration_name}, Status: {self.migration_status}", "Migration Submit")
         if self.migration_status == "Draft":
             self.start_migration()
     
@@ -51,7 +55,9 @@ class EBoekhoudenMigration(Document):
                 self.progress_percentage = 10
                 self.save()
                 
-                result = self.migrate_chart_of_accounts(settings)
+                # Use getattr to avoid field/method name conflict
+                migrate_method = getattr(self.__class__, 'migrate_chart_of_accounts')
+                result = migrate_method(self, settings)
                 migration_log.append(f"Chart of Accounts: {result}")
             
             # Phase 2: Cost Centers
@@ -60,7 +66,9 @@ class EBoekhoudenMigration(Document):
                 self.progress_percentage = 20
                 self.save()
                 
-                result = self.migrate_cost_centers(settings)
+                # Use getattr to avoid field/method name conflict
+                migrate_method = getattr(self.__class__, 'migrate_cost_centers')
+                result = migrate_method(self, settings)
                 migration_log.append(f"Cost Centers: {result}")
             
             # Phase 3: Customers
@@ -69,7 +77,9 @@ class EBoekhoudenMigration(Document):
                 self.progress_percentage = 40
                 self.save()
                 
-                result = self.migrate_customers(settings)
+                # Use getattr to avoid field/method name conflict
+                migrate_method = getattr(self.__class__, 'migrate_customers')
+                result = migrate_method(self, settings)
                 migration_log.append(f"Customers: {result}")
             
             # Phase 4: Suppliers
@@ -78,7 +88,9 @@ class EBoekhoudenMigration(Document):
                 self.progress_percentage = 60
                 self.save()
                 
-                result = self.migrate_suppliers(settings)
+                # Use getattr to avoid field/method name conflict
+                migrate_method = getattr(self.__class__, 'migrate_suppliers')
+                result = migrate_method(self, settings)
                 migration_log.append(f"Suppliers: {result}")
             
             # Phase 5: Transactions
@@ -87,8 +99,21 @@ class EBoekhoudenMigration(Document):
                 self.progress_percentage = 80
                 self.save()
                 
-                result = self.migrate_transactions_data(settings)
+                # Use getattr to avoid field/method name conflict
+                migrate_method = getattr(self.__class__, 'migrate_transactions_data')
+                result = migrate_method(self, settings)
                 migration_log.append(f"Transactions: {result}")
+            
+            # Phase 6: Stock Transactions
+            if getattr(self, 'migrate_stock_transactions', 0):
+                self.current_operation = "Migrating Stock Transactions..."
+                self.progress_percentage = 90
+                self.save()
+                
+                # Use getattr to avoid field/method name conflict
+                migrate_method = getattr(self.__class__, 'migrate_stock_transactions_data')
+                result = migrate_method(self, settings)
+                migration_log.append(f"Stock Transactions: {result}")
             
             # Completion
             self.migration_status = "Completed"
@@ -325,13 +350,46 @@ class EBoekhoudenMigration(Document):
                 else:
                     current_date = current_date.replace(month=current_date.month + 1, day=1)
             
+            # Prepare summary message
+            summary_parts = []
             if self.dry_run:
-                return f"Dry Run: Found {total_created} transactions to migrate"
+                summary_parts.append(f"Dry Run: Found {total_created} transactions to migrate")
             else:
-                return f"Created {total_created} journal entries"
+                summary_parts.append(f"Created {total_created} journal entries")
+            
+            # Add stock transaction information if any were skipped
+            if hasattr(self, 'skipped_stock_transactions') and self.skipped_stock_transactions > 0:
+                summary_parts.append(f"Skipped {self.skipped_stock_transactions} stock account transactions (require stock transactions, not journal entries)")
+            
+            return " | ".join(summary_parts)
                 
         except Exception as e:
             return f"Error migrating Transactions: {str(e)}"
+    
+    def migrate_stock_transactions_data(self, settings):
+        """Migrate Stock Transactions from e-Boekhouden"""
+        try:
+            from verenigingen.utils.stock_migration import StockTransactionMigrator
+            
+            # Create stock migrator
+            migrator = StockTransactionMigrator(self)
+            
+            # Set date range from migration settings
+            date_from = getdate(self.date_from) if self.date_from else None
+            date_to = getdate(self.date_to) if self.date_to else None
+            
+            # Run stock migration
+            result = migrator.migrate_stock_transactions(settings, date_from, date_to)
+            
+            # Update counters
+            self.total_records += (migrator.stock_transactions_created + migrator.stock_transactions_failed + migrator.stock_transactions_skipped)
+            self.imported_records += migrator.stock_transactions_created
+            self.failed_records += migrator.stock_transactions_failed
+            
+            return result
+            
+        except Exception as e:
+            return f"Error migrating Stock Transactions: {str(e)}"
     
     def parse_grootboekrekeningen_xml(self, xml_data):
         """Parse Chart of Accounts XML response"""
@@ -400,39 +458,85 @@ class EBoekhoudenMigration(Document):
                 self.log_error(f"Invalid account data: code={account_code}, name={account_name}")
                 return False
             
+            # Truncate account name if too long (ERPNext limit is 140 chars)
+            if len(account_name) > 120:  # Leave room for account code
+                account_name = account_name[:120] + "..."
+                self.log_error(f"Truncated long account name for {account_code}")
+            
+            # Create full account name with code
+            full_account_name = f"{account_code} - {account_name}"
+            if len(full_account_name) > 140:
+                # If still too long, truncate the description part more aggressively
+                max_desc_length = 140 - len(account_code) - 3  # 3 for " - "
+                account_name = account_name[:max_desc_length]
+                full_account_name = f"{account_code} - {account_name}"
+            
             # Check if account already exists
             if frappe.db.exists("Account", {"account_number": account_code}):
                 self.log_error(f"Account {account_code} already exists, skipping")
                 return False
             
-            # Map e-Boekhouden categories to ERPNext account types
-            account_type_mapping = {
-                'BTWRC': 'Tax',
-                'AF6': 'Tax', 
-                'AF19': 'Tax',
-                'AFOVERIG': 'Tax',
-                'VOOR': 'Tax',
-                'VW': 'Expense',
-                'BAL': 'Asset',
-                'FIN': 'Bank',
-                'KAS': 'Cash'
+            # Map e-Boekhouden categories to ERPNext account types and root types
+            # ERPNext valid account types: Bank, Cash, Receivable, Payable, Tax, etc.
+            category_mapping = {
+                'BTWRC': {'account_type': 'Tax', 'root_type': 'Liability'},
+                'AF6': {'account_type': 'Tax', 'root_type': 'Liability'}, 
+                'AF19': {'account_type': 'Tax', 'root_type': 'Liability'},
+                'AFOVERIG': {'account_type': 'Tax', 'root_type': 'Liability'},
+                'VOOR': {'account_type': 'Tax', 'root_type': 'Liability'},
+                'VW': {'account_type': '', 'root_type': 'Expense'},  # No specific type for general expense
+                'BAL': {'account_type': 'Fixed Asset', 'root_type': 'Asset'},  # Balance sheet assets
+                'FIN': {'account_type': 'Bank', 'root_type': 'Asset'},
+                'KAS': {'account_type': 'Cash', 'root_type': 'Asset'}
             }
             
-            account_type = account_type_mapping.get(category, 'Expense')  # Default to Expense
+            # Get mapping or default
+            mapping = category_mapping.get(category, {'account_type': '', 'root_type': 'Expense'})
+            account_type = mapping['account_type']
+            root_type = mapping['root_type']
             
-            # Determine root type based on account type
-            root_type_mapping = {
-                'Asset': 'Asset',
-                'Bank': 'Asset', 
-                'Cash': 'Asset',
-                'Liability': 'Liability',
-                'Equity': 'Equity',
-                'Income': 'Income',
-                'Expense': 'Expense',
-                'Tax': 'Liability'
-            }
-            
-            root_type = root_type_mapping.get(account_type, 'Expense')
+            # For account codes, try to infer type from the code itself if category mapping fails
+            if not account_type and account_code:
+                if account_code.startswith(('1', '2')):  # Asset accounts typically start with 1-2
+                    if account_code.startswith('15'):  # Bank accounts often 15xx
+                        account_type = 'Bank'
+                        root_type = 'Asset'
+                    elif account_code.startswith('16'):  # Cash accounts often 16xx
+                        account_type = 'Cash' 
+                        root_type = 'Asset'
+                    elif account_code.startswith('13'):  # Receivables often 13xx
+                        # Don't use 'Receivable' type to avoid party requirements in journal entries
+                        account_type = 'Current Asset'
+                        root_type = 'Asset'
+                    else:
+                        account_type = 'Current Asset'
+                        root_type = 'Asset'
+                elif account_code.startswith(('3', '4')):  # Asset/Liability accounts typically 3-4
+                    if account_code.startswith('30'):  # Inventory/Stock accounts often 30xx
+                        # Stock accounts require special handling - create as Current Asset for migration
+                        # but note that they should be converted to Stock type manually if needed
+                        account_type = 'Current Asset'
+                        root_type = 'Asset'
+                        self.log_error(f"Account {account_code} appears to be inventory - created as Current Asset, convert to Stock type manually if needed")
+                    elif account_code.startswith('44'):  # Payables often 44xx
+                        # Don't use 'Payable' type to avoid party requirements in journal entries
+                        account_type = 'Current Liability'
+                        root_type = 'Liability'
+                    elif account_code.startswith('4'):
+                        account_type = 'Current Liability'
+                        root_type = 'Liability'
+                    else:  # Account codes starting with 3 (non-30)
+                        account_type = 'Current Asset'
+                        root_type = 'Asset'
+                elif account_code.startswith('5'):  # Equity typically 5
+                    account_type = ''
+                    root_type = 'Equity'
+                elif account_code.startswith('8'):  # Income typically 8
+                    account_type = ''
+                    root_type = 'Income'
+                elif account_code.startswith(('6', '7')):  # Expenses typically 6-7
+                    account_type = ''
+                    root_type = 'Expense'
             
             # Get default company
             settings = frappe.get_single("E-Boekhouden Settings")
@@ -446,17 +550,22 @@ class EBoekhoudenMigration(Document):
             parent_account = self.get_parent_account(account_type, root_type, company)
             
             # Create new account
-            account = frappe.get_doc({
+            account_doc = {
                 'doctype': 'Account',
-                'account_name': account_name,
+                'account_name': full_account_name,  # Use the properly formatted name
                 'account_number': account_code,
                 'parent_account': parent_account,
                 'company': company,
-                'account_type': account_type if account_type != 'Expense' else None,
                 'root_type': root_type,
                 'is_group': 0,
                 'disabled': 0
-            })
+            }
+            
+            # Only set account_type if it's not empty (some accounts don't need a specific type)
+            if account_type:
+                account_doc['account_type'] = account_type
+            
+            account = frappe.get_doc(account_doc)
             
             account.insert(ignore_permissions=True)
             self.log_error(f"Created account: {account_code} - {account_name}")
@@ -469,12 +578,12 @@ class EBoekhoudenMigration(Document):
     def get_parent_account(self, account_type, root_type, company):
         """Get appropriate parent account for the new account"""
         try:
-            # Try to find existing parent accounts
+            # First, try to find existing parent accounts by type
             if account_type == 'Tax':
                 # Look for Tax Assets or Duties and Taxes
                 parent = frappe.db.get_value("Account", {
                     "company": company,
-                    "account_name": ["in", ["Tax Assets", "Duties and Taxes", "VAT"]],
+                    "account_name": ["in", ["Tax Assets", "Duties and Taxes", "VAT", "Current Liabilities"]],
                     "is_group": 1
                 }, "name")
                 if parent:
@@ -492,13 +601,26 @@ class EBoekhoudenMigration(Document):
             elif account_type == 'Cash':
                 parent = frappe.db.get_value("Account", {
                     "company": company,
-                    "account_type": "Cash",
+                    "account_type": "Cash", 
                     "is_group": 1
                 }, "name")
                 if parent:
                     return parent
             
-            # Fallback to root account based on root_type
+            # Fallback: Look for appropriate root account based on root_type
+            # Find a group account under the root type
+            parent_accounts = frappe.db.get_all("Account", {
+                "company": company,
+                "root_type": root_type,
+                "is_group": 1
+            }, ["name", "parent_account"], order_by="lft")
+            
+            # Return the first non-root group account, or root if no groups exist
+            for acc in parent_accounts:
+                if acc.parent_account:  # Not a root account
+                    return acc.name
+            
+            # If no non-root groups, return the root account
             root_account = frappe.db.get_value("Account", {
                 "company": company,
                 "root_type": root_type,
@@ -510,12 +632,11 @@ class EBoekhoudenMigration(Document):
             
         except Exception as e:
             self.log_error(f"Error finding parent account: {str(e)}")
-            # Return the first root account as last resort
+            # Return any group account as last resort
             return frappe.db.get_value("Account", {
                 "company": company,
-                "is_group": 1,
-                "parent_account": ""
-            }, "name")
+                "is_group": 1
+            }, "name", order_by="lft")
     
     def create_cost_center(self, cost_center_data):
         """Create Cost Center in ERPNext"""
@@ -529,17 +650,21 @@ class EBoekhoudenMigration(Document):
                 self.log_error(f"Invalid cost center data: no description")
                 return False
             
-            # Check if cost center already exists
-            if frappe.db.exists("Cost Center", {"cost_center_name": description}):
-                self.log_error(f"Cost Center '{description}' already exists, skipping")
-                return False
-            
             # Get default company
             settings = frappe.get_single("E-Boekhouden Settings")
             company = settings.default_company
             
             if not company:
                 self.log_error("No default company set in E-Boekhouden Settings")
+                return False
+            
+            # Check if cost center already exists
+            existing_cc = frappe.db.get_value("Cost Center", {
+                "cost_center_name": description,
+                "company": company
+            }, "name")
+            if existing_cc:
+                # Return False but don't log as error - this is expected for existing data
                 return False
             
             # Determine parent cost center
@@ -589,13 +714,17 @@ class EBoekhoudenMigration(Document):
             company_name = customer_data.get('companyName', '').strip()
             contact_name = customer_data.get('contactName', '').strip()
             email = customer_data.get('email', '').strip()
+            customer_id = customer_data.get('id', '')
             
-            # Use company name if available, otherwise contact name, otherwise name
+            # Use company name if available, otherwise contact name, otherwise name, otherwise ID
             display_name = company_name or contact_name or customer_name
             
             if not display_name:
-                self.log_error(f"Invalid customer data: no name available")
-                return False
+                if customer_id:
+                    display_name = f"Customer {customer_id}"
+                else:
+                    self.log_error(f"Invalid customer data: no name or ID available")
+                    return False
             
             # Check if customer already exists
             if frappe.db.exists("Customer", {"customer_name": display_name}):
@@ -641,13 +770,17 @@ class EBoekhoudenMigration(Document):
             company_name = supplier_data.get('companyName', '').strip()
             contact_name = supplier_data.get('contactName', '').strip()
             email = supplier_data.get('email', '').strip()
+            supplier_id = supplier_data.get('id', '')
             
-            # Use company name if available, otherwise contact name, otherwise name
+            # Use company name if available, otherwise contact name, otherwise name, otherwise ID
             display_name = company_name or contact_name or supplier_name
             
             if not display_name:
-                self.log_error(f"Invalid supplier data: no name available")
-                return False
+                if supplier_id:
+                    display_name = f"Supplier {supplier_id}"
+                else:
+                    self.log_error(f"Invalid supplier data: no name or ID available")
+                    return False
             
             # Check if supplier already exists
             if frappe.db.exists("Supplier", {"supplier_name": display_name}):
@@ -693,24 +826,65 @@ class EBoekhoudenMigration(Document):
         """Create Journal Entry in ERPNext"""
         try:
             # Map e-Boekhouden transaction to ERPNext journal entry
+            # e-Boekhouden API format: {id, type, date, invoiceNumber, ledgerId, amount, entryNumber}
             transaction_date = transaction_data.get('date', '')
-            description = transaction_data.get('description', '').strip()
-            debit_amount = float(transaction_data.get('debit', 0) or 0)
-            credit_amount = float(transaction_data.get('credit', 0) or 0)
-            account_code = transaction_data.get('accountCode', '')
+            ledger_id = transaction_data.get('ledgerId', '')
+            amount = float(transaction_data.get('amount', 0) or 0)
+            transaction_type = transaction_data.get('type', 0)  # 0=debit, 1=credit typically
+            invoice_number = transaction_data.get('invoiceNumber', '').strip()
+            entry_number = transaction_data.get('entryNumber', '').strip()
             
-            if not transaction_date or not description:
-                self.log_error(f"Invalid transaction data: missing date or description")
+            # Create description from available fields
+            description_parts = []
+            if invoice_number:
+                description_parts.append(f"Invoice: {invoice_number}")
+            if entry_number:
+                description_parts.append(f"Entry: {entry_number}")
+            if ledger_id:
+                description_parts.append(f"Ledger: {ledger_id}")
+            
+            description = " | ".join(description_parts) if description_parts else "Imported transaction"
+            
+            # Handle missing date
+            if not transaction_date:
+                self.log_error(f"Invalid transaction data: missing date for {description}")
                 return False
             
-            if debit_amount == 0 and credit_amount == 0:
-                self.log_error(f"Invalid transaction data: no amount specified")
+            # Skip zero-amount transactions
+            if amount == 0:
                 return False
+            
+            # Convert ledgerId to account code - need to look up in chart of accounts
+            account_code = self.get_account_code_from_ledger_id(ledger_id)
+            if not account_code:
+                self.log_error(f"Could not find account code for ledger ID {ledger_id}")
+                return False
+            
+            # Determine debit/credit based on type and amount
+            if transaction_type == 0:  # Assuming 0 = debit
+                debit_amount = amount
+                credit_amount = 0
+            else:  # 1 = credit
+                debit_amount = 0  
+                credit_amount = amount
             
             # Find the account in ERPNext
-            account = frappe.db.get_value("Account", {"account_number": account_code}, "name")
-            if not account:
+            account_details = frappe.db.get_value("Account", {"account_number": account_code}, 
+                                                 ["name", "account_type"], as_dict=True)
+            if not account_details:
                 self.log_error(f"Account {account_code} not found in ERPNext")
+                return False
+            
+            account = account_details.name
+            account_type = account_details.account_type
+            
+            # Skip stock accounts - they can only be updated via stock transactions
+            if account_type == "Stock":
+                self.log_error(f"Skipping stock account {account_code} - must be updated via stock transactions")
+                # Track skipped stock transactions
+                if not hasattr(self, 'skipped_stock_transactions'):
+                    self.skipped_stock_transactions = 0
+                self.skipped_stock_transactions += 1
                 return False
             
             # Get default settings
@@ -888,6 +1062,37 @@ class EBoekhoudenMigration(Document):
         except Exception as e:
             self.log_error(f"Failed to create address for supplier {supplier_name}: {str(e)}")
     
+    def get_account_code_from_ledger_id(self, ledger_id):
+        """Convert e-Boekhouden ledger ID to account code"""
+        try:
+            # First, try to get chart of accounts and build a mapping
+            if not hasattr(self, '_ledger_id_mapping'):
+                self._ledger_id_mapping = {}
+                
+                from verenigingen.utils.eboekhouden_api import EBoekhoudenAPI
+                settings = frappe.get_single("E-Boekhouden Settings")
+                api = EBoekhoudenAPI(settings)
+                
+                result = api.get_chart_of_accounts()
+                if result["success"]:
+                    import json
+                    data = json.loads(result["data"])
+                    accounts = data.get("items", [])
+                    
+                    # Build mapping of ledger ID to account code
+                    for account in accounts:
+                        account_id = account.get('id')
+                        account_code = account.get('code')
+                        if account_id and account_code:
+                            self._ledger_id_mapping[str(account_id)] = account_code
+            
+            # Look up the ledger ID in our mapping
+            return self._ledger_id_mapping.get(str(ledger_id))
+            
+        except Exception as e:
+            self.log_error(f"Error converting ledger ID {ledger_id} to account code: {str(e)}")
+            return None
+    
     def get_suspense_account(self, company):
         """Get or create suspense account for balancing entries"""
         try:
@@ -922,6 +1127,37 @@ class EBoekhoudenMigration(Document):
             self.log_error(f"Error finding suspense account: {str(e)}")
             return None
 
+
+@frappe.whitelist()
+def start_migration_api(migration_name, dry_run=1):
+    """API method to start migration process"""
+    try:
+        migration = frappe.get_doc("E-Boekhouden Migration", migration_name)
+        if migration.migration_status != "Draft":
+            return {"success": False, "error": "Migration must be in Draft status to start"}
+        
+        # Update migration settings and initialize counters
+        migration.dry_run = int(dry_run)
+        migration.migration_status = "In Progress"
+        migration.start_time = frappe.utils.now_datetime()
+        migration.current_operation = "Initializing migration..."
+        migration.progress_percentage = 0
+        
+        # Initialize counters - THIS IS THE FIX!
+        migration.total_records = 0
+        migration.imported_records = 0
+        migration.failed_records = 0
+        
+        migration.save()
+        
+        # Start migration directly without submission
+        migration.start_migration()
+        
+        return {"success": True, "message": "Migration started successfully"}
+        
+    except Exception as e:
+        frappe.log_error(f"Error starting migration: {str(e)}")
+        return {"success": False, "error": str(e)}
 
 @frappe.whitelist()
 def start_migration(migration_name):

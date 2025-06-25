@@ -3,27 +3,191 @@
 
 frappe.ui.form.on('E-Boekhouden Migration', {
 	refresh: function(frm) {
+		console.log('E-Boekhouden Migration refresh called', frm.doc);
+		console.log('Doc status:', frm.doc.docstatus, 'Migration status:', frm.doc.migration_status);
+		
 		// Add custom buttons based on status
 		if (frm.doc.docstatus === 0 && frm.doc.migration_status === 'Draft') {
-			frm.add_custom_button(__('Preview Migration'), function() {
-				// Set dry run and submit for preview
-				frm.set_value('dry_run', 1);
-				frm.save().then(() => {
-					frm.submit();
+			console.log('Adding buttons for Draft status');
+			
+			frm.add_custom_button(__('Test Connection'), function() {
+				console.log('Test Connection clicked');
+				frappe.call({
+					method: 'verenigingen.utils.eboekhouden_api.test_api_connection',
+					callback: function(r) {
+						if (r.message && r.message.success) {
+							frappe.show_alert({
+								message: __('✅ Connection successful! API is working.'),
+								indicator: 'green'
+							});
+						} else {
+							frappe.show_alert({
+								message: __('❌ Connection failed: ') + (r.message ? r.message.error : 'Unknown error'),
+								indicator: 'red'
+							});
+						}
+					}
 				});
+			}).addClass('btn-info');
+			
+			frm.add_custom_button(__('Preview Migration'), function() {
+				console.log('Preview Migration button clicked');
+				
+				// Simple validation
+				if (!frm.doc.migration_name) {
+					frappe.msgprint(__('Migration Name is required'));
+					return;
+				}
+				if (!frm.doc.company) {
+					frappe.msgprint(__('Company is required'));
+					return;
+				}
+				
+				console.log('Validation passed, showing confirm dialog');
+				frappe.confirm(
+					__('This will preview what data would be migrated without actually importing anything. Continue?'),
+					function() {
+						console.log('User confirmed preview migration');
+						
+						// Use direct API call instead of form submission
+						console.log('Starting preview migration via API...');
+						
+						frappe.call({
+							method: 'verenigingen.verenigingen.doctype.e_boekhouden_migration.e_boekhouden_migration.start_migration_api',
+							args: {
+								migration_name: frm.doc.name,
+								dry_run: 1
+							},
+							callback: function(r) {
+								console.log('API call completed, response:', r);
+								
+								if (r.message && r.message.success) {
+									console.log('Preview migration started successfully');
+									frappe.show_alert({
+										message: __('✅ Preview migration started successfully!'),
+										indicator: 'green'
+									});
+									
+									// Reload the form to show updated status
+									setTimeout(() => {
+										frm.reload_doc();
+									}, 1000);
+								} else {
+									console.error('Preview migration failed:', r.message);
+									frappe.show_alert({
+										message: __('❌ Preview migration failed: ') + (r.message ? r.message.error : 'Unknown error'),
+										indicator: 'red'
+									});
+								}
+							},
+							error: function(error) {
+								console.error('API call error:', error);
+								frappe.show_alert({
+									message: __('❌ API call failed: ') + (error.message || error),
+									indicator: 'red'
+								});
+							}
+						});
+					},
+					function() {
+						console.log('User cancelled preview migration');
+					}
+				);
 			}).addClass('btn-secondary');
 			
 			frm.add_custom_button(__('Start Migration'), function() {
+				console.log('Start Migration button clicked');
+				
+				// Simple validation
+				if (!frm.doc.migration_name) {
+					frappe.msgprint(__('Migration Name is required'));
+					return;
+				}
+				if (!frm.doc.company) {
+					frappe.msgprint(__('Company is required'));
+					return;
+				}
+				
 				frappe.confirm(
-					__('Are you sure you want to start the migration? This will import data from e-Boekhouden into ERPNext.'),
+					__('Are you sure you want to start the migration? This will import data from e-Boekhouden into ERPNext.<br><br><strong>This action cannot be undone!</strong>'),
 					function() {
-						frm.set_value('dry_run', 0);
-						frm.save().then(() => {
-							frm.submit();
+						console.log('User confirmed start migration');
+						
+						// Use direct API call instead of form submission
+						console.log('Starting actual migration via API...');
+						
+						frappe.call({
+							method: 'verenigingen.verenigingen.doctype.e_boekhouden_migration.e_boekhouden_migration.start_migration_api',
+							args: {
+								migration_name: frm.doc.name,
+								dry_run: 0
+							},
+							callback: function(r) {
+								console.log('API call completed, response:', r);
+								
+								if (r.message && r.message.success) {
+									console.log('Migration started successfully');
+									frappe.show_alert({
+										message: __('✅ Migration started successfully!'),
+										indicator: 'green'
+									});
+									
+									// Reload the form to show updated status
+									setTimeout(() => {
+										frm.reload_doc();
+									}, 1000);
+								} else {
+									console.error('Migration failed:', r.message);
+									frappe.show_alert({
+										message: __('❌ Migration failed: ') + (r.message ? r.message.error : 'Unknown error'),
+										indicator: 'red'
+									});
+								}
+							},
+							error: function(error) {
+								console.error('API call error:', error);
+								frappe.show_alert({
+									message: __('❌ API call failed: ') + (error.message || error),
+									indicator: 'red'
+								});
+							}
 						});
 					}
 				);
 			}).addClass('btn-primary');
+		} else if (frm.doc.migration_status === 'Failed') {
+			console.log('Adding reset button for Failed status');
+			frm.add_custom_button(__('Reset to Draft'), function() {
+				frappe.confirm(
+					__('This will reset the migration status to Draft so you can try again. Continue?'),
+					function() {
+						frappe.call({
+							method: 'frappe.client.set_value',
+							args: {
+								doctype: 'E-Boekhouden Migration',
+								name: frm.doc.name,
+								fieldname: {
+									'migration_status': 'Draft',
+									'error_log': '',
+									'current_operation': '',
+									'progress_percentage': 0
+								}
+							},
+							callback: function(r) {
+								if (r.message) {
+									frappe.show_alert({
+										message: __('Migration reset to Draft status'),
+										indicator: 'green'
+									});
+									frm.reload_doc();
+								}
+							}
+						});
+					}
+				);
+			}).addClass('btn-secondary');
+		} else {
+			console.log('Not adding buttons - docstatus:', frm.doc.docstatus, 'status:', frm.doc.migration_status);
 		}
 		
 		// Add progress refresh button if in progress
@@ -100,7 +264,7 @@ frappe.ui.form.on('E-Boekhouden Migration', {
 		
 		// Set help text based on status
 		if (frm.doc.migration_status === 'Draft') {
-			frm.set_intro(__('Configure your migration settings and click "Start Migration" to begin importing data from e-Boekhouden.'));
+			frm.set_intro(__('<strong>How to use:</strong><br>1. First click "Test Connection" to verify API settings<br>2. Click "Preview Migration" to see what would be imported (recommended)<br>3. Click "Start Migration" to perform the actual import'), 'blue');
 		} else if (frm.doc.migration_status === 'In Progress') {
 			frm.set_intro(__('Migration is currently running. Progress will be updated automatically.'));
 		} else if (frm.doc.migration_status === 'Completed') {

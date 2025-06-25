@@ -7,6 +7,7 @@ from frappe.utils import now_datetime, get_datetime, format_datetime
 import json
 
 class EBoekhoudenDashboard(Document):
+    @frappe.whitelist()
     def load_dashboard_data(self):
         """Load and update dashboard data"""
         try:
@@ -39,13 +40,13 @@ class EBoekhoudenDashboard(Document):
             settings = frappe.get_single("E-Boekhouden Settings")
             api = EBoekhoudenAPI(settings)
             
-            # Test connection
-            result = api.get_administrations()
+            # Test connection with a simple session token request
+            session_token = api.get_session_token()
             
-            if result["success"]:
+            if session_token:
                 self.connection_status = "✅ Connected"
             else:
-                self.connection_status = f"❌ Connection Failed: {result['error'][:50]}"
+                self.connection_status = "❌ Connection Failed: Unable to get session token"
                 
         except Exception as e:
             self.connection_status = f"❌ Error: {str(e)[:50]}"

@@ -21,6 +21,7 @@
   "migrate_customers",
   "migrate_suppliers",
   "migrate_transactions",
+  "migrate_stock_transactions",
   "dry_run",
   "progress_section",
   "progress_percentage",
@@ -115,6 +116,11 @@
    "fieldname": "migrate_transactions",
    "fieldtype": "Check",
    "label": "Migrate Transactions"
+  },
+  {
+   "fieldname": "migrate_stock_transactions",
+   "fieldtype": "Check",
+   "label": "Migrate Stock Transactions"
   },
   {
    "default": 1,

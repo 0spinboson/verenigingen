@@ -144,6 +144,22 @@ class EBoekhoudenAPI:
     def get_mutations(self, params=None):
         """Get Mutations (Transactions)"""
         return self.make_request("v1/mutation", params=params)
+    
+    def get_documents(self, params=None):
+        """Get Documents/Attachments"""
+        return self.make_request("v1/document", params=params)
+    
+    def get_invoice_documents(self, invoice_id, params=None):
+        """Get documents for a specific invoice"""
+        return self.make_request(f"v1/invoice/{invoice_id}/document", params=params)
+    
+    def download_document(self, document_id):
+        """Download a specific document"""
+        return self.make_request(f"v1/document/{document_id}/download")
+    
+    def get_invoice_detail(self, invoice_id):
+        """Get detailed invoice information including attachments"""
+        return self.make_request(f"v1/invoice/{invoice_id}")
 
 
 class EBoekhoudenXMLParser:
@@ -325,6 +341,78 @@ def update_api_url():
         }
 
 @frappe.whitelist()
+def test_ledger_id_mapping():
+    """Test the mapping between ledger IDs and account codes"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        api = EBoekhoudenAPI(settings)
+        
+        # Get chart of accounts
+        accounts_result = api.get_chart_of_accounts()
+        if not accounts_result["success"]:
+            return {"success": False, "error": "Failed to get chart of accounts"}
+        
+        accounts_data = json.loads(accounts_result["data"])
+        accounts = accounts_data.get("items", [])
+        
+        # Get sample transactions
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        last_month = today - timedelta(days=30)
+        
+        params = {
+            "dateFrom": last_month.strftime("%Y-%m-%d"),
+            "dateTo": today.strftime("%Y-%m-%d")
+        }
+        
+        transactions_result = api.get_mutations(params)
+        if not transactions_result["success"]:
+            return {"success": False, "error": "Failed to get transactions"}
+        
+        transactions_data = json.loads(transactions_result["data"])
+        transactions = transactions_data.get("items", [])
+        
+        # Build ledger ID to account code mapping
+        ledger_mapping = {}
+        for account in accounts:
+            account_id = account.get('id')
+            account_code = account.get('code')
+            if account_id and account_code:
+                ledger_mapping[str(account_id)] = account_code
+        
+        # Analyze first few transactions
+        analysis = {
+            "total_accounts": len(accounts),
+            "total_transactions": len(transactions),
+            "ledger_mapping_sample": dict(list(ledger_mapping.items())[:5]),
+            "transaction_analysis": []
+        }
+        
+        for i, trans in enumerate(transactions[:5]):
+            ledger_id = str(trans.get('ledgerId', ''))
+            account_code = ledger_mapping.get(ledger_id)
+            
+            trans_analysis = {
+                "transaction": trans,
+                "ledger_id": ledger_id,
+                "mapped_account_code": account_code,
+                "mapping_found": bool(account_code)
+            }
+            analysis["transaction_analysis"].append(trans_analysis)
+        
+        return {
+            "success": True,
+            "analysis": analysis
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing ledger ID mapping: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
 def test_session_token_only():
     """Test just the session token creation with detailed logging"""
     try:
@@ -414,6 +502,78 @@ def discover_api_structure():
         }
 
 @frappe.whitelist()
+def test_ledger_id_mapping():
+    """Test the mapping between ledger IDs and account codes"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        api = EBoekhoudenAPI(settings)
+        
+        # Get chart of accounts
+        accounts_result = api.get_chart_of_accounts()
+        if not accounts_result["success"]:
+            return {"success": False, "error": "Failed to get chart of accounts"}
+        
+        accounts_data = json.loads(accounts_result["data"])
+        accounts = accounts_data.get("items", [])
+        
+        # Get sample transactions
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        last_month = today - timedelta(days=30)
+        
+        params = {
+            "dateFrom": last_month.strftime("%Y-%m-%d"),
+            "dateTo": today.strftime("%Y-%m-%d")
+        }
+        
+        transactions_result = api.get_mutations(params)
+        if not transactions_result["success"]:
+            return {"success": False, "error": "Failed to get transactions"}
+        
+        transactions_data = json.loads(transactions_result["data"])
+        transactions = transactions_data.get("items", [])
+        
+        # Build ledger ID to account code mapping
+        ledger_mapping = {}
+        for account in accounts:
+            account_id = account.get('id')
+            account_code = account.get('code')
+            if account_id and account_code:
+                ledger_mapping[str(account_id)] = account_code
+        
+        # Analyze first few transactions
+        analysis = {
+            "total_accounts": len(accounts),
+            "total_transactions": len(transactions),
+            "ledger_mapping_sample": dict(list(ledger_mapping.items())[:5]),
+            "transaction_analysis": []
+        }
+        
+        for i, trans in enumerate(transactions[:5]):
+            ledger_id = str(trans.get('ledgerId', ''))
+            account_code = ledger_mapping.get(ledger_id)
+            
+            trans_analysis = {
+                "transaction": trans,
+                "ledger_id": ledger_id,
+                "mapped_account_code": account_code,
+                "mapping_found": bool(account_code)
+            }
+            analysis["transaction_analysis"].append(trans_analysis)
+        
+        return {
+            "success": True,
+            "analysis": analysis
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing ledger ID mapping: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
 def test_raw_request():
     """Test a raw HTTP request to understand the API better"""
     try:
@@ -481,6 +641,78 @@ def test_raw_request():
         }
 
 @frappe.whitelist()
+def test_ledger_id_mapping():
+    """Test the mapping between ledger IDs and account codes"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        api = EBoekhoudenAPI(settings)
+        
+        # Get chart of accounts
+        accounts_result = api.get_chart_of_accounts()
+        if not accounts_result["success"]:
+            return {"success": False, "error": "Failed to get chart of accounts"}
+        
+        accounts_data = json.loads(accounts_result["data"])
+        accounts = accounts_data.get("items", [])
+        
+        # Get sample transactions
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        last_month = today - timedelta(days=30)
+        
+        params = {
+            "dateFrom": last_month.strftime("%Y-%m-%d"),
+            "dateTo": today.strftime("%Y-%m-%d")
+        }
+        
+        transactions_result = api.get_mutations(params)
+        if not transactions_result["success"]:
+            return {"success": False, "error": "Failed to get transactions"}
+        
+        transactions_data = json.loads(transactions_result["data"])
+        transactions = transactions_data.get("items", [])
+        
+        # Build ledger ID to account code mapping
+        ledger_mapping = {}
+        for account in accounts:
+            account_id = account.get('id')
+            account_code = account.get('code')
+            if account_id and account_code:
+                ledger_mapping[str(account_id)] = account_code
+        
+        # Analyze first few transactions
+        analysis = {
+            "total_accounts": len(accounts),
+            "total_transactions": len(transactions),
+            "ledger_mapping_sample": dict(list(ledger_mapping.items())[:5]),
+            "transaction_analysis": []
+        }
+        
+        for i, trans in enumerate(transactions[:5]):
+            ledger_id = str(trans.get('ledgerId', ''))
+            account_code = ledger_mapping.get(ledger_id)
+            
+            trans_analysis = {
+                "transaction": trans,
+                "ledger_id": ledger_id,
+                "mapped_account_code": account_code,
+                "mapping_found": bool(account_code)
+            }
+            analysis["transaction_analysis"].append(trans_analysis)
+        
+        return {
+            "success": True,
+            "analysis": analysis
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing ledger ID mapping: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
 def test_correct_endpoints():
     """Test the correct API endpoints from Swagger documentation"""
     try:
@@ -522,6 +754,78 @@ def test_correct_endpoints():
         }
 
 @frappe.whitelist()
+def test_ledger_id_mapping():
+    """Test the mapping between ledger IDs and account codes"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        api = EBoekhoudenAPI(settings)
+        
+        # Get chart of accounts
+        accounts_result = api.get_chart_of_accounts()
+        if not accounts_result["success"]:
+            return {"success": False, "error": "Failed to get chart of accounts"}
+        
+        accounts_data = json.loads(accounts_result["data"])
+        accounts = accounts_data.get("items", [])
+        
+        # Get sample transactions
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        last_month = today - timedelta(days=30)
+        
+        params = {
+            "dateFrom": last_month.strftime("%Y-%m-%d"),
+            "dateTo": today.strftime("%Y-%m-%d")
+        }
+        
+        transactions_result = api.get_mutations(params)
+        if not transactions_result["success"]:
+            return {"success": False, "error": "Failed to get transactions"}
+        
+        transactions_data = json.loads(transactions_result["data"])
+        transactions = transactions_data.get("items", [])
+        
+        # Build ledger ID to account code mapping
+        ledger_mapping = {}
+        for account in accounts:
+            account_id = account.get('id')
+            account_code = account.get('code')
+            if account_id and account_code:
+                ledger_mapping[str(account_id)] = account_code
+        
+        # Analyze first few transactions
+        analysis = {
+            "total_accounts": len(accounts),
+            "total_transactions": len(transactions),
+            "ledger_mapping_sample": dict(list(ledger_mapping.items())[:5]),
+            "transaction_analysis": []
+        }
+        
+        for i, trans in enumerate(transactions[:5]):
+            ledger_id = str(trans.get('ledgerId', ''))
+            account_code = ledger_mapping.get(ledger_id)
+            
+            trans_analysis = {
+                "transaction": trans,
+                "ledger_id": ledger_id,
+                "mapped_account_code": account_code,
+                "mapping_found": bool(account_code)
+            }
+            analysis["transaction_analysis"].append(trans_analysis)
+        
+        return {
+            "success": True,
+            "analysis": analysis
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing ledger ID mapping: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
 def test_api_connection():
     """Test API connection and return sample data"""
     try:
@@ -544,6 +848,78 @@ def test_api_connection():
             
     except Exception as e:
         frappe.log_error(f"Error testing API connection: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
+def test_ledger_id_mapping():
+    """Test the mapping between ledger IDs and account codes"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        api = EBoekhoudenAPI(settings)
+        
+        # Get chart of accounts
+        accounts_result = api.get_chart_of_accounts()
+        if not accounts_result["success"]:
+            return {"success": False, "error": "Failed to get chart of accounts"}
+        
+        accounts_data = json.loads(accounts_result["data"])
+        accounts = accounts_data.get("items", [])
+        
+        # Get sample transactions
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        last_month = today - timedelta(days=30)
+        
+        params = {
+            "dateFrom": last_month.strftime("%Y-%m-%d"),
+            "dateTo": today.strftime("%Y-%m-%d")
+        }
+        
+        transactions_result = api.get_mutations(params)
+        if not transactions_result["success"]:
+            return {"success": False, "error": "Failed to get transactions"}
+        
+        transactions_data = json.loads(transactions_result["data"])
+        transactions = transactions_data.get("items", [])
+        
+        # Build ledger ID to account code mapping
+        ledger_mapping = {}
+        for account in accounts:
+            account_id = account.get('id')
+            account_code = account.get('code')
+            if account_id and account_code:
+                ledger_mapping[str(account_id)] = account_code
+        
+        # Analyze first few transactions
+        analysis = {
+            "total_accounts": len(accounts),
+            "total_transactions": len(transactions),
+            "ledger_mapping_sample": dict(list(ledger_mapping.items())[:5]),
+            "transaction_analysis": []
+        }
+        
+        for i, trans in enumerate(transactions[:5]):
+            ledger_id = str(trans.get('ledgerId', ''))
+            account_code = ledger_mapping.get(ledger_id)
+            
+            trans_analysis = {
+                "transaction": trans,
+                "ledger_id": ledger_id,
+                "mapped_account_code": account_code,
+                "mapping_found": bool(account_code)
+            }
+            analysis["transaction_analysis"].append(trans_analysis)
+        
+        return {
+            "success": True,
+            "analysis": analysis
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing ledger ID mapping: {str(e)}")
         return {
             "success": False,
             "error": str(e)
@@ -598,6 +974,78 @@ def preview_chart_of_accounts():
             "error": str(e)
         }
 
+@frappe.whitelist()
+def test_ledger_id_mapping():
+    """Test the mapping between ledger IDs and account codes"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        api = EBoekhoudenAPI(settings)
+        
+        # Get chart of accounts
+        accounts_result = api.get_chart_of_accounts()
+        if not accounts_result["success"]:
+            return {"success": False, "error": "Failed to get chart of accounts"}
+        
+        accounts_data = json.loads(accounts_result["data"])
+        accounts = accounts_data.get("items", [])
+        
+        # Get sample transactions
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        last_month = today - timedelta(days=30)
+        
+        params = {
+            "dateFrom": last_month.strftime("%Y-%m-%d"),
+            "dateTo": today.strftime("%Y-%m-%d")
+        }
+        
+        transactions_result = api.get_mutations(params)
+        if not transactions_result["success"]:
+            return {"success": False, "error": "Failed to get transactions"}
+        
+        transactions_data = json.loads(transactions_result["data"])
+        transactions = transactions_data.get("items", [])
+        
+        # Build ledger ID to account code mapping
+        ledger_mapping = {}
+        for account in accounts:
+            account_id = account.get('id')
+            account_code = account.get('code')
+            if account_id and account_code:
+                ledger_mapping[str(account_id)] = account_code
+        
+        # Analyze first few transactions
+        analysis = {
+            "total_accounts": len(accounts),
+            "total_transactions": len(transactions),
+            "ledger_mapping_sample": dict(list(ledger_mapping.items())[:5]),
+            "transaction_analysis": []
+        }
+        
+        for i, trans in enumerate(transactions[:5]):
+            ledger_id = str(trans.get('ledgerId', ''))
+            account_code = ledger_mapping.get(ledger_id)
+            
+            trans_analysis = {
+                "transaction": trans,
+                "ledger_id": ledger_id,
+                "mapped_account_code": account_code,
+                "mapping_found": bool(account_code)
+            }
+            analysis["transaction_analysis"].append(trans_analysis)
+        
+        return {
+            "success": True,
+            "analysis": analysis
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing ledger ID mapping: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
 
 @frappe.whitelist()
 def test_chart_of_accounts_migration():
@@ -612,6 +1060,11 @@ def test_chart_of_accounts_migration():
         migration.migrate_suppliers = 0
         migration.migrate_transactions = 0
         migration.dry_run = 1
+        
+        # Initialize counters
+        migration.total_records = 0
+        migration.imported_records = 0
+        migration.failed_records = 0
         
         # Get settings
         settings = frappe.get_single("E-Boekhouden Settings")
@@ -636,6 +1089,78 @@ def test_chart_of_accounts_migration():
         }
 
 @frappe.whitelist()
+def test_ledger_id_mapping():
+    """Test the mapping between ledger IDs and account codes"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        api = EBoekhoudenAPI(settings)
+        
+        # Get chart of accounts
+        accounts_result = api.get_chart_of_accounts()
+        if not accounts_result["success"]:
+            return {"success": False, "error": "Failed to get chart of accounts"}
+        
+        accounts_data = json.loads(accounts_result["data"])
+        accounts = accounts_data.get("items", [])
+        
+        # Get sample transactions
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        last_month = today - timedelta(days=30)
+        
+        params = {
+            "dateFrom": last_month.strftime("%Y-%m-%d"),
+            "dateTo": today.strftime("%Y-%m-%d")
+        }
+        
+        transactions_result = api.get_mutations(params)
+        if not transactions_result["success"]:
+            return {"success": False, "error": "Failed to get transactions"}
+        
+        transactions_data = json.loads(transactions_result["data"])
+        transactions = transactions_data.get("items", [])
+        
+        # Build ledger ID to account code mapping
+        ledger_mapping = {}
+        for account in accounts:
+            account_id = account.get('id')
+            account_code = account.get('code')
+            if account_id and account_code:
+                ledger_mapping[str(account_id)] = account_code
+        
+        # Analyze first few transactions
+        analysis = {
+            "total_accounts": len(accounts),
+            "total_transactions": len(transactions),
+            "ledger_mapping_sample": dict(list(ledger_mapping.items())[:5]),
+            "transaction_analysis": []
+        }
+        
+        for i, trans in enumerate(transactions[:5]):
+            ledger_id = str(trans.get('ledgerId', ''))
+            account_code = ledger_mapping.get(ledger_id)
+            
+            trans_analysis = {
+                "transaction": trans,
+                "ledger_id": ledger_id,
+                "mapped_account_code": account_code,
+                "mapping_found": bool(account_code)
+            }
+            analysis["transaction_analysis"].append(trans_analysis)
+        
+        return {
+            "success": True,
+            "analysis": analysis
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing ledger ID mapping: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
 def test_cost_center_migration():
     """Test Cost Center migration in dry-run mode"""
     try:
@@ -648,6 +1173,11 @@ def test_cost_center_migration():
         migration.migrate_suppliers = 0
         migration.migrate_transactions = 0
         migration.dry_run = 1
+        
+        # Initialize counters
+        migration.total_records = 0
+        migration.imported_records = 0
+        migration.failed_records = 0
         
         # Get settings
         settings = frappe.get_single("E-Boekhouden Settings")
@@ -666,6 +1196,78 @@ def test_cost_center_migration():
         
     except Exception as e:
         frappe.log_error(f"Error testing Cost Center migration: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
+def test_ledger_id_mapping():
+    """Test the mapping between ledger IDs and account codes"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        api = EBoekhoudenAPI(settings)
+        
+        # Get chart of accounts
+        accounts_result = api.get_chart_of_accounts()
+        if not accounts_result["success"]:
+            return {"success": False, "error": "Failed to get chart of accounts"}
+        
+        accounts_data = json.loads(accounts_result["data"])
+        accounts = accounts_data.get("items", [])
+        
+        # Get sample transactions
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        last_month = today - timedelta(days=30)
+        
+        params = {
+            "dateFrom": last_month.strftime("%Y-%m-%d"),
+            "dateTo": today.strftime("%Y-%m-%d")
+        }
+        
+        transactions_result = api.get_mutations(params)
+        if not transactions_result["success"]:
+            return {"success": False, "error": "Failed to get transactions"}
+        
+        transactions_data = json.loads(transactions_result["data"])
+        transactions = transactions_data.get("items", [])
+        
+        # Build ledger ID to account code mapping
+        ledger_mapping = {}
+        for account in accounts:
+            account_id = account.get('id')
+            account_code = account.get('code')
+            if account_id and account_code:
+                ledger_mapping[str(account_id)] = account_code
+        
+        # Analyze first few transactions
+        analysis = {
+            "total_accounts": len(accounts),
+            "total_transactions": len(transactions),
+            "ledger_mapping_sample": dict(list(ledger_mapping.items())[:5]),
+            "transaction_analysis": []
+        }
+        
+        for i, trans in enumerate(transactions[:5]):
+            ledger_id = str(trans.get('ledgerId', ''))
+            account_code = ledger_mapping.get(ledger_id)
+            
+            trans_analysis = {
+                "transaction": trans,
+                "ledger_id": ledger_id,
+                "mapped_account_code": account_code,
+                "mapping_found": bool(account_code)
+            }
+            analysis["transaction_analysis"].append(trans_analysis)
+        
+        return {
+            "success": True,
+            "analysis": analysis
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing ledger ID mapping: {str(e)}")
         return {
             "success": False,
             "error": str(e)
@@ -715,6 +1317,78 @@ def preview_customers():
             
     except Exception as e:
         frappe.log_error(f"Error previewing Customers: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
+def test_ledger_id_mapping():
+    """Test the mapping between ledger IDs and account codes"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        api = EBoekhoudenAPI(settings)
+        
+        # Get chart of accounts
+        accounts_result = api.get_chart_of_accounts()
+        if not accounts_result["success"]:
+            return {"success": False, "error": "Failed to get chart of accounts"}
+        
+        accounts_data = json.loads(accounts_result["data"])
+        accounts = accounts_data.get("items", [])
+        
+        # Get sample transactions
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        last_month = today - timedelta(days=30)
+        
+        params = {
+            "dateFrom": last_month.strftime("%Y-%m-%d"),
+            "dateTo": today.strftime("%Y-%m-%d")
+        }
+        
+        transactions_result = api.get_mutations(params)
+        if not transactions_result["success"]:
+            return {"success": False, "error": "Failed to get transactions"}
+        
+        transactions_data = json.loads(transactions_result["data"])
+        transactions = transactions_data.get("items", [])
+        
+        # Build ledger ID to account code mapping
+        ledger_mapping = {}
+        for account in accounts:
+            account_id = account.get('id')
+            account_code = account.get('code')
+            if account_id and account_code:
+                ledger_mapping[str(account_id)] = account_code
+        
+        # Analyze first few transactions
+        analysis = {
+            "total_accounts": len(accounts),
+            "total_transactions": len(transactions),
+            "ledger_mapping_sample": dict(list(ledger_mapping.items())[:5]),
+            "transaction_analysis": []
+        }
+        
+        for i, trans in enumerate(transactions[:5]):
+            ledger_id = str(trans.get('ledgerId', ''))
+            account_code = ledger_mapping.get(ledger_id)
+            
+            trans_analysis = {
+                "transaction": trans,
+                "ledger_id": ledger_id,
+                "mapped_account_code": account_code,
+                "mapping_found": bool(account_code)
+            }
+            analysis["transaction_analysis"].append(trans_analysis)
+        
+        return {
+            "success": True,
+            "analysis": analysis
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing ledger ID mapping: {str(e)}")
         return {
             "success": False,
             "error": str(e)
@@ -771,6 +1445,78 @@ def preview_suppliers():
         }
 
 @frappe.whitelist()
+def test_ledger_id_mapping():
+    """Test the mapping between ledger IDs and account codes"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        api = EBoekhoudenAPI(settings)
+        
+        # Get chart of accounts
+        accounts_result = api.get_chart_of_accounts()
+        if not accounts_result["success"]:
+            return {"success": False, "error": "Failed to get chart of accounts"}
+        
+        accounts_data = json.loads(accounts_result["data"])
+        accounts = accounts_data.get("items", [])
+        
+        # Get sample transactions
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        last_month = today - timedelta(days=30)
+        
+        params = {
+            "dateFrom": last_month.strftime("%Y-%m-%d"),
+            "dateTo": today.strftime("%Y-%m-%d")
+        }
+        
+        transactions_result = api.get_mutations(params)
+        if not transactions_result["success"]:
+            return {"success": False, "error": "Failed to get transactions"}
+        
+        transactions_data = json.loads(transactions_result["data"])
+        transactions = transactions_data.get("items", [])
+        
+        # Build ledger ID to account code mapping
+        ledger_mapping = {}
+        for account in accounts:
+            account_id = account.get('id')
+            account_code = account.get('code')
+            if account_id and account_code:
+                ledger_mapping[str(account_id)] = account_code
+        
+        # Analyze first few transactions
+        analysis = {
+            "total_accounts": len(accounts),
+            "total_transactions": len(transactions),
+            "ledger_mapping_sample": dict(list(ledger_mapping.items())[:5]),
+            "transaction_analysis": []
+        }
+        
+        for i, trans in enumerate(transactions[:5]):
+            ledger_id = str(trans.get('ledgerId', ''))
+            account_code = ledger_mapping.get(ledger_id)
+            
+            trans_analysis = {
+                "transaction": trans,
+                "ledger_id": ledger_id,
+                "mapped_account_code": account_code,
+                "mapping_found": bool(account_code)
+            }
+            analysis["transaction_analysis"].append(trans_analysis)
+        
+        return {
+            "success": True,
+            "analysis": analysis
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing ledger ID mapping: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
 def test_customer_migration():
     """Test Customer migration in dry-run mode"""
     try:
@@ -783,6 +1529,11 @@ def test_customer_migration():
         migration.migrate_suppliers = 0
         migration.migrate_transactions = 0
         migration.dry_run = 1
+        
+        # Initialize counters
+        migration.total_records = 0
+        migration.imported_records = 0
+        migration.failed_records = 0
         
         # Get settings
         settings = frappe.get_single("E-Boekhouden Settings")
@@ -807,6 +1558,78 @@ def test_customer_migration():
         }
 
 @frappe.whitelist()
+def test_ledger_id_mapping():
+    """Test the mapping between ledger IDs and account codes"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        api = EBoekhoudenAPI(settings)
+        
+        # Get chart of accounts
+        accounts_result = api.get_chart_of_accounts()
+        if not accounts_result["success"]:
+            return {"success": False, "error": "Failed to get chart of accounts"}
+        
+        accounts_data = json.loads(accounts_result["data"])
+        accounts = accounts_data.get("items", [])
+        
+        # Get sample transactions
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        last_month = today - timedelta(days=30)
+        
+        params = {
+            "dateFrom": last_month.strftime("%Y-%m-%d"),
+            "dateTo": today.strftime("%Y-%m-%d")
+        }
+        
+        transactions_result = api.get_mutations(params)
+        if not transactions_result["success"]:
+            return {"success": False, "error": "Failed to get transactions"}
+        
+        transactions_data = json.loads(transactions_result["data"])
+        transactions = transactions_data.get("items", [])
+        
+        # Build ledger ID to account code mapping
+        ledger_mapping = {}
+        for account in accounts:
+            account_id = account.get('id')
+            account_code = account.get('code')
+            if account_id and account_code:
+                ledger_mapping[str(account_id)] = account_code
+        
+        # Analyze first few transactions
+        analysis = {
+            "total_accounts": len(accounts),
+            "total_transactions": len(transactions),
+            "ledger_mapping_sample": dict(list(ledger_mapping.items())[:5]),
+            "transaction_analysis": []
+        }
+        
+        for i, trans in enumerate(transactions[:5]):
+            ledger_id = str(trans.get('ledgerId', ''))
+            account_code = ledger_mapping.get(ledger_id)
+            
+            trans_analysis = {
+                "transaction": trans,
+                "ledger_id": ledger_id,
+                "mapped_account_code": account_code,
+                "mapping_found": bool(account_code)
+            }
+            analysis["transaction_analysis"].append(trans_analysis)
+        
+        return {
+            "success": True,
+            "analysis": analysis
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing ledger ID mapping: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
 def test_supplier_migration():
     """Test Supplier migration in dry-run mode"""
     try:
@@ -819,6 +1642,11 @@ def test_supplier_migration():
         migration.migrate_suppliers = 1
         migration.migrate_transactions = 0
         migration.dry_run = 1
+        
+        # Initialize counters
+        migration.total_records = 0
+        migration.imported_records = 0
+        migration.failed_records = 0
         
         # Get settings
         settings = frappe.get_single("E-Boekhouden Settings")
@@ -837,6 +1665,78 @@ def test_supplier_migration():
         
     except Exception as e:
         frappe.log_error(f"Error testing Supplier migration: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
+def test_ledger_id_mapping():
+    """Test the mapping between ledger IDs and account codes"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        api = EBoekhoudenAPI(settings)
+        
+        # Get chart of accounts
+        accounts_result = api.get_chart_of_accounts()
+        if not accounts_result["success"]:
+            return {"success": False, "error": "Failed to get chart of accounts"}
+        
+        accounts_data = json.loads(accounts_result["data"])
+        accounts = accounts_data.get("items", [])
+        
+        # Get sample transactions
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        last_month = today - timedelta(days=30)
+        
+        params = {
+            "dateFrom": last_month.strftime("%Y-%m-%d"),
+            "dateTo": today.strftime("%Y-%m-%d")
+        }
+        
+        transactions_result = api.get_mutations(params)
+        if not transactions_result["success"]:
+            return {"success": False, "error": "Failed to get transactions"}
+        
+        transactions_data = json.loads(transactions_result["data"])
+        transactions = transactions_data.get("items", [])
+        
+        # Build ledger ID to account code mapping
+        ledger_mapping = {}
+        for account in accounts:
+            account_id = account.get('id')
+            account_code = account.get('code')
+            if account_id and account_code:
+                ledger_mapping[str(account_id)] = account_code
+        
+        # Analyze first few transactions
+        analysis = {
+            "total_accounts": len(accounts),
+            "total_transactions": len(transactions),
+            "ledger_mapping_sample": dict(list(ledger_mapping.items())[:5]),
+            "transaction_analysis": []
+        }
+        
+        for i, trans in enumerate(transactions[:5]):
+            ledger_id = str(trans.get('ledgerId', ''))
+            account_code = ledger_mapping.get(ledger_id)
+            
+            trans_analysis = {
+                "transaction": trans,
+                "ledger_id": ledger_id,
+                "mapped_account_code": account_code,
+                "mapping_found": bool(account_code)
+            }
+            analysis["transaction_analysis"].append(trans_analysis)
+        
+        return {
+            "success": True,
+            "analysis": analysis
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing ledger ID mapping: {str(e)}")
         return {
             "success": False,
             "error": str(e)
@@ -916,6 +1816,11 @@ def create_test_migration():
         }
 
 @frappe.whitelist()
+def get_dashboard_data_api():
+    """API endpoint for dashboard data (properly whitelisted)"""
+    return test_dashboard_data()
+
+@frappe.whitelist()
 def test_dashboard_data():
     """Test dashboard data collection without creating dashboard doc"""
     try:
@@ -983,3 +1888,337 @@ def test_dashboard_data():
             "error": str(e),
             "traceback": traceback.format_exc()
         }
+
+@frappe.whitelist()
+def debug_transaction_data():
+    """Debug transaction data from e-Boekhouden"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        api = EBoekhoudenAPI(settings)
+        
+        # Get a sample of transactions
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        last_month = today - timedelta(days=30)
+        
+        params = {
+            "dateFrom": last_month.strftime("%Y-%m-%d"),
+            "dateTo": today.strftime("%Y-%m-%d")
+        }
+        
+        result = api.get_mutations(params)
+        
+        if result["success"]:
+            data = json.loads(result["data"])
+            transactions = data.get("items", [])
+            
+            # Analyze the first few transactions
+            sample_analysis = []
+            for i, trans in enumerate(transactions[:5]):
+                analysis = {
+                    "index": i,
+                    "raw_data": trans,
+                    "date": trans.get("date"),
+                    "description": trans.get("description"),
+                    "debit": trans.get("debit"),
+                    "credit": trans.get("credit"),
+                    "account_code": trans.get("accountCode"),
+                    "has_date": bool(trans.get("date")),
+                    "has_description": bool(trans.get("description")),
+                    "has_amount": bool(trans.get("debit") or trans.get("credit"))
+                }
+                sample_analysis.append(analysis)
+            
+            return {
+                "success": True,
+                "total_transactions": len(transactions),
+                "sample_analysis": sample_analysis
+            }
+        else:
+            return {
+                "success": False,
+                "error": result["error"]
+            }
+            
+    except Exception as e:
+        frappe.log_error(f"Error debugging transaction data: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
+def test_ledger_id_mapping():
+    """Test the mapping between ledger IDs and account codes"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        api = EBoekhoudenAPI(settings)
+        
+        # Get chart of accounts
+        accounts_result = api.get_chart_of_accounts()
+        if not accounts_result["success"]:
+            return {"success": False, "error": "Failed to get chart of accounts"}
+        
+        accounts_data = json.loads(accounts_result["data"])
+        accounts = accounts_data.get("items", [])
+        
+        # Get sample transactions
+        from datetime import datetime, timedelta
+        today = datetime.now()
+        last_month = today - timedelta(days=30)
+        
+        params = {
+            "dateFrom": last_month.strftime("%Y-%m-%d"),
+            "dateTo": today.strftime("%Y-%m-%d")
+        }
+        
+        transactions_result = api.get_mutations(params)
+        if not transactions_result["success"]:
+            return {"success": False, "error": "Failed to get transactions"}
+        
+        transactions_data = json.loads(transactions_result["data"])
+        transactions = transactions_data.get("items", [])
+        
+        # Build ledger ID to account code mapping
+        ledger_mapping = {}
+        for account in accounts:
+            account_id = account.get('id')
+            account_code = account.get('code')
+            if account_id and account_code:
+                ledger_mapping[str(account_id)] = account_code
+        
+        # Analyze first few transactions
+        analysis = {
+            "total_accounts": len(accounts),
+            "total_transactions": len(transactions),
+            "ledger_mapping_sample": dict(list(ledger_mapping.items())[:5]),
+            "transaction_analysis": []
+        }
+        
+        for i, trans in enumerate(transactions[:5]):
+            ledger_id = str(trans.get('ledgerId', ''))
+            account_code = ledger_mapping.get(ledger_id)
+            
+            trans_analysis = {
+                "transaction": trans,
+                "ledger_id": ledger_id,
+                "mapped_account_code": account_code,
+                "mapping_found": bool(account_code)
+            }
+            analysis["transaction_analysis"].append(trans_analysis)
+        
+        return {
+            "success": True,
+            "analysis": analysis
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing ledger ID mapping: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+
+@frappe.whitelist()
+def fix_account_types():
+    """Fix migrated accounts that have party requirements"""
+    try:
+        # Find migrated accounts that are Receivable/Payable
+        receivable_accounts = frappe.db.get_all("Account", {
+            "account_type": "Receivable",
+            "account_number": ["!=", ""]
+        }, ["name", "account_name", "account_number"])
+        
+        payable_accounts = frappe.db.get_all("Account", {
+            "account_type": "Payable", 
+            "account_number": ["!=", ""]
+        }, ["name", "account_name", "account_number"])
+        
+        fixed_accounts = []
+        
+        # Fix Receivable accounts
+        for account in receivable_accounts:
+            frappe.db.set_value("Account", account.name, "account_type", "Current Asset")
+            fixed_accounts.append(f"{account.name} (Receivable → Current Asset)")
+        
+        # Fix Payable accounts
+        for account in payable_accounts:
+            frappe.db.set_value("Account", account.name, "account_type", "Current Liability")
+            fixed_accounts.append(f"{account.name} (Payable → Current Liability)")
+        
+        frappe.db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Fixed {len(fixed_accounts)} accounts",
+            "fixed_accounts": fixed_accounts
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error fixing account types: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+@frappe.whitelist()
+def test_document_retrieval():
+    """Test e-Boekhouden document/attachment retrieval capabilities"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        api = EBoekhoudenAPI(settings)
+        
+        results = {
+            "document_endpoints": {},
+            "invoice_sample": None,
+            "document_sample": None
+        }
+        
+        # Test general documents endpoint
+        try:
+            doc_result = api.get_documents()
+            results["document_endpoints"]["v1/document"] = {
+                "success": doc_result["success"],
+                "status_code": doc_result.get("status_code"),
+                "data_sample": doc_result["data"][:500] if doc_result["success"] else doc_result.get("error", "")
+            }
+        except Exception as e:
+            results["document_endpoints"]["v1/document"] = {"error": str(e)}
+        
+        # Get some invoices first to test document retrieval
+        try:
+            invoices_result = api.get_invoices({"limit": 5})
+            if invoices_result["success"]:
+                import json
+                invoices_data = json.loads(invoices_result["data"])
+                if "items" in invoices_data and invoices_data["items"]:
+                    first_invoice = invoices_data["items"][0]
+                    results["invoice_sample"] = {
+                        "id": first_invoice.get("id"),
+                        "number": first_invoice.get("number", first_invoice.get("invoiceNumber")),
+                        "keys": list(first_invoice.keys())
+                    }
+                    
+                    # Test invoice-specific document retrieval
+                    if "id" in first_invoice:
+                        try:
+                            invoice_docs = api.get_invoice_documents(first_invoice["id"])
+                            results["document_endpoints"]["v1/invoice/{id}/document"] = {
+                                "success": invoice_docs["success"],
+                                "status_code": invoice_docs.get("status_code"),
+                                "data_sample": invoice_docs["data"][:500] if invoice_docs["success"] else invoice_docs.get("error", "")
+                            }
+                        except Exception as e:
+                            results["document_endpoints"]["v1/invoice/{id}/document"] = {"error": str(e)}
+                        
+                        # Test detailed invoice info
+                        try:
+                            invoice_detail = api.get_invoice_detail(first_invoice["id"])
+                            results["document_endpoints"]["v1/invoice/{id}"] = {
+                                "success": invoice_detail["success"],
+                                "status_code": invoice_detail.get("status_code"),
+                                "data_sample": invoice_detail["data"][:500] if invoice_detail["success"] else invoice_detail.get("error", "")
+                            }
+                        except Exception as e:
+                            results["document_endpoints"]["v1/invoice/{id}"] = {"error": str(e)}
+                            
+        except Exception as e:
+            results["invoice_sample"] = {"error": str(e)}
+        
+        # Test if there are any endpoints with 'attachment', 'file', 'pdf' in the response
+        test_endpoints = [
+            "v1/attachment",
+            "v1/file", 
+            "v1/pdf",
+            "v1/upload",
+            "v1/download"
+        ]
+        
+        for endpoint in test_endpoints:
+            try:
+                test_result = api.make_request(endpoint)
+                results["document_endpoints"][endpoint] = {
+                    "success": test_result["success"],
+                    "status_code": test_result.get("status_code"),
+                    "data_sample": test_result["data"][:200] if test_result["success"] else test_result.get("error", "")[:200]
+                }
+            except Exception as e:
+                results["document_endpoints"][endpoint] = {"error": str(e)}
+        
+        return {
+            "success": True,
+            "results": results,
+            "summary": f"Tested {len(results['document_endpoints'])} document-related endpoints"
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing document retrieval: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+@frappe.whitelist()
+def explore_invoice_fields():
+    """Explore what fields are available in invoice data"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        api = EBoekhoudenAPI(settings)
+        
+        results = {}
+        
+        # Try different parameters to get invoice data
+        test_params = [
+            {"limit": 10},
+            {"limit": 50},
+            {"dateFrom": "2023-01-01", "dateTo": "2024-12-31", "limit": 20},
+            {"dateFrom": "2022-01-01", "dateTo": "2024-12-31", "limit": 20},
+            {}  # No params
+        ]
+        
+        for i, params in enumerate(test_params):
+            result = api.get_invoices(params)
+            
+            if result["success"]:
+                import json
+                data = json.loads(result["data"])
+                results[f"test_{i}"] = {
+                    "params": params,
+                    "success": True,
+                    "items_count": len(data.get("items", [])),
+                    "raw_sample": result["data"][:500] if len(result["data"]) > 500 else result["data"]
+                }
+                
+                # If we found items, analyze the first one in detail
+                if data.get("items"):
+                    first_item = data["items"][0]
+                    results[f"test_{i}"]["first_item_analysis"] = {
+                        "all_keys": list(first_item.keys()),
+                        "file_related_keys": [k for k in first_item.keys() if any(word in k.lower() for word in ['file', 'document', 'attachment', 'pdf', 'image', 'link', 'url', 'path'])],
+                        "full_first_item": first_item
+                    }
+                    # Stop after finding the first successful result with data
+                    break
+            else:
+                results[f"test_{i}"] = {
+                    "params": params,
+                    "success": False,
+                    "error": result.get("error"),
+                    "status_code": result.get("status_code")
+                }
+        
+        return {
+            "success": True,
+            "results": results
+        }
+            
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
