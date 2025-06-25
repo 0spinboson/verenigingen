@@ -29,7 +29,7 @@ frappe.ui.form.on('E-Boekhouden Settings', {
 			});
 		}).addClass('btn-primary');
 		
-		// Add test API call button
+		// Add test API call buttons
 		if (frm.doc.connection_status && frm.doc.connection_status.includes('✅')) {
 			frm.add_custom_button(__('Test Chart of Accounts'), function() {
 				frappe.call({
@@ -52,6 +52,34 @@ frappe.ui.form.on('E-Boekhouden Settings', {
 						} else {
 							frappe.msgprint({
 								title: 'API Test Failed',
+								message: r.message.error || 'Unknown error occurred',
+								indicator: 'red'
+							});
+						}
+					}
+				});
+			});
+			
+			frm.add_custom_button(__('Test Migration'), function() {
+				frappe.call({
+					method: 'verenigingen.utils.eboekhouden_api.test_chart_of_accounts_migration',
+					callback: function(r) {
+						if (r.message && r.message.success) {
+							frappe.msgprint({
+								title: 'Migration Test Results',
+								message: `
+									<div>
+										<p><strong>Result:</strong> ${r.message.result}</p>
+										<p><strong>Total Records:</strong> ${r.message.total_records}</p>
+										<p><strong>Would Import:</strong> ${r.message.imported_records}</p>
+										<p><strong>Failures:</strong> ${r.message.failed_records}</p>
+									</div>
+								`,
+								indicator: 'blue'
+							});
+						} else {
+							frappe.msgprint({
+								title: 'Migration Test Failed',
 								message: r.message.error || 'Unknown error occurred',
 								indicator: 'red'
 							});

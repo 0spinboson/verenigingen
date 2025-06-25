@@ -17,6 +17,7 @@
   "date_to",
   "column_break_7",
   "migrate_accounts",
+  "migrate_cost_centers",
   "migrate_customers",
   "migrate_suppliers",
   "migrate_transactions",
@@ -91,6 +92,12 @@
    "fieldname": "migrate_accounts",
    "fieldtype": "Check",
    "label": "Migrate Chart of Accounts"
+  },
+  {
+   "default": 1,
+   "fieldname": "migrate_cost_centers",
+   "fieldtype": "Check",
+   "label": "Migrate Cost Centers"
   },
   {
    "default": 1,

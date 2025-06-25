@@ -578,6 +578,78 @@ def preview_chart_of_accounts():
 
 
 @frappe.whitelist()
+def test_chart_of_accounts_migration():
+    """Test Chart of Accounts migration in dry-run mode"""
+    try:
+        # Create a temporary migration document for testing
+        migration = frappe.new_doc("E-Boekhouden Migration")
+        migration.migration_name = f"Test Migration {frappe.utils.now_datetime()}"
+        migration.migrate_accounts = 1
+        migration.migrate_cost_centers = 0
+        migration.migrate_customers = 0
+        migration.migrate_suppliers = 0
+        migration.migrate_transactions = 0
+        migration.dry_run = 1
+        
+        # Get settings
+        settings = frappe.get_single("E-Boekhouden Settings")
+        
+        # Run migration test
+        result = migration.migrate_chart_of_accounts(settings)
+        
+        return {
+            "success": True,
+            "message": "Chart of Accounts migration test completed",
+            "result": result,
+            "imported_records": getattr(migration, 'imported_records', 0),
+            "failed_records": getattr(migration, 'failed_records', 0),
+            "total_records": getattr(migration, 'total_records', 0)
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing Chart of Accounts migration: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
+def test_cost_center_migration():
+    """Test Cost Center migration in dry-run mode"""
+    try:
+        # Create a temporary migration document for testing
+        migration = frappe.new_doc("E-Boekhouden Migration")
+        migration.migration_name = f"Test Cost Center Migration {frappe.utils.now_datetime()}"
+        migration.migrate_accounts = 0
+        migration.migrate_cost_centers = 1
+        migration.migrate_customers = 0
+        migration.migrate_suppliers = 0
+        migration.migrate_transactions = 0
+        migration.dry_run = 1
+        
+        # Get settings
+        settings = frappe.get_single("E-Boekhouden Settings")
+        
+        # Run migration test
+        result = migration.migrate_cost_centers(settings)
+        
+        return {
+            "success": True,
+            "message": "Cost Center migration test completed",
+            "result": result,
+            "imported_records": getattr(migration, 'imported_records', 0),
+            "failed_records": getattr(migration, 'failed_records', 0),
+            "total_records": getattr(migration, 'total_records', 0)
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing Cost Center migration: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
 def preview_customers():
     """Preview Customers data"""
     try:

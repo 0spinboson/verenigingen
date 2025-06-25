@@ -97,7 +97,7 @@ okay, now for a conceptual question. I am currently using eboekhouden and would 
   4. Dry Run Mode - Preview what will be imported without creating records
 
   Phase 2: Master Data Migration
-
+api spec: https://api.e-boekhouden.nl/swagger/v1/swagger.json
   1. Chart of Accounts - Create account hierarchy
   2. Customers & Suppliers - Import business relations
   3. VAT Codes - Set up tax structure
