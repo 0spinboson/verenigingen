@@ -28,7 +28,7 @@ class EBoekhoudenMigration(Document):
         """Start the migration process"""
         try:
             self.migration_status = "In Progress"
-            self.start_time = now_datetime()
+            self.start_time = frappe.utils.now_datetime()
             self.current_operation = "Initializing migration..."
             self.progress_percentage = 0
             self.save()
@@ -94,14 +94,14 @@ class EBoekhoudenMigration(Document):
             self.migration_status = "Completed"
             self.current_operation = "Migration completed successfully"
             self.progress_percentage = 100
-            self.end_time = now_datetime()
+            self.end_time = frappe.utils.now_datetime()
             self.migration_summary = "\n".join(migration_log)
             self.save()
             
         except Exception as e:
             self.migration_status = "Failed"
             self.current_operation = f"Migration failed: {str(e)}"
-            self.end_time = now_datetime()
+            self.end_time = frappe.utils.now_datetime()
             self.error_log = frappe.get_traceback()
             self.save()
             frappe.log_error(f"E-Boekhouden migration failed: {str(e)}", "E-Boekhouden Migration")

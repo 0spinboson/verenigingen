@@ -30,7 +30,7 @@ def get_dashboard_data():
 		settings = frappe.get_single("E-Boekhouden Settings")
 		api = EBoekhoudenAPI(settings)
 		
-		connection_test = api.get_administrations()
+		connection_test = api.get_chart_of_accounts()
 		data["connection_status"] = "Connected" if connection_test["success"] else "Disconnected"
 		data["connection_error"] = connection_test.get("error", "") if not connection_test["success"] else ""
 		

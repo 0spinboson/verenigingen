@@ -605,7 +605,7 @@ def test_chart_of_accounts_migration():
     try:
         # Create a temporary migration document for testing
         migration = frappe.new_doc("E-Boekhouden Migration")
-        migration.migration_name = f"Test Migration {frappe.utils.now_datetime()}"
+        migration.migration_name = f"Test Migration {frappe.utils.now()}"
         migration.migrate_accounts = 1
         migration.migrate_cost_centers = 0
         migration.migrate_customers = 0
@@ -641,7 +641,7 @@ def test_cost_center_migration():
     try:
         # Create a temporary migration document for testing
         migration = frappe.new_doc("E-Boekhouden Migration")
-        migration.migration_name = f"Test Cost Center Migration {frappe.utils.now_datetime()}"
+        migration.migration_name = f"Test Cost Center Migration {frappe.utils.now()}"
         migration.migrate_accounts = 0
         migration.migrate_cost_centers = 1
         migration.migrate_customers = 0
@@ -776,7 +776,7 @@ def test_customer_migration():
     try:
         # Create a temporary migration document for testing
         migration = frappe.new_doc("E-Boekhouden Migration")
-        migration.migration_name = f"Test Customer Migration {frappe.utils.now_datetime()}"
+        migration.migration_name = f"Test Customer Migration {frappe.utils.now()}"
         migration.migrate_accounts = 0
         migration.migrate_cost_centers = 0
         migration.migrate_customers = 1
@@ -812,7 +812,7 @@ def test_supplier_migration():
     try:
         # Create a temporary migration document for testing
         migration = frappe.new_doc("E-Boekhouden Migration")
-        migration.migration_name = f"Test Supplier Migration {frappe.utils.now_datetime()}"
+        migration.migration_name = f"Test Supplier Migration {frappe.utils.now()}"
         migration.migrate_accounts = 0
         migration.migrate_cost_centers = 0
         migration.migrate_customers = 0
@@ -854,3 +854,132 @@ def update_dashboard_data_periodically():
             
     except Exception as e:
         frappe.log_error(f"Error in periodic dashboard update: {str(e)}", "E-Boekhouden Dashboard")
+
+@frappe.whitelist()
+def test_simple_migration():
+    """Simple test to isolate migration issue"""
+    try:
+        # Create a very basic migration document
+        migration = frappe.new_doc("E-Boekhouden Migration")
+        migration.migration_name = "Simple Test"
+        migration.migrate_accounts = 0
+        migration.migrate_cost_centers = 0
+        migration.migrate_customers = 1
+        migration.migrate_suppliers = 0
+        migration.migrate_transactions = 0
+        migration.dry_run = 1
+        
+        return {
+            "success": True,
+            "message": "Simple migration document created successfully"
+        }
+        
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@frappe.whitelist()
+def create_test_migration():
+    """Create a test migration record for dashboard testing"""
+    try:
+        companies = frappe.get_all('Company', limit=1)
+        if not companies:
+            return {"success": False, "error": "No company found"}
+            
+        migration = frappe.new_doc('E-Boekhouden Migration')
+        migration.migration_name = 'Dashboard Test Migration'
+        migration.company = companies[0].name
+        migration.migrate_accounts = 1
+        migration.dry_run = 1
+        migration.migration_status = 'Completed'
+        migration.total_records = 100
+        migration.imported_records = 95
+        migration.failed_records = 5
+        migration.insert()
+        
+        return {
+            "success": True,
+            "message": f"Created test migration: {migration.name}",
+            "migration_name": migration.name
+        }
+        
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
+@frappe.whitelist()
+def test_dashboard_data():
+    """Test dashboard data collection without creating dashboard doc"""
+    try:
+        # Test migration statistics
+        migration_stats = {
+            "total": frappe.db.count("E-Boekhouden Migration"),
+            "completed": frappe.db.count("E-Boekhouden Migration", {"migration_status": "Completed"}),
+            "in_progress": frappe.db.count("E-Boekhouden Migration", {"migration_status": "In Progress"}),
+            "failed": frappe.db.count("E-Boekhouden Migration", {"migration_status": "Failed"}),
+            "draft": frappe.db.count("E-Boekhouden Migration", {"migration_status": "Draft"})
+        }
+        
+        # Test API connection
+        from verenigingen.utils.eboekhouden_api import EBoekhoudenAPI
+        settings = frappe.get_single("E-Boekhouden Settings")
+        api = EBoekhoudenAPI(settings)
+        connection_test = api.get_chart_of_accounts()
+        connection_status = "Connected" if connection_test["success"] else "Disconnected"
+        
+        # Test available data counts
+        available_data = {
+            "accounts": 0,
+            "cost_centers": 0,
+            "customers": 0,
+            "suppliers": 0
+        }
+        
+        if connection_test["success"]:
+            # Chart of Accounts
+            result = api.get_chart_of_accounts()
+            if result["success"]:
+                import json
+                data = json.loads(result["data"])
+                available_data["accounts"] = len(data.get("items", []))
+            
+            # Cost Centers
+            result = api.get_cost_centers()
+            if result["success"]:
+                data = json.loads(result["data"])
+                available_data["cost_centers"] = len(data.get("items", []))
+            
+            # Customers
+            result = api.get_customers()
+            if result["success"]:
+                data = json.loads(result["data"])
+                available_data["customers"] = len(data.get("items", []))
+            
+            # Suppliers
+            result = api.get_suppliers()
+            if result["success"]:
+                data = json.loads(result["data"])
+                available_data["suppliers"] = len(data.get("items", []))
+        
+        return {
+            "success": True,
+            "migration_stats": migration_stats,
+            "connection_status": connection_status,
+            "available_data": available_data
+        }
+        
+    except Exception as e:
+        import traceback
+        return {
+            "success": False,
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
