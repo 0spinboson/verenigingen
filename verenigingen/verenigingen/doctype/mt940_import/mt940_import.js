@@ -80,10 +80,20 @@ frappe.ui.form.on('MT940 Import', {
 		// Show import results if completed
 		if (frm.doc.import_status === 'Completed') {
 			frm.add_custom_button(__('View Bank Transactions'), function() {
-				frappe.set_route('List', 'Bank Transaction', {
-					'bank_account': frm.doc.bank_account,
-					'creation': ['>', frappe.datetime.add_days(frm.doc.creation, -1)]
-				});
+				// Use statement date range if available, otherwise fall back to creation date
+				let filters = {
+					'bank_account': frm.doc.bank_account
+				};
+				
+				if (frm.doc.statement_from_date && frm.doc.statement_to_date) {
+					// Use the actual statement date range
+					filters['date'] = ['between', [frm.doc.statement_from_date, frm.doc.statement_to_date]];
+				} else {
+					// Fallback to creation date range
+					filters['creation'] = ['>', frappe.datetime.add_days(frm.doc.creation, -1)];
+				}
+				
+				frappe.set_route('List', 'Bank Transaction', filters);
 			});
 		}
 		

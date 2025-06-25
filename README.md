@@ -45,13 +45,11 @@ This app is designed to be installed in a Frappe/ERPNext environment:
 The app requires:
 - ERPNext to be installed and configured
 - Payments app for financial transactions
-<<<<<<< HEAD
 - HRMS installed
 - CRM installed
-=======
 - CRM app
 - HRMS app
->>>>>>> refs/remotes/origin/uitzetten
+- (Alyf-de) Banking app for reconciliation
 - Proper site configuration for association settings
 
 ## Development
