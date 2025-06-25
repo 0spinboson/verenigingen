@@ -5,19 +5,27 @@ frappe.ui.form.on('E-Boekhouden Settings', {
 	refresh: function(frm) {
 		// Add custom buttons for testing
 		frm.add_custom_button(__('Test Connection'), function() {
-			frm.call('test_connection').then(r => {
-				if (r.message && r.message.success) {
-					frappe.show_alert({
-						message: __('Connection test successful!'),
-						indicator: 'green'
-					});
-				} else {
-					frappe.show_alert({
-						message: __('Connection test failed. Check your credentials.'),
-						indicator: 'red'
-					});
+			if (!frm.doc.api_token) {
+				frappe.msgprint(__('Please enter your API token first.'));
+				return;
+			}
+			
+			frappe.call({
+				method: 'verenigingen.verenigingen.doctype.e_boekhouden_settings.e_boekhouden_settings.test_connection',
+				callback: function(r) {
+					if (r.message && r.message.success) {
+						frappe.show_alert({
+							message: __('Connection test successful!'),
+							indicator: 'green'
+						});
+					} else {
+						frappe.show_alert({
+							message: __('Connection test failed. Check your API token.'),
+							indicator: 'red'
+						});
+					}
+					frm.reload_doc();
 				}
-				frm.reload_doc();
 			});
 		}).addClass('btn-primary');
 		
@@ -25,7 +33,7 @@ frappe.ui.form.on('E-Boekhouden Settings', {
 		if (frm.doc.connection_status && frm.doc.connection_status.includes('✅')) {
 			frm.add_custom_button(__('Test Chart of Accounts'), function() {
 				frappe.call({
-					method: 'verenigingen.verenigingen.doctype.e_boekhouden_settings.e_boekhouden_settings.get_grootboekrekeningen',
+					method: 'verenigingen.utils.eboekhouden_api.preview_chart_of_accounts',
 					callback: function(r) {
 						if (r.message && r.message.success) {
 							let dialog = new frappe.ui.Dialog({
@@ -33,8 +41,8 @@ frappe.ui.form.on('E-Boekhouden Settings', {
 								fields: [{
 									fieldtype: 'HTML',
 									options: `<div class="text-muted">
-										<h5>API Response Preview:</h5>
-										<pre style="max-height: 400px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 3px;">${r.message.data_preview}</pre>
+										<h5>Found ${r.message.total_count} accounts:</h5>
+										<pre style="max-height: 400px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 3px;">${JSON.stringify(r.message.accounts, null, 2)}</pre>
 									</div>`
 								}],
 								primary_action_label: 'Close',
@@ -54,13 +62,6 @@ frappe.ui.form.on('E-Boekhouden Settings', {
 		}
 	},
 	
-	test_connection: function(frm) {
-		// Handle test connection button click
-		frm.call('test_connection').then(r => {
-			frm.reload_doc();
-		});
-	},
-	
 	default_company: function(frm) {
 		// Auto-set cost center when company changes
 		if (frm.doc.default_company) {
@@ -78,5 +79,5 @@ frappe.ui.form.on('E-Boekhouden Settings', {
 
 // Add help text
 frappe.ui.form.on('E-Boekhouden Settings', 'onload', function(frm) {
-	frm.set_intro(__('Configure your e-Boekhouden API credentials to enable data migration to ERPNext. You can find your API credentials in your e-Boekhouden account settings.'));
+	frm.set_intro(__('Configure your e-Boekhouden API token to enable data migration to ERPNext. You can find your API token in your e-Boekhouden account settings under "API Access" or "Integrations".'));
 });

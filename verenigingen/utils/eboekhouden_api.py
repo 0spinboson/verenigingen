@@ -21,28 +21,55 @@ class EBoekhoudenAPI:
             settings = frappe.get_single("E-Boekhouden Settings")
         
         self.settings = settings
-        self.base_url = settings.api_url
-        self.username = settings.username
-        self.security_code1 = settings.get_password('security_code1')
-        self.security_code2 = settings.get_password('security_code2')
+        self.base_url = settings.api_url.rstrip('/')  # Remove trailing slash
+        self.api_token = settings.get_password('api_token')
         self.source = settings.source_application or 'Verenigingen ERPNext'
     
-    def make_request(self, mode, additional_params=None):
-        """Make API request to e-Boekhouden"""
+    def get_session_token(self):
+        """Get session token using API token"""
         try:
-            data = {
-                'UserName': self.username,
-                'SecurityCode1': self.security_code1,
-                'SecurityCode2': self.security_code2,
-                'Source': self.source
+            session_url = f"{self.base_url}/v1/session"
+            session_data = {
+                "accessToken": self.api_token,
+                "source": self.source
             }
             
-            if additional_params:
-                data.update(additional_params)
+            response = requests.post(session_url, json=session_data, timeout=30)
             
-            url = f"{self.base_url}?mode={mode}"
+            if response.status_code == 200:
+                session_response = response.json()
+                return session_response.get("token")
+            else:
+                frappe.log_error(f"Session token request failed: {response.status_code} - {response.text}")
+                return None
+                
+        except Exception as e:
+            frappe.log_error(f"Error getting session token: {str(e)}")
+            return None
+    
+    def make_request(self, endpoint, method="GET", params=None):
+        """Make API request to e-Boekhouden"""
+        try:
+            # Get session token first
+            session_token = self.get_session_token()
+            if not session_token:
+                return {
+                    "success": False,
+                    "error": "Failed to get session token"
+                }
             
-            response = requests.post(url, data=data, timeout=120)
+            headers = {
+                'Authorization': session_token,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+            
+            url = f"{self.base_url}/{endpoint}"
+            
+            if method.upper() == "GET":
+                response = requests.get(url, headers=headers, params=params, timeout=120)
+            else:
+                response = requests.post(url, headers=headers, json=params, timeout=120)
             
             if response.status_code == 200:
                 return {
@@ -69,27 +96,32 @@ class EBoekhoudenAPI:
             }
     
     def get_chart_of_accounts(self):
-        """Get Chart of Accounts (Grootboekrekeningen)"""
-        return self.make_request("Grootboekrekeningen")
+        """Get Chart of Accounts (Ledgers)"""
+        return self.make_request("v1/ledger")
     
-    def get_customers(self):
-        """Get Customers (Relations with type C)"""
-        return self.make_request("Relaties", {"Type": "C"})
+    def get_cost_centers(self):
+        """Get Cost Centers"""
+        return self.make_request("v1/costcenter")
     
-    def get_suppliers(self):
-        """Get Suppliers (Relations with type L)"""
-        return self.make_request("Relaties", {"Type": "L"})
+    def get_invoices(self, params=None):
+        """Get Invoices"""
+        return self.make_request("v1/invoice", params=params)
     
-    def get_transactions(self, date_from, date_to):
-        """Get Transactions (Mutaties) for date range"""
-        return self.make_request("Mutaties", {
-            "OpenDat": date_from.strftime("%d-%m-%Y"),
-            "SluitDat": date_to.strftime("%d-%m-%Y")
-        })
+    def get_invoice_templates(self):
+        """Get Invoice Templates"""
+        return self.make_request("v1/invoicetemplate")
     
-    def get_vat_codes(self):
-        """Get VAT codes (BtwCodes)"""
-        return self.make_request("BtwCodes")
+    def get_email_templates(self):
+        """Get Email Templates"""
+        return self.make_request("v1/emailtemplate")
+    
+    def get_administrations(self):
+        """Get Administrations"""
+        return self.make_request("v1/administration")
+    
+    def get_linked_administrations(self):
+        """Get Linked Administrations"""
+        return self.make_request("v1/administration/linked")
 
 
 class EBoekhoudenXMLParser:
@@ -214,13 +246,267 @@ class EBoekhoudenXMLParser:
 
 
 @frappe.whitelist()
+def debug_settings():
+    """Debug E-Boekhouden Settings"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        
+        # Check basic fields
+        result = {
+            "settings_exists": True,
+            "api_url": settings.api_url,
+            "source_application": settings.source_application,
+            "api_token_field_populated": bool(settings.get("api_token")),
+        }
+        
+        # Try to get the password
+        try:
+            token = settings.get_password('api_token')
+            result["api_token_password_accessible"] = bool(token)
+            if token:
+                result["token_length"] = len(token)
+        except Exception as e:
+            result["password_error"] = str(e)
+        
+        # Check raw database value
+        raw_token = frappe.db.get_value("E-Boekhouden Settings", "E-Boekhouden Settings", "api_token")
+        result["raw_token_exists"] = bool(raw_token)
+        
+        return result
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "settings_exists": False
+        }
+
+@frappe.whitelist()
+def update_api_url():
+    """Update API URL to the correct modern endpoint"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        settings.api_url = "https://api.e-boekhouden.nl"
+        settings.source_application = "ERPNext"  # Standard source format
+        settings.save()
+        
+        return {
+            "success": True,
+            "message": "API URL and source updated",
+            "new_url": settings.api_url,
+            "new_source": settings.source_application
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
+def test_session_token_only():
+    """Test just the session token creation with detailed logging"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        
+        session_url = f"{settings.api_url}/v1/session"
+        session_data = {
+            "accessToken": settings.get_password("api_token"),
+            "source": settings.source_application or "ERPNext"
+        }
+        
+        frappe.log_error(f"Testing session token with URL: {session_url}")
+        frappe.log_error(f"Session data: {{'accessToken': '***', 'source': '{session_data['source']}'}}")
+        
+        response = requests.post(session_url, json=session_data, timeout=30)
+        
+        result = {
+            "url": session_url,
+            "source": session_data["source"],
+            "status_code": response.status_code,
+            "response_text": response.text[:1000],  # First 1000 chars
+            "headers": dict(response.headers)
+        }
+        
+        if response.status_code == 200:
+            try:
+                json_response = response.json()
+                result["session_token_received"] = bool(json_response.get("sessionToken"))
+                result["success"] = True
+            except:
+                result["json_parse_error"] = True
+                result["success"] = False
+        else:
+            result["success"] = False
+        
+        return result
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "exception_type": type(e).__name__
+        }
+
+@frappe.whitelist()
+def discover_api_structure():
+    """Try to discover the API structure by testing various approaches"""
+    try:
+        api = EBoekhoudenAPI()
+        
+        # Test basic endpoints and root paths
+        discovery_tests = [
+            ("", "Root"),
+            ("v1", "Version 1 root"),
+            ("api", "API root"),
+            ("api/v1", "API v1 root"),
+            ("swagger.json", "Swagger spec"),
+            ("swagger/v1/swagger.json", "Swagger v1 spec"),
+            ("docs", "Documentation"),
+            ("health", "Health check"),
+            ("status", "Status check")
+        ]
+        
+        results = {}
+        
+        for endpoint, description in discovery_tests:
+            result = api.make_request(endpoint)
+            results[endpoint] = {
+                "description": description,
+                "success": result["success"],
+                "status_code": result.get("status_code"),
+                "error": result.get("error"),
+                "response_preview": result.get("data", "")[:500] if result["success"] else None
+            }
+        
+        return {
+            "success": True,
+            "message": "API discovery completed",
+            "results": results
+        }
+            
+    except Exception as e:
+        frappe.log_error(f"Error discovering API structure: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
+def test_raw_request():
+    """Test a raw HTTP request to understand the API better"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        
+        # Get session token
+        session_url = f"{settings.api_url}/v1/session"
+        session_data = {
+            "accessToken": settings.get_password("api_token"),
+            "source": settings.source_application or "ERPNext"
+        }
+        
+        session_response = requests.post(session_url, json=session_data, timeout=30)
+        
+        if session_response.status_code != 200:
+            return {
+                "success": False,
+                "error": f"Session token failed: {session_response.status_code} - {session_response.text}"
+            }
+        
+        token = session_response.json().get("token")
+        
+        # Try a simple GET to the base API URL with the token
+        headers = {
+            'Authorization': token,
+            'Accept': 'application/json'
+        }
+        
+        # Test different base URLs
+        test_urls = [
+            f"{settings.api_url}/",
+            f"{settings.api_url}/v1/",
+            f"{settings.api_url}/api/",
+            f"{settings.api_url}/swagger.json"
+        ]
+        
+        results = {}
+        
+        for test_url in test_urls:
+            try:
+                response = requests.get(test_url, headers=headers, timeout=15)
+                results[test_url] = {
+                    "status_code": response.status_code,
+                    "content_type": response.headers.get("content-type", ""),
+                    "content_length": len(response.text),
+                    "response_preview": response.text[:500],
+                    "success": response.status_code == 200
+                }
+            except Exception as e:
+                results[test_url] = {
+                    "error": str(e),
+                    "success": False
+                }
+        
+        return {
+            "success": True,
+            "token_obtained": bool(token),
+            "test_results": results
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
+def test_correct_endpoints():
+    """Test the correct API endpoints from Swagger documentation"""
+    try:
+        api = EBoekhoudenAPI()
+        
+        # Test all available endpoints
+        endpoint_tests = [
+            ("v1/administration", "Administrations"),
+            ("v1/ledger", "Chart of Accounts"),
+            ("v1/costcenter", "Cost Centers"),
+            ("v1/invoice", "Invoices"),
+            ("v1/invoicetemplate", "Invoice Templates"),
+            ("v1/emailtemplate", "Email Templates")
+        ]
+        
+        results = {}
+        
+        for endpoint, description in endpoint_tests:
+            result = api.make_request(endpoint)
+            results[endpoint] = {
+                "description": description,
+                "success": result["success"],
+                "status_code": result.get("status_code"),
+                "error": result.get("error"),
+                "data_preview": result.get("data", "")[:300] if result["success"] else None
+            }
+        
+        return {
+            "success": True,
+            "message": "Endpoint testing completed with correct endpoints",
+            "results": results
+        }
+            
+    except Exception as e:
+        frappe.log_error(f"Error testing correct endpoints: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
 def test_api_connection():
     """Test API connection and return sample data"""
     try:
         api = EBoekhoudenAPI()
         
-        # Test with VAT codes (simplest API call)
-        result = api.get_vat_codes()
+        # Test with Chart of Accounts using correct endpoint
+        result = api.get_chart_of_accounts()
         
         if result["success"]:
             return {
@@ -250,14 +536,33 @@ def preview_chart_of_accounts():
         result = api.get_chart_of_accounts()
         
         if result["success"]:
-            accounts = EBoekhoudenXMLParser.parse_grootboekrekeningen(result["data"])
-            
-            return {
-                "success": True,
-                "message": f"Found {len(accounts)} accounts",
-                "accounts": accounts[:10],  # First 10 for preview
-                "total_count": len(accounts)
-            }
+            # Parse JSON response instead of XML
+            try:
+                data = json.loads(result["data"])
+                accounts = data.get("items", [])
+                
+                # Convert to simplified format
+                simplified_accounts = []
+                for account in accounts[:10]:  # First 10 for preview
+                    simplified_accounts.append({
+                        'id': account.get('id'),
+                        'code': account.get('code'),
+                        'description': account.get('description'),
+                        'category': account.get('category'),
+                        'group': account.get('group', '')
+                    })
+                
+                return {
+                    "success": True,
+                    "message": f"Found {len(accounts)} accounts",
+                    "accounts": simplified_accounts,
+                    "total_count": len(accounts)
+                }
+            except json.JSONDecodeError as e:
+                return {
+                    "success": False,
+                    "error": f"Failed to parse API response: {str(e)}"
+                }
         else:
             return {
                 "success": False,
