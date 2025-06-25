@@ -192,31 +192,40 @@ class EBoekhoudenMigration(Document):
     def migrate_customers(self, settings):
         """Migrate Customers from e-Boekhouden"""
         try:
-            # Get Relations data with customer filter
-            result = settings.get_api_data("Relaties", {"Type": "C"})  # C = Customer
+            from verenigingen.utils.eboekhouden_api import EBoekhoudenAPI
+            
+            # Get Customers data using new API
+            api = EBoekhoudenAPI(settings)
+            result = api.get_customers()
             
             if not result["success"]:
                 return f"Failed to fetch Customers: {result['error']}"
             
-            # Parse XML response  
-            customers_data = self.parse_relaties_xml(result["data"])
+            # Parse JSON response
+            import json
+            data = json.loads(result["data"])
+            customers_data = data.get("items", [])
             
             if self.dry_run:
                 return f"Dry Run: Found {len(customers_data)} customers to migrate"
             
             # Create customers in ERPNext
             created_count = 0
+            skipped_count = 0
+            
             for customer_data in customers_data:
                 try:
-                    self.create_customer(customer_data)
-                    created_count += 1
-                    self.imported_records += 1
+                    if self.create_customer(customer_data):
+                        created_count += 1
+                        self.imported_records += 1
+                    else:
+                        skipped_count += 1
                 except Exception as e:
                     self.failed_records += 1
-                    frappe.log_error(f"Failed to create customer {customer_data.get('code', 'Unknown')}: {str(e)}")
+                    self.log_error(f"Failed to create customer {customer_data.get('name', 'Unknown')}: {str(e)}")
             
             self.total_records += len(customers_data)
-            return f"Created {created_count} customers ({len(customers_data)} total)"
+            return f"Created {created_count} customers, skipped {skipped_count} ({len(customers_data)} total)"
             
         except Exception as e:
             return f"Error migrating Customers: {str(e)}"
@@ -224,31 +233,40 @@ class EBoekhoudenMigration(Document):
     def migrate_suppliers(self, settings):
         """Migrate Suppliers from e-Boekhouden"""
         try:
-            # Get Relations data with supplier filter
-            result = settings.get_api_data("Relaties", {"Type": "L"})  # L = Leverancier (Supplier)
+            from verenigingen.utils.eboekhouden_api import EBoekhoudenAPI
+            
+            # Get Suppliers data using new API
+            api = EBoekhoudenAPI(settings)
+            result = api.get_suppliers()
             
             if not result["success"]:
                 return f"Failed to fetch Suppliers: {result['error']}"
             
-            # Parse XML response
-            suppliers_data = self.parse_relaties_xml(result["data"])
+            # Parse JSON response
+            import json
+            data = json.loads(result["data"])
+            suppliers_data = data.get("items", [])
             
             if self.dry_run:
                 return f"Dry Run: Found {len(suppliers_data)} suppliers to migrate"
             
             # Create suppliers in ERPNext
             created_count = 0
+            skipped_count = 0
+            
             for supplier_data in suppliers_data:
                 try:
-                    self.create_supplier(supplier_data)
-                    created_count += 1
-                    self.imported_records += 1
+                    if self.create_supplier(supplier_data):
+                        created_count += 1
+                        self.imported_records += 1
+                    else:
+                        skipped_count += 1
                 except Exception as e:
                     self.failed_records += 1
-                    frappe.log_error(f"Failed to create supplier {supplier_data.get('code', 'Unknown')}: {str(e)}")
+                    self.log_error(f"Failed to create supplier {supplier_data.get('name', 'Unknown')}: {str(e)}")
             
             self.total_records += len(suppliers_data)
-            return f"Created {created_count} suppliers ({len(suppliers_data)} total)"
+            return f"Created {created_count} suppliers, skipped {skipped_count} ({len(suppliers_data)} total)"
             
         except Exception as e:
             return f"Error migrating Suppliers: {str(e)}"
@@ -256,6 +274,11 @@ class EBoekhoudenMigration(Document):
     def migrate_transactions_data(self, settings):
         """Migrate Transactions from e-Boekhouden"""
         try:
+            from verenigingen.utils.eboekhouden_api import EBoekhoudenAPI
+            
+            # Get Mutations data using new API
+            api = EBoekhoudenAPI(settings)
+            
             # Process transactions in monthly batches to avoid large data loads
             current_date = getdate(self.date_from)
             end_date = getdate(self.date_to)
@@ -270,14 +293,18 @@ class EBoekhoudenMigration(Document):
                 
                 month_end = min(month_end, end_date)
                 
-                # Get transactions for this month
-                result = settings.get_api_data("Mutaties", {
-                    "OpenDat": current_date.strftime("%d-%m-%Y"),
-                    "SluitDat": month_end.strftime("%d-%m-%Y")
-                })
+                # Get transactions for this month using new API
+                params = {
+                    "dateFrom": current_date.strftime("%Y-%m-%d"),
+                    "dateTo": month_end.strftime("%Y-%m-%d")
+                }
+                result = api.get_mutations(params)
                 
                 if result["success"]:
-                    transactions_data = self.parse_mutaties_xml(result["data"])
+                    # Parse JSON response
+                    import json
+                    data = json.loads(result["data"])
+                    transactions_data = data.get("items", [])
                     
                     if self.dry_run:
                         total_created += len(transactions_data)
@@ -285,12 +312,12 @@ class EBoekhoudenMigration(Document):
                         # Create journal entries
                         for transaction_data in transactions_data:
                             try:
-                                self.create_journal_entry(transaction_data)
-                                total_created += 1
-                                self.imported_records += 1
+                                if self.create_journal_entry(transaction_data):
+                                    total_created += 1
+                                    self.imported_records += 1
                             except Exception as e:
                                 self.failed_records += 1
-                                frappe.log_error(f"Failed to create transaction: {str(e)}")
+                                self.log_error(f"Failed to create transaction: {str(e)}")
                 
                 # Move to next month
                 if current_date.month == 12:
@@ -556,18 +583,344 @@ class EBoekhoudenMigration(Document):
     
     def create_customer(self, customer_data):
         """Create Customer in ERPNext"""
-        # Implementation for creating customers
-        pass
+        try:
+            # Map e-Boekhouden relation to ERPNext customer
+            customer_name = customer_data.get('name', '').strip()
+            company_name = customer_data.get('companyName', '').strip()
+            contact_name = customer_data.get('contactName', '').strip()
+            email = customer_data.get('email', '').strip()
+            
+            # Use company name if available, otherwise contact name, otherwise name
+            display_name = company_name or contact_name or customer_name
+            
+            if not display_name:
+                self.log_error(f"Invalid customer data: no name available")
+                return False
+            
+            # Check if customer already exists
+            if frappe.db.exists("Customer", {"customer_name": display_name}):
+                self.log_error(f"Customer '{display_name}' already exists, skipping")
+                return False
+            
+            # Get default settings
+            settings = frappe.get_single("E-Boekhouden Settings")
+            
+            # Create new customer
+            customer = frappe.get_doc({
+                'doctype': 'Customer',
+                'customer_name': display_name,
+                'customer_type': 'Company' if company_name else 'Individual',
+                'customer_group': 'All Customer Groups',  # Default customer group
+                'territory': 'All Territories',  # Default territory
+                'default_currency': settings.default_currency or 'EUR',
+                'disabled': 0
+            })
+            
+            customer.insert(ignore_permissions=True)
+            
+            # Create contact if contact details are available
+            if contact_name or email:
+                self.create_contact_for_customer(customer.name, customer_data)
+            
+            # Create address if address details are available
+            if any([customer_data.get('address'), customer_data.get('city'), customer_data.get('postalCode')]):
+                self.create_address_for_customer(customer.name, customer_data)
+            
+            self.log_error(f"Created customer: {display_name}")
+            return True
+            
+        except Exception as e:
+            self.log_error(f"Failed to create customer {display_name}: {str(e)}")
+            return False
     
     def create_supplier(self, supplier_data):
         """Create Supplier in ERPNext"""
-        # Implementation for creating suppliers
-        pass
+        try:
+            # Map e-Boekhouden relation to ERPNext supplier
+            supplier_name = supplier_data.get('name', '').strip()
+            company_name = supplier_data.get('companyName', '').strip()
+            contact_name = supplier_data.get('contactName', '').strip()
+            email = supplier_data.get('email', '').strip()
+            
+            # Use company name if available, otherwise contact name, otherwise name
+            display_name = company_name or contact_name or supplier_name
+            
+            if not display_name:
+                self.log_error(f"Invalid supplier data: no name available")
+                return False
+            
+            # Check if supplier already exists
+            if frappe.db.exists("Supplier", {"supplier_name": display_name}):
+                self.log_error(f"Supplier '{display_name}' already exists, skipping")
+                return False
+            
+            # Get default settings
+            settings = frappe.get_single("E-Boekhouden Settings")
+            
+            # Create new supplier
+            supplier = frappe.get_doc({
+                'doctype': 'Supplier',
+                'supplier_name': display_name,
+                'supplier_type': 'Company' if company_name else 'Individual',
+                'supplier_group': 'All Supplier Groups',  # Default supplier group
+                'default_currency': settings.default_currency or 'EUR',
+                'disabled': 0
+            })
+            
+            # Add VAT number if available
+            vat_number = supplier_data.get('vatNumber', '').strip()
+            if vat_number:
+                supplier.tax_id = vat_number
+            
+            supplier.insert(ignore_permissions=True)
+            
+            # Create contact if contact details are available
+            if contact_name or email:
+                self.create_contact_for_supplier(supplier.name, supplier_data)
+            
+            # Create address if address details are available
+            if any([supplier_data.get('address'), supplier_data.get('city'), supplier_data.get('postalCode')]):
+                self.create_address_for_supplier(supplier.name, supplier_data)
+            
+            self.log_error(f"Created supplier: {display_name}")
+            return True
+            
+        except Exception as e:
+            self.log_error(f"Failed to create supplier {display_name}: {str(e)}")
+            return False
     
     def create_journal_entry(self, transaction_data):
         """Create Journal Entry in ERPNext"""
-        # Implementation for creating journal entries
-        pass
+        try:
+            # Map e-Boekhouden transaction to ERPNext journal entry
+            transaction_date = transaction_data.get('date', '')
+            description = transaction_data.get('description', '').strip()
+            debit_amount = float(transaction_data.get('debit', 0) or 0)
+            credit_amount = float(transaction_data.get('credit', 0) or 0)
+            account_code = transaction_data.get('accountCode', '')
+            
+            if not transaction_date or not description:
+                self.log_error(f"Invalid transaction data: missing date or description")
+                return False
+            
+            if debit_amount == 0 and credit_amount == 0:
+                self.log_error(f"Invalid transaction data: no amount specified")
+                return False
+            
+            # Find the account in ERPNext
+            account = frappe.db.get_value("Account", {"account_number": account_code}, "name")
+            if not account:
+                self.log_error(f"Account {account_code} not found in ERPNext")
+                return False
+            
+            # Get default settings
+            settings = frappe.get_single("E-Boekhouden Settings")
+            company = settings.default_company
+            
+            if not company:
+                self.log_error("No default company set in E-Boekhouden Settings")
+                return False
+            
+            # Parse transaction date
+            try:
+                from datetime import datetime
+                if 'T' in transaction_date:
+                    posting_date = datetime.strptime(transaction_date.split('T')[0], '%Y-%m-%d').date()
+                else:
+                    posting_date = datetime.strptime(transaction_date, '%Y-%m-%d').date()
+            except ValueError:
+                self.log_error(f"Invalid date format: {transaction_date}")
+                return False
+            
+            # Create journal entry
+            journal_entry = frappe.get_doc({
+                'doctype': 'Journal Entry',
+                'company': company,
+                'posting_date': posting_date,
+                'voucher_type': 'Journal Entry',
+                'user_remark': f"Migrated from e-Boekhouden: {description}",
+                'accounts': []
+            })
+            
+            # Add the account entry
+            journal_entry.append('accounts', {
+                'account': account,
+                'debit_in_account_currency': debit_amount if debit_amount > 0 else 0,
+                'credit_in_account_currency': credit_amount if credit_amount > 0 else 0,
+                'user_remark': description,
+                'cost_center': settings.default_cost_center
+            })
+            
+            # For balance, we need to create a balancing entry
+            # This is a simplified approach - in reality you'd need to group transactions properly
+            if debit_amount > 0:
+                # Find a suitable contra account (e.g., suspense account)
+                contra_account = self.get_suspense_account(company)
+                if contra_account:
+                    journal_entry.append('accounts', {
+                        'account': contra_account,
+                        'credit_in_account_currency': debit_amount,
+                        'user_remark': f"Contra entry for: {description}",
+                        'cost_center': settings.default_cost_center
+                    })
+            elif credit_amount > 0:
+                # Find a suitable contra account
+                contra_account = self.get_suspense_account(company)
+                if contra_account:
+                    journal_entry.append('accounts', {
+                        'account': contra_account,
+                        'debit_in_account_currency': credit_amount,
+                        'user_remark': f"Contra entry for: {description}",
+                        'cost_center': settings.default_cost_center
+                    })
+            
+            if len(journal_entry.accounts) < 2:
+                self.log_error(f"Could not create balanced journal entry for transaction: {description}")
+                return False
+            
+            journal_entry.insert(ignore_permissions=True)
+            self.log_error(f"Created journal entry: {description}")
+            return True
+            
+        except Exception as e:
+            self.log_error(f"Failed to create journal entry: {str(e)}")
+            return False
+    
+    def create_contact_for_customer(self, customer_name, customer_data):
+        """Create contact for customer"""
+        try:
+            contact_name = customer_data.get('contactName', '').strip()
+            email = customer_data.get('email', '').strip()
+            phone = customer_data.get('phone', '').strip()
+            
+            if not contact_name and not email:
+                return
+            
+            contact = frappe.get_doc({
+                'doctype': 'Contact',
+                'first_name': contact_name or email.split('@')[0],
+                'email_ids': [{'email_id': email, 'is_primary': 1}] if email else [],
+                'phone_nos': [{'phone': phone, 'is_primary_phone': 1}] if phone else [],
+                'links': [{'link_doctype': 'Customer', 'link_name': customer_name}]
+            })
+            
+            contact.insert(ignore_permissions=True)
+            self.log_error(f"Created contact for customer: {customer_name}")
+            
+        except Exception as e:
+            self.log_error(f"Failed to create contact for customer {customer_name}: {str(e)}")
+    
+    def create_contact_for_supplier(self, supplier_name, supplier_data):
+        """Create contact for supplier"""
+        try:
+            contact_name = supplier_data.get('contactName', '').strip()
+            email = supplier_data.get('email', '').strip()
+            phone = supplier_data.get('phone', '').strip()
+            
+            if not contact_name and not email:
+                return
+            
+            contact = frappe.get_doc({
+                'doctype': 'Contact',
+                'first_name': contact_name or email.split('@')[0],
+                'email_ids': [{'email_id': email, 'is_primary': 1}] if email else [],
+                'phone_nos': [{'phone': phone, 'is_primary_phone': 1}] if phone else [],
+                'links': [{'link_doctype': 'Supplier', 'link_name': supplier_name}]
+            })
+            
+            contact.insert(ignore_permissions=True)
+            self.log_error(f"Created contact for supplier: {supplier_name}")
+            
+        except Exception as e:
+            self.log_error(f"Failed to create contact for supplier {supplier_name}: {str(e)}")
+    
+    def create_address_for_customer(self, customer_name, customer_data):
+        """Create address for customer"""
+        try:
+            address_line1 = customer_data.get('address', '').strip()
+            city = customer_data.get('city', '').strip()
+            postal_code = customer_data.get('postalCode', '').strip()
+            country = customer_data.get('country', 'Netherlands').strip()
+            
+            if not address_line1 and not city:
+                return
+            
+            address = frappe.get_doc({
+                'doctype': 'Address',
+                'address_title': f"{customer_name} Address",
+                'address_line1': address_line1,
+                'city': city,
+                'pincode': postal_code,
+                'country': country,
+                'links': [{'link_doctype': 'Customer', 'link_name': customer_name}]
+            })
+            
+            address.insert(ignore_permissions=True)
+            self.log_error(f"Created address for customer: {customer_name}")
+            
+        except Exception as e:
+            self.log_error(f"Failed to create address for customer {customer_name}: {str(e)}")
+    
+    def create_address_for_supplier(self, supplier_name, supplier_data):
+        """Create address for supplier"""
+        try:
+            address_line1 = supplier_data.get('address', '').strip()
+            city = supplier_data.get('city', '').strip()
+            postal_code = supplier_data.get('postalCode', '').strip()
+            country = supplier_data.get('country', 'Netherlands').strip()
+            
+            if not address_line1 and not city:
+                return
+            
+            address = frappe.get_doc({
+                'doctype': 'Address',
+                'address_title': f"{supplier_name} Address",
+                'address_line1': address_line1,
+                'city': city,
+                'pincode': postal_code,
+                'country': country,
+                'links': [{'link_doctype': 'Supplier', 'link_name': supplier_name}]
+            })
+            
+            address.insert(ignore_permissions=True)
+            self.log_error(f"Created address for supplier: {supplier_name}")
+            
+        except Exception as e:
+            self.log_error(f"Failed to create address for supplier {supplier_name}: {str(e)}")
+    
+    def get_suspense_account(self, company):
+        """Get or create suspense account for balancing entries"""
+        try:
+            # Try to find existing suspense account
+            suspense_account = frappe.db.get_value("Account", {
+                "company": company,
+                "account_name": ["like", "%suspense%"]
+            }, "name")
+            
+            if suspense_account:
+                return suspense_account
+            
+            # If not found, look for temporary account
+            temp_account = frappe.db.get_value("Account", {
+                "company": company,
+                "account_name": ["like", "%temporary%"]
+            }, "name")
+            
+            if temp_account:
+                return temp_account
+            
+            # As last resort, return the first liability account
+            liability_account = frappe.db.get_value("Account", {
+                "company": company,
+                "root_type": "Liability",
+                "is_group": 0
+            }, "name")
+            
+            return liability_account
+            
+        except Exception as e:
+            self.log_error(f"Error finding suspense account: {str(e)}")
+            return None
 
 
 @frappe.whitelist()

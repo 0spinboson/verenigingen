@@ -122,6 +122,28 @@ class EBoekhoudenAPI:
     def get_linked_administrations(self):
         """Get Linked Administrations"""
         return self.make_request("v1/administration/linked")
+    
+    def get_relations(self, params=None):
+        """Get Relations (Customers/Suppliers)"""
+        return self.make_request("v1/relation", params=params)
+    
+    def get_customers(self, params=None):
+        """Get Customers (Relations with type filter)"""
+        if not params:
+            params = {}
+        params["relationType"] = "Customer"
+        return self.make_request("v1/relation", params=params)
+    
+    def get_suppliers(self, params=None):
+        """Get Suppliers (Relations with type filter)"""
+        if not params:
+            params = {}
+        params["relationType"] = "Supplier"
+        return self.make_request("v1/relation", params=params)
+    
+    def get_mutations(self, params=None):
+        """Get Mutations (Transactions)"""
+        return self.make_request("v1/mutation", params=params)
 
 
 class EBoekhoudenXMLParser:
@@ -657,14 +679,34 @@ def preview_customers():
         result = api.get_customers()
         
         if result["success"]:
-            customers = EBoekhoudenXMLParser.parse_relaties(result["data"])
-            
-            return {
-                "success": True,
-                "message": f"Found {len(customers)} customers",
-                "customers": customers[:10],  # First 10 for preview
-                "total_count": len(customers)
-            }
+            # Parse JSON response instead of XML
+            try:
+                data = json.loads(result["data"])
+                customers = data.get("items", [])
+                
+                # Convert to simplified format
+                simplified_customers = []
+                for customer in customers[:10]:  # First 10 for preview
+                    simplified_customers.append({
+                        'id': customer.get('id'),
+                        'name': customer.get('name', ''),
+                        'companyName': customer.get('companyName', ''),
+                        'contactName': customer.get('contactName', ''),
+                        'email': customer.get('email', ''),
+                        'city': customer.get('city', '')
+                    })
+                
+                return {
+                    "success": True,
+                    "message": f"Found {len(customers)} customers",
+                    "customers": simplified_customers,
+                    "total_count": len(customers)
+                }
+            except json.JSONDecodeError as e:
+                return {
+                    "success": False,
+                    "error": f"Failed to parse API response: {str(e)}"
+                }
         else:
             return {
                 "success": False,
@@ -677,3 +719,138 @@ def preview_customers():
             "success": False,
             "error": str(e)
         }
+
+@frappe.whitelist()
+def preview_suppliers():
+    """Preview Suppliers data"""
+    try:
+        api = EBoekhoudenAPI()
+        result = api.get_suppliers()
+        
+        if result["success"]:
+            # Parse JSON response
+            try:
+                data = json.loads(result["data"])
+                suppliers = data.get("items", [])
+                
+                # Convert to simplified format
+                simplified_suppliers = []
+                for supplier in suppliers[:10]:  # First 10 for preview
+                    simplified_suppliers.append({
+                        'id': supplier.get('id'),
+                        'name': supplier.get('name', ''),
+                        'companyName': supplier.get('companyName', ''),
+                        'contactName': supplier.get('contactName', ''),
+                        'email': supplier.get('email', ''),
+                        'city': supplier.get('city', ''),
+                        'vatNumber': supplier.get('vatNumber', '')
+                    })
+                
+                return {
+                    "success": True,
+                    "message": f"Found {len(suppliers)} suppliers",
+                    "suppliers": simplified_suppliers,
+                    "total_count": len(suppliers)
+                }
+            except json.JSONDecodeError as e:
+                return {
+                    "success": False,
+                    "error": f"Failed to parse API response: {str(e)}"
+                }
+        else:
+            return {
+                "success": False,
+                "error": result["error"]
+            }
+            
+    except Exception as e:
+        frappe.log_error(f"Error previewing Suppliers: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
+def test_customer_migration():
+    """Test Customer migration in dry-run mode"""
+    try:
+        # Create a temporary migration document for testing
+        migration = frappe.new_doc("E-Boekhouden Migration")
+        migration.migration_name = f"Test Customer Migration {frappe.utils.now_datetime()}"
+        migration.migrate_accounts = 0
+        migration.migrate_cost_centers = 0
+        migration.migrate_customers = 1
+        migration.migrate_suppliers = 0
+        migration.migrate_transactions = 0
+        migration.dry_run = 1
+        
+        # Get settings
+        settings = frappe.get_single("E-Boekhouden Settings")
+        
+        # Run migration test
+        result = migration.migrate_customers(settings)
+        
+        return {
+            "success": True,
+            "message": "Customer migration test completed",
+            "result": result,
+            "imported_records": getattr(migration, 'imported_records', 0),
+            "failed_records": getattr(migration, 'failed_records', 0),
+            "total_records": getattr(migration, 'total_records', 0)
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing Customer migration: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@frappe.whitelist()
+def test_supplier_migration():
+    """Test Supplier migration in dry-run mode"""
+    try:
+        # Create a temporary migration document for testing
+        migration = frappe.new_doc("E-Boekhouden Migration")
+        migration.migration_name = f"Test Supplier Migration {frappe.utils.now_datetime()}"
+        migration.migrate_accounts = 0
+        migration.migrate_cost_centers = 0
+        migration.migrate_customers = 0
+        migration.migrate_suppliers = 1
+        migration.migrate_transactions = 0
+        migration.dry_run = 1
+        
+        # Get settings
+        settings = frappe.get_single("E-Boekhouden Settings")
+        
+        # Run migration test
+        result = migration.migrate_suppliers(settings)
+        
+        return {
+            "success": True,
+            "message": "Supplier migration test completed",
+            "result": result,
+            "imported_records": getattr(migration, 'imported_records', 0),
+            "failed_records": getattr(migration, 'failed_records', 0),
+            "total_records": getattr(migration, 'total_records', 0)
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error testing Supplier migration: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+def update_dashboard_data_periodically():
+    """Scheduled task to update dashboard data"""
+    try:
+        # Check if dashboard exists
+        if frappe.db.exists("E-Boekhouden Dashboard", "E-Boekhouden Dashboard"):
+            dashboard = frappe.get_single("E-Boekhouden Dashboard")
+            dashboard.load_dashboard_data()
+            frappe.db.commit()
+            
+    except Exception as e:
+        frappe.log_error(f"Error in periodic dashboard update: {str(e)}", "E-Boekhouden Dashboard")

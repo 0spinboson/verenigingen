@@ -1,0 +1,123 @@
+{
+ "charts": [
+  {
+   "chart_name": "Migration Status Chart",
+   "label": "Migration Status"
+  }
+ ],
+ "content": "[{\"id\":\"LZzfcQG-Q7\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">E-Boekhouden Integration</span>\",\"col\":12}},{\"id\":\"3lx8X96vGM\",\"type\":\"paragraph\",\"data\":{\"text\":\"Manage data migration from e-Boekhouden.nl to ERPNext with comprehensive monitoring and validation tools.\",\"col\":12}},{\"id\":\"HMEyMqVlF9\",\"type\":\"card\",\"data\":{\"card_name\":\"Migration Dashboard\",\"col\":4}},{\"id\":\"m4R9zBZ7iQ\",\"type\":\"card\",\"data\":{\"card_name\":\"New Migration\",\"col\":4}},{\"id\":\"RqLt6bOp_z\",\"type\":\"card\",\"data\":{\"card_name\":\"Settings\",\"col\":4}},{\"id\":\"K7_mDFy8sJ\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Migration Status Chart\",\"col\":6}},{\"id\":\"n3Q1fXY2pE\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Test Connection\",\"col\":3}},{\"id\":\"gL5vN4pR8T\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Preview Data\",\"col\":3}}]",
+ "creation": "2025-06-25 14:30:00.000000",
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "accounting",
+ "idx": 0,
+ "is_hidden": 0,
+ "label": "E-Boekhouden",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Migration Dashboard",
+   "link_name": "E-Boekhouden Dashboard",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Migrations", 
+   "link_name": "E-Boekhouden Migration",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Settings",
+   "link_name": "E-Boekhouden Settings",
+   "link_type": "DocType", 
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Live Dashboard",
+   "link_name": "e-boekhouden-dashboard",
+   "link_type": "Page",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2025-06-25 14:30:00.000000",
+ "modified_by": "Administrator",
+ "module": "Verenigingen",
+ "name": "E-Boekhouden",
+ "number_cards": [
+  {
+   "document_type": "E-Boekhouden Migration",
+   "function": "Count",
+   "is_public": 0,
+   "label": "Total Migrations",
+   "show_percentage_stats": 1,
+   "stats_time_interval": "Monthly"
+  },
+  {
+   "document_type": "E-Boekhouden Migration",
+   "filters_json": "{\"migration_status\":\"Completed\"}",
+   "function": "Count", 
+   "is_public": 0,
+   "label": "Completed Migrations",
+   "show_percentage_stats": 1,
+   "stats_time_interval": "Monthly"
+  },
+  {
+   "document_type": "E-Boekhouden Migration",
+   "filters_json": "{\"migration_status\":\"Failed\"}",
+   "function": "Count",
+   "is_public": 0,
+   "label": "Failed Migrations",
+   "show_percentage_stats": 1,
+   "stats_time_interval": "Monthly"
+  }
+ ],
+ "owner": "Administrator",
+ "parent": null,
+ "parentfield": null,
+ "parenttype": null,
+ "public": 1,
+ "quick_lists": [
+  {
+   "document_type": "E-Boekhouden Migration",
+   "label": "Recent Migrations",
+   "quick_list_filter": "{\"migration_status\":[\"!=\",\"Draft\"]}",
+   "stats": [
+    {
+     "function": "count",
+     "label": "Total"
+    }
+   ]
+  }
+ ],
+ "shortcuts": [
+  {
+   "color": "Blue",
+   "format": "{} Active",
+   "label": "Active Migrations",
+   "link_to": "E-Boekhouden Migration",
+   "stats_filter": "{\"migration_status\":\"In Progress\"}",
+   "type": "DocType"
+  },
+  {
+   "color": "Green", 
+   "format": "Test Connection",
+   "label": "Test Connection",
+   "link_to": "E-Boekhouden Settings",
+   "type": "DocType"
+  }
+ ]
+}
