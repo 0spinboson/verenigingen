@@ -652,8 +652,10 @@ class Volunteer(Document):
             first_name = name_parts[0] if name_parts else "Volunteer"
             last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
             
-            # Get default expense approver (treasurer)
-            expense_approver = self.get_default_expense_approver()
+            # Get department based on volunteer assignments
+            from verenigingen.utils.department_hierarchy import DepartmentHierarchyManager
+            dept_manager = DepartmentHierarchyManager()
+            department = dept_manager.get_volunteer_department(self.name)
             
             # Create minimal employee record with required fields
             employee_data = {
@@ -666,7 +668,8 @@ class Volunteer(Document):
                 "gender": "Prefer not to say",  # Required field with default
                 "date_of_birth": "1990-01-01",  # Required field with default
                 "date_of_joining": frappe.utils.today(),  # Required field with today's date
-                "expense_approver": expense_approver  # Set default approver for expense claims
+                "department": department  # Set department, let hierarchy handle approver
+                # Note: Don't set expense_approver - department hierarchy will provide it
             }
             
             # Add optional fields if available

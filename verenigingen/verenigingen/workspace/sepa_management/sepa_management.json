@@ -1,0 +1,148 @@
+{
+ "cards": [
+  {
+   "hidden": 0,
+   "label": "Payment Overview",
+   "links": [
+    {
+     "description": "View and manage SEPA mandates",
+     "label": "SEPA Mandates",
+     "name": "SEPA Mandate",
+     "type": "DocType"
+    },
+    {
+     "description": "Direct debit batch processing",
+     "label": "Direct Debit Batches",
+     "name": "Direct Debit Batch",
+     "type": "DocType"
+    },
+    {
+     "description": "Payment retry management",
+     "label": "Payment Retries",
+     "name": "SEPA Payment Retry",
+     "type": "DocType"
+    }
+   ]
+  },
+  {
+   "hidden": 0,
+   "label": "Reconciliation",
+   "links": [
+    {
+     "description": "Bank transaction reconciliation",
+     "label": "Bank Transactions",
+     "name": "Bank Transaction",
+     "type": "DocType"
+    },
+    {
+     "description": "Payment entries",
+     "label": "Payment Entries",
+     "name": "Payment Entry",
+     "type": "DocType"
+    }
+   ]
+  },
+  {
+   "hidden": 0,
+   "label": "Reports",
+   "links": [
+    {
+     "is_query_report": 1,
+     "label": "SEPA Collection Summary",
+     "name": "SEPA Collection Summary",
+     "type": "Report"
+    },
+    {
+     "is_query_report": 1,
+     "label": "Failed Payment Analysis",
+     "name": "Failed Payment Analysis",
+     "type": "Report"
+    },
+    {
+     "is_query_report": 1,
+     "label": "Mandate Status Report",
+     "name": "Mandate Status Report",
+     "type": "Report"
+    }
+   ]
+  }
+ ],
+ "category": "Domains",
+ "charts": [
+  {
+   "chart_name": "SEPA Payment Status",
+   "label": "Payment Status Distribution"
+  }
+ ],
+ "creation": "2025-01-01 10:00:00.000000",
+ "developer_mode_only": 0,
+ "disable_user_customization": 0,
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "extends": "",
+ "extends_another_page": 0,
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "bank",
+ "idx": 0,
+ "is_default": 0,
+ "is_standard": 1,
+ "label": "SEPA Management",
+ "links": [],
+ "modified": "2025-01-01 10:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Verenigingen",
+ "name": "SEPA Management",
+ "owner": "Administrator",
+ "parent_page": "",
+ "pin_to_bottom": 0,
+ "pin_to_top": 0,
+ "public": 1,
+ "quick_lists": [
+  {
+   "document_type": "SEPA Mandate",
+   "filters": "{\"status\": \"Active\"}",
+   "label": "Active Mandates"
+  },
+  {
+   "document_type": "Direct Debit Batch",
+   "filters": "{\"status\": [\"in\", [\"Draft\", \"Generated\"]]}",
+   "label": "Pending Batches"
+  },
+  {
+   "document_type": "SEPA Payment Retry",
+   "filters": "{\"status\": \"Scheduled\"}",
+   "label": "Scheduled Retries"
+  }
+ ],
+ "restrict_to_domain": "",
+ "roles": [
+  {
+   "role": "Membership Manager"
+  },
+  {
+   "role": "Verenigingen Administrator"
+  },
+  {
+   "role": "System Manager"
+  }
+ ],
+ "sequence_id": 25.0,
+ "shortcuts": [
+  {
+   "color": "Green",
+   "doc_view": "New",
+   "label": "New Direct Debit Batch",
+   "name": "Direct Debit Batch",
+   "type": "DocType"
+  },
+  {
+   "color": "Blue",
+   "doc_view": "List",
+   "label": "Reconcile Transactions",
+   "name": "Bank Transaction",
+   "type": "DocType"
+  }
+ ],
+ "title": "SEPA Management"
+}

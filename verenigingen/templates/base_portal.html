@@ -7,15 +7,9 @@
     min-height: 400px;
 }
 </style>
-
-<!-- Dynamic Brand CSS -->
-<style id="brand-css">
-{% set brand_css = frappe.call('verenigingen.verenigingen.doctype.brand_settings.brand_settings.get_brand_css_inline') %}
-{% if brand_css and brand_css.success %}
-{{ brand_css.css | safe }}
-{% endif %}
-</style>
 {% endblock %}
+
+{% block body_class %}verenigingen-portal{% endblock %}
 
 {% block sidebar %}
 {% include "templates/includes/web_sidebar_enhanced.html" %}

@@ -261,44 +261,45 @@ def generate_brand_css():
 	--brand-secondary-text: {secondary_text};
 	--brand-accent-text: {accent_text};
 	
-	/* Override Tailwind CSS custom properties */
+	/* Override Tailwind CSS custom properties - DISABLED TO FIX MENU ISSUE
 	--color-primary-500: {settings['primary_color']} !important;
 	--color-primary-600: {settings['primary_hover_color']} !important;
 	--color-secondary-500: {settings['secondary_color']} !important;
 	--color-secondary-600: {settings['secondary_hover_color']} !important;
 	--color-accent-500: {settings['accent_color']} !important;
-	--color-accent-600: {settings['accent_hover_color']} !important;
+	--color-accent-600: {settings['accent_hover_color']} !important; */
 }}
 
-/* Override Tailwind classes with brand colors */
-.bg-red-600 {{ background-color: var(--brand-primary) !important; }}
-.bg-red-700 {{ background-color: var(--brand-primary-hover) !important; }}
-.hover\\:bg-red-700:hover {{ background-color: var(--brand-primary-hover) !important; }}
+/* Override Tailwind classes with brand colors - ONLY for portal pages */
+/* Scoped to prevent affecting Frappe desk */
+.verenigingen-portal .bg-red-600 {{ background-color: var(--brand-primary) !important; }}
+.verenigingen-portal .bg-red-700 {{ background-color: var(--brand-primary-hover) !important; }}
+.verenigingen-portal .hover\\:bg-red-700:hover {{ background-color: var(--brand-primary-hover) !important; }}
 
-.bg-teal-600 {{ background-color: var(--brand-secondary) !important; }}
-.bg-teal-700 {{ background-color: var(--brand-secondary-hover) !important; }}
-.hover\\:bg-teal-700:hover {{ background-color: var(--brand-secondary-hover) !important; }}
+.verenigingen-portal .bg-teal-600 {{ background-color: var(--brand-secondary) !important; }}
+.verenigingen-portal .bg-teal-700 {{ background-color: var(--brand-secondary-hover) !important; }}
+.verenigingen-portal .hover\\:bg-teal-700:hover {{ background-color: var(--brand-secondary-hover) !important; }}
 
-.bg-purple-600 {{ background-color: var(--brand-accent) !important; }}
-.bg-purple-700 {{ background-color: var(--brand-accent-hover) !important; }}
-.hover\\:bg-purple-700:hover {{ background-color: var(--brand-accent-hover) !important; }}
+.verenigingen-portal .bg-purple-600 {{ background-color: var(--brand-accent) !important; }}
+.verenigingen-portal .bg-purple-700 {{ background-color: var(--brand-accent-hover) !important; }}
+.verenigingen-portal .hover\\:bg-purple-700:hover {{ background-color: var(--brand-accent-hover) !important; }}
 
-.text-red-600 {{ color: var(--brand-primary) !important; }}
-.text-teal-600 {{ color: var(--brand-secondary) !important; }}
-.text-purple-600 {{ color: var(--brand-accent) !important; }}
+.verenigingen-portal .text-red-600 {{ color: var(--brand-primary) !important; }}
+.verenigingen-portal .text-teal-600 {{ color: var(--brand-secondary) !important; }}
+.verenigingen-portal .text-purple-600 {{ color: var(--brand-accent) !important; }}
 
-.border-red-500 {{ border-color: var(--brand-primary) !important; }}
-.border-teal-500 {{ border-color: var(--brand-secondary) !important; }}
-.border-purple-500 {{ border-color: var(--brand-accent) !important; }}
+.verenigingen-portal .border-red-500 {{ border-color: var(--brand-primary) !important; }}
+.verenigingen-portal .border-teal-500 {{ border-color: var(--brand-secondary) !important; }}
+.verenigingen-portal .border-purple-500 {{ border-color: var(--brand-accent) !important; }}
 
-.focus\\:ring-red-500:focus {{ --tw-ring-color: var(--brand-primary) !important; }}
-.focus\\:border-red-500:focus {{ border-color: var(--brand-primary) !important; }}
+.verenigingen-portal .focus\\:ring-red-500:focus {{ --tw-ring-color: var(--brand-primary) !important; }}
+.verenigingen-portal .focus\\:border-red-500:focus {{ border-color: var(--brand-primary) !important; }}
 
-/* Gradient overrides */
-.from-purple-600 {{ --tw-gradient-from: var(--brand-accent) !important; }}
-.from-purple-700 {{ --tw-gradient-from: var(--brand-accent-hover) !important; }}
-.to-red-600 {{ --tw-gradient-to: var(--brand-primary) !important; }}
-.to-purple-800 {{ --tw-gradient-to: var(--brand-accent-hover) !important; }}
+/* Gradient overrides - scoped to portal pages */
+.verenigingen-portal .from-purple-600 {{ --tw-gradient-from: var(--brand-accent) !important; }}
+.verenigingen-portal .from-purple-700 {{ --tw-gradient-from: var(--brand-accent-hover) !important; }}
+.verenigingen-portal .to-red-600 {{ --tw-gradient-to: var(--brand-primary) !important; }}
+.verenigingen-portal .to-purple-800 {{ --tw-gradient-to: var(--brand-accent-hover) !important; }}
 
 /* Custom brand utility classes */
 .btn-brand-primary {{
