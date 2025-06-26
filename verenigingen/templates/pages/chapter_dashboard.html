@@ -1,5 +1,29 @@
 {% extends "templates/web.html" %}
 
+{% macro format_date(date_val, format='%B %d, %Y') -%}
+    {%- if date_val -%}
+        {%- if date_val is string -%}
+            {{ date_val }}
+        {%- else -%}
+            {{ date_val.strftime(format) }}
+        {%- endif -%}
+    {%- else -%}
+        
+    {%- endif -%}
+{%- endmacro %}
+
+{% macro format_datetime(date_val, format='%B %d, %Y at %H:%M') -%}
+    {%- if date_val -%}
+        {%- if date_val is string -%}
+            {{ date_val }}
+        {%- else -%}
+            {{ date_val.strftime(format) }}
+        {%- endif -%}
+    {%- else -%}
+        Recently
+    {%- endif -%}
+{%- endmacro %}
+
 {% block title %}{{ title }}{% endblock %}
 
 {% block head_include %}
@@ -29,13 +53,13 @@
                     <div class="header-info">
                         <span class="user-role">{{ user_board_role.role if user_board_role else 'Board Member' }}</span>
                         {% if user_board_role and user_board_role.since %}
-                            <span class="role-since">Since {{ user_board_role.since.strftime('%B %Y') if user_board_role.since else '' }}</span>
+                            <span class="role-since">Since {{ format_date(user_board_role.since, '%B %Y') }}</span>
                         {% endif %}
                     </div>
                 </div>
                 <div class="header-right">
                     <div class="last-updated">
-                        Last Updated: {{ dashboard_data.last_updated.strftime('%B %d, %Y at %H:%M') if dashboard_data.last_updated else 'Just now' }}
+                        Last Updated: {{ format_datetime(dashboard_data.last_updated) }}
                     </div>
                     {% if user_chapters|length > 1 %}
                         <div class="chapter-selector">
@@ -147,7 +171,7 @@
                                                 <span class="status-badge active">Joined</span>
                                             {% endif %}
                                             <small class="activity-date">
-                                                {{ member.chapter_join_date.strftime('%B %d, %Y') if member.chapter_join_date else 'Recently' }}
+                                                {{ format_date(member.chapter_join_date) }}
                                             </small>
                                         </li>
                                     {% endfor %}
@@ -237,7 +261,7 @@
                                             {% endif %}
                                         </div>
                                         <small class="board-since">
-                                            Since {{ board_member.from_date.strftime('%B %Y') if board_member.from_date else 'Unknown' }}
+                                            Since {{ format_date(board_member.from_date, '%B %Y') if board_member.from_date else 'Unknown' }}
                                         </small>
                                     </li>
                                 {% endfor %}
@@ -296,7 +320,7 @@
                                     <div class="timeline-content">
                                         <p>{{ activity.description }}</p>
                                         <small class="timeline-date">
-                                            {{ activity.timestamp.strftime('%B %d, %Y at %H:%M') if activity.timestamp else 'Recently' }}
+                                            {{ format_datetime(activity.timestamp) }}
                                         </small>
                                     </div>
                                 </li>

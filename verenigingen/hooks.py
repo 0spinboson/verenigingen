@@ -96,6 +96,16 @@ doc_events = {
         "on_cancel": "verenigingen.utils.donation_history_manager.on_donation_cancel",
         "on_trash": "verenigingen.utils.donation_history_manager.on_donation_delete"
     },
+    
+    # Payment notifications
+    "Payment Entry": {
+        "on_submit": "verenigingen.utils.payment_notifications.on_payment_submit"
+    },
+    
+    # Volunteer department sync
+    "Volunteer": {
+        "on_update": "verenigingen.utils.department_hierarchy.update_volunteer_employee_department"
+    },
 }
 
 # Scheduled Tasks
@@ -132,6 +142,18 @@ scheduler_events = {
         
         # Board member role cleanup
         # "verenigingen.utils.board_member_role_cleanup.cleanup_expired_board_member_roles",
+        
+        # SEPA payment retry processing
+        "verenigingen.utils.payment_retry.execute_payment_retry",
+        
+        # Bank transaction reconciliation
+        "verenigingen.utils.sepa_reconciliation.reconcile_bank_transactions",
+        
+        # SEPA mandate expiry notifications
+        "verenigingen.utils.sepa_notifications.check_and_send_expiry_notifications",
+        
+        # Department hierarchy sync
+        "verenigingen.utils.department_hierarchy.sync_approvers",
     ],
     "weekly": [
         # Termination reports and reviews
@@ -170,6 +192,11 @@ standard_portal_menu_items = [
 website_context = {
     "get_member_context": "verenigingen.utils.portal_customization.get_member_context"
 }
+
+# Website context update hook - adds body classes for brand styling
+update_website_context = [
+    "verenigingen.utils.portal_customization.add_brand_body_classes"
+]
 
 # Installation
 # ------------

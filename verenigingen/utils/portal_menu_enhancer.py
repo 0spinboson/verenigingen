@@ -133,7 +133,8 @@ def get_enhanced_portal_menu_items():
     
     # Now add relevant items from Portal Settings
     member_relevant_items = [
-        "Issues & Support", "Addresses"
+        "Issues & Support", "Addresses", "Newsletter", "Projects",
+        "My Memberships", "My Expenses", "My Addresses"
     ]
     
     portal_settings = frappe.get_single("Portal Settings")
@@ -144,6 +145,11 @@ def get_enhanced_portal_menu_items():
             
         # Skip items that are not relevant for members
         if item.title not in member_relevant_items:
+            continue
+            
+        # Skip if already added (like Member Portal, Volunteer Portal)
+        existing_titles = [menu_item["title"] for menu_item in enhanced_menu]
+        if item.title in existing_titles:
             continue
             
         menu_item = {
@@ -361,4 +367,130 @@ def add_enhanced_sidebar_to_context(context):
         
     except Exception as e:
         frappe.log_error(f"Error adding enhanced sidebar to context: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+@frappe.whitelist()
+def analyze_portal_menu_items():
+    """Comprehensive analysis of portal menu items"""
+    try:
+        portal_settings = frappe.get_single("Portal Settings")
+        
+        # Collect all items
+        all_items = []
+        enabled_items = []
+        disabled_items = []
+        
+        for idx, item in enumerate(portal_settings.menu):
+            item_info = {
+                "idx": idx + 1,
+                "title": item.title,
+                "route": item.route,
+                "enabled": item.enabled,
+                "role": getattr(item, 'role', None),
+                "reference_doctype": getattr(item, 'reference_doctype', None)
+            }
+            all_items.append(item_info)
+            
+            if item.enabled:
+                enabled_items.append(item_info)
+            else:
+                disabled_items.append(item_info)
+        
+        # Categorize items
+        erp_keywords = ['quotation', 'order', 'invoice', 'purchase', 'supplier', 'shipment', 'material', 'timesheet', 'rfq']
+        erp_doctypes = ['Quotation', 'Sales Order', 'Purchase Order', 'Sales Invoice', 'Purchase Invoice', 
+                        'Delivery Note', 'Material Request', 'Timesheet', 'Request for Quotation', 
+                        'Supplier Quotation']
+        
+        erp_items = []
+        association_relevant = []
+        
+        for item in enabled_items:
+            is_erp = False
+            
+            # Check title and route
+            for keyword in erp_keywords:
+                if keyword in item['title'].lower() or keyword in item['route'].lower():
+                    is_erp = True
+                    break
+            
+            # Check doctype
+            if item['reference_doctype'] in erp_doctypes:
+                is_erp = True
+            
+            if is_erp:
+                erp_items.append(item)
+            else:
+                association_relevant.append(item)
+        
+        # Check for missing association items
+        expected_items = [
+            {"title": "Member Portal", "route": "/member_portal"},
+            {"title": "My Memberships", "route": "/memberships"},
+            {"title": "Volunteer Portal", "route": "/volunteer_portal"},
+            {"title": "My Expenses", "route": "/my_expenses"},
+            {"title": "My Addresses", "route": "/my_addresses"}
+        ]
+        
+        current_titles = [item['title'] for item in all_items]
+        missing_items = []
+        
+        for expected in expected_items:
+            if expected['title'] not in current_titles:
+                missing_items.append(expected)
+        
+        # Print detailed analysis
+        print("\n" + "="*80)
+        print("PORTAL SETTINGS MENU ANALYSIS")
+        print("="*80 + "\n")
+        
+        print("CURRENT MENU ITEMS:")
+        print("-" * 80)
+        print(f"{'#':<3} {'Title':<30} {'Route':<25} {'Role':<15} {'Enabled':<10}")
+        print("-" * 80)
+        
+        for item in all_items:
+            enabled_str = 'Yes' if item['enabled'] else 'No'
+            role_str = item['role'] or 'Public'
+            print(f"{item['idx']:<3} {item['title']:<30} {item['route']:<25} {role_str:<15} {enabled_str:<10}")
+        
+        print(f"\n\nSUMMARY:")
+        print(f"Total items: {len(all_items)}")
+        print(f"Enabled: {len(enabled_items)}")
+        print(f"Disabled: {len(disabled_items)}")
+        
+        print("\n\nCATEGORIZATION:")
+        print(f"\nERP/Business Items ({len(erp_items)} items) - NOT RELEVANT:")
+        for item in erp_items:
+            print(f"  - {item['title']} (Role: {item['role'] or 'Public'})")
+        
+        print(f"\nAssociation-Relevant Items ({len(association_relevant)} items) - KEEP:")
+        for item in association_relevant:
+            print(f"  - {item['title']} (Role: {item['role'] or 'Public'})")
+        
+        print(f"\nMissing Association Items ({len(missing_items)} items) - TO ADD:")
+        for item in missing_items:
+            print(f"  - {item['title']} ({item['route']})")
+        
+        return {
+            "success": True,
+            "summary": {
+                "total_items": len(all_items),
+                "enabled_items": len(enabled_items),
+                "disabled_items": len(disabled_items)
+            },
+            "all_items": all_items,
+            "categorization": {
+                "erp_items": erp_items,
+                "association_relevant": association_relevant,
+                "missing_items": missing_items
+            },
+            "recommendations": {
+                "disable": [item['title'] for item in erp_items],
+                "keep": [item['title'] for item in association_relevant],
+                "add": missing_items
+            }
+        }
+        
+    except Exception as e:
         return {"success": False, "error": str(e)}

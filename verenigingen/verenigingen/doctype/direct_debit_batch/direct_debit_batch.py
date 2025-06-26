@@ -431,82 +431,9 @@ def update_membership_payment_status(membership_name):
         raise
 
 def get_bic_from_iban(iban):
-    """Try to determine BIC from IBAN country code and bank code"""
-    if not iban or len(iban) < 8:
-        return None
-    
-    try:
-        # Remove spaces
-        iban = iban.replace(' ', '')
-        
-        # Dutch IBAN - extract bank code
-        if iban.startswith('NL'):
-            bank_code = iban[4:8]
-            
-            # Common Dutch bank codes
-            bank_codes = {
-                'INGB': 'INGBNL2A',  # ING Bank
-                'ABNA': 'ABNANL2A',  # ABN AMRO
-                'RABO': 'RABONL2U',  # Rabobank
-                'TRIO': 'TRIONL2U',  # Triodos Bank
-                'SNSB': 'SNSBNL2A',  # SNS Bank
-                'ASNB': 'ASNBNL21',  # ASN Bank
-                'KNAB': 'KNABNL2H',  # Knab
-                'BUNQ': 'BUNQNL2A',  # bunq Bank
-                'REVO': 'REVONL2A',  # Revolut
-                'BITV': 'BITVNL21',  # Bitonic
-                'FVLB': 'FVLBNL22',  # Van Lanschot Kempen
-                'HAND': 'HANDNL2A',  # Svenska Handelsbanken
-                'DHBN': 'DHBNNL2R',  # Demir-Halk Bank Nederland
-                'NWAB': 'NWABNL2G',  # Nederlandse Waterschapsbank
-                'COBA': 'COBANL2X',  # Commerzbank
-                'DEUT': 'DEUTNL2A',  # Deutsche Bank
-                'FBHL': 'FBHLNL2A',  # Credit Europe Bank
-                'NNBA': 'NNBANL2G',  # Nationale-Nederlanden Bank
-            }
-            
-            return bank_codes.get(bank_code)
-        
-        # German IBAN - extract bank code
-        elif iban.startswith('DE'):
-            bank_code = iban[4:12]  # German bank codes are 8 digits
-            
-            # Common German bank codes (limited set)
-            german_bank_codes = {
-                '10070000': 'DEUTDEFF',    # Deutsche Bank
-                '20070000': 'DEUTDEDBHAM', # Deutsche Bank Hamburg
-                '50070010': 'DEUTDEFF500', # Deutsche Bank Düsseldorf
-                '12030000': 'BYLADEM1001', # DKB
-                '43060967': 'GENODEM1GLS', # GLS Bank
-                '50010517': 'INGDDEFF',    # ING-DiBa
-                '76026000': 'HYVEDEMM473', # HypoVereinsbank
-                '20041133': 'COBADEFFXXX', # Commerzbank Hamburg
-            }
-            
-            return german_bank_codes.get(bank_code)
-        
-        # Belgian IBAN - extract bank code  
-        elif iban.startswith('BE'):
-            bank_code = iban[4:7]  # Belgian bank codes are 3 digits
-            
-            # Common Belgian bank codes
-            belgian_bank_codes = {
-                '001': 'BPOTBEB1',  # bpost bank
-                '068': 'JVBABE22',  # Crelan
-                '096': 'GKCCBEBB',  # Belfius
-                '363': 'BBRUBEBB',  # KBC
-            }
-            
-            return belgian_bank_codes.get(bank_code)
-        
-        # For other countries, we would need a more extensive mapping
-        return None
-    except Exception as e:
-        frappe.log_error(
-            f"Error determining BIC from IBAN {iban}: {str(e)}",
-            "IBAN Processing Error"
-        )
-        return None
+    """Try to determine BIC from IBAN - use enhanced validator"""
+    from verenigingen.utils.iban_validator import derive_bic_from_iban
+    return derive_bic_from_iban(iban)
 
 @frappe.whitelist()
 def generate_direct_debit_batch(date=None):

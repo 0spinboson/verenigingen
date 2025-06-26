@@ -22,9 +22,27 @@ def get_context(context):
     # Get member record
     member = frappe.db.get_value("Member", {"email": frappe.session.user})
     if not member:
-        frappe.throw(_("No member record found for your account"), frappe.DoesNotExistError)
+        # Show a graceful error message instead of throwing
+        context.no_member_record = True
+        context.error_title = _("Member Record Not Found")
+        context.error_message = _("No member record found for your account. You need to be a member to submit contact requests.")
+        # Try to get support email from settings, with fallback
+        try:
+            context.support_email = frappe.db.get_single_value("Verenigingen Settings", "support_email")
+        except:
+            # If field doesn't exist, try company email or use default
+            try:
+                company = frappe.db.get_single_value("Verenigingen Settings", "company")
+                if company:
+                    context.support_email = frappe.db.get_value("Company", company, "email") or "support@example.com"
+                else:
+                    context.support_email = "support@example.com"
+            except:
+                context.support_email = "support@example.com"
+        return context
     
     context.member = frappe.get_doc("Member", member)
+    context.no_member_record = False
     
     # Get recent contact requests
     context.recent_requests = get_recent_contact_requests(member)

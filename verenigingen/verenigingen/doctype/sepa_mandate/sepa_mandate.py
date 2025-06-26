@@ -75,21 +75,53 @@ class SEPAMandate(Document):
                 frappe.throw(_("Expiry date cannot be before sign date"))
     
     def validate_iban(self):
-        # Basic IBAN validation
+        # Comprehensive IBAN validation with mod-97
         if self.iban:
-            # Remove spaces and convert to uppercase
-            iban = self.iban.replace(' ', '').upper()
-            self.iban = iban
+            from verenigingen.utils.iban_validator import validate_iban, format_iban, derive_bic_from_iban
             
-            # Basic length check (varies by country)
-            if len(iban) < 15 or len(iban) > 34:
-                frappe.throw(_("Invalid IBAN length"))
+            # Validate IBAN
+            validation_result = validate_iban(self.iban)
+            if not validation_result['valid']:
+                frappe.throw(_(validation_result['message']))
+            
+            # Format IBAN properly
+            self.iban = format_iban(self.iban)
+            
+            # Auto-derive BIC if not provided
+            if not self.bic:
+                derived_bic = derive_bic_from_iban(self.iban)
+                if derived_bic:
+                    self.bic = derived_bic
+                    frappe.msgprint(_("BIC automatically derived from IBAN: {0}").format(derived_bic))
+    
+    def after_insert(self):
+        """Send notification when mandate is created"""
+        if self.status == "Active":
+            from verenigingen.utils.sepa_notifications import SEPAMandateNotificationManager
+            notification_manager = SEPAMandateNotificationManager()
+            notification_manager.send_mandate_created_notification(self)
     
     def on_update(self):
         """
         When a mandate is updated to Active status and is used for memberships,
         check if it should be set as the current mandate
         """
+        # Check for status changes
+        if self.has_value_changed("status"):
+            old_status = self.get_doc_before_save().status if self.get_doc_before_save() else None
+            
+            # Send notifications based on status changes
+            from verenigingen.utils.sepa_notifications import SEPAMandateNotificationManager
+            notification_manager = SEPAMandateNotificationManager()
+            
+            if self.status == "Active" and old_status != "Active":
+                # Mandate activated
+                notification_manager.send_mandate_created_notification(self)
+            elif self.status == "Cancelled" and old_status != "Cancelled":
+                # Mandate cancelled
+                reason = self.cancellation_reason or "Cancelled by member request"
+                notification_manager.send_mandate_cancelled_notification(self, reason)
+        
         if self.member and self.status == "Active" and self.is_active and self.used_for_memberships:
             # Find if this mandate is already linked to the member
             member = frappe.get_doc("Member", self.member)
