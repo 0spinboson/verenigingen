@@ -428,3 +428,8 @@ def get_reconciliation_summary(from_date=None, to_date=None):
     summary['reconciliation_rate'] = (summary['reconciled'] / summary['total_transactions'] * 100) if summary['total_transactions'] > 0 else 0
     
     return summary
+
+def reconcile_bank_transactions(bank_account=None, from_date=None, to_date=None):
+    """Module-level function for scheduled job to reconcile bank transactions"""
+    manager = SEPAReconciliationManager()
+    return manager.reconcile_bank_transactions(bank_account, from_date, to_date)

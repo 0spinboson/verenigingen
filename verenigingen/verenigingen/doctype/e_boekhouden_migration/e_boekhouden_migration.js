@@ -155,6 +155,172 @@ frappe.ui.form.on('E-Boekhouden Migration', {
 					}
 				);
 			}).addClass('btn-primary');
+			
+			frm.add_custom_button(__('Full Migration'), function() {
+				console.log('Full Migration button clicked');
+				
+				// Simple validation
+				if (!frm.doc.company) {
+					frappe.msgprint(__('Company is required'));
+					return;
+				}
+				
+				frappe.confirm(
+					__('<h4>Full E-Boekhouden Migration</h4>' +
+					   '<p>This will perform a comprehensive migration that includes:</p>' +
+					   '<ul>' +
+					   '<li>Automatically determine the date range from E-Boekhouden</li>' +
+					   '<li>Create opening balance journal entry</li>' +
+					   '<li>Migrate chart of accounts</li>' +
+					   '<li>Migrate all transactions</li>' +
+					   '<li>Create payment entries where applicable</li>' +
+					   '</ul>' +
+					   '<p><strong>⚠️ WARNING: This action cannot be undone and may take several minutes!</strong></p>' +
+					   '<p>Are you sure you want to proceed?</p>'),
+					function() {
+						console.log('User confirmed full migration');
+						
+						// Show progress dialog
+						let progress_dialog = new frappe.ui.Dialog({
+							title: 'Full Migration Progress',
+							fields: [{
+								fieldtype: 'HTML',
+								fieldname: 'progress_html',
+								options: '<div id="migration-progress">' +
+										'<div class="progress">' +
+										'<div class="progress-bar progress-bar-striped active" role="progressbar" ' +
+										'style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">' +
+										'0%</div></div>' +
+										'<p class="text-muted mt-2" id="progress-message">Initializing migration...</p>' +
+										'</div>'
+							}]
+						});
+						progress_dialog.show();
+						progress_dialog.get_close_btn().hide();
+						
+						// Start full migration
+						frappe.call({
+							method: 'verenigingen.utils.eboekhouden_full_migration.migrate_all_eboekhouden_data',
+							callback: function(r) {
+								progress_dialog.hide();
+								console.log('Full migration completed, response:', r);
+								
+								if (r.message && r.message.success) {
+									console.log('Full migration successful');
+									
+									// Show detailed summary dialog
+									let summary = r.message.summary;
+									let summary_html = `
+										<h5>Migration Completed Successfully!</h5>
+										<hr>
+										<div class="row">
+											<div class="col-md-6">
+												<h6>Date Range:</h6>
+												<p>${summary.date_range.from} to ${summary.date_range.to}<br>
+												(${summary.date_range.years} years, ${summary.date_range.days} days)</p>
+											</div>
+											<div class="col-md-6">
+												<h6>Migration Date:</h6>
+												<p>${summary.migration_date}</p>
+											</div>
+										</div>
+										<hr>
+										<h6>Results Summary:</h6>
+										<table class="table table-sm">
+											<tr>
+												<td>Chart of Accounts</td>
+												<td>${summary.totals.total_accounts} accounts</td>
+											</tr>
+											<tr>
+												<td>Journal Entries</td>
+												<td>${summary.totals.total_journal_entries} created</td>
+											</tr>
+											<tr>
+												<td>Payment Entries</td>
+												<td>${summary.totals.total_payment_entries} created</td>
+											</tr>
+											<tr>
+												<td>Total Errors</td>
+												<td class="${summary.totals.total_errors > 0 ? 'text-danger' : 'text-success'}">
+													${summary.totals.total_errors}
+												</td>
+											</tr>
+										</table>
+									`;
+									
+									if (summary.results.opening_balance.created) {
+										summary_html += `<p><strong>Opening Balance:</strong> Created as ${summary.results.opening_balance.journal_entry}</p>`;
+									}
+									
+									let result_dialog = new frappe.ui.Dialog({
+										title: 'Full Migration Summary',
+										fields: [{
+											fieldtype: 'HTML',
+											options: summary_html
+										}],
+										primary_action_label: 'Close',
+										primary_action: function() {
+											result_dialog.hide();
+											frm.reload_doc();
+										}
+									});
+									result_dialog.show();
+									
+								} else {
+									console.error('Full migration failed:', r.message);
+									frappe.msgprint({
+										title: __('Migration Failed'),
+										message: __('Full migration failed: ') + (r.message ? r.message.error : 'Unknown error'),
+										indicator: 'red'
+									});
+								}
+							},
+							error: function(error) {
+								progress_dialog.hide();
+								console.error('Full migration error:', error);
+								frappe.msgprint({
+									title: __('Migration Error'),
+									message: __('Full migration error: ') + (error.message || error),
+									indicator: 'red'
+								});
+							}
+						});
+						
+						// Update progress bar
+						frappe.realtime.on('progress', function(data) {
+							if (data.progress) {
+								let percent = data.progress;
+								let message = data.title || 'Processing...';
+								
+								$('#migration-progress .progress-bar')
+									.css('width', percent + '%')
+									.attr('aria-valuenow', percent)
+									.text(percent + '%');
+								$('#progress-message').text(message);
+							}
+						});
+					}
+				);
+			}).addClass('btn-warning');
+			
+			// Add Post-Migration section with account type mapping
+			frm.add_custom_button(__('Map Account Types'), function() {
+				// Step 1: Analyze categories
+				frappe.call({
+					method: 'verenigingen.utils.eboekhouden_account_type_mapping.analyze_account_categories',
+					callback: function(r) {
+						if (r.message && r.message.success) {
+							show_account_mapping_dialog(r.message);
+						} else {
+							frappe.msgprint({
+								title: __('Error'),
+								message: __('Failed to analyze account categories'),
+								indicator: 'red'
+							});
+						}
+					}
+				});
+			}, __('Post-Migration'));
 		} else if (frm.doc.migration_status === 'Failed') {
 			console.log('Adding reset button for Failed status');
 			frm.add_custom_button(__('Reset to Draft'), function() {
@@ -264,7 +430,7 @@ frappe.ui.form.on('E-Boekhouden Migration', {
 		
 		// Set help text based on status
 		if (frm.doc.migration_status === 'Draft') {
-			frm.set_intro(__('<strong>How to use:</strong><br>1. First click "Test Connection" to verify API settings<br>2. Click "Preview Migration" to see what would be imported (recommended)<br>3. Click "Start Migration" to perform the actual import'), 'blue');
+			frm.set_intro(__('<strong>How to use:</strong><br>1. First click "Test Connection" to verify API settings<br>2. Click "Preview Migration" to see what would be imported (recommended)<br>3. Click "Start Migration" to perform the actual import with specified date range<br>4. Or click "Full Migration" to automatically migrate ALL data from E-Boekhouden'), 'blue');
 		} else if (frm.doc.migration_status === 'In Progress') {
 			frm.set_intro(__('Migration is currently running. Progress will be updated automatically.'));
 		} else if (frm.doc.migration_status === 'Completed') {
@@ -308,3 +474,211 @@ frappe.ui.form.on('E-Boekhouden Migration', 'before_unload', function(frm) {
 		clearInterval(frm.auto_refresh_interval);
 	}
 });
+
+// Function to show account mapping dialog
+function show_account_mapping_dialog(analysis_data) {
+	let mapping_fields = [];
+	
+	// Add intro
+	mapping_fields.push({
+		fieldtype: 'HTML',
+		options: `<div class="alert alert-info">
+			<h5>Account Type Mapping</h5>
+			<p>Map E-Boekhouden categories to ERPNext account types. This is a two-step process:</p>
+			<ol>
+				<li>Review and adjust the mappings below</li>
+				<li>Preview changes before applying</li>
+			</ol>
+			<p><strong>Note:</strong> Receivable/Payable accounts require party information in journal entries.</p>
+		</div>`
+	});
+	
+	// Add mapping fields for each proposal (group or category)
+	analysis_data.mapping_proposals.forEach(function(proposal) {
+		let suggested = proposal.suggested_mapping || {};
+		let proposal_type = proposal.type || 'category';
+		let display_name = proposal.name || proposal.identifier || proposal.category;
+		let identifier = proposal.identifier || proposal.category;
+		
+		let field_html = `
+			<div class="form-group">
+				<label>${display_name} (${proposal.account_count} accounts)</label>
+				<div class="text-muted small mb-2">`;
+		
+		// Show type badge
+		if (proposal_type === 'group') {
+			field_html += `<span class="badge badge-info">Group ${identifier}</span> `;
+		} else {
+			field_html += `<span class="badge badge-secondary">Category</span> `;
+		}
+		
+		// Show sample accounts
+		if (proposal.sample_accounts && proposal.sample_accounts.length > 0) {
+			field_html += '<strong>Examples:</strong> ';
+			field_html += proposal.sample_accounts.slice(0, 3).map(acc => 
+				`${acc.code} - ${acc.description}`
+			).join(', ');
+			if (proposal.account_count > 3) {
+				field_html += ` ... and ${proposal.account_count - 3} more`;
+			}
+		}
+		
+		// Show suggestion if available
+		if (suggested.reason) {
+			field_html += `<br><strong>Suggestion:</strong> ${suggested.reason}`;
+			if (suggested.action) {
+				field_html += ` (${suggested.action})`;
+			}
+		}
+		
+		// Show current types
+		if (proposal.current_erpnext_types) {
+			field_html += `<br><strong>Current ERPNext types:</strong> ${proposal.current_erpnext_types.join(', ')}`;
+		}
+		
+		field_html += '</div></div>';
+		
+		mapping_fields.push({
+			fieldtype: 'HTML',
+			fieldname: `${identifier}_label`,
+			options: field_html
+		});
+		
+		mapping_fields.push({
+			fieldtype: 'Select',
+			fieldname: `mapping_${identifier}`,
+			label: '',
+			options: [
+				'',
+				'Skip',
+				'Receivable',
+				'Payable',
+				'Bank',
+				'Cash',
+				'Current Asset',
+				'Fixed Asset',
+				'Stock',
+				'Current Liability',
+				'Expense',
+				'Income'
+			],
+			default: suggested.type === 'Various' ? 'Skip' : (suggested.type || 'Skip')
+		});
+		
+		mapping_fields.push({
+			fieldtype: 'Column Break'
+		});
+	});
+	
+	// Create dialog
+	let mapping_dialog = new frappe.ui.Dialog({
+		title: 'Map E-Boekhouden Account Types',
+		fields: mapping_fields,
+		size: 'large',
+		primary_action_label: 'Preview Changes',
+		primary_action: function(values) {
+			// Extract mappings
+			let mappings = {};
+			for (let key in values) {
+				if (key.startsWith('mapping_')) {
+					let category = key.replace('mapping_', '');
+					if (values[key] && values[key] !== 'Skip') {
+						mappings[category] = values[key];
+					}
+				}
+			}
+			
+			// Preview changes
+			frappe.call({
+				method: 'verenigingen.utils.eboekhouden_account_type_mapping.get_mapping_preview',
+				args: { mappings: mappings },
+				callback: function(r) {
+					if (r.message && r.message.success) {
+						show_mapping_preview(mappings, r.message.preview);
+					}
+				}
+			});
+		},
+		secondary_action_label: 'Cancel'
+	});
+	
+	mapping_dialog.show();
+}
+
+// Function to show mapping preview
+function show_mapping_preview(mappings, preview) {
+	let preview_html = '<h5>Preview of Changes</h5><hr>';
+	let total_updates = 0;
+	
+	for (let category in preview) {
+		let cat_data = preview[category];
+		let update_count = cat_data.accounts_to_update.length;
+		total_updates += update_count;
+		
+		preview_html += `<h6>${category} → ${cat_data.target_type}</h6>`;
+		
+		if (update_count > 0) {
+			preview_html += `<p class="text-success">${update_count} accounts will be updated:</p>`;
+			preview_html += '<ul class="small">';
+			cat_data.accounts_to_update.slice(0, 5).forEach(acc => {
+				preview_html += `<li>${acc.code} - ${acc.description} (${acc.current_type} → ${acc.new_type})</li>`;
+			});
+			if (update_count > 5) {
+				preview_html += `<li>... and ${update_count - 5} more</li>`;
+			}
+			preview_html += '</ul>';
+		}
+		
+		if (cat_data.accounts_already_correct.length > 0) {
+			preview_html += `<p class="text-muted small">${cat_data.accounts_already_correct.length} accounts already correct</p>`;
+		}
+		
+		if (cat_data.accounts_not_found.length > 0) {
+			preview_html += `<p class="text-warning small">${cat_data.accounts_not_found.length} accounts not found in ERPNext</p>`;
+		}
+	}
+	
+	preview_html += `<hr><p><strong>Total accounts to update: ${total_updates}</strong></p>`;
+	
+	let preview_dialog = new frappe.ui.Dialog({
+		title: 'Confirm Account Type Updates',
+		fields: [{
+			fieldtype: 'HTML',
+			options: preview_html
+		}],
+		size: 'large',
+		primary_action_label: 'Apply Changes',
+		primary_action: function() {
+			preview_dialog.hide();
+			
+			// Apply mappings
+			frappe.call({
+				method: 'verenigingen.utils.eboekhouden_account_type_mapping.apply_account_type_mappings',
+				args: { mappings: mappings },
+				callback: function(r) {
+					if (r.message && r.message.success) {
+						let summary = r.message.summary;
+						frappe.msgprint({
+							title: __('Account Types Updated'),
+							message: __(`Successfully updated ${summary.total_updated} accounts. 
+								${summary.total_skipped} skipped, ${summary.total_errors} errors.`),
+							indicator: 'green'
+						});
+					} else {
+						frappe.msgprint({
+							title: __('Error'),
+							message: __('Failed to update account types'),
+							indicator: 'red'
+						});
+					}
+				}
+			});
+		},
+		secondary_action_label: 'Back',
+		secondary_action: function() {
+			preview_dialog.hide();
+		}
+	});
+	
+	preview_dialog.show();
+}

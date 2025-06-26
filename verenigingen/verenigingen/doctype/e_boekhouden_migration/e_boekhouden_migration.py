@@ -369,27 +369,36 @@ class EBoekhoudenMigration(Document):
     def migrate_stock_transactions_data(self, settings):
         """Migrate Stock Transactions from e-Boekhouden"""
         try:
-            from verenigingen.utils.stock_migration import StockTransactionMigrator
+            # Use the fixed stock migration that properly handles E-Boekhouden limitations
+            from verenigingen.utils.stock_migration_fixed import migrate_stock_transactions_safe
             
-            # Create stock migrator
-            migrator = StockTransactionMigrator(self)
+            # Get date range
+            date_from = self.date_from if self.date_from else None
+            date_to = self.date_to if self.date_to else None
             
-            # Set date range from migration settings
-            date_from = getdate(self.date_from) if self.date_from else None
-            date_to = getdate(self.date_to) if self.date_to else None
+            # Run migration - returns a message or result dict
+            result = migrate_stock_transactions_safe(self, date_from, date_to)
             
-            # Run stock migration
-            result = migrator.migrate_stock_transactions(settings, date_from, date_to)
-            
-            # Update counters
-            self.total_records += (migrator.stock_transactions_created + migrator.stock_transactions_failed + migrator.stock_transactions_skipped)
-            self.imported_records += migrator.stock_transactions_created
-            self.failed_records += migrator.stock_transactions_failed
-            
-            return result
+            # If result is a dict, extract the message
+            if isinstance(result, dict):
+                message = result.get("message", "Stock migration completed")
+                # Update counters if available
+                if "skipped" in result:
+                    self.total_records += result["skipped"]
+                if "processed" in result:
+                    self.imported_records += result["processed"]
+                return message
+            else:
+                # Result is already a message string
+                return result
             
         except Exception as e:
-            return f"Error migrating Stock Transactions: {str(e)}"
+            # Log full error without truncation
+            frappe.log_error(
+                title="Stock Transaction Migration Error",
+                message=f"Error migrating stock transactions:\n{str(e)}\n\n{frappe.get_traceback()}"
+            )
+            return f"Error migrating Stock Transactions: {str(e)[:100]}..."  # Truncate for display
     
     def parse_grootboekrekeningen_xml(self, xml_data):
         """Parse Chart of Accounts XML response"""
@@ -685,8 +694,13 @@ class EBoekhoudenMigration(Document):
                 }, "name")
             
             if not parent_cost_center:
-                self.log_error(f"No parent cost center found for company {company}")
-                return False
+                # Try to create root cost center if it doesn't exist
+                from verenigingen.utils.eboekhouden_cost_center_fix import ensure_root_cost_center
+                parent_cost_center = ensure_root_cost_center(company)
+                
+                if not parent_cost_center:
+                    self.log_error(f"Could not create or find root cost center for company {company}")
+                    return False
             
             # Create new cost center
             cost_center = frappe.get_doc({
