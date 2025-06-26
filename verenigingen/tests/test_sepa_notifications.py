@@ -4,6 +4,7 @@ from frappe.utils import today, add_days, getdate
 from unittest.mock import patch, MagicMock
 from verenigingen.utils.sepa_notifications import SEPAMandateNotificationManager
 from verenigingen.utils.payment_notifications import on_payment_submit, check_and_resolve_payment_retries
+from verenigingen.tests.test_patches import apply_test_patches, remove_test_patches
 
 class TestSEPANotifications(unittest.TestCase):
     """Test SEPA notification system"""
@@ -11,6 +12,9 @@ class TestSEPANotifications(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up test data"""
+        # Apply test patches to disable notifications
+        apply_test_patches()
+        
         cls.test_member = None
         cls.test_mandate = None
         cls.test_customer = None
@@ -77,6 +81,9 @@ class TestSEPANotifications(unittest.TestCase):
         
         if cls.test_customer and frappe.db.exists('Customer', cls.test_customer.name):
             frappe.delete_doc('Customer', cls.test_customer.name, force=True)
+        
+        # Remove test patches
+        remove_test_patches()
         
         frappe.db.commit()
     

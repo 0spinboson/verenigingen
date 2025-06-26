@@ -4,7 +4,17 @@ Chapter Board Dashboard - Simplified interface for chapter board members
 import frappe
 from frappe import _
 from frappe.utils import today, flt, formatdate, add_days, date_diff, now_datetime
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
+
+def serialize_dates(obj):
+    """Recursively convert date/datetime objects to strings for JSON serialization"""
+    if isinstance(obj, (datetime, date)):
+        return obj.strftime("%Y-%m-%d %H:%M:%S") if isinstance(obj, datetime) else obj.strftime("%Y-%m-%d")
+    elif isinstance(obj, dict):
+        return {k: serialize_dates(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [serialize_dates(item) for item in obj]
+    return obj
 
 def get_context(context):
     """Get context for chapter dashboard page"""
@@ -138,6 +148,7 @@ def get_user_board_role(chapter_name):
         return {
             "role": board_role.chapter_role,
             "since": board_role.from_date,
+            "since_formatted": board_role.from_date.strftime('%B %Y') if board_role.from_date else '',
             "permissions": role_permissions
         }
     
@@ -192,7 +203,7 @@ def get_chapter_dashboard_data(chapter_name):
     if not any(ch['chapter_name'] == chapter_name for ch in user_chapters):
         frappe.throw(_("You don't have access to this chapter"))
     
-    return {
+    dashboard_data = {
         "chapter_info": get_chapter_basic_info(chapter_name),
         "key_metrics": get_chapter_key_metrics(chapter_name),
         "member_overview": get_member_overview(chapter_name),
@@ -200,8 +211,11 @@ def get_chapter_dashboard_data(chapter_name):
         "financial_summary": get_financial_summary(chapter_name),
         "board_info": get_board_information(chapter_name),
         "recent_activity": get_recent_activity(chapter_name),
-        "last_updated": now_datetime()
+        "last_updated": now_datetime().strftime("%Y-%m-%d %H:%M:%S")
     }
+    
+    # Serialize all date/datetime objects for JSON compatibility
+    return serialize_dates(dashboard_data)
 
 def get_chapter_basic_info(chapter_name):
     """Get basic chapter information"""

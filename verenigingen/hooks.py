@@ -190,6 +190,11 @@ website_context = {
     "get_member_context": "verenigingen.utils.portal_customization.get_member_context"
 }
 
+# Website context update hook - adds body classes for brand styling
+update_website_context = [
+    "verenigingen.utils.portal_customization.add_brand_body_classes"
+]
+
 # Installation
 # ------------
 after_install = [

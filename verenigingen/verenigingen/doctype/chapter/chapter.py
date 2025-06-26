@@ -568,6 +568,17 @@ def get_list_context(context):
     context.title = 'All Chapters'
     context.no_breadcrumbs = True
     context.order_by = 'creation desc'
+    
+    # Get current user's member chapters
+    context.user_chapters = []
+    if frappe.session.user != "Guest":
+        member = frappe.db.get_value("Member", {"email": frappe.session.user}, "name")
+        if member:
+            context.user_chapters = frappe.get_all(
+                "Chapter Member",
+                filters={"member": member, "enabled": 1},
+                pluck="parent"
+            )
 
 def get_chapter_permission_query_conditions(user=None):
     """Get permission query conditions for Chapters with optimized single query"""
