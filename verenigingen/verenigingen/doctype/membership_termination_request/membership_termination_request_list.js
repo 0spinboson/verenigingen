@@ -181,7 +181,7 @@ function show_bulk_process_dialog(listview) {
             
             approved_items.forEach(function(item, index) {
                 frappe.call({
-                    method: 'vereinigen.verenigingen.doctype.membership_termination_request.membership_termination_request.execute_termination',
+                    method: 'verenigingen.verenigingen.doctype.membership_termination_request.membership_termination_request.execute_termination',
                     args: {
                         request_name: item.name
                     },

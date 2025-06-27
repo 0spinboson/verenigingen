@@ -14,7 +14,7 @@ class EBoekhoudenMigration(Document):
     def validate(self):
         """Validate migration settings"""
         # Debug logging
-        frappe.log_error(f"Validating migration: {self.migration_name}, Status: {self.migration_status}", "Migration Validation")
+        frappe.logger().debug(f"Validating migration: {self.migration_name}, Status: {self.migration_status}")
         
         if getattr(self, 'migrate_transactions', 0) and not (self.date_from and self.date_to):
             frappe.throw("Date range is required when migrating transactions")
@@ -24,7 +24,7 @@ class EBoekhoudenMigration(Document):
     
     def on_submit(self):
         """Start migration process when document is submitted"""
-        frappe.log_error(f"Migration submitted: {self.migration_name}, Status: {self.migration_status}", "Migration Submit")
+        frappe.logger().debug(f"Migration submitted: {self.migration_name}, Status: {self.migration_status}")
         if self.migration_status == "Draft":
             self.start_migration()
     
@@ -455,9 +455,33 @@ class EBoekhoudenMigration(Document):
         else:
             self.error_details = message
     
-    def create_account(self, account_data):
+    def create_account(self, account_data, use_enhanced=True):
         """Create Account in ERPNext"""
         try:
+            # Use enhanced migration if available and enabled
+            if use_enhanced:
+                try:
+                    from verenigingen.utils.eboekhouden_migration_enhancements import EnhancedAccountMigration
+                    enhanced_migrator = EnhancedAccountMigration(self)
+                    result = enhanced_migrator.analyze_and_create_account(account_data)
+                    
+                    account_code = account_data.get('code', '')
+                    account_name = account_data.get('description', '')
+                    
+                    if result["status"] == "created":
+                        frappe.logger().info(f"Created account: {account_code} - {account_name} (Group: {result.get('group', 'N/A')})")
+                        return True
+                    elif result["status"] == "skipped":
+                        frappe.logger().info(f"Skipped: {account_code} - {account_name} ({result.get('reason', '')})")
+                        return False
+                    else:
+                        self.log_error(f"Failed: {account_code} - {account_name}: {result.get('error', '')}")
+                        return False
+                except ImportError:
+                    # Fall back to standard migration
+                    pass
+            
+            # Standard migration logic
             # Map e-Boekhouden account to ERPNext account
             account_code = account_data.get('code', '')
             account_name = account_data.get('description', '')
@@ -470,7 +494,7 @@ class EBoekhoudenMigration(Document):
             # Truncate account name if too long (ERPNext limit is 140 chars)
             if len(account_name) > 120:  # Leave room for account code
                 account_name = account_name[:120] + "..."
-                self.log_error(f"Truncated long account name for {account_code}")
+                frappe.logger().info(f"Truncated long account name for {account_code}")
             
             # Create full account name with code
             full_account_name = f"{account_code} - {account_name}"
@@ -482,7 +506,7 @@ class EBoekhoudenMigration(Document):
             
             # Check if account already exists
             if frappe.db.exists("Account", {"account_number": account_code}):
-                self.log_error(f"Account {account_code} already exists, skipping")
+                frappe.logger().info(f"Account {account_code} already exists, skipping")
                 return False
             
             # Map e-Boekhouden categories to ERPNext account types and root types
@@ -526,7 +550,7 @@ class EBoekhoudenMigration(Document):
                         # but note that they should be converted to Stock type manually if needed
                         account_type = 'Current Asset'
                         root_type = 'Asset'
-                        self.log_error(f"Account {account_code} appears to be inventory - created as Current Asset, convert to Stock type manually if needed")
+                        frappe.logger().info(f"Account {account_code} appears to be inventory - created as Current Asset, convert to Stock type manually if needed")
                     elif account_code.startswith('44'):  # Payables often 44xx
                         # Don't use 'Payable' type to avoid party requirements in journal entries
                         account_type = 'Current Liability'
@@ -577,7 +601,7 @@ class EBoekhoudenMigration(Document):
             account = frappe.get_doc(account_doc)
             
             account.insert(ignore_permissions=True)
-            self.log_error(f"Created account: {account_code} - {account_name}")
+            frappe.logger().info(f"Created account: {account_code} - {account_name}")
             return True
             
         except Exception as e:
@@ -713,7 +737,7 @@ class EBoekhoudenMigration(Document):
             })
             
             cost_center.insert(ignore_permissions=True)
-            self.log_error(f"Created cost center: {description}")
+            frappe.logger().info(f"Created cost center: {description}")
             return True
             
         except Exception as e:
@@ -742,7 +766,7 @@ class EBoekhoudenMigration(Document):
             
             # Check if customer already exists
             if frappe.db.exists("Customer", {"customer_name": display_name}):
-                self.log_error(f"Customer '{display_name}' already exists, skipping")
+                frappe.logger().info(f"Customer '{display_name}' already exists, skipping")
                 return False
             
             # Get default settings
@@ -769,7 +793,7 @@ class EBoekhoudenMigration(Document):
             if any([customer_data.get('address'), customer_data.get('city'), customer_data.get('postalCode')]):
                 self.create_address_for_customer(customer.name, customer_data)
             
-            self.log_error(f"Created customer: {display_name}")
+            frappe.logger().info(f"Created customer: {display_name}")
             return True
             
         except Exception as e:
@@ -798,7 +822,7 @@ class EBoekhoudenMigration(Document):
             
             # Check if supplier already exists
             if frappe.db.exists("Supplier", {"supplier_name": display_name}):
-                self.log_error(f"Supplier '{display_name}' already exists, skipping")
+                frappe.logger().info(f"Supplier '{display_name}' already exists, skipping")
                 return False
             
             # Get default settings
@@ -829,7 +853,7 @@ class EBoekhoudenMigration(Document):
             if any([supplier_data.get('address'), supplier_data.get('city'), supplier_data.get('postalCode')]):
                 self.create_address_for_supplier(supplier.name, supplier_data)
             
-            self.log_error(f"Created supplier: {display_name}")
+            frappe.logger().info(f"Created supplier: {display_name}")
             return True
             
         except Exception as e:
@@ -894,7 +918,7 @@ class EBoekhoudenMigration(Document):
             
             # Skip stock accounts - they can only be updated via stock transactions
             if account_type == "Stock":
-                self.log_error(f"Skipping stock account {account_code} - must be updated via stock transactions")
+                frappe.logger().info(f"Skipping stock account {account_code} - must be updated via stock transactions")
                 # Track skipped stock transactions
                 if not hasattr(self, 'skipped_stock_transactions'):
                     self.skipped_stock_transactions = 0
@@ -967,7 +991,7 @@ class EBoekhoudenMigration(Document):
                 return False
             
             journal_entry.insert(ignore_permissions=True)
-            self.log_error(f"Created journal entry: {description}")
+            frappe.logger().info(f"Created journal entry: {description}")
             return True
             
         except Exception as e:
@@ -993,7 +1017,7 @@ class EBoekhoudenMigration(Document):
             })
             
             contact.insert(ignore_permissions=True)
-            self.log_error(f"Created contact for customer: {customer_name}")
+            frappe.logger().info(f"Created contact for customer: {customer_name}")
             
         except Exception as e:
             self.log_error(f"Failed to create contact for customer {customer_name}: {str(e)}")
@@ -1017,7 +1041,7 @@ class EBoekhoudenMigration(Document):
             })
             
             contact.insert(ignore_permissions=True)
-            self.log_error(f"Created contact for supplier: {supplier_name}")
+            frappe.logger().info(f"Created contact for supplier: {supplier_name}")
             
         except Exception as e:
             self.log_error(f"Failed to create contact for supplier {supplier_name}: {str(e)}")
@@ -1044,7 +1068,7 @@ class EBoekhoudenMigration(Document):
             })
             
             address.insert(ignore_permissions=True)
-            self.log_error(f"Created address for customer: {customer_name}")
+            frappe.logger().info(f"Created address for customer: {customer_name}")
             
         except Exception as e:
             self.log_error(f"Failed to create address for customer {customer_name}: {str(e)}")
@@ -1071,7 +1095,7 @@ class EBoekhoudenMigration(Document):
             })
             
             address.insert(ignore_permissions=True)
-            self.log_error(f"Created address for supplier: {supplier_name}")
+            frappe.logger().info(f"Created address for supplier: {supplier_name}")
             
         except Exception as e:
             self.log_error(f"Failed to create address for supplier {supplier_name}: {str(e)}")

@@ -155,7 +155,7 @@ frappe.ui.form.on('Direct Debit Invoice', {
         const row = locals[cdt][cdn];
         if (row.invoice) {
             frappe.call({
-                method: 'vereiningen.api.sepa_batch_ui.get_invoice_mandate_info',
+                method: 'verenigingen.api.sepa_batch_ui.get_invoice_mandate_info',
                 args: { invoice: row.invoice },
                 callback: function(r) {
                     if (r.message) {
@@ -364,7 +364,7 @@ function load_unpaid_invoices(frm) {
         primary_action_label: __('Load Invoices'),
         primary_action(values) {
             frappe.call({
-                method: 'vereiningen.api.sepa_batch_ui.load_unpaid_invoices',
+                method: 'verenigingen.api.sepa_batch_ui.load_unpaid_invoices',
                 args: values,
                 callback: function(r) {
                     if (r.message && r.message.length > 0) {
@@ -421,7 +421,7 @@ function validate_mandates(frm) {
     
     frm.doc.invoices.forEach((inv, idx) => {
         frappe.call({
-            method: 'vereiningen.api.sepa_batch_ui.validate_invoice_mandate',
+            method: 'verenigingen.api.sepa_batch_ui.validate_invoice_mandate',
             args: { 
                 invoice: inv.invoice,
                 member: inv.member
@@ -533,7 +533,7 @@ function process_returns_dialog(frm) {
         primary_action_label: __('Process'),
         primary_action(values) {
             frappe.call({
-                method: 'vereiningen.utils.sepa_reconciliation.process_sepa_return_file',
+                method: 'verenigingen.utils.sepa_reconciliation.process_sepa_return_file',
                 args: {
                     file_content: values.return_file,
                     file_type: 'pain.002'

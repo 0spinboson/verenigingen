@@ -173,7 +173,7 @@ function show_board_memberships(frm) {
 
 function create_organization_user(frm) {
     frappe.call({
-        method: 'verenigingen.verenigingen.doctype.vereinigingen_settings.verenigingen_settings.get_organization_email_domain',
+        method: 'verenigingen.verenigingen.doctype.verenigingen_settings.verenigingen_settings.get_organization_email_domain',
         callback: function(r) {
             const domain = r.message && r.message.organization_email_domain 
                 ? r.message.organization_email_domain 

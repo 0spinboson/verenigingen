@@ -88,7 +88,7 @@ generate_sepa_file: function(frm) {
 
 ### 4. **API Method Path Differences**
 - **Backup**: Uses full path like `'verenigingen.verenigingen.doctype.direct_debit_batch.direct_debit_batch.generate_sepa_xml'`
-- **Current**: Uses shorter paths like `'generate_sepa_xml'` (doc methods) or `'vereiningen.api.sepa_batch_ui.load_unpaid_invoices'`
+- **Current**: Uses shorter paths like `'generate_sepa_xml'` (doc methods) or `'verenigingen.api.sepa_batch_ui.load_unpaid_invoices'`
 
 ### 5. **Features Added in Current Version (Not in Backup)**
 1. Status indicator with colors

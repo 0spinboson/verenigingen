@@ -168,7 +168,7 @@ def create_group_mapping():
     This can be used to automate account type assignment during migration
     """
     try:
-        from vereiningen.utils.eboekhouden_api import EBoekhoudenAPI
+        from verenigingen.utils.eboekhouden_api import EBoekhoudenAPI
         
         # Initialize API
         api = EBoekhoudenAPI()

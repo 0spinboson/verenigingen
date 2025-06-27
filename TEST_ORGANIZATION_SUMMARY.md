@@ -29,7 +29,7 @@ The properly organized test structure is:
 
 ```
 /home/frappe/frappe-bench/apps/verenigingen/
-├── vereingingen/tests/                     # Main test directory (ORGANIZED ✅)
+├── verenigingen/tests/                     # Main test directory (ORGANIZED ✅)
 │   ├── test_validation_regression.py       # Validation regression tests
 │   ├── test_application_submission_validation.py  # Application flow tests
 │   ├── test_doctype_validation_comprehensive.py   # Comprehensive validation

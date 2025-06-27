@@ -111,8 +111,8 @@ bench --site dev.veganisme.net execute verenigingen.test_termination_fix.compare
 
 ## Files Modified
 
-1. `/vereinigingen/utils/termination_utils.py` - Lines 131-161
-2. `/vereinigingen/utils/termination_integration.py` - Lines 722-751
+1. `/verenigingen/utils/termination_utils.py` - Lines 131-161
+2. `/verenigingen/utils/termination_integration.py` - Lines 722-751
 
 ## Next Steps
 

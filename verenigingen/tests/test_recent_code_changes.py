@@ -229,7 +229,7 @@ class TestRecentCodeChanges(FrappeTestCase):
 
     @patch('frappe.get_single')
     def test_expense_approver_with_settings(self, mock_get_single):
-        """Test expense approver with vereinigen settings"""
+        """Test expense approver with verenigingen settings"""
         # Mock settings
         mock_settings = MagicMock()
         mock_settings.national_board_chapter = self.test_chapter.name

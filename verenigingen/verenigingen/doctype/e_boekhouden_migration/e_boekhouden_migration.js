@@ -6,9 +6,14 @@ frappe.ui.form.on('E-Boekhouden Migration', {
 		console.log('E-Boekhouden Migration refresh called', frm.doc);
 		console.log('Doc status:', frm.doc.docstatus, 'Migration status:', frm.doc.migration_status);
 		
-		// Add custom buttons based on status
-		if (frm.doc.docstatus === 0 && frm.doc.migration_status === 'Draft') {
-			console.log('Adding buttons for Draft status');
+		// Check if we have any migration history
+		let has_migrations = frm.doc.imported_records > 0 || frm.doc.total_records > 0;
+		
+		// Always show core action buttons when not submitted
+		if (frm.doc.docstatus === 0) {
+			// Show migration actions if not currently running
+			if (frm.doc.migration_status !== 'In Progress') {
+				console.log('Adding core action buttons');
 			
 			frm.add_custom_button(__('Test Connection'), function() {
 				console.log('Test Connection clicked');
@@ -302,25 +307,131 @@ frappe.ui.form.on('E-Boekhouden Migration', {
 					}
 				);
 			}).addClass('btn-warning');
+			}
 			
-			// Add Post-Migration section with account type mapping
-			frm.add_custom_button(__('Map Account Types'), function() {
-				// Step 1: Analyze categories
-				frappe.call({
-					method: 'verenigingen.utils.eboekhouden_account_type_mapping.analyze_account_categories',
-					callback: function(r) {
-						if (r.message && r.message.success) {
-							show_account_mapping_dialog(r.message);
-						} else {
-							frappe.msgprint({
-								title: __('Error'),
-								message: __('Failed to analyze account categories'),
-								indicator: 'red'
+			// Show Post-Migration buttons if we have any migration history or if status is Completed
+			if (has_migrations || frm.doc.migration_status === 'Completed') {
+				console.log('Adding Post-Migration buttons');
+				
+				// Add Post-Migration section with account type mapping
+				frm.add_custom_button(__('Map Account Types'), function() {
+					// Ask user which approach to use
+					let d = new frappe.ui.Dialog({
+						title: 'Choose Mapping Approach',
+						fields: [
+							{
+								fieldtype: 'HTML',
+								options: `<p>How would you like to map account types?</p>
+									<div class="alert alert-info">
+										<strong>Category-based (Recommended):</strong> Uses E-Boekhouden's own categories (DEB, CRED, FIN, etc.) 
+										and automatically splits mixed categories like Financial accounts into Cash, Bank, and PSPs.
+									</div>
+									<div class="alert alert-warning">
+										<strong>Group-based:</strong> Uses numeric groups (002, 005, etc.) with inferred names.
+									</div>`
+							}
+						],
+						primary_action_label: 'Use Category-based (Recommended)',
+						primary_action: function() {
+							d.hide();
+							// Use fixed category-based mapping
+							frappe.call({
+								method: 'verenigingen.utils.eboekhouden_category_mapping_fixed.analyze_accounts_with_proper_categories',
+								callback: function(r) {
+									if (r.message && r.message.success) {
+										show_account_mapping_dialog(r.message);
+									} else {
+										frappe.msgprint({
+											title: __('Error'),
+											message: __('Failed to analyze account categories'),
+											indicator: 'red'
+										});
+									}
+								}
+							});
+						},
+						secondary_action_label: 'Use Group-based',
+						secondary_action: function() {
+							d.hide();
+							// Use original group-based mapping
+							frappe.call({
+								method: 'verenigingen.utils.eboekhouden_group_analysis_improved.analyze_account_categories_improved',
+								args: {
+									use_groups: true
+								},
+								callback: function(r) {
+									if (r.message && r.message.success) {
+										show_account_mapping_dialog(r.message);
+									} else {
+										frappe.msgprint({
+											title: __('Error'),
+											message: __('Failed to analyze account categories'),
+											indicator: 'red'
+										});
+									}
+								}
 							});
 						}
+					});
+					d.show();
+				}, __('Post-Migration'));
+				
+				// Add other post-migration utilities
+				frm.add_custom_button(__('Fix Receivables/Payables'), function() {
+					frappe.msgprint({
+						title: __('Fix Receivables/Payables'),
+						message: __('This will identify journal entries that use Receivable/Payable accounts without party information and help you fix them.'),
+						primary_action_label: __('Proceed'),
+						primary_action: function() {
+							frappe.call({
+								method: 'verenigingen.utils.fix_receivable_payable_entries.analyze_and_fix_entries',
+								callback: function(r) {
+									if (r.message && r.message.success) {
+										frappe.msgprint({
+											title: __('Analysis Complete'),
+											message: r.message.summary,
+											indicator: 'green'
+										});
+									} else {
+										frappe.msgprint({
+											title: __('Error'),
+											message: r.message ? r.message.error : 'Unknown error',
+											indicator: 'red'
+										});
+									}
+								}
+							});
+						}
+					});
+				}, __('Post-Migration'));
+				
+				frm.add_custom_button(__('View Migration History'), function() {
+					let history_html = '<h5>Migration History</h5><hr>';
+					
+					if (frm.doc.migration_summary) {
+						history_html += '<h6>Last Migration Summary:</h6>';
+						history_html += '<pre style="max-height: 400px; overflow-y: auto; background: #f8f9fa; padding: 10px; border-radius: 3px;">' + frm.doc.migration_summary + '</pre>';
 					}
-				});
-			}, __('Post-Migration'));
+					
+					history_html += '<hr><h6>Statistics:</h6>';
+					history_html += '<table class="table table-sm">';
+					history_html += '<tr><td>Total Records Processed</td><td>' + (frm.doc.total_records || 0) + '</td></tr>';
+					history_html += '<tr><td>Successfully Imported</td><td class="text-success">' + (frm.doc.imported_records || 0) + '</td></tr>';
+					history_html += '<tr><td>Failed Records</td><td class="text-danger">' + (frm.doc.failed_records || 0) + '</td></tr>';
+					history_html += '</table>';
+					
+					let dialog = new frappe.ui.Dialog({
+						title: 'Migration History',
+						fields: [{
+							fieldtype: 'HTML',
+							options: history_html
+						}],
+						primary_action_label: 'Close',
+						primary_action: function() { dialog.hide(); }
+					});
+					dialog.show();
+				}, __('Post-Migration'));
+			}
 		} else if (frm.doc.migration_status === 'Failed') {
 			console.log('Adding reset button for Failed status');
 			frm.add_custom_button(__('Reset to Draft'), function() {
@@ -429,14 +540,14 @@ frappe.ui.form.on('E-Boekhouden Migration', {
 		}
 		
 		// Set help text based on status
-		if (frm.doc.migration_status === 'Draft') {
+		if (frm.doc.migration_status === 'Draft' && !has_migrations) {
 			frm.set_intro(__('<strong>How to use:</strong><br>1. First click "Test Connection" to verify API settings<br>2. Click "Preview Migration" to see what would be imported (recommended)<br>3. Click "Start Migration" to perform the actual import with specified date range<br>4. Or click "Full Migration" to automatically migrate ALL data from E-Boekhouden'), 'blue');
 		} else if (frm.doc.migration_status === 'In Progress') {
 			frm.set_intro(__('Migration is currently running. Progress will be updated automatically.'));
-		} else if (frm.doc.migration_status === 'Completed') {
-			frm.set_intro(__('Migration completed successfully. Check the summary for details.'));
+		} else if (frm.doc.migration_status === 'Completed' || has_migrations) {
+			frm.set_intro(__('Migration completed successfully. You can now use the Post-Migration tools to:<br>• Map account types for proper ERPNext functionality<br>• Fix any Receivable/Payable entries missing party information<br>• View detailed migration history<br><br>You can also run additional migrations if needed.'), 'green');
 		} else if (frm.doc.migration_status === 'Failed') {
-			frm.set_intro(__('Migration failed. Check the error log for details.'), 'red');
+			frm.set_intro(__('Migration failed. Check the error log for details. You can reset to Draft to try again.'), 'red');
 		}
 	},
 	
@@ -479,128 +590,246 @@ frappe.ui.form.on('E-Boekhouden Migration', 'before_unload', function(frm) {
 function show_account_mapping_dialog(analysis_data) {
 	let mapping_fields = [];
 	
-	// Add intro
+	// Add intro with any explanatory notes
+	let intro_html = `<div class="alert alert-info">
+		<h5>Account Type Mapping</h5>
+		<p>Map E-Boekhouden categories to ERPNext account types. This is a two-step process:</p>
+		<ol>
+			<li>Review and adjust the mappings below</li>
+			<li>Preview changes before applying</li>
+		</ol>
+		<p><strong>Note:</strong> Receivable/Payable accounts require party information in journal entries.</p>
+	</div>`;
+	
+	// Add explanatory notes if provided
+	if (analysis_data.explanatory_notes) {
+		analysis_data.explanatory_notes.forEach(function(note) {
+			intro_html += `<div class="alert alert-warning mt-2">
+				<strong>${note.title}:</strong>
+				<ul class="mb-0">`;
+			note.items.forEach(function(item) {
+				intro_html += `<li>${item}</li>`;
+			});
+			intro_html += '</ul></div>';
+		});
+	}
+	
 	mapping_fields.push({
 		fieldtype: 'HTML',
-		options: `<div class="alert alert-info">
-			<h5>Account Type Mapping</h5>
-			<p>Map E-Boekhouden categories to ERPNext account types. This is a two-step process:</p>
-			<ol>
-				<li>Review and adjust the mappings below</li>
-				<li>Preview changes before applying</li>
-			</ol>
-			<p><strong>Note:</strong> Receivable/Payable accounts require party information in journal entries.</p>
-		</div>`
+		options: intro_html
 	});
 	
-	// Add mapping fields for each proposal (group or category)
-	analysis_data.mapping_proposals.forEach(function(proposal) {
+	// Add section break after intro
+	mapping_fields.push({
+		fieldtype: 'Section Break',
+		label: 'Account Mappings'
+	});
+	
+	// Add action buttons
+	mapping_fields.push({
+		fieldtype: 'HTML',
+		options: `
+			<div class="mb-3">
+				<button type="button" class="btn btn-xs btn-default" onclick="
+					$('.mapping-select').each(function() {
+						let suggested = $(this).find('option[selected]').val();
+						if (suggested) $(this).val(suggested);
+					});
+				">Apply All Suggestions</button>
+				<button type="button" class="btn btn-xs btn-default ml-2" onclick="
+					$('.mapping-select').val('Skip');
+				">Skip All</button>
+				<span class="text-muted ml-3">${analysis_data.mapping_proposals.length} mappings to configure</span>
+			</div>
+		`
+	});
+	
+	// Create a container for better layout with proper spacing and scrolling
+	mapping_fields.push({
+		fieldtype: 'HTML',
+		options: '<div class="mapping-container" style="height: 350px; overflow-y: auto; padding: 10px; margin-bottom: 20px; border: 1px solid #d1d8dd; border-radius: 4px; background-color: #fafbfc;">'
+	});
+	
+	// Add mapping fields for each proposal (group or category) as rows
+	analysis_data.mapping_proposals.forEach(function(proposal, index) {
 		let suggested = proposal.suggested_mapping || {};
 		let proposal_type = proposal.type || 'category';
 		let display_name = proposal.name || proposal.identifier || proposal.category;
 		let identifier = proposal.identifier || proposal.category;
 		
-		let field_html = `
-			<div class="form-group">
-				<label>${display_name} (${proposal.account_count} accounts)</label>
-				<div class="text-muted small mb-2">`;
+		// Create a simpler row layout
+		let row_html = `
+			<div class="mapping-row" style="margin-bottom: 8px; padding: 10px; background-color: white; border: 1px solid #e3e3e3; border-radius: 3px;">
+				<div class="row align-items-center">
+					<div class="col-md-7">
+						<div style="margin-bottom: 5px;">
+							<strong>${display_name}</strong>
+							<span class="text-muted ml-2">(${proposal.account_count} accounts)</span>`;
 		
-		// Show type badge
-		if (proposal_type === 'group') {
-			field_html += `<span class="badge badge-info">Group ${identifier}</span> `;
-		} else {
-			field_html += `<span class="badge badge-secondary">Category</span> `;
+		// Show type badge inline
+		if (proposal_type === 'category') {
+			row_html += ` <span class="badge badge-primary badge-sm ml-2">${identifier}</span>`;
+		} else if (proposal_type === 'subcategory') {
+			row_html += ` <span class="badge badge-info badge-sm ml-2">${proposal.parent_category}</span>`;
 		}
 		
-		// Show sample accounts
+		row_html += `</div>`;
+		
+		// Show sample accounts more compactly
 		if (proposal.sample_accounts && proposal.sample_accounts.length > 0) {
-			field_html += '<strong>Examples:</strong> ';
-			field_html += proposal.sample_accounts.slice(0, 3).map(acc => 
-				`${acc.code} - ${acc.description}`
+			row_html += '<div class="text-muted small" style="line-height: 1.4;">';
+			let examples = proposal.sample_accounts.slice(0, 2).map(acc => 
+				`${acc.code} - ${acc.description || acc.name || ''}`
 			).join(', ');
-			if (proposal.account_count > 3) {
-				field_html += ` ... and ${proposal.account_count - 3} more`;
+			row_html += examples;
+			if (proposal.account_count > 2) {
+				row_html += ` <em>(+${proposal.account_count - 2} more)</em>`;
 			}
+			row_html += '</div>';
 		}
 		
-		// Show suggestion if available
+		row_html += `</div>
+					<div class="col-md-3">`;
+		
+		// Show suggestion compactly
 		if (suggested.reason) {
-			field_html += `<br><strong>Suggestion:</strong> ${suggested.reason}`;
-			if (suggested.action) {
-				field_html += ` (${suggested.action})`;
-			}
+			let confidence_color = suggested.confidence === 'high' ? 'text-success' : 
+								 suggested.confidence === 'medium' ? 'text-warning' : 'text-muted';
+			row_html += `<div class="small ${confidence_color}" style="margin-bottom: 5px;">
+				<i class="fa fa-lightbulb-o"></i> ${suggested.reason}
+			</div>`;
 		}
 		
-		// Show current types
-		if (proposal.current_erpnext_types) {
-			field_html += `<br><strong>Current ERPNext types:</strong> ${proposal.current_erpnext_types.join(', ')}`;
-		}
+		row_html += `</div>
+					<div class="col-md-2">
+						<select class="form-control form-control-sm mapping-select" id="mapping_${identifier}" data-identifier="${identifier}">`;
 		
-		field_html += '</div></div>';
+		// Simplified options without optgroups for cleaner look
+		let option_list = [
+			{ value: '', label: '-- Select --' },
+			{ value: 'Skip', label: 'Skip' },
+			{ value: '---', label: '─────────', disabled: true },
+			{ value: 'Cash', label: 'Cash' },
+			{ value: 'Bank', label: 'Bank' },
+			{ value: 'Receivable', label: 'Receivable' },
+			{ value: 'Payable', label: 'Payable' },
+			{ value: 'Stock', label: 'Stock' },
+			{ value: 'Current Asset', label: 'Current Asset' },
+			{ value: 'Fixed Asset', label: 'Fixed Asset' },
+			{ value: 'Current Liability', label: 'Current Liability' },
+			{ value: 'Equity', label: 'Equity' },
+			{ value: '---2', label: '─────────', disabled: true },
+			{ value: 'Income', label: 'Income' },
+			{ value: 'Expense', label: 'Expense' },
+			{ value: 'Tax', label: 'Tax' },
+			{ value: 'Depreciation', label: 'Depreciation' },
+			{ value: 'Temporary', label: 'Temporary' }
+		];
+		
+		option_list.forEach(function(opt) {
+			let selected = (suggested.type === opt.value) ? 'selected' : '';
+			let disabled = opt.disabled ? 'disabled' : '';
+			row_html += `<option value="${opt.value}" ${selected} ${disabled}>${opt.label}</option>`;
+		});
+		
+		row_html += `
+						</select>
+					</div>
+				</div>
+			</div>`;
 		
 		mapping_fields.push({
 			fieldtype: 'HTML',
-			fieldname: `${identifier}_label`,
-			options: field_html
+			fieldname: `mapping_row_${identifier}`,
+			options: row_html
 		});
 		
-		mapping_fields.push({
-			fieldtype: 'Select',
-			fieldname: `mapping_${identifier}`,
-			label: '',
-			options: [
-				'',
-				'Skip',
-				'Receivable',
-				'Payable',
-				'Bank',
-				'Cash',
-				'Current Asset',
-				'Fixed Asset',
-				'Stock',
-				'Current Liability',
-				'Expense',
-				'Income'
-			],
-			default: suggested.type === 'Various' ? 'Skip' : (suggested.type || 'Skip')
-		});
-		
-		mapping_fields.push({
-			fieldtype: 'Column Break'
-		});
+		// No section breaks needed with the cleaner layout
+	});
+	
+	// Close the container
+	mapping_fields.push({
+		fieldtype: 'HTML',
+		options: '</div>'
 	});
 	
 	// Create dialog
 	let mapping_dialog = new frappe.ui.Dialog({
 		title: 'Map E-Boekhouden Account Types',
 		fields: mapping_fields,
-		size: 'large',
+		size: 'extra-large',
 		primary_action_label: 'Preview Changes',
 		primary_action: function(values) {
-			// Extract mappings
+			// Extract mappings from custom select elements
 			let mappings = {};
-			for (let key in values) {
-				if (key.startsWith('mapping_')) {
-					let category = key.replace('mapping_', '');
-					if (values[key] && values[key] !== 'Skip') {
-						mappings[category] = values[key];
-					}
+			
+			// Get values from our custom select elements
+			mapping_dialog.$wrapper.find('.mapping-select').each(function() {
+				let identifier = $(this).data('identifier');
+				let value = $(this).val();
+				if (value && value !== 'Skip') {
+					mappings[identifier] = value;
 				}
+			});
+			
+			if (Object.keys(mappings).length === 0) {
+				frappe.msgprint({
+					title: __('No Mappings Selected'),
+					message: __('Please select at least one account type mapping before previewing.'),
+					indicator: 'orange'
+				});
+				return;
 			}
 			
-			// Preview changes
+			// Preview changes - detect which type of mapping we're using
+			let preview_method = 'verenigingen.utils.eboekhouden_account_type_mapping.get_mapping_preview';
+			
+			// Check if this is category-based mapping
+			let mapping_keys = Object.keys(mappings);
+			if (mapping_keys.some(k => k.includes('_') || ['DEB', 'CRED', 'FIN', 'KAS', 'VW', 'BTW', 'EIG', 'BAL'].includes(k))) {
+				preview_method = 'verenigingen.utils.eboekhouden_category_preview.get_category_mapping_preview';
+			}
+			
 			frappe.call({
-				method: 'verenigingen.utils.eboekhouden_account_type_mapping.get_mapping_preview',
+				method: preview_method,
 				args: { mappings: mappings },
 				callback: function(r) {
 					if (r.message && r.message.success) {
 						show_mapping_preview(mappings, r.message.preview);
+						mapping_dialog.hide();
+					} else {
+						frappe.msgprint({
+							title: __('Preview Failed'),
+							message: r.message ? r.message.error : 'Unknown error',
+							indicator: 'red'
+						});
 					}
 				}
 			});
 		},
 		secondary_action_label: 'Cancel'
 	});
+	
+	// Add some custom CSS for better appearance
+	mapping_dialog.$wrapper.find('.modal-dialog').css('max-width', '1000px');
+	// Remove max-height restriction on modal-body to prevent conflicts
+	mapping_dialog.$wrapper.find('.modal-body').css('overflow', 'visible');
+	
+	// Add CSS to fix any potential overlap issues
+	mapping_dialog.$wrapper.find('head').append(`
+		<style>
+			.mapping-row:hover {
+				background-color: #f5f7fa !important;
+				border-color: #d1d8dd !important;
+			}
+			.mapping-container {
+				margin-top: 10px;
+			}
+			.form-section {
+				margin-bottom: 15px;
+			}
+		</style>
+	`);
 	
 	mapping_dialog.show();
 }
