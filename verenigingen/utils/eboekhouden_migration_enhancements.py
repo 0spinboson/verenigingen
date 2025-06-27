@@ -90,23 +90,29 @@ class EnhancedAccountMigration:
         """
         Determine account type using category, then fallback to code patterns
         """
-        category = account_data.get('category', '')
-        code = account_data.get('code', '')
-        
-        # First try category mapping
-        if category and category in self.category_type_mapping:
-            suggested_type = self.category_type_mapping[category]
+        # Use smart account type detection
+        try:
+            from verenigingen.utils.eboekhouden_smart_account_typing import get_smart_account_type
+            return get_smart_account_type(account_data)
+        except ImportError:
+            # Fallback to existing logic if smart typing not available
+            category = account_data.get('category', '')
+            code = account_data.get('code', '')
             
-            # Special handling for categories that need further analysis
-            if category == "BAL":  # Balance sheet accounts
-                return self._determine_balance_sheet_type(account_data)
-            elif suggested_type:
-                # Determine root type from account type
-                root_type = self._get_root_type_for_account_type(suggested_type)
-                return suggested_type, root_type
-        
-        # Fallback to code-based detection
-        return self._determine_type_by_code(code)
+            # First try category mapping
+            if category and category in self.category_type_mapping:
+                suggested_type = self.category_type_mapping[category]
+                
+                # Special handling for categories that need further analysis
+                if category == "BAL":  # Balance sheet accounts
+                    return self._determine_balance_sheet_type(account_data)
+                elif suggested_type:
+                    # Determine root type from account type
+                    root_type = self._get_root_type_for_account_type(suggested_type)
+                    return suggested_type, root_type
+            
+            # Fallback to code-based detection
+            return self._determine_type_by_code(code)
     
     def _determine_balance_sheet_type(self, account_data):
         """
@@ -125,7 +131,12 @@ class EnhancedAccountMigration:
                 else:
                     return 'Bank', 'Asset'
             elif code.startswith('13'):
-                return 'Current Asset', 'Asset'  # Not Receivable to avoid party requirement
+                # Check if it should be Receivable
+                name = account_data.get('description', '').lower()
+                if 'te ontvangen' in name or 'debiteuren' in name or 'vordering' in name:
+                    return 'Receivable', 'Asset'
+                else:
+                    return 'Current Asset', 'Asset'
             elif code.startswith('14'):
                 return 'Current Asset', 'Asset'
             else:
@@ -157,9 +168,19 @@ class EnhancedAccountMigration:
             else:
                 return 'Bank', 'Asset'
         elif code.startswith('13'):
-            return 'Current Asset', 'Asset'  # Not Receivable during migration
+            # Use smart detection for receivables
+            name = account_data.get('description', '').lower() if isinstance(account_data, dict) else ''
+            if 'te ontvangen' in name or 'debiteuren' in name:
+                return 'Receivable', 'Asset'
+            else:
+                return 'Current Asset', 'Asset'
         elif code.startswith('44'):
-            return 'Current Liability', 'Liability'  # Not Payable during migration
+            # Use smart detection for payables
+            name = account_data.get('description', '').lower() if isinstance(account_data, dict) else ''
+            if 'te betalen' in name or 'crediteuren' in name:
+                return 'Payable', 'Liability'
+            else:
+                return 'Current Liability', 'Liability'
         elif code.startswith('5'):
             return '', 'Equity'
         elif code.startswith('8'):

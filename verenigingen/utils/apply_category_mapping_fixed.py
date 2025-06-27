@@ -91,6 +91,24 @@ def get_accounts_for_mapping(mapping_key, all_accounts):
         fin_groups = split_financial_accounts(fin_accounts)
         accounts = fin_groups.get(subtype, [])
         
+    elif mapping_key.startswith("BAL_"):
+        # Balance sheet subcategory
+        subtype = mapping_key.split("_", 1)[1]
+        from verenigingen.utils.eboekhouden_category_mapping_fixed import split_balance_accounts
+        
+        bal_accounts = [acc for acc in all_accounts if acc.get("category") == "BAL"]
+        bal_groups = split_balance_accounts(bal_accounts)
+        accounts = bal_groups.get(subtype, [])
+        
+    elif mapping_key.startswith("VW_"):
+        # VW (Verbruiksrekeningen) subcategory
+        subtype = mapping_key.split("_", 1)[1]
+        from verenigingen.utils.eboekhouden_category_mapping_fixed import split_vw_accounts
+        
+        vw_accounts = [acc for acc in all_accounts if acc.get("category") == "VW"]
+        vw_groups = split_vw_accounts(vw_accounts)
+        accounts = vw_groups.get(subtype, [])
+        
     elif mapping_key.startswith("SMART_"):
         # Smart grouping for uncategorized accounts
         group_type = mapping_key.split("_", 1)[1]
@@ -133,8 +151,8 @@ def update_account_type_safe(account_code, target_type, description=""):
         account = frappe.get_doc("Account", account_name)
         old_type = account.account_type
         
-        # Check if already correct
-        if old_type == target_type:
+        # Check if already correct (treat empty string as None)
+        if old_type and old_type == target_type:
             return {
                 "status": "skipped",
                 "message": f"{account_code} - {description} already has type {target_type}"

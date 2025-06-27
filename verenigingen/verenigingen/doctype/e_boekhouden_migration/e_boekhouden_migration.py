@@ -174,43 +174,55 @@ class EBoekhoudenMigration(Document):
             return f"Error migrating Chart of Accounts: {str(e)}"
     
     def migrate_cost_centers(self, settings):
-        """Migrate Cost Centers from e-Boekhouden"""
+        """Migrate Cost Centers from e-Boekhouden with proper hierarchy"""
         try:
-            from verenigingen.utils.eboekhouden_api import EBoekhoudenAPI
+            # Use the fixed cost center migration
+            from verenigingen.utils.eboekhouden_cost_center_fix import (
+                migrate_cost_centers_with_hierarchy, 
+                cleanup_cost_centers
+            )
             
-            # Get Cost Centers data using new API
-            api = EBoekhoudenAPI(settings)
-            result = api.get_cost_centers()
+            result = migrate_cost_centers_with_hierarchy(settings)
             
-            if not result["success"]:
-                return f"Failed to fetch Cost Centers: {result['error']}"
+            if result["success"]:
+                self.imported_records += result["created"]
+                self.total_records += result["total"]
+                
+                # Run cleanup to fix any orphaned cost centers
+                if settings.default_company:
+                    cleanup_result = cleanup_cost_centers(settings.default_company)
+                    if cleanup_result["success"] and cleanup_result["fixed"] > 0:
+                        self.log_error(f"Fixed {cleanup_result['fixed']} orphaned cost centers")
+                
+                if result.get("errors"):
+                    for error in result["errors"][:5]:  # Log first 5 errors
+                        self.log_error(f"Cost center error: {error}")
+                
+                return result["message"]
+            else:
+                return f"Error: {result.get('error', 'Unknown error')}"
             
-            # Parse JSON response
-            import json
-            data = json.loads(result["data"])
-            cost_centers_data = data.get("items", [])
-            
-            if self.dry_run:
-                return f"Dry Run: Found {len(cost_centers_data)} cost centers to migrate"
-            
-            # Create cost centers in ERPNext
-            created_count = 0
-            skipped_count = 0
-            
-            for cost_center_data in cost_centers_data:
-                try:
-                    if self.create_cost_center(cost_center_data):
-                        created_count += 1
-                        self.imported_records += 1
-                    else:
-                        skipped_count += 1
-                except Exception as e:
-                    self.failed_records += 1
-                    self.log_error(f"Failed to create cost center {cost_center_data.get('description', 'Unknown')}: {str(e)}")
-            
-            self.total_records += len(cost_centers_data)
-            return f"Created {created_count} cost centers, skipped {skipped_count} ({len(cost_centers_data)} total)"
-            
+            # Old implementation below for reference
+            # from verenigingen.utils.eboekhouden_api import EBoekhoudenAPI
+            # 
+            # # Get Cost Centers data using new API
+            # api = EBoekhoudenAPI(settings)
+            # result = api.get_cost_centers()
+            # 
+            # if not result["success"]:
+            #     return f"Failed to fetch Cost Centers: {result['error']}"
+            # 
+            # # Parse JSON response
+            # import json
+            # data = json.loads(result["data"])
+            # cost_centers_data = data.get("items", [])
+            # 
+            # if self.dry_run:
+            #     return f"Dry Run: Found {len(cost_centers_data)} cost centers to migrate"
+            # 
+            # # Create cost centers in ERPNext
+            # created_count = 0
+            # skipped_count = 0
         except Exception as e:
             return f"Error migrating Cost Centers: {str(e)}"
     
@@ -297,72 +309,24 @@ class EBoekhoudenMigration(Document):
             return f"Error migrating Suppliers: {str(e)}"
     
     def migrate_transactions_data(self, settings):
-        """Migrate Transactions from e-Boekhouden"""
+        """Migrate Transactions from e-Boekhouden using grouped approach"""
         try:
-            from verenigingen.utils.eboekhouden_api import EBoekhoudenAPI
+            # Use the enhanced grouped migration
+            from verenigingen.utils.eboekhouden_grouped_migration import migrate_mutations_grouped
             
-            # Get Mutations data using new API
-            api = EBoekhoudenAPI(settings)
+            result = migrate_mutations_grouped(self, settings)
             
-            # Process transactions in monthly batches to avoid large data loads
-            current_date = getdate(self.date_from)
-            end_date = getdate(self.date_to)
-            total_created = 0
-            
-            while current_date <= end_date:
-                # Calculate month end
-                if current_date.month == 12:
-                    month_end = current_date.replace(year=current_date.year + 1, month=1, day=1) - timedelta(days=1)
-                else:
-                    month_end = current_date.replace(month=current_date.month + 1, day=1) - timedelta(days=1)
+            if result["success"]:
+                self.imported_records += result["created"]
+                self.failed_records += result["failed"]
+                self.total_records += result["total_mutations"]
                 
-                month_end = min(month_end, end_date)
-                
-                # Get transactions for this month using new API
-                params = {
-                    "dateFrom": current_date.strftime("%Y-%m-%d"),
-                    "dateTo": month_end.strftime("%Y-%m-%d")
-                }
-                result = api.get_mutations(params)
-                
-                if result["success"]:
-                    # Parse JSON response
-                    import json
-                    data = json.loads(result["data"])
-                    transactions_data = data.get("items", [])
-                    
-                    if self.dry_run:
-                        total_created += len(transactions_data)
-                    else:
-                        # Create journal entries
-                        for transaction_data in transactions_data:
-                            try:
-                                if self.create_journal_entry(transaction_data):
-                                    total_created += 1
-                                    self.imported_records += 1
-                            except Exception as e:
-                                self.failed_records += 1
-                                self.log_error(f"Failed to create transaction: {str(e)}")
-                
-                # Move to next month
-                if current_date.month == 12:
-                    current_date = current_date.replace(year=current_date.year + 1, month=1, day=1)
-                else:
-                    current_date = current_date.replace(month=current_date.month + 1, day=1)
-            
-            # Prepare summary message
-            summary_parts = []
-            if self.dry_run:
-                summary_parts.append(f"Dry Run: Found {total_created} transactions to migrate")
+                return (f"Created {result['created']} journal entries from "
+                       f"{result['total_mutations']} mutations "
+                       f"({result['grouped_entries']} grouped, "
+                       f"{result['ungrouped_mutations']} ungrouped)")
             else:
-                summary_parts.append(f"Created {total_created} journal entries")
-            
-            # Add stock transaction information if any were skipped
-            if hasattr(self, 'skipped_stock_transactions') and self.skipped_stock_transactions > 0:
-                summary_parts.append(f"Skipped {self.skipped_stock_transactions} stock account transactions (require stock transactions, not journal entries)")
-            
-            return " | ".join(summary_parts)
-                
+                return f"Error: {result.get('error', 'Unknown error')}"
         except Exception as e:
             return f"Error migrating Transactions: {str(e)}"
     

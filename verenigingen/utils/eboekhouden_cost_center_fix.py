@@ -1,320 +1,317 @@
 """
-E-Boekhouden Cost Center Fix
-Handles cost center creation and migration issues
+Fix for E-Boekhouden cost center migration with proper parent-child relationships
 """
 
 import frappe
 from frappe import _
-from frappe.utils import cstr
+import json
 
-
-@frappe.whitelist()
-def create_cost_center_safe(cost_center_name, company, parent_cost_center=None):
+def migrate_cost_centers_with_hierarchy(settings):
     """
-    Safely create a cost center with proper error handling
-    
-    Args:
-        cost_center_name: Name of the cost center
-        company: Company name
-        parent_cost_center: Parent cost center (optional)
-    
-    Returns:
-        dict with success status and cost center name or error
+    Migrate cost centers with proper parent-child hierarchy
     """
     try:
-        # Validate inputs
-        if not cost_center_name:
+        from verenigingen.utils.eboekhouden_api import EBoekhoudenAPI
+        
+        # Get Cost Centers data
+        api = EBoekhoudenAPI(settings)
+        result = api.get_cost_centers()
+        
+        if not result["success"]:
             return {
                 "success": False,
-                "error": "Cost center name is required"
+                "error": f"Failed to fetch Cost Centers: {result['error']}"
             }
         
+        # Parse JSON response
+        data = json.loads(result["data"])
+        cost_centers_data = data.get("items", [])
+        
+        if not cost_centers_data:
+            return {
+                "success": True,
+                "message": "No cost centers to migrate"
+            }
+        
+        company = settings.default_company
         if not company:
             return {
                 "success": False,
-                "error": "Company is required"
+                "error": "No default company set"
             }
         
-        # Clean the cost center name
-        cost_center_name = cstr(cost_center_name).strip()
-        
-        # Check if cost center already exists
-        existing = frappe.db.get_value(
-            "Cost Center",
-            {
-                "cost_center_name": cost_center_name,
-                "company": company
-            },
-            "name"
-        )
-        
-        if existing:
-            return {
-                "success": True,
-                "cost_center": existing,
-                "message": "Cost center already exists"
-            }
-        
-        # If no parent specified, try to find the company's main cost center
-        if not parent_cost_center:
-            # First try to find "Main - Company"
-            parent_cost_center = frappe.db.get_value(
-                "Cost Center",
-                {
-                    "cost_center_name": "Main",
-                    "company": company,
-                    "is_group": 1
-                },
-                "name"
-            )
-            
-            # If not found, get the root cost center for the company
-            if not parent_cost_center:
-                parent_cost_center = frappe.db.get_value(
-                    "Cost Center",
-                    {
-                        "company": company,
-                        "parent_cost_center": "",
-                        "is_group": 1
-                    },
-                    "name"
-                )
-        
-        if not parent_cost_center:
+        # Get or create root cost center
+        root_cc = ensure_root_cost_center(company)
+        if not root_cc:
             return {
                 "success": False,
-                "error": f"No parent cost center found for company {company}"
+                "error": "Could not create root cost center"
             }
         
-        # Create the cost center
-        cost_center = frappe.get_doc({
-            "doctype": "Cost Center",
-            "cost_center_name": cost_center_name,
-            "parent_cost_center": parent_cost_center,
-            "company": company,
-            "is_group": 0
-        })
+        # Build parent-child relationships first
+        parent_map = {}  # Maps E-Boekhouden ID to its parent ID
+        root_level_ccs = []  # Cost centers with no parent
         
-        cost_center.insert(ignore_permissions=True)
+        for cc_data in cost_centers_data:
+            cc_id = cc_data.get("id")
+            parent_id = cc_data.get("parentId", 0) or 0
+            
+            if cc_id:
+                if parent_id > 0:
+                    parent_map[cc_id] = parent_id
+                else:
+                    root_level_ccs.append(cc_id)
+        
+        # Sort cost centers to create parents before children
+        def get_depth(cc_id, depth=0):
+            """Get depth of cost center in hierarchy"""
+            if cc_id in root_level_ccs:
+                return 0
+            parent_id = parent_map.get(cc_id)
+            if not parent_id or parent_id not in parent_map:
+                return depth
+            return get_depth(parent_id, depth + 1)
+        
+        # Sort by depth (parents first) then by ID
+        sorted_cost_centers = sorted(cost_centers_data, 
+            key=lambda cc: (get_depth(cc.get("id", 0)), cc.get("id", 0)))
+        
+        # Create mapping of e-boekhouden ID to ERPNext cost center name
+        id_to_name_map = {}
+        created_count = 0
+        skipped_count = 0
+        errors = []
+        
+        # Create all cost centers with proper hierarchy
+        for cc_data in sorted_cost_centers:
+            try:
+                # Get parent for this cost center
+                cc_id = cc_data.get("id")
+                parent_id = cc_data.get("parentId", 0) or 0
+                
+                # Determine ERPNext parent
+                if parent_id > 0 and parent_id in id_to_name_map:
+                    # Use the already created parent
+                    erpnext_parent = id_to_name_map[parent_id]
+                else:
+                    # Use root cost center
+                    erpnext_parent = root_cc
+                
+                result = create_cost_center_safe(
+                    cc_data, company, erpnext_parent, id_to_name_map
+                )
+                
+                if result["success"]:
+                    created_count += 1
+                    # Store mapping
+                    if cc_id:
+                        id_to_name_map[cc_id] = result["name"]
+                elif result.get("exists"):
+                    skipped_count += 1
+                    # Still store mapping for existing cost centers
+                    if cc_id:
+                        id_to_name_map[cc_id] = result["name"]
+                else:
+                    errors.append(f"{cc_data.get('name', 'Unknown')}: {result.get('error', 'Unknown error')}")
+                    
+            except Exception as e:
+                errors.append(f"{cc_data.get('name', 'Unknown')}: {str(e)}")
+        
+        frappe.db.commit()
         
         return {
             "success": True,
-            "cost_center": cost_center.name,
-            "message": f"Cost center {cost_center.name} created successfully"
+            "created": created_count,
+            "skipped": skipped_count,
+            "errors": errors,
+            "total": len(cost_centers_data),
+            "message": f"Created {created_count} cost centers, skipped {skipped_count}"
         }
         
-    except frappe.exceptions.DuplicateEntryError:
-        # Handle race condition where cost center was created between check and insert
-        existing = frappe.db.get_value(
-            "Cost Center",
-            {
-                "cost_center_name": cost_center_name,
-                "company": company
-            },
-            "name"
-        )
-        
-        if existing:
-            return {
-                "success": True,
-                "cost_center": existing,
-                "message": "Cost center already exists (created by another process)"
-            }
-        else:
-            return {
-                "success": False,
-                "error": "Duplicate entry error but cost center not found"
-            }
-            
     except Exception as e:
-        frappe.log_error(
-            f"Error creating cost center {cost_center_name}: {str(e)}",
-            "Cost Center Creation Error"
-        )
+        frappe.log_error(f"Cost center migration error: {str(e)}", "E-Boekhouden")
         return {
             "success": False,
             "error": str(e)
         }
 
-
-@frappe.whitelist()
-def fix_cost_center_migration(migration_name=None):
+def create_cost_center_safe(cc_data, company, parent_cc, id_map):
     """
-    Fix cost center migration issues
-    
-    Args:
-        migration_name: Optional E-Boekhouden Migration name
-    
-    Returns:
-        dict with results
+    Create a single cost center with guaranteed valid parent
     """
     try:
-        results = {
-            "fixed": [],
-            "errors": [],
-            "skipped": []
-        }
+        cc_code = str(cc_data.get("code", "")).strip()
+        cc_name = cc_data.get("name", "").strip()
         
-        # Get default company from settings
-        settings = frappe.get_single("E-Boekhouden Settings")
-        default_company = settings.default_company
+        if not cc_name:
+            return {"success": False, "error": "No cost center name"}
         
-        if not default_company:
-            return {
-                "success": False,
-                "error": "No default company set in E-Boekhouden Settings"
-            }
+        # Create full name with code if available
+        if cc_code:
+            full_cc_name = f"{cc_code} - {cc_name}"
+        else:
+            full_cc_name = cc_name
         
-        # If migration specified, get cost centers from that migration
-        if migration_name:
-            # This would need to be implemented based on how cost centers
-            # are stored in the migration
-            pass
+        # Check if already exists
+        existing = frappe.db.get_value("Cost Center", {
+            "cost_center_name": full_cc_name,
+            "company": company
+        }, "name")
         
-        # Get all cost centers that might need fixing
-        problem_cost_centers = frappe.db.sql("""
-            SELECT DISTINCT cost_center_name
-            FROM `tabCost Center`
-            WHERE company = %s
-            AND (parent_cost_center IS NULL OR parent_cost_center = '')
-            AND name != (
-                SELECT name FROM `tabCost Center`
-                WHERE company = %s
-                AND parent_cost_center = ''
-                AND is_group = 1
-                LIMIT 1
-            )
-        """, (default_company, default_company), as_dict=True)
+        if existing:
+            return {"success": False, "exists": True, "name": existing}
         
-        for cc in problem_cost_centers:
-            result = create_cost_center_safe(
-                cc.cost_center_name,
-                default_company
-            )
-            
-            if result["success"]:
-                results["fixed"].append(cc.cost_center_name)
-            else:
-                results["errors"].append({
-                    "cost_center": cc.cost_center_name,
-                    "error": result["error"]
-                })
+        # Ensure parent exists and is valid
+        if parent_cc:
+            parent_exists = frappe.db.exists("Cost Center", parent_cc)
+            if not parent_exists:
+                frappe.logger().warning(f"Parent {parent_cc} not found, using root")
+                parent_cc = ensure_root_cost_center(company)
         
-        return {
-            "success": True,
-            "results": results,
-            "summary": f"Fixed {len(results['fixed'])} cost centers, {len(results['errors'])} errors"
-        }
+        # Create cost center
+        cc = frappe.new_doc("Cost Center")
+        cc.cost_center_name = full_cc_name
+        cc.company = company
+        cc.parent_cost_center = parent_cc
+        cc.is_group = 0  # Default to not a group
+        
+        # Add custom field to track e-boekhouden ID
+        if hasattr(cc, 'eboekhouden_id'):
+            cc.eboekhouden_id = cc_data.get("id")
+        
+        cc.insert(ignore_permissions=True)
+        
+        return {"success": True, "name": cc.name}
         
     except Exception as e:
-        frappe.log_error(
-            f"Error fixing cost center migration: {str(e)}",
-            "Cost Center Migration Fix Error"
-        )
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False, "error": str(e)}
 
-
-def get_or_create_cost_center(cost_center_name, company):
-    """
-    Get existing cost center or create new one
-    
-    This is a helper function for use in migrations
-    """
-    result = create_cost_center_safe(cost_center_name, company)
-    
-    if result["success"]:
-        return result["cost_center"]
-    else:
-        frappe.log_error(
-            f"Failed to get/create cost center {cost_center_name}: {result['error']}",
-            "Cost Center Creation"
-        )
-        return None
-
-
-@frappe.whitelist()
 def ensure_root_cost_center(company):
     """
-    Ensure a root cost center exists for the company
-    
-    Args:
-        company: Company name
-    
-    Returns:
-        Root cost center name or None
+    Ensure root cost center exists for the company
     """
+    # Try to find existing root
+    root_cc = frappe.db.get_value("Cost Center", {
+        "company": company,
+        "is_group": 1,
+        "parent_cost_center": ["in", ["", None]]
+    }, "name")
+    
+    if root_cc:
+        return root_cc
+    
+    # Try company abbreviation pattern
+    abbr = frappe.db.get_value("Company", company, "abbr")
+    if abbr:
+        pattern_cc = f"{company} - {abbr}"
+        if frappe.db.exists("Cost Center", pattern_cc):
+            return pattern_cc
+    
+    # Try to find a cost center with name equal to company
+    company_cc = frappe.db.get_value("Cost Center", {
+        "cost_center_name": company,
+        "company": company
+    }, "name")
+    
+    if company_cc:
+        return company_cc
+    
+    # Create root cost center if not found
     try:
-        # First check if a root cost center already exists
-        root_cc = frappe.db.get_value(
-            "Cost Center",
-            {
-                "company": company,
-                "is_group": 1,
-                "parent_cost_center": ""
-            },
-            "name"
-        )
+        cc = frappe.new_doc("Cost Center")
+        # IMPORTANT: For root cost centers, the name must equal the company name
+        # to bypass the parent validation in ERPNext
+        cc.cost_center_name = company
+        cc.company = company
+        cc.is_group = 1
+        cc.parent_cost_center = ""
         
-        if root_cc:
-            return root_cc
-        
-        # Try to find the main cost center
-        main_cc = frappe.db.get_value(
-            "Cost Center",
-            {
-                "company": company,
-                "cost_center_name": "Main",
-                "is_group": 1
-            },
-            "name"
-        )
-        
-        if main_cc:
-            return main_cc
-        
-        # If no root exists, create one
+        # Try to insert, if it fails due to duplicate, find the existing one
         try:
-            # Get company abbreviation
-            company_abbr = frappe.db.get_value("Company", company, "abbr")
-            if not company_abbr:
-                frappe.log_error(
-                    f"Company {company} not found or has no abbreviation",
-                    "Cost Center Creation"
-                )
-                return None
-            
-            # Create root cost center
-            root_cc = frappe.get_doc({
-                "doctype": "Cost Center",
-                "cost_center_name": "Main",
-                "company": company,
-                "is_group": 1,
-                "parent_cost_center": ""
-            })
-            
-            root_cc.insert(ignore_permissions=True)
-            
-            return root_cc.name
-            
-        except frappe.exceptions.DuplicateEntryError:
-            # Handle race condition - try to find it again
-            root_cc = frappe.db.get_value(
-                "Cost Center",
-                {
-                    "company": company,
-                    "is_group": 1,
-                    "parent_cost_center": ""
-                },
-                "name"
-            )
-            return root_cc
+            cc.insert(ignore_permissions=True)
+            frappe.logger().info(f"Created root cost center for company: {company}")
+            return cc.name
+        except frappe.DuplicateEntryError:
+            # If duplicate, find the existing one
+            existing = frappe.db.get_value("Cost Center", {
+                "cost_center_name": company,
+                "company": company
+            }, "name")
+            if existing:
+                return existing
+            raise
             
     except Exception as e:
-        frappe.log_error(
-            f"Error ensuring root cost center for {company}: {str(e)}",
-            "Root Cost Center Creation"
-        )
+        frappe.log_error(f"Could not create root cost center: {str(e)}", "E-Boekhouden")
+        
+        # As a last resort, try to find ANY group cost center for this company
+        any_group = frappe.db.get_value("Cost Center", {
+            "company": company,
+            "is_group": 1
+        }, "name", order_by="creation asc")
+        
+        if any_group:
+            frappe.logger().warning(f"Using existing group cost center {any_group} as root for {company}")
+            return any_group
+            
         return None
+
+@frappe.whitelist()
+def add_eboekhouden_id_field():
+    """Add custom field to track e-boekhouden cost center IDs"""
+    if not frappe.db.has_column("Cost Center", "eboekhouden_id"):
+        custom_field = frappe.new_doc("Custom Field")
+        custom_field.dt = "Cost Center"
+        custom_field.label = "E-Boekhouden ID"
+        custom_field.fieldname = "eboekhouden_id"
+        custom_field.fieldtype = "Data"
+        custom_field.insert_after = "disabled"
+        custom_field.insert(ignore_permissions=True)
+        return {"success": True, "message": "Field added"}
+    return {"success": True, "message": "Field already exists"}
+
+@frappe.whitelist()
+def cleanup_cost_centers(company):
+    """
+    Clean up cost centers with missing parent references
+    """
+    try:
+        # First ensure we have a proper root cost center
+        root_cc = ensure_root_cost_center(company)
+        if not root_cc:
+            return {"success": False, "error": "Could not create root cost center"}
+        
+        # Find all cost centers with empty parent_cost_center (excluding the root)
+        orphaned_ccs = frappe.db.get_all("Cost Center", 
+            filters={
+                "company": company,
+                "parent_cost_center": ["in", ["", None]],
+                "name": ["!=", root_cc]
+            },
+            fields=["name", "cost_center_name"]
+        )
+        
+        fixed_count = 0
+        errors = []
+        
+        for cc in orphaned_ccs:
+            try:
+                # Set the root as parent for orphaned cost centers
+                frappe.db.set_value("Cost Center", cc.name, "parent_cost_center", root_cc)
+                fixed_count += 1
+                frappe.logger().info(f"Fixed orphaned cost center: {cc.cost_center_name}")
+            except Exception as e:
+                errors.append(f"{cc.cost_center_name}: {str(e)}")
+        
+        frappe.db.commit()
+        
+        return {
+            "success": True,
+            "fixed": fixed_count,
+            "errors": errors,
+            "message": f"Fixed {fixed_count} orphaned cost centers"
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Cost center cleanup error: {str(e)}", "E-Boekhouden")
+        return {"success": False, "error": str(e)}

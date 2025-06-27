@@ -216,10 +216,10 @@ def group_accounts_by_type(accounts):
             groups["Equity"].append(account)
         # Income accounts
         elif any(term in desc_lower for term in ["omzet", "opbrengst", "inkomsten", "contributie", "donatie"]) or code.startswith("8"):
-            groups["Income"].append(account)
+            groups["Income Account"].append(account)
         # Expense accounts  
         elif any(term in desc_lower for term in ["kosten", "uitgaven", "inkoop", "afschrijving"]) or code.startswith("4"):
-            groups["Expense"].append(account)
+            groups["Expense Account"].append(account)
         # Tax accounts
         elif "btw" in desc_lower:
             groups["Tax"].append(account)
@@ -242,9 +242,9 @@ def group_accounts_by_type(accounts):
                 elif first_digit == "2":
                     groups["Current Liability"].append(account)
                 elif first_digit in ["4", "5", "6", "7"]:
-                    groups["Expense"].append(account)
+                    groups["Expense Account"].append(account)
                 elif first_digit == "8":
-                    groups["Income"].append(account)
+                    groups["Income Account"].append(account)
                 else:
                     groups["Unknown"].append(account)
     
@@ -261,18 +261,18 @@ def analyze_category_content(category, accounts):
     if codes and all(c.startswith(codes[0][0]) for c in codes if c):
         first_digit = codes[0][0]
         if first_digit == "8":
-            return "Income", "Revenue accounts"
+            return "Income Account", "Revenue accounts"
         elif first_digit in ["4", "5", "6", "7"]:
-            return "Expense", "Cost accounts"
+            return "Expense Account", "Cost accounts"
     
     # Check descriptions for patterns
     desc_text = " ".join(descriptions)
     if "btw" in desc_text:
         return "Tax", "BTW accounts"
     elif any(term in desc_text for term in ["omzet", "opbrengst", "inkomsten"]):
-        return "Income", "Revenue accounts"
+        return "Income Account", "Revenue accounts"
     elif any(term in desc_text for term in ["kosten", "uitgaven"]):
-        return "Expense", "Cost accounts"
+        return "Expense Account", "Cost accounts"
     
     return None, f"Mixed accounts in category {category}"
 
@@ -295,8 +295,8 @@ def split_balance_accounts(accounts):
         "Fixed Asset": [],
         "Current Liability": [],
         "Equity": [],
-        "Income": [],
-        "Expense": []
+        "Income Account": [],
+        "Expense Account": []
     }
     
     for account in accounts:
@@ -314,10 +314,10 @@ def split_balance_accounts(accounts):
             groups["Equity"].append(account)
         # Income accounts
         elif any(term in desc_lower for term in ["omzet", "opbrengst", "inkomsten", "rentebaten"]) or code.startswith("8") or code.startswith("9"):
-            groups["Income"].append(account)
+            groups["Income Account"].append(account)
         # Expense accounts  
         elif any(term in desc_lower for term in ["kosten", "uitgaven", "afschrijving"]):
-            groups["Expense"].append(account)
+            groups["Expense Account"].append(account)
         # Fixed assets
         elif any(term in desc_lower for term in ["vaste activa", "inventaris", "gebouw", "machine", "apparatuur"]) or code.startswith("0"):
             groups["Fixed Asset"].append(account)
@@ -339,7 +339,7 @@ def split_balance_accounts(accounts):
                 elif first_digit == "2":
                     groups["Current Liability"].append(account)
                 elif first_digit in ["8", "9"]:
-                    groups["Income"].append(account)
+                    groups["Income Account"].append(account)
     
     # Remove empty groups
     return {k: v for k, v in groups.items() if v}
@@ -352,8 +352,8 @@ def get_bal_subtype_name(subtype):
         "Fixed Asset": "Vaste Activa", 
         "Current Liability": "Kortlopende Schulden",
         "Equity": "Eigen Vermogen",
-        "Income": "Opbrengsten",
-        "Expense": "Kosten"
+        "Income Account": "Opbrengsten",
+        "Expense Account": "Kosten"
     }
     return names.get(subtype, subtype)
 
@@ -361,8 +361,8 @@ def get_bal_subtype_name(subtype):
 def split_vw_accounts(accounts):
     """Split VW accounts into income and expense based on account code"""
     groups = {
-        "Income": [],
-        "Expense": []
+        "Income Account": [],
+        "Expense Account": []
     }
     
     for account in accounts:
@@ -371,16 +371,16 @@ def split_vw_accounts(accounts):
         
         # Use account code as primary indicator
         if code.startswith("8") or code.startswith("9"):
-            groups["Income"].append(account)
+            groups["Income Account"].append(account)
         elif code.startswith(("4", "5", "6", "7")):
-            groups["Expense"].append(account)
+            groups["Expense Account"].append(account)
         else:
             # Fall back to description analysis
             if any(term in desc_lower for term in ["inkomsten", "opbrengst", "omzet", "subsidie", "bijdrage", "donatie"]):
-                groups["Income"].append(account)
+                groups["Income Account"].append(account)
             else:
                 # Default to expense for VW accounts
-                groups["Expense"].append(account)
+                groups["Expense Account"].append(account)
     
     # Remove empty groups
     return {k: v for k, v in groups.items() if v}
@@ -389,8 +389,8 @@ def split_vw_accounts(accounts):
 def get_vw_subtype_name(subtype):
     """Get display name for VW subtypes"""
     names = {
-        "Income": "Inkomsten & Opbrengsten",
-        "Expense": "Kosten & Uitgaven"
+        "Income Account": "Inkomsten & Opbrengsten",
+        "Expense Account": "Kosten & Uitgaven"
     }
     return names.get(subtype, subtype)
 
@@ -399,8 +399,8 @@ def get_smart_group_name(group_type):
     """Get display name for smart groups"""
     names = {
         "Equity": "Eigen Vermogen & Reserves",
-        "Income": "Omzet & Opbrengsten",
-        "Expense": "Kosten & Uitgaven",
+        "Income Account": "Omzet & Opbrengsten",
+        "Expense Account": "Kosten & Uitgaven",
         "Tax": "BTW Rekeningen",
         "Fixed Asset": "Vaste Activa",
         "Current Asset": "Vlottende Activa",
