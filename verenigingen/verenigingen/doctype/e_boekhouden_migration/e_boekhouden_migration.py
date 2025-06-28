@@ -309,24 +309,45 @@ class EBoekhoudenMigration(Document):
             return f"Error migrating Suppliers: {str(e)}"
     
     def migrate_transactions_data(self, settings):
-        """Migrate Transactions from e-Boekhouden using grouped approach"""
+        """Migrate Transactions from e-Boekhouden using SOAP API"""
         try:
-            # Use the enhanced grouped migration
-            from verenigingen.utils.eboekhouden_grouped_migration import migrate_mutations_grouped
+            # Check if we should use SOAP API (default to True)
+            use_soap = getattr(self, 'use_soap_api', True)
             
-            result = migrate_mutations_grouped(self, settings)
-            
-            if result["success"]:
-                self.imported_records += result["created"]
-                self.failed_records += result["failed"]
-                self.total_records += result["total_mutations"]
+            if use_soap:
+                # Use the new SOAP-based migration
+                from verenigingen.utils.eboekhouden_soap_migration import migrate_using_soap
                 
-                return (f"Created {result['created']} journal entries from "
-                       f"{result['total_mutations']} mutations "
-                       f"({result['grouped_entries']} grouped, "
-                       f"{result['ungrouped_mutations']} ungrouped)")
+                result = migrate_using_soap(self, settings)
+                
+                if result["success"]:
+                    stats = result["stats"]
+                    self.imported_records += (stats["invoices_created"] + 
+                                            stats["payments_processed"] + 
+                                            stats["journal_entries_created"])
+                    self.failed_records += len(stats["errors"])
+                    self.total_records += stats["total_mutations"]
+                    
+                    return result["message"]
+                else:
+                    return f"Error: {result.get('error', 'Unknown error')}"
             else:
-                return f"Error: {result.get('error', 'Unknown error')}"
+                # Use the old REST API grouped migration
+                from verenigingen.utils.eboekhouden_grouped_migration import migrate_mutations_grouped
+                
+                result = migrate_mutations_grouped(self, settings)
+                
+                if result["success"]:
+                    self.imported_records += result["created"]
+                    self.failed_records += result["failed"]
+                    self.total_records += result["total_mutations"]
+                    
+                    return (f"Created {result['created']} journal entries from "
+                           f"{result['total_mutations']} mutations "
+                           f"({result['grouped_entries']} grouped, "
+                           f"{result['ungrouped_mutations']} ungrouped)")
+                else:
+                    return f"Error: {result.get('error', 'Unknown error')}"
         except Exception as e:
             return f"Error migrating Transactions: {str(e)}"
     

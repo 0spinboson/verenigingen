@@ -40,11 +40,11 @@ frappe.listview_settings['Member'] = {
         // Priority indicators for new members and chapter changes
         if (doc.status === 'Active') {
             if (creationDate && creationDate >= sevenDaysAgo) {
-                return ['green', 'Very New Member (≤7 days)', "status,=,Active|creation,>=," + sevenDaysAgo];
+                return ['green', 'Very New Member (≤7 days)', "status,=,Active"];
             } else if (creationDate && creationDate >= thirtyDaysAgo) {
-                return ['blue', 'New Member (≤30 days)', "status,=,Active|creation,>=," + thirtyDaysAgo];
+                return ['blue', 'New Member (≤30 days)', "status,=,Active"];
             } else if (hasRecentChapterChange) {
-                return ['orange', 'Recent Chapter Change', "chapter_assigned_date,>=," + thirtyDaysAgo];
+                return ['orange', 'Recent Chapter Change', "status,=,Active"];
             }
         }
         
