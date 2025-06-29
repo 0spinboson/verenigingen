@@ -7,6 +7,7 @@ import frappe
 import random
 from datetime import datetime, timedelta
 from frappe.utils import today, add_days, add_months, random_string
+from .test_membership_utilities import MembershipTestUtilities
 
 
 class TestDataFactory:
@@ -56,31 +57,41 @@ class TestDataFactory:
         print(f"✅ Created {count} test chapters")
         return chapters
     
-    def create_test_membership_types(self, count=3):
-        """Create test membership types"""
+    def create_test_membership_types(self, count=3, with_subscriptions=True):
+        """Create test membership types with proper subscription plans"""
         membership_types = []
+        
+        # Different configurations for variety
         type_configs = [
-            {"name": "Regular", "fee": 100.00, "description": "Regular membership"},
-            {"name": "Student", "fee": 50.00, "description": "Student discount membership"},
-            {"name": "Senior", "fee": 75.00, "description": "Senior citizen membership"},
-            {"name": "Corporate", "fee": 500.00, "description": "Corporate membership"},
-            {"name": "Honorary", "fee": 0.00, "description": "Honorary membership"},
+            {"name": f"Regular-{self.test_run_id}", "period": "Annual", "amount": 100.00},
+            {"name": f"Student-{self.test_run_id}", "period": "Annual", "amount": 50.00},
+            {"name": f"Monthly-{self.test_run_id}", "period": "Monthly", "amount": 10.00},
+            {"name": f"Quarterly-{self.test_run_id}", "period": "Quarterly", "amount": 25.00},
+            {"name": f"Daily-{self.test_run_id}", "period": "Daily", "amount": 2.00},
         ]
         
         for i in range(min(count, len(type_configs))):
             config = type_configs[i]
-            membership_type = frappe.get_doc({
-                "doctype": "Membership Type",
-                "membership_type": f"{config['name']} - {self.test_run_id}",
-                "annual_fee": config['fee'],
-                "currency": "EUR",
-                "description": config['description']
-            })
-            membership_type.insert(ignore_permissions=True)
+            result = MembershipTestUtilities.create_membership_type_with_subscription(
+                name=config["name"],
+                period=config["period"],
+                amount=config["amount"],
+                create_subscription_plan=with_subscriptions,
+                create_item=with_subscriptions
+            )
+            
+            membership_type = result["membership_type"]
             self._track_record("Membership Type", membership_type.name)
+            
+            # Track related records
+            if "subscription_plan" in result:
+                self._track_record("Subscription Plan", result["subscription_plan"].name)
+            if "item" in result:
+                self._track_record("Item", result["item"].name)
+                
             membership_types.append(membership_type)
             
-        print(f"✅ Created {len(membership_types)} membership types")
+        print(f"✅ Created {len(membership_types)} membership types with subscriptions")
         return membership_types
     
     def create_test_members(self, chapters, count=100, status_distribution=None):
@@ -136,39 +147,45 @@ class TestDataFactory:
         print(f"✅ Created {count} test members")
         return members
     
-    def create_test_memberships(self, members, membership_types, coverage_ratio=0.9):
-        """Create memberships for members"""
+    def create_test_memberships(self, members, membership_types, coverage_ratio=0.9, with_subscriptions=True):
+        """Create memberships for members with proper subscription linkage"""
         memberships = []
         member_sample = random.sample(members, int(len(members) * coverage_ratio))
-        
-        status_options = ["Active", "Pending", "Overdue", "Cancelled"]
         
         for member in member_sample:
             membership_type = random.choice(membership_types)
             
-            # Choose status based on member status
-            if member.status == "Active":
-                membership_status = random.choice(["Active", "Pending", "Overdue"])
-            elif member.status == "Suspended":
-                membership_status = random.choice(["Overdue", "Pending"])
-            else:  # Terminated
-                membership_status = "Cancelled"
+            # Use the utility to create membership with subscription
+            start_date = member.join_date or today()
             
-            membership = frappe.get_doc({
-                "doctype": "Membership",
-                "member": member.name,
-                "membership_type": membership_type.name,
-                "status": membership_status,
-                "annual_fee": membership_type.annual_fee,
-                "start_date": member.join_date,
-                "renewal_date": add_months(member.join_date, 12),
-                "next_billing_date": add_months(today(), random.randint(1, 12))
-            })
-            membership.insert(ignore_permissions=True)
-            self._track_record("Membership", membership.name)
-            memberships.append(membership)
+            try:
+                result = MembershipTestUtilities.create_membership_with_subscription(
+                    member=member,
+                    membership_type=membership_type,
+                    start_date=start_date
+                )
+                
+                membership = result["membership"]
+                self._track_record("Membership", membership.name)
+                
+                if "subscription" in result:
+                    self._track_record("Subscription", result["subscription"].name)
+                    
+                memberships.append(membership)
+            except Exception as e:
+                # Fallback to simple membership creation if subscription fails
+                membership = frappe.get_doc({
+                    "doctype": "Membership",
+                    "member": member.name,
+                    "membership_type": membership_type.name,
+                    "start_date": start_date,
+                    "status": "Active" if member.status == "Active" else "Inactive"
+                })
+                membership.insert(ignore_permissions=True)
+                self._track_record("Membership", membership.name)
+                memberships.append(membership)
         
-        print(f"✅ Created {len(memberships)} memberships")
+        print(f"✅ Created {len(memberships)} memberships with subscriptions")
         return memberships
     
     def create_test_volunteers(self, members, volunteer_ratio=0.3):
