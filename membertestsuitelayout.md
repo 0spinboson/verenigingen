@@ -284,14 +284,13 @@ Comprehensive Test Suite Plan for Verenigingen
   10. Relationship Management: Testing complex doctype relationships
 
 Update Todos
-  ⎿  ☒ Create enhanced base test infrastructure (base classes and utilities)                      
-     ☒ Create controller method tests for Member, Membership, and Volunteer
-     ☒ Create API function tests (membership application, member management, payment)
-     ☒ Create test data scenarios with standard personas and builders
-     ☐ Create multi-stage workflow tests (member lifecycle, volunteer journey, payment recovery) < you were at this step.
-     ☐ Create permission and security tests
-     ☐ Create edge case and error handling tests
-     ☐ Create integration tests (ERPNext, email/notifications)
-     ☐ Create performance and load tests
-     ☐ Create ancillary logic tests (assignment history, chapter member history, board management)
+● Update Todos
+  ⎿  ☐ Create multi-stage workflow test: TestMemberLifecycle with 10 stages from application to termination         
+     ☐ Create multi-stage workflow test: TestVolunteerJourney with 8 stages covering volunteer lifecycle
+     ☐ Create multi-stage workflow test: TestPaymentFailureRecovery with 6 stages covering payment failure scenarios
+     ☐ Create permission and security tests covering role-based access and query permissions
+     ☐ Create edge case and error handling tests for data validation and state transitions
+     ☐ Create integration tests for ERPNext and email/notification systems
+     ☐ Create performance and load tests for bulk operations
+     ☐ Create ancillary logic tests for assignment history and chapter member tracking
 
