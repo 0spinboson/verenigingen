@@ -55,21 +55,31 @@ class MembershipType(Document):
             return self.subscription_plan
             
         # Determine plan interval based on subscription period
+        # ERPNext only supports Day, Week, Month, Year
         interval_map = {
+            "Daily": "Day",
             "Monthly": "Month",
-            "Quarterly": "Quarter",
-            "Biannual": "Half-Year",
+            "Quarterly": "Month", # Will use 3 months
+            "Biannual": "Month",  # Will use 6 months
             "Annual": "Year",
-            "Lifetime": "Year",  # ERPNext doesn't have 'Lifetime', use Year
-            "Custom": "Month"    # Custom will use months as the base unit
+            "Lifetime": "Year",   # ERPNext doesn't have 'Lifetime', use Year
+            "Custom": "Month"     # Custom will use months as the base unit
         }
         
-        interval = interval_map.get(self.subscription_plan, "Month")
+        interval = interval_map.get(self.subscription_period, "Month")
         
         # Calculate interval count for custom periods
-        interval_count = 1
-        if self.subscription_period == "Custom":
-            interval_count = self.subscription_period_in_months
+        interval_count_map = {
+            "Daily": 1,          # 1 day
+            "Monthly": 1,        # 1 month
+            "Quarterly": 3,      # 3 months
+            "Biannual": 6,       # 6 months
+            "Annual": 1,         # 1 year
+            "Lifetime": 1,       # 1 year
+            "Custom": self.subscription_period_in_months or 1
+        }
+        
+        interval_count = interval_count_map.get(self.subscription_period, 1)
             
         # Create new subscription plan
         plan = frappe.new_doc("Subscription Plan")

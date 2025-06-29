@@ -52,7 +52,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Subscription Period",
-   "options": "Monthly\nQuarterly\nBiannual\nAnnual\nLifetime\nCustom",
+   "options": "Daily\nMonthly\nQuarterly\nBiannual\nAnnual\nLifetime\nCustom",
    "reqd": 1
   },
   {
