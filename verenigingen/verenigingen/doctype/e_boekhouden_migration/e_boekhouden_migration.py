@@ -48,6 +48,7 @@ class EBoekhoudenMigration(Document):
             self.failed_records = 0
             
             migration_log = []
+            self.failed_record_details = []  # Track details of failed records
             
             # Phase 1: Chart of Accounts
             if getattr(self, 'migrate_accounts', 0):
@@ -121,6 +122,11 @@ class EBoekhoudenMigration(Document):
             self.progress_percentage = 100
             self.end_time = frappe.utils.now_datetime()
             self.migration_summary = "\n".join(migration_log)
+            
+            # Save failed records to file
+            if self.failed_record_details:
+                self.save_failed_records_log()
+                
             self.save()
             
         except Exception as e:
@@ -165,7 +171,7 @@ class EBoekhoudenMigration(Document):
                         skipped_count += 1
                 except Exception as e:
                     self.failed_records += 1
-                    self.log_error(f"Failed to create account {account_data.get('code', 'Unknown')}: {str(e)}")
+                    self.log_error(f"Failed to create account {account_data.get('code', 'Unknown')}: {str(e)}", "account", account_data)
             
             self.total_records += len(accounts_data)
             return f"Created {created_count} accounts, skipped {skipped_count} ({len(accounts_data)} total)"
@@ -318,7 +324,10 @@ class EBoekhoudenMigration(Document):
                 # Use the new SOAP-based migration
                 from verenigingen.utils.eboekhouden_soap_migration import migrate_using_soap
                 
-                result = migrate_using_soap(self, settings)
+                # Check if we should use account mappings
+                use_account_mappings = getattr(self, 'use_account_mappings', True)
+                
+                result = migrate_using_soap(self, settings, use_account_mappings)
                 
                 if result["success"]:
                     stats = result["stats"]
@@ -432,15 +441,24 @@ class EBoekhoudenMigration(Document):
             frappe.log_error(f"Error parsing Transactions XML: {str(e)}")
             return []
     
-    def log_error(self, message):
-        """Log error message"""
+    def log_error(self, message, record_type=None, record_data=None):
+        """Log error message and track failed records"""
         frappe.log_error(message, "E-Boekhouden Migration")
         if hasattr(self, 'error_details'):
             self.error_details += f"\n{message}"
         else:
             self.error_details = message
+            
+        # Track failed record details if provided
+        if record_type and record_data and hasattr(self, 'failed_record_details'):
+            self.failed_record_details.append({
+                'timestamp': frappe.utils.now_datetime(),
+                'record_type': record_type,
+                'error_message': message,
+                'record_data': record_data
+            })
     
-    def create_account(self, account_data, use_enhanced=True):
+    def create_account(self, account_data, use_enhanced=False):
         """Create Account in ERPNext"""
         try:
             # Use enhanced migration if available and enabled
@@ -590,7 +608,9 @@ class EBoekhoudenMigration(Document):
             return True
             
         except Exception as e:
-            self.log_error(f"Failed to create account {account_code}: {str(e)}")
+            # account_code might not be defined if error occurs early
+            account_ref = account_data.get('code', 'Unknown') if 'account_data' in locals() else 'Unknown'
+            self.log_error(f"Failed to create account {account_ref}: {str(e)}", "account", account_data if 'account_data' in locals() else {})
             return False
     
     def get_parent_account(self, account_type, root_type, company):
@@ -1149,6 +1169,39 @@ class EBoekhoudenMigration(Document):
         except Exception as e:
             self.log_error(f"Error finding suspense account: {str(e)}")
             return None
+    
+    def save_failed_records_log(self):
+        """Save detailed log of failed records to a file"""
+        try:
+            import os
+            from datetime import datetime
+            
+            # Create logs directory if it doesn't exist
+            log_dir = frappe.get_site_path("private", "files", "eboekhouden_migration_logs")
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir)
+            
+            # Create filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"failed_records_{self.name}_{timestamp}.json"
+            filepath = os.path.join(log_dir, filename)
+            
+            # Save the failed records
+            with open(filepath, 'w') as f:
+                json.dump({
+                    'migration_name': self.name,
+                    'migration_id': self.migration_name,
+                    'timestamp': frappe.utils.now_datetime(),
+                    'total_failed': self.failed_records,
+                    'failed_records': self.failed_record_details
+                }, f, indent=2, default=str)
+            
+            # Add note to migration summary
+            self.migration_summary += f"\n\nFailed records log saved to: {filename}"
+            frappe.logger().info(f"Failed records log saved to: {filepath}")
+            
+        except Exception as e:
+            frappe.log_error(f"Failed to save failed records log: {str(e)}")
 
 
 @frappe.whitelist()

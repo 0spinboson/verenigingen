@@ -9,9 +9,14 @@ from datetime import datetime
 from collections import defaultdict
 import json
 
-def migrate_using_soap(migration_doc, settings):
+def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
     """
     Main migration function using SOAP API with mutation ID ranges
+    
+    Args:
+        migration_doc: The migration document
+        settings: E-Boekhouden settings
+        use_account_mappings: Whether to use account mappings for document type determination
     """
     from .eboekhouden_soap_api import EBoekhoudenSOAPAPI
     
@@ -143,10 +148,13 @@ def migrate_using_soap(migration_doc, settings):
         }
         
         # Group mutations by type for processing
+        from .normalize_mutation_types import normalize_mutation_type
         mutations_by_type = defaultdict(list)
         for mut in all_mutations:
             soort = mut.get("Soort", "Unknown")
-            mutations_by_type[soort].append(mut)
+            # Normalize the mutation type to handle abbreviations
+            normalized_soort = normalize_mutation_type(soort)
+            mutations_by_type[normalized_soort].append(mut)
         
         # Process each type
         for soort, muts in mutations_by_type.items():
@@ -158,8 +166,14 @@ def migrate_using_soap(migration_doc, settings):
                 
             elif soort == "FactuurOntvangen":
                 # Purchase invoices
-                result = process_purchase_invoices(muts, company, cost_center, migration_doc)
-                stats["invoices_created"] += result.get("created", 0)
+                if use_account_mappings:
+                    from .eboekhouden_mapping_migration import process_purchase_invoices_with_mapping
+                    result = process_purchase_invoices_with_mapping(muts, company, cost_center, migration_doc)
+                    stats["invoices_created"] += result.get("created_purchase_invoices", 0)
+                    stats["journal_entries_created"] += result.get("created_journal_entries", 0)
+                else:
+                    result = process_purchase_invoices(muts, company, cost_center, migration_doc)
+                    stats["invoices_created"] += result.get("created", 0)
                 stats["errors"].extend(result.get("errors", []))
                 
             elif soort == "FactuurbetalingOntvangen":
@@ -227,10 +241,25 @@ def process_sales_invoices(mutations, company, cost_center, migration_doc):
             si.company = company
             si.customer = customer
             si.posting_date = posting_date
-            payment_terms = int(mut.get("Betalingstermijn", 30))
-            si.due_date = frappe.utils.add_days(posting_date, max(0, payment_terms))
             si.eboekhouden_invoice_number = invoice_no
             si.remarks = description
+            
+            # Calculate and set due date
+            try:
+                payment_terms = int(mut.get("Betalingstermijn", 30))
+            except (ValueError, TypeError):
+                payment_terms = 30
+            
+            # Ensure payment terms is positive
+            if payment_terms < 0:
+                payment_terms = 0
+            
+            # Set due date - ensure it's not before posting date
+            calculated_due_date = frappe.utils.add_days(posting_date, payment_terms)
+            if frappe.utils.getdate(calculated_due_date) < frappe.utils.getdate(posting_date):
+                si.due_date = posting_date
+            else:
+                si.due_date = calculated_due_date
             
             # Set the debit to account from E-Boekhouden mutation
             rekening_code = mut.get("Rekening")
@@ -295,12 +324,13 @@ def process_customer_payments(mutations, company, cost_center, migration_doc):
                 {"eboekhouden_invoice_number": invoice_no}, "name")
             
             if not si_name:
-                # Invoice not found, create journal entry instead
-                result = create_payment_journal_entry(mut, company, cost_center, "Customer")
+                # Invoice not found, create unreconciled payment entry
+                from .create_unreconciled_payment import create_unreconciled_payment_entry
+                result = create_unreconciled_payment_entry(mut, company, cost_center, "Customer")
                 if result["success"]:
                     created += 1
                 else:
-                    errors.append(result["error"])
+                    errors.append(f"Unreconciled payment {mut.get('MutatieNr')}: {result['error']}")
                 continue
             
             # Create payment entry
@@ -310,6 +340,11 @@ def process_customer_payments(mutations, company, cost_center, migration_doc):
             pe.posting_date = parse_date(mut.get("Datum"))
             pe.party_type = "Customer"
             pe.party = frappe.db.get_value("Sales Invoice", si_name, "customer")
+            
+            # Set descriptive title
+            from .eboekhouden_payment_naming import get_payment_entry_title, enhance_payment_entry_fields
+            pe.title = get_payment_entry_title(mut, pe.party, "Receive")
+            pe = enhance_payment_entry_fields(pe, mut)
             
             # Get amount from mutation lines
             total_amount = 0
@@ -358,8 +393,12 @@ def process_bank_transactions(mutations, company, cost_center, migration_doc, tr
             je = frappe.new_doc("Journal Entry")
             je.company = company
             je.posting_date = parse_date(mut.get("Datum"))
-            je.user_remark = mut.get("Omschrijving", "")
             je.eboekhouden_mutation_nr = mutation_nr
+            
+            # Set descriptive title and enhanced remarks
+            from .eboekhouden_payment_naming import get_journal_entry_title, enhance_journal_entry_fields
+            je.title = get_journal_entry_title(mut, transaction_type)
+            je = enhance_journal_entry_fields(je, mut, "Bank Transaction")
             
             # Get amount
             total_amount = 0
@@ -420,9 +459,9 @@ def parse_date(date_str):
         return frappe.utils.today()
     
     if 'T' in date_str:
-        return datetime.strptime(date_str.split('T')[0], '%Y-%m-%d').date()
+        return date_str.split('T')[0]  # Return string format YYYY-MM-DD
     else:
-        return datetime.strptime(date_str, '%Y-%m-%d').date()
+        return date_str  # Already in correct format
 
 def get_or_create_customer(code, description=""):
     """Get or create customer based on code and description"""
@@ -448,6 +487,29 @@ def get_or_create_customer(code, description=""):
     
     return customer.name
 
+def get_or_create_supplier(code, description=""):
+    """Get or create supplier based on code and description"""
+    if not code:
+        # Try to extract from description
+        if description:
+            # Look for patterns in description
+            return "E-Boekhouden Import Supplier"
+        return "E-Boekhouden Import Supplier"
+    
+    # Check if supplier exists with this code
+    supplier = frappe.db.get_value("Supplier", {"eboekhouden_relation_code": code}, "name")
+    if supplier:
+        return supplier
+    
+    # Create new supplier
+    supplier = frappe.new_doc("Supplier")
+    supplier.supplier_name = f"Supplier {code}"
+    supplier.eboekhouden_relation_code = code
+    supplier.supplier_group = frappe.db.get_value("Supplier Group", {"is_group": 0}, "name") or "All Supplier Groups"
+    supplier.insert(ignore_permissions=True)
+    
+    return supplier.name
+
 def get_or_create_item(code):
     """Get or create item for invoice line"""
     if not code:
@@ -455,13 +517,32 @@ def get_or_create_item(code):
     
     item_name = f"Service {code}"
     if not frappe.db.exists("Item", item_name):
-        item = frappe.new_doc("Item")
-        item.item_code = item_name
-        item.item_name = item_name
-        item.item_group = "Services"
-        item.stock_uom = "Nos"
-        item.is_stock_item = 0
-        item.insert(ignore_permissions=True)
+        try:
+            item = frappe.new_doc("Item")
+            item.item_code = item_name
+            item.item_name = item_name
+            item.item_group = frappe.db.get_value("Item Group", {"is_group": 0}, "name") or "Services"
+            item.stock_uom = "Nos"
+            item.is_stock_item = 0
+            item.insert(ignore_permissions=True)
+        except Exception as e:
+            frappe.log_error(f"Failed to create item {item_name}: {str(e)}")
+            # Return a default item
+            default_item = frappe.db.get_value("Item", {"is_stock_item": 0}, "name")
+            if default_item:
+                return default_item
+            # As last resort, create a generic item
+            try:
+                generic = frappe.new_doc("Item")
+                generic.item_code = "Generic Service"
+                generic.item_name = "Generic Service"
+                generic.item_group = frappe.db.get_value("Item Group", {"is_group": 0}, "name")
+                generic.stock_uom = "Nos"
+                generic.is_stock_item = 0
+                generic.insert(ignore_permissions=True)
+                return generic.name
+            except:
+                raise Exception("Cannot create items for invoices")
     
     return item_name
 
@@ -535,6 +616,23 @@ def determine_expense_account(description, company):
     
     return get_default_expense_account(company)
 
+def get_expense_account_by_code(code, company):
+    """Get expense account by code"""
+    if not code:
+        # Return default expense account
+        return get_default_expense_account(company)
+    
+    account = frappe.db.get_value("Account", {
+        "company": company,
+        "account_number": code
+    }, "name")
+    
+    if account:
+        return account
+    
+    # Return default expense account
+    return get_default_expense_account(company)
+
 def get_default_income_account(company):
     """Get default income account"""
     return frappe.db.get_value("Account", {
@@ -557,10 +655,60 @@ def create_payment_journal_entry(mut, company, cost_center, party_type):
         je = frappe.new_doc("Journal Entry")
         je.company = company
         je.posting_date = parse_date(mut.get("Datum"))
-        je.user_remark = f"Payment for invoice {mut.get('Factuurnummer')} - {mut.get('Omschrijving', '')}"
+        je.eboekhouden_mutation_nr = mut.get("MutatieNr")
+        je.eboekhouden_invoice_number = mut.get("Factuurnummer")
         
-        # Add bank and receivable/payable entries
-        # Implementation depends on specific requirements
+        # Set descriptive title and enhanced remarks
+        from .eboekhouden_payment_naming import get_journal_entry_title, enhance_journal_entry_fields
+        mutation_type = mut.get("Soort", "Payment")
+        je.title = get_journal_entry_title(mut, mutation_type)
+        je = enhance_journal_entry_fields(je, mut, f"{party_type} Payment - Invoice Not Found")
+        
+        # Get amount
+        total_amount = 0
+        for regel in mut.get("MutatieRegels", []):
+            total_amount += float(regel.get("BedragInclBTW", 0) or regel.get("BedragInvoer", 0))
+        
+        if total_amount == 0:
+            return {"success": False, "error": "No amount found"}
+        
+        # Get bank account
+        bank_account = get_bank_account(mut.get("Rekening"), company)
+        
+        # Get default receivable/payable account
+        if party_type == "Customer":
+            party_account = frappe.db.get_value("Company", company, "default_receivable_account")
+            # Money received
+            je.append("accounts", {
+                "account": bank_account,
+                "debit_in_account_currency": abs(total_amount),
+                "cost_center": cost_center
+            })
+            je.append("accounts", {
+                "account": party_account,
+                "credit_in_account_currency": abs(total_amount),
+                "cost_center": cost_center,
+                "party_type": party_type,
+                "party": get_or_create_customer(mut.get("RelatieCode"), mut.get("Omschrijving", ""))
+            })
+        else:
+            party_account = frappe.db.get_value("Company", company, "default_payable_account")
+            # Money paid
+            je.append("accounts", {
+                "account": party_account,
+                "debit_in_account_currency": abs(total_amount),
+                "cost_center": cost_center,
+                "party_type": party_type,
+                "party": get_or_create_supplier(mut.get("RelatieCode"), mut.get("Omschrijving", ""))
+            })
+            je.append("accounts", {
+                "account": bank_account,
+                "credit_in_account_currency": abs(total_amount),
+                "cost_center": cost_center
+            })
+        
+        je.insert(ignore_permissions=True)
+        je.submit()
         
         return {"success": True}
     except Exception as e:
@@ -712,14 +860,206 @@ def fix_account_type(account_code, company, target_type):
         frappe.db.set_value("Account", account.name, "account_type", target_type)
 
 def process_purchase_invoices(mutations, company, cost_center, migration_doc):
-    """Process FactuurOntvangen (purchase invoices) - placeholder"""
-    # Similar to sales invoices but creating Purchase Invoices
-    return {"created": 0, "errors": []}
+    """Process FactuurOntvangen (purchase invoices)"""
+    created = 0
+    errors = []
+    
+    for mut in mutations:
+        try:
+            # Skip if already imported
+            invoice_no = mut.get("Factuurnummer")
+            if not invoice_no:
+                continue
+                
+            if frappe.db.exists("Purchase Invoice", {"eboekhouden_invoice_number": invoice_no}):
+                continue
+            
+            # Parse mutation data
+            posting_date = parse_date(mut.get("Datum"))
+            supplier_code = mut.get("RelatieCode")
+            description = mut.get("Omschrijving", "")
+            
+            # Get or create supplier
+            supplier = get_or_create_supplier(supplier_code, description)
+            
+            # Create purchase invoice
+            pi = frappe.new_doc("Purchase Invoice")
+            pi.company = company
+            pi.supplier = supplier
+            pi.posting_date = posting_date
+            pi.bill_date = posting_date  # Set bill_date same as posting_date
+            pi.eboekhouden_invoice_number = invoice_no
+            pi.remarks = description
+            
+            # Calculate and set due date
+            try:
+                payment_terms = int(mut.get("Betalingstermijn", 30))
+            except (ValueError, TypeError):
+                payment_terms = 30
+            
+            # Ensure payment terms is positive
+            if payment_terms < 0:
+                payment_terms = 0
+            
+            # Set due date - ensure it's not before posting date
+            calculated_due_date = frappe.utils.add_days(posting_date, payment_terms)
+            
+            if frappe.utils.getdate(calculated_due_date) < frappe.utils.getdate(posting_date):
+                pi.due_date = posting_date
+            else:
+                pi.due_date = calculated_due_date
+            
+            # Set the credit to account from E-Boekhouden mutation
+            rekening_code = mut.get("Rekening")
+            if rekening_code:
+                # Get the account by code
+                credit_account = get_account_by_code(rekening_code, company)
+                if credit_account:
+                    # Ensure it's marked as payable
+                    current_type = frappe.db.get_value("Account", credit_account, "account_type")
+                    if current_type != "Payable":
+                        frappe.db.set_value("Account", credit_account, "account_type", "Payable")
+                        frappe.db.commit()
+                    pi.credit_to = credit_account
+                else:
+                    # Fallback to default
+                    default_payable = frappe.db.get_value("Company", company, "default_payable_account")
+                    if default_payable:
+                        pi.credit_to = default_payable
+            else:
+                # Use default if no Rekening specified
+                default_payable = frappe.db.get_value("Company", company, "default_payable_account")
+                if default_payable:
+                    pi.credit_to = default_payable
+            
+            # Set cost center
+            pi.cost_center = cost_center
+            
+            # Add line items from MutatieRegels
+            for regel in mut.get("MutatieRegels", []):
+                amount = float(regel.get("BedragExclBTW", 0))
+                if amount > 0:
+                    pi.append("items", {
+                        "item_code": get_or_create_item(regel.get("TegenrekeningCode")),
+                        "qty": 1,
+                        "rate": amount,
+                        "expense_account": get_expense_account_by_code(regel.get("TegenrekeningCode"), company),
+                        "cost_center": cost_center
+                    })
+            
+            pi.insert(ignore_permissions=True)
+            pi.submit()
+            created += 1
+            
+        except Exception as e:
+            errors.append(f"Purchase Invoice {mut.get('Factuurnummer')}: {str(e)}")
+            migration_doc.log_error(f"Failed to create purchase invoice {invoice_no}: {str(e)}", "purchase_invoice", mut)
+    
+    return {"created": created, "errors": errors}
 
 def process_supplier_payments(mutations, company, cost_center, migration_doc):
-    """Process FactuurbetalingVerstuurd (supplier payments) - placeholder"""
-    # Similar to customer payments but for suppliers
-    return {"created": 0, "errors": []}
+    """Process FactuurbetalingVerstuurd (supplier payments)"""
+    created = 0
+    errors = []
+    
+    for mut in mutations:
+        try:
+            invoice_no = mut.get("Factuurnummer")
+            if not invoice_no:
+                continue
+            
+            # Find the related purchase invoice
+            pi_name = frappe.db.get_value("Purchase Invoice", 
+                {"eboekhouden_invoice_number": invoice_no}, "name")
+            
+            if not pi_name:
+                # Invoice not found, create unreconciled payment entry
+                from .create_unreconciled_payment import create_unreconciled_payment_entry
+                result = create_unreconciled_payment_entry(mut, company, cost_center, "Supplier")
+                if result["success"]:
+                    created += 1
+                else:
+                    errors.append(f"Unreconciled payment {mut.get('MutatieNr')}: {result['error']}")
+                continue
+            
+            # Check if payment already exists for this mutation
+            mutation_nr = mut.get("MutatieNr")
+            existing_payment = frappe.db.exists("Payment Entry", {
+                "reference_no": mutation_nr,
+                "docstatus": ["!=", 2]  # Not cancelled
+            })
+            
+            if existing_payment:
+                # Payment already exists for this mutation, skip
+                continue
+            
+            # Get the purchase invoice
+            pi = frappe.get_doc("Purchase Invoice", pi_name)
+            
+            # Check if already paid
+            if pi.outstanding_amount <= 0:
+                continue
+            
+            # Create payment entry
+            pe = frappe.new_doc("Payment Entry")
+            pe.payment_type = "Pay"
+            pe.company = company
+            pe.posting_date = parse_date(mut.get("Datum"))
+            pe.party_type = "Supplier"
+            pe.party = pi.supplier
+            
+            # Set descriptive title
+            from .eboekhouden_payment_naming import get_payment_entry_title, enhance_payment_entry_fields
+            pe.title = get_payment_entry_title(mut, pe.party, "Pay")
+            pe = enhance_payment_entry_fields(pe, mut)
+            
+            # Get amount from MutatieRegels
+            amount = 0
+            for regel in mut.get("MutatieRegels", []):
+                amount += float(regel.get("BedragInvoer", 0))
+            
+            if amount <= 0:
+                # Skip if no amount
+                continue
+                
+            pe.paid_amount = amount
+            pe.received_amount = pe.paid_amount
+            pe.reference_no = mut.get("MutatieNr")
+            pe.reference_date = pe.posting_date
+            
+            # Set bank account
+            bank_code = mut.get("Rekening")
+            if bank_code:
+                bank_account = get_bank_account(bank_code, company)
+                pe.paid_from = bank_account
+            else:
+                # Get default bank account
+                default_bank = frappe.db.get_value("Account", {
+                    "company": company,
+                    "account_type": "Bank",
+                    "is_group": 0
+                }, "name")
+                pe.paid_from = default_bank
+            
+            # Set payable account from invoice
+            pe.paid_to = pi.credit_to
+            
+            # Add reference to the invoice
+            pe.append("references", {
+                "reference_doctype": "Purchase Invoice",
+                "reference_name": pi_name,
+                "allocated_amount": pe.paid_amount
+            })
+            
+            pe.insert(ignore_permissions=True)
+            pe.submit()
+            created += 1
+            
+        except Exception as e:
+            errors.append(f"Payment for Invoice {mut.get('Factuurnummer')}: {str(e)}")
+            migration_doc.log_error(f"Failed to create supplier payment for invoice {invoice_no}: {str(e)}", "supplier_payment", mut)
+    
+    return {"created": created, "errors": errors}
 
 def process_memorial_entries(mutations, company, cost_center, migration_doc):
     """Process Memoriaal entries - placeholder"""

@@ -112,10 +112,12 @@ def migrate_cost_centers_with_hierarchy(settings):
                     if cc_id:
                         id_to_name_map[cc_id] = result["name"]
                 else:
-                    errors.append(f"{cc_data.get('name', 'Unknown')}: {result.get('error', 'Unknown error')}")
+                    cc_info = f"Code: {cc_data.get('code', 'N/A')}, Name: {cc_data.get('name', 'N/A')}, ID: {cc_data.get('id', 'N/A')}"
+                    errors.append(f"{cc_info}: {result.get('error', 'Unknown error')}")
                     
             except Exception as e:
-                errors.append(f"{cc_data.get('name', 'Unknown')}: {str(e)}")
+                cc_info = f"Code: {cc_data.get('code', 'N/A')}, Name: {cc_data.get('name', 'N/A')}, ID: {cc_data.get('id', 'N/A')}"
+                errors.append(f"{cc_info}: {str(e)}")
         
         frappe.db.commit()
         

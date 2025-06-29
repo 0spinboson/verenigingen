@@ -157,7 +157,7 @@ def prepare_system_for_migration():
     })
     
     # 5. Check API connection
-    from vereiningen.utils.eboekhouden_api import test_api_connection
+    from verenigingen.utils.eboekhouden_api import test_api_connection
     api_test = test_api_connection()
     results.append({
         "step": "API Connection",

@@ -45,15 +45,22 @@ def analyze_eboekhouden_data():
     """
     
     from verenigingen.utils.eboekhouden_soap_api import EBoekhoudenSOAPAPI
+    from verenigingen.utils.eboekhouden_date_analyzer import get_actual_date_range
     
     try:
         settings = frappe.get_single("E-Boekhouden Settings")
         api = EBoekhoudenSOAPAPI(settings)
         
-        # First try to get early mutations by number range to find the actual start date
-        early_result = api.get_mutations(mutation_nr_from=1, mutation_nr_to=100)
+        # Get actual date range from the data
+        date_range_result = get_actual_date_range()
         
-        # Then get recent mutations for analysis
+        if not date_range_result["success"]:
+            return {
+                "success": False,
+                "error": date_range_result.get("error", "Failed to get date range")
+            }
+        
+        # Get recent mutations for analysis
         today = frappe.utils.today()
         one_year_ago = frappe.utils.add_years(today, -1)
         
@@ -67,21 +74,11 @@ def analyze_eboekhouden_data():
         
         mutations = result["mutations"]
         
-        # Check if we got early mutations to find actual start date
-        actual_earliest_date = None
-        if early_result["success"] and early_result["mutations"]:
-            for early_mut in early_result["mutations"]:
-                date_str = early_mut.get("Datum", "")
-                if date_str:
-                    date = date_str.split("T")[0] if "T" in date_str else date_str
-                    if not actual_earliest_date or date < actual_earliest_date:
-                        actual_earliest_date = date
-        
         # Analyze the data
         analysis = {
             "date_range": {
-                "earliest_date": actual_earliest_date,
-                "latest_date": None
+                "earliest_date": date_range_result["earliest_date"],
+                "latest_date": date_range_result["latest_date"]
             },
             "mutation_types": {},
             "account_usage": {
@@ -98,15 +95,7 @@ def analyze_eboekhouden_data():
         }
         
         for mut in mutations:
-            # Update date range (only update earliest if we don't have one from early mutations)
-            date_str = mut.get("Datum", "")
-            if date_str:
-                date = date_str.split("T")[0] if "T" in date_str else date_str
-                if not actual_earliest_date:
-                    if not analysis["date_range"]["earliest_date"] or date < analysis["date_range"]["earliest_date"]:
-                        analysis["date_range"]["earliest_date"] = date
-                if not analysis["date_range"]["latest_date"] or date > analysis["date_range"]["latest_date"]:
-                    analysis["date_range"]["latest_date"] = date
+            # We already have the actual date range from get_actual_date_range()
             
             # Count mutation types
             mutation_type = mut.get("Soort", "Unknown")
@@ -158,7 +147,12 @@ def analyze_eboekhouden_data():
         # Convert sets to counts for JSON serialization
         summary = {
             "success": True,
-            "date_range": analysis["date_range"],
+            "date_range": {
+                "earliest_date": date_range_result["earliest_date"],
+                "latest_date": date_range_result["latest_date"],
+                "earliest_formatted": date_range_result["earliest_formatted"],
+                "latest_formatted": date_range_result["latest_formatted"]
+            },
             "total_mutations": len(mutations),
             "total_estimate": total_estimate,
             "mutation_types": analysis["mutation_types"],
