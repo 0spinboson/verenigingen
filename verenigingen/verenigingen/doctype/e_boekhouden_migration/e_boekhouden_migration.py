@@ -31,11 +31,13 @@ class EBoekhoudenMigration(Document):
     def start_migration(self):
         """Start the migration process"""
         try:
-            self.migration_status = "In Progress"
-            self.start_time = frappe.utils.now_datetime()
-            self.current_operation = "Initializing migration..."
-            self.progress_percentage = 0
-            self.save()
+            self.db_set({
+                "migration_status": "In Progress",
+                "start_time": frappe.utils.now_datetime(),
+                "current_operation": "Initializing migration...",
+                "progress_percentage": 0
+            })
+            frappe.db.commit()
             
             # Get settings
             settings = frappe.get_single("E-Boekhouden Settings")
@@ -52,9 +54,11 @@ class EBoekhoudenMigration(Document):
             
             # Phase 1: Chart of Accounts
             if getattr(self, 'migrate_accounts', 0):
-                self.current_operation = "Migrating Chart of Accounts..."
-                self.progress_percentage = 10
-                self.save()
+                self.db_set({
+                    "current_operation": "Migrating Chart of Accounts...",
+                    "progress_percentage": 10
+                })
+                frappe.db.commit()
                 
                 # Use getattr to avoid field/method name conflict
                 migrate_method = getattr(self.__class__, 'migrate_chart_of_accounts')
@@ -63,9 +67,11 @@ class EBoekhoudenMigration(Document):
             
             # Phase 2: Cost Centers
             if getattr(self, 'migrate_cost_centers', 0):
-                self.current_operation = "Migrating Cost Centers..."
-                self.progress_percentage = 20
-                self.save()
+                self.db_set({
+                    "current_operation": "Migrating Cost Centers...",
+                    "progress_percentage": 20
+                })
+                frappe.db.commit()
                 
                 # Use getattr to avoid field/method name conflict
                 migrate_method = getattr(self.__class__, 'migrate_cost_centers')
@@ -74,9 +80,11 @@ class EBoekhoudenMigration(Document):
             
             # Phase 3: Customers
             if getattr(self, 'migrate_customers', 0):
-                self.current_operation = "Migrating Customers..."
-                self.progress_percentage = 40
-                self.save()
+                self.db_set({
+                    "current_operation": "Migrating Customers...",
+                    "progress_percentage": 40
+                })
+                frappe.db.commit()
                 
                 # Use getattr to avoid field/method name conflict
                 migrate_method = getattr(self.__class__, 'migrate_customers')
@@ -85,9 +93,11 @@ class EBoekhoudenMigration(Document):
             
             # Phase 4: Suppliers
             if getattr(self, 'migrate_suppliers', 0):
-                self.current_operation = "Migrating Suppliers..."
-                self.progress_percentage = 60
-                self.save()
+                self.db_set({
+                    "current_operation": "Migrating Suppliers...",
+                    "progress_percentage": 60
+                })
+                frappe.db.commit()
                 
                 # Use getattr to avoid field/method name conflict
                 migrate_method = getattr(self.__class__, 'migrate_suppliers')
@@ -96,9 +106,11 @@ class EBoekhoudenMigration(Document):
             
             # Phase 5: Transactions
             if getattr(self, 'migrate_transactions', 0):
-                self.current_operation = "Migrating Transactions..."
-                self.progress_percentage = 80
-                self.save()
+                self.db_set({
+                    "current_operation": "Migrating Transactions...",
+                    "progress_percentage": 80
+                })
+                frappe.db.commit()
                 
                 # Use getattr to avoid field/method name conflict
                 migrate_method = getattr(self.__class__, 'migrate_transactions_data')
@@ -107,9 +119,11 @@ class EBoekhoudenMigration(Document):
             
             # Phase 6: Stock Transactions
             if getattr(self, 'migrate_stock_transactions', 0):
-                self.current_operation = "Migrating Stock Transactions..."
-                self.progress_percentage = 90
-                self.save()
+                self.db_set({
+                    "current_operation": "Migrating Stock Transactions...",
+                    "progress_percentage": 90
+                })
+                frappe.db.commit()
                 
                 # Use getattr to avoid field/method name conflict
                 migrate_method = getattr(self.__class__, 'migrate_stock_transactions_data')
@@ -117,24 +131,28 @@ class EBoekhoudenMigration(Document):
                 migration_log.append(f"Stock Transactions: {result}")
             
             # Completion
-            self.migration_status = "Completed"
-            self.current_operation = "Migration completed successfully"
-            self.progress_percentage = 100
-            self.end_time = frappe.utils.now_datetime()
-            self.migration_summary = "\n".join(migration_log)
+            self.db_set({
+                "migration_status": "Completed",
+                "current_operation": "Migration completed successfully",
+                "progress_percentage": 100,
+                "end_time": frappe.utils.now_datetime(),
+                "migration_summary": "\n".join(migration_log)
+            })
             
             # Save failed records to file
             if self.failed_record_details:
                 self.save_failed_records_log()
                 
-            self.save()
+            frappe.db.commit()
             
         except Exception as e:
-            self.migration_status = "Failed"
-            self.current_operation = f"Migration failed: {str(e)}"
-            self.end_time = frappe.utils.now_datetime()
-            self.error_log = frappe.get_traceback()
-            self.save()
+            self.db_set({
+                "migration_status": "Failed",
+                "current_operation": f"Migration failed: {str(e)}",
+                "end_time": frappe.utils.now_datetime(),
+                "error_log": frappe.get_traceback()
+            })
+            frappe.db.commit()
             frappe.log_error(f"E-Boekhouden migration failed: {str(e)}", "E-Boekhouden Migration")
             raise
     
@@ -331,12 +349,33 @@ class EBoekhoudenMigration(Document):
                 
                 if result["success"]:
                     stats = result["stats"]
-                    self.imported_records += (stats["invoices_created"] + 
-                                            stats["payments_processed"] + 
-                                            stats["journal_entries_created"])
-                    self.failed_records += len(stats["errors"])
-                    self.total_records += stats["total_mutations"]
+                    # Update counters in database directly to avoid document conflicts
+                    imported = (stats["invoices_created"] + 
+                               stats["payments_processed"] + 
+                               stats["journal_entries_created"])
                     
+                    # Get categorized results for better reporting
+                    categorized = stats.get("categorized_results", {})
+                    
+                    # Calculate "failed" based on actual errors, not retries
+                    actual_failures = 0
+                    if "categories" in categorized:
+                        # Count validation errors and system errors as failures
+                        actual_failures = (categorized["categories"].get("validation_error", {}).get("count", 0) +
+                                         categorized["categories"].get("system_error", {}).get("count", 0))
+                    else:
+                        # Fallback to old method
+                        actual_failures = len(stats["errors"])
+                    
+                    total = stats["total_mutations"]
+                    
+                    self.db_set({
+                        "imported_records": self.imported_records + imported,
+                        "failed_records": self.failed_records + actual_failures,
+                        "total_records": self.total_records + total
+                    })
+                    
+                    # Use the improved message from categorizer
                     return result["message"]
                 else:
                     return f"Error: {result.get('error', 'Unknown error')}"
@@ -443,7 +482,27 @@ class EBoekhoudenMigration(Document):
     
     def log_error(self, message, record_type=None, record_data=None):
         """Log error message and track failed records"""
-        frappe.log_error(message, "E-Boekhouden Migration")
+        # Create a short title for the error log
+        if record_type:
+            title = f"E-Boekhouden {record_type} Error"
+        else:
+            # Extract first part of message for title
+            title = message.split(":")[0] if ":" in message else message
+            title = title[:100]  # Ensure it's not too long
+        
+        # Ensure title is within 140 character limit
+        if len(title) > 140:
+            title = title[:137] + "..."
+            
+        try:
+            frappe.log_error(message, title)
+        except Exception as e:
+            # If logging fails, try with a generic title
+            try:
+                frappe.log_error(message, "E-Boekhouden Migration Error")
+            except:
+                # Last resort - just print to console
+                frappe.logger().error(f"E-Boekhouden Migration: {message}")
         if hasattr(self, 'error_details'):
             self.error_details += f"\n{message}"
         else:

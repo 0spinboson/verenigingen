@@ -4,6 +4,7 @@ Create unreconciled Payment Entries for E-Boekhouden payments without matching i
 
 import frappe
 from frappe import _
+from pymysql.err import IntegrityError
 
 
 def create_unreconciled_payment_entry(mutation, company, cost_center, payment_type="Customer"):
@@ -22,6 +23,26 @@ def create_unreconciled_payment_entry(mutation, company, cost_center, payment_ty
     try:
         from .eboekhouden_payment_naming import get_payment_entry_title, enhance_payment_entry_fields
         from .eboekhouden_soap_migration import parse_date, get_bank_account, get_or_create_customer, get_or_create_supplier
+        
+        # Check if payment already exists for this mutation
+        mutation_nr = mutation.get("MutatieNr")
+        if mutation_nr:
+            # Check both reference_no AND eboekhouden_mutation_nr fields
+            existing_payment = frappe.db.exists("Payment Entry", [
+                ["reference_no", "=", mutation_nr],
+                ["docstatus", "!=", 2]  # Not cancelled
+            ])
+            
+            if not existing_payment:
+                # Also check the custom field if it exists
+                existing_payment = frappe.db.exists("Payment Entry", [
+                    ["eboekhouden_mutation_nr", "=", mutation_nr],
+                    ["docstatus", "!=", 2]  # Not cancelled
+                ])
+            
+            if existing_payment:
+                # Payment already exists for this mutation, return success
+                return {"success": True, "payment_entry": existing_payment, "already_exists": True}
         
         # Create payment entry
         pe = frappe.new_doc("Payment Entry")
@@ -164,11 +185,35 @@ def create_unreconciled_payment_entry(mutation, company, cost_center, payment_ty
             pe.mode_of_payment = default_mode
         
         # Insert and submit
-        pe.insert(ignore_permissions=True)
-        pe.submit()
+        try:
+            pe.insert(ignore_permissions=True)
+            pe.submit()
+            return {"success": True, "payment_entry": pe.name}
+        except IntegrityError as ie:
+            if "Duplicate entry" in str(ie) and "eboekhouden_mutation_nr" in str(ie):
+                # This payment was already created (race condition or retry)
+                frappe.db.rollback()
+                # Try to find the existing payment
+                existing = frappe.db.get_value("Payment Entry", {
+                    "eboekhouden_mutation_nr": mutation.get("MutatieNr"),
+                    "docstatus": ["!=", 2]
+                }, "name")
+                if existing:
+                    return {"success": True, "payment_entry": existing, "already_exists": True}
+                else:
+                    return {"success": False, "error": "Duplicate payment exists but could not be found"}
+            else:
+                # Re-raise other integrity errors
+                raise
         
-        return {"success": True, "payment_entry": pe.name}
-        
+    except IntegrityError as ie:
+        if "Duplicate entry" in str(ie) and "eboekhouden_mutation_nr" in str(ie):
+            # This payment was already created, treat as success
+            frappe.db.rollback()
+            return {"success": True, "payment_entry": None, "already_exists": True}
+        else:
+            frappe.log_error(f"Failed to create unreconciled payment: {str(ie)}", "E-Boekhouden Unreconciled Payment")
+            return {"success": False, "error": str(ie)}
     except Exception as e:
         frappe.log_error(f"Failed to create unreconciled payment: {str(e)}", "E-Boekhouden Unreconciled Payment")
         return {"success": False, "error": str(e)}

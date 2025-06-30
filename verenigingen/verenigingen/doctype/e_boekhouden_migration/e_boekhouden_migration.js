@@ -786,6 +786,13 @@ function add_post_migration_tools(frm) {
 		});
 		review_dialog.show();
 	}, __('Tools'));
+	
+	// Add mapping review button if using account mappings
+	if (frm.doc.use_account_mappings) {
+		frm.add_custom_button(__('Review Mappings'), function() {
+			window.location.href = '/eboekhouden_mapping_review';
+		}, __('Tools'));
+	}
 }
 
 function check_account_types(frm) {

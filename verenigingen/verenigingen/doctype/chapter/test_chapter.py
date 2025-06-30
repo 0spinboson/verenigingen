@@ -42,6 +42,20 @@ class TestChapter(FrappeTestCase):
     
     def create_test_prerequisites(self):
         """Create test prerequisites"""
+        # Get or create test region
+        self.test_region = frappe.db.get_value("Region", {"region_code": "TR"}, "name")
+        if not self.test_region:
+            # Create test region if it doesn't exist
+            region = frappe.get_doc({
+                "doctype": "Region",
+                "region_name": "Test Region",
+                "region_code": "TR",
+                "country": "Netherlands",
+                "is_active": 1
+            })
+            region.insert(ignore_permissions=True)
+            self.test_region = region.name
+            
         # Create test member for chapter head
         self.test_member = frappe.get_doc({
             "doctype": "Member",
@@ -58,7 +72,7 @@ class TestChapter(FrappeTestCase):
         chapter = frappe.get_doc({
             "doctype": "Chapter",
             "name": f"Test Chapter {self.unique_id}",
-            "region": "Test Region",
+            "region": self.test_region,
             "introduction": "Test chapter for unit tests",
             "published": 1,
             "chapter_head": self.test_member.name
@@ -67,7 +81,7 @@ class TestChapter(FrappeTestCase):
         
         # Verify chapter was created correctly
         self.assertEqual(chapter.name, f"Test Chapter {self.unique_id}")
-        self.assertEqual(chapter.region, "Test Region")
+        self.assertEqual(chapter.region, self.test_region)
         # Note: chapter_head may not be set if the field doesn't exist or isn't required
         if hasattr(chapter, 'chapter_head') and chapter.chapter_head:
             self.assertEqual(chapter.chapter_head, self.test_member.name)
@@ -94,7 +108,7 @@ class TestChapter(FrappeTestCase):
         chapter = frappe.get_doc({
             "doctype": "Chapter",
             "name": f"Test Chapter {self.unique_id}",
-            "region": "Test Region",
+            "region": self.test_region,
             "introduction": "Test chapter",
             "postal_codes": "1000-1999, 2000, 3000-3099"
         })

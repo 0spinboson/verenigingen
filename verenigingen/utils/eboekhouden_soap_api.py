@@ -16,10 +16,18 @@ class EBoekhoudenSOAPAPI:
             settings = frappe.get_single("E-Boekhouden Settings")
         
         self.soap_url = "https://soap.e-boekhouden.nl/soap.asmx"
-        # Use the actual credentials
-        self.username = "NVV_penningmeester"
-        self.security_code_1 = "7e3169c820d849518853df7e30c4ba3f"
-        self.security_code_2 = "BB51E315-A9B2-4D37-8E8E-96EF2E2554A7"
+        
+        # Get credentials from settings or use defaults for backward compatibility
+        if hasattr(settings, 'soap_username') and settings.soap_username:
+            self.username = settings.soap_username
+            self.security_code_1 = settings.get_password('soap_security_code1') if hasattr(settings, 'soap_security_code1') else ""
+            self.security_code_2 = settings.get_password('soap_security_code2') if hasattr(settings, 'soap_security_code2') else ""
+        else:
+            # Fallback to hardcoded values for existing installations
+            self.username = "NVV_penningmeester"
+            self.security_code_1 = "7e3169c820d849518853df7e30c4ba3f"
+            self.security_code_2 = "BB51E315-A9B2-4D37-8E8E-96EF2E2554A7"
+            
         self.session_id = None
         
     def open_session(self):

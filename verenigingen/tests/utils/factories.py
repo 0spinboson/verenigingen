@@ -234,19 +234,35 @@ class TestDataBuilder:
             name = f"Test Chapter {random_string(8)}"
             
         if not region:
-            region = "Test Region"
+            # Get the actual test region name (it might be slugified)
+            region = frappe.db.get_value("Region", {"region_code": "TR"}, "name")
+            if not region:
+                # Create test region if it doesn't exist
+                test_region = frappe.get_doc({
+                    "doctype": "Region",
+                    "region_name": "Test Region",
+                    "region_code": "TR",
+                    "country": "Netherlands",
+                    "is_active": 1
+                })
+                test_region.insert(ignore_permissions=True)
+                region = test_region.name
             
         if not postal_codes:
             postal_codes = f"{random.randint(1000, 9999)}"
             
-        chapter = frappe.get_doc({
-            "doctype": "Chapter",
-            "name": name,
-            "region": region,
-            "postal_codes": postal_codes,
-            "introduction": "Test chapter"
-        })
-        chapter.insert(ignore_permissions=True)
+        # Check if chapter already exists
+        if frappe.db.exists("Chapter", name):
+            chapter = frappe.get_doc("Chapter", name)
+        else:
+            chapter = frappe.get_doc({
+                "doctype": "Chapter",
+                "name": name,
+                "region": region,
+                "postal_codes": postal_codes,
+                "introduction": "Test chapter"
+            })
+            chapter.insert(ignore_permissions=True)
         
         self._data["chapter"] = chapter
         self._cleanup_manager.register("Chapter", chapter.name)
@@ -285,7 +301,7 @@ class TestDataBuilder:
         # Add to chapter if chapter exists
         if "chapter" in self._data:
             chapter = frappe.get_doc("Chapter", self._data["chapter"].name)
-            chapter.append("chapter_members", {
+            chapter.append("members", {
                 "member": member.name,
                 "chapter_join_date": today(),
                 "enabled": 1,
@@ -397,13 +413,45 @@ class TestDataBuilder:
             raise ValueError("Must create volunteer before expense")
             
         expense_data = {
-            "doctype": "Volunteer_Expense",
+            "doctype": "Volunteer Expense",
             "volunteer": self._data["volunteer"].name,
             "amount": amount,
             "description": description,
             "expense_date": today(),
-            "status": "Draft"
+            "status": "Draft",
+            "organization_type": "Chapter"  # Default to Chapter
         }
+        
+        # Try to get or create a default expense category
+        expense_categories = frappe.get_all("Expense Category", limit=1)
+        if expense_categories:
+            expense_data["category"] = expense_categories[0].name
+        else:
+            # Create a default test expense category if none exist
+            expense_account = frappe.get_all("Account", 
+                filters={"account_type": "Expense Account", "is_group": 0}, 
+                limit=1)
+            if expense_account:
+                test_category = frappe.get_doc({
+                    "doctype": "Expense Category",
+                    "category_name": "Test Expenses",
+                    "expense_account": expense_account[0].name
+                })
+                test_category.insert(ignore_permissions=True)
+                expense_data["category"] = test_category.name
+        
+        # If chapter exists in test data, use it
+        if "chapter" in self._data:
+            expense_data["chapter"] = self._data["chapter"].name
+        else:
+            # Try to get chapter from volunteer's member record
+            volunteer = self._data["volunteer"]
+            if hasattr(volunteer, 'member') and volunteer.member:
+                member = frappe.get_doc("Member", volunteer.member)
+                if hasattr(member, 'primary_chapter') and member.primary_chapter:
+                    expense_data["chapter"] = member.primary_chapter
+                    
+        # Allow override from kwargs
         expense_data.update(kwargs)
         
         expense = frappe.get_doc(expense_data)
@@ -413,7 +461,7 @@ class TestDataBuilder:
             self._data["expenses"] = []
         self._data["expenses"].append(expense)
         
-        self._cleanup_manager.register("Volunteer_Expense", expense.name,
+        self._cleanup_manager.register("Volunteer Expense", expense.name,
                                      dependencies=[f"Volunteer:{self._data['volunteer'].name}"])
         
         return self

@@ -18,12 +18,26 @@ class TestEnvironmentSetup:
         """Create standard test chapters for testing"""
         chapters = []
         
+        # Get the actual test region name (it might be slugified)
+        test_region = frappe.db.get_value("Region", {"region_code": "TR"}, "name")
+        if not test_region:
+            # Create test region if it doesn't exist
+            region = frappe.get_doc({
+                "doctype": "Region",
+                "region_name": "Test Region",
+                "region_code": "TR",
+                "country": "Netherlands",
+                "is_active": 1
+            })
+            region.insert(ignore_permissions=True)
+            test_region = region.name
+        
         # Amsterdam Chapter
         if not frappe.db.exists("Chapter", "Test Amsterdam Chapter"):
             amsterdam = frappe.get_doc({
                 "doctype": "Chapter",
                 "name": "Test Amsterdam Chapter",
-                "region": "Test Region",
+                "region": test_region,
                 "postal_codes": "1000-1099",
                 "introduction": "Test chapter for Amsterdam area",
                 "published": 1
@@ -36,7 +50,7 @@ class TestEnvironmentSetup:
             rotterdam = frappe.get_doc({
                 "doctype": "Chapter", 
                 "name": "Test Rotterdam Chapter",
-                "region": "Test Region",
+                "region": test_region,
                 "postal_codes": "3000-3099",
                 "introduction": "Test chapter for Rotterdam area",
                 "published": 1
@@ -119,7 +133,10 @@ class TestEnvironmentSetup:
             {"name": "Test Regular Membership", "period": "Annual", "amount": 100.00, "enforce_minimum": True},
             {"name": "Test Student Membership", "period": "Annual", "amount": 50.00, "enforce_minimum": True},
             {"name": "Test Monthly Membership", "period": "Monthly", "amount": 10.00, "enforce_minimum": False},
-            {"name": "Test Daily Membership", "period": "Daily", "amount": 2.00, "enforce_minimum": False}
+            {"name": "Test Daily Membership", "period": "Daily", "amount": 2.00, "enforce_minimum": False},
+            # Add simplified names that personas expect
+            {"name": "Annual", "period": "Annual", "amount": 100.00, "enforce_minimum": True},
+            {"name": "Monthly", "period": "Monthly", "amount": 10.00, "enforce_minimum": False}
         ]
         
         for config in configs:
@@ -152,13 +169,15 @@ class TestEnvironmentSetup:
         ]
         
         for area_name in area_names:
-            if not frappe.db.exists("Volunteer Interest Area", area_name):
-                area = frappe.get_doc({
-                    "doctype": "Volunteer Interest Area",
-                    "name": area_name
+            # Since Volunteer Interest Area is a child table, we need to create
+            # Volunteer Interest Category instead
+            if not frappe.db.exists("Volunteer Interest Category", area_name):
+                category = frappe.get_doc({
+                    "doctype": "Volunteer Interest Category",
+                    "category_name": area_name
                 })
-                area.insert(ignore_permissions=True)
-                areas.append(area)
+                category.insert(ignore_permissions=True)
+                areas.append(category)
                 
         return areas
         
@@ -170,7 +189,7 @@ class TestEnvironmentSetup:
             ("Team Member", {"volunteer": ["like", "Test%"]}),
             ("Team", {"team_name": ["like", "Test%"]}),
             ("Volunteer Assignment", {"role": ["like", "Test%"]}),
-            ("Volunteer_Expense", {"description": ["like", "Test%"]}),
+            ("Volunteer Expense", {"description": ["like", "Test%"]}),
             ("Volunteer", {"volunteer_name": ["like", "Test%"]}),
             ("Membership", {"member": ["like", "Assoc-Member-Test%"]}),
             ("Chapter Member", {"member": ["like", "Assoc-Member-Test%"]}),

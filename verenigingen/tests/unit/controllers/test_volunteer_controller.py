@@ -10,9 +10,9 @@ Tests the Python controller methods and assignment history management
 import unittest
 import frappe
 from frappe.utils import today, add_days
-from verenigingen.verenigingen.tests.utils.base import VereningingenUnitTestCase
-from verenigingen.verenigingen.tests.utils.factories import TestDataBuilder
-from verenigingen.verenigingen.tests.utils.setup_helpers import TestEnvironmentSetup
+from verenigingen.tests.utils.base import VereningingenUnitTestCase
+from verenigingen.tests.utils.factories import TestDataBuilder
+from verenigingen.tests.utils.setup_helpers import TestEnvironmentSetup
 
 
 class TestVolunteerController(VereningingenUnitTestCase):
@@ -43,8 +43,8 @@ class TestVolunteerController(VereningingenUnitTestCase):
         # Create volunteer with valid member link
         volunteer = frappe.get_doc({
             "doctype": "Volunteer",
-            "volunteer_name": "Test Volunteer",
-            "email": "volunteer@test.com",
+            "volunteer_name": f"Test Volunteer {frappe.utils.random_string(8)}",
+            "email": f"volunteer.{frappe.utils.random_string(8)}@test.com",
             "member": member.name,
             "status": "Active",
             "start_date": today()
@@ -57,8 +57,8 @@ class TestVolunteerController(VereningingenUnitTestCase):
         # Test with invalid member link
         volunteer2 = frappe.get_doc({
             "doctype": "Volunteer",
-            "volunteer_name": "Test Volunteer 2",
-            "email": "volunteer2@test.com",
+            "volunteer_name": f"Test Invalid Volunteer {frappe.utils.random_string(8)}",
+            "email": f"volunteer.invalid.{frappe.utils.random_string(8)}@test.com",
             "member": "INVALID-MEMBER",
             "status": "Active",
             "start_date": today()
@@ -74,7 +74,7 @@ class TestVolunteerController(VereningingenUnitTestCase):
             .with_member()
             .with_volunteer_profile()
             .with_team_assignment(
-                team_name=self.test_env["teams"][0].name,
+                team_name=None,  # Let builder create a new team
                 role="Event Coordinator"
             )
             .build())
@@ -118,8 +118,8 @@ class TestVolunteerController(VereningingenUnitTestCase):
         
         volunteer.save()
         
-        # Test get_active_assignments
-        active = volunteer.get_active_assignments()
+        # Test get_activity_assignments
+        active = volunteer.get_activity_assignments()
         self.assertEqual(len(active), 1)
         self.assertEqual(active[0].role, "Active Role")
         
@@ -193,11 +193,11 @@ class TestVolunteerController(VereningingenUnitTestCase):
         """Test aggregated assignments from multiple sources"""
         # Create volunteer with team and activity
         test_data = (self.builder
-            .with_chapter(self.test_env["chapters"][0].name)
+            .with_chapter(None)  # Let builder create a new chapter
             .with_member()
             .with_volunteer_profile()
             .with_team_assignment(
-                team_name=self.test_env["teams"][0].name,
+                team_name=None,  # Let builder create a new team
                 role="Team Member"
             )
             .build())
@@ -237,10 +237,17 @@ class TestVolunteerController(VereningingenUnitTestCase):
             .build())
         
         volunteer = test_data["volunteer"]
-        team = self.test_env["teams"][0]
         
-        # Add to team (should create assignment history)
-        team_doc = frappe.get_doc("Team", team.name)
+        # Create a team for testing
+        team_doc = frappe.get_doc({
+            "doctype": "Team",
+            "team_name": f"Test Team {frappe.utils.random_string(8)}",
+            "status": "Active",
+            "team_type": "Project Team",
+            "start_date": today()
+        })
+        team_doc.insert(ignore_permissions=True)
+        self.track_doc("Team", team_doc.name)
         team_doc.append("team_members", {
             "volunteer": volunteer.name,
             "volunteer_name": volunteer.volunteer_name,
@@ -256,7 +263,7 @@ class TestVolunteerController(VereningingenUnitTestCase):
         volunteer.reload()
         active_assignment = None
         for assignment in volunteer.assignment_history:
-            if (assignment.reference_name == team.name and 
+            if (assignment.reference_name == team_doc.name and 
                 assignment.status == "Active"):
                 active_assignment = assignment
                 break
@@ -275,13 +282,13 @@ class TestVolunteerController(VereningingenUnitTestCase):
         volunteer.reload()
         completed_assignment = None
         for assignment in volunteer.assignment_history:
-            if (assignment.reference_name == team.name and 
+            if (assignment.reference_name == team_doc.name and 
                 assignment.status == "Completed"):
                 completed_assignment = assignment
                 break
                 
         self.assertIsNotNone(completed_assignment)
-        self.assertEqual(completed_assignment.end_date, today())
+        self.assertEqual(str(completed_assignment.end_date), today())
         
     def test_volunteer_status_transitions(self):
         """Test volunteer status state machine"""
@@ -328,6 +335,8 @@ class TestVolunteerController(VereningingenUnitTestCase):
             roles=["Member", "Volunteer"]
         )
         
+        # Reload member to avoid timestamp issues
+        member = frappe.get_doc("Member", member.name)
         member.user = user.name
         member.save()
         
@@ -343,6 +352,7 @@ class TestVolunteerController(VereningingenUnitTestCase):
     def test_volunteer_expense_workflow(self):
         """Test volunteer expense submission and approval"""
         test_data = (self.builder
+            .with_chapter()  # Add chapter first
             .with_member()
             .with_volunteer_profile()
             .with_expense(100, "Travel expense")

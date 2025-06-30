@@ -284,10 +284,19 @@ class Volunteer(Document):
         return team_assignments
     
     def get_activity_assignments(self):
-        """Get assignments from Volunteer Activity"""
+        """Get active assignments from assignment history and Volunteer Activity"""
         activity_assignments = []
         
-        # Query activities for this volunteer
+        # First check assignment_history child table
+        if hasattr(self, 'assignment_history') and self.assignment_history:
+            for assignment in self.assignment_history:
+                if assignment.status == "Active":
+                    activity_assignments.append(assignment)
+            # If we found assignments in history, return them
+            if activity_assignments:
+                return activity_assignments
+        
+        # Fallback to querying Volunteer Activity doctype
         activities = frappe.get_all(
             "Volunteer Activity",
             filters={
@@ -625,6 +634,30 @@ class Volunteer(Document):
             })
             
         return skills_by_category
+    
+    @frappe.whitelist()
+    def calculate_total_hours(self):
+        """Calculate total volunteer hours from all activities and assignments"""
+        total_hours = 0
+        
+        # Get hours from volunteer activities
+        activities = frappe.get_all(
+            "Volunteer Activity",
+            filters={"volunteer": self.name},
+            fields=["actual_hours", "estimated_hours"]
+        )
+        
+        for activity in activities:
+            # Use actual hours if available, otherwise use estimated hours
+            hours = activity.actual_hours or activity.estimated_hours or 0
+            total_hours += hours
+            
+        # Get hours from assignment history (child table)
+        for assignment in self.assignment_history:
+            if assignment.actual_hours:
+                total_hours += assignment.actual_hours
+            
+        return total_hours
     
     @frappe.whitelist()
     def create_minimal_employee(self):

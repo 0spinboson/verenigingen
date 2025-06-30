@@ -137,7 +137,7 @@
    "fieldname": "setup_mappings_btn",
    "fieldtype": "Button",
    "label": "Setup Account Mappings",
-   "options": "window.location.href='/eboekhouden_mapping_review';"
+   "hidden": 1
   },
   {
    "default": 1,

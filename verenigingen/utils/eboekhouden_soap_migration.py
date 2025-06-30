@@ -8,6 +8,7 @@ from frappe import _
 from datetime import datetime
 from collections import defaultdict
 import json
+from pymysql.err import IntegrityError
 
 def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
     """
@@ -156,13 +157,33 @@ def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
             normalized_soort = normalize_mutation_type(soort)
             mutations_by_type[normalized_soort].append(mut)
         
+        # Log mutation type distribution
+        mutation_distribution = {k: len(v) for k, v in mutations_by_type.items()}
+        # Log to the migration summary instead of error log to avoid title length issues
+        distribution_summary = f"Mutation types found: {', '.join([f'{k}({v})' for k, v in mutation_distribution.items()])}"
+        frappe.logger().info(f"E-Boekhouden Migration {migration_doc.name}: {distribution_summary}")
+        
+        # Store in migration document if needed
+        if hasattr(migration_doc, 'migration_summary'):
+            migration_doc.migration_summary = distribution_summary + "\n" + (migration_doc.migration_summary or "")
+        
         # Process each type
+        unhandled_mutations = 0
+        all_skip_reasons = {}
+        all_skipped = 0
+        
         for soort, muts in mutations_by_type.items():
             if soort == "FactuurVerstuurd":
                 # Sales invoices
                 result = process_sales_invoices(muts, company, cost_center, migration_doc)
                 stats["invoices_created"] += result.get("created", 0)
                 stats["errors"].extend(result.get("errors", []))
+                
+                # Track skipped mutations
+                if "skipped" in result:
+                    all_skipped += result["skipped"]
+                    for reason, count in result.get("skip_reasons", {}).items():
+                        all_skip_reasons[reason] = all_skip_reasons.get(reason, 0) + count
                 
             elif soort == "FactuurOntvangen":
                 # Purchase invoices
@@ -176,11 +197,23 @@ def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
                     stats["invoices_created"] += result.get("created", 0)
                 stats["errors"].extend(result.get("errors", []))
                 
+                # Track skipped mutations
+                if "skipped" in result:
+                    all_skipped += result["skipped"]
+                    for reason, count in result.get("skip_reasons", {}).items():
+                        all_skip_reasons[reason] = all_skip_reasons.get(reason, 0) + count
+                
             elif soort == "FactuurbetalingOntvangen":
                 # Customer payments
                 result = process_customer_payments(muts, company, cost_center, migration_doc)
                 stats["payments_processed"] += result.get("created", 0)
                 stats["errors"].extend(result.get("errors", []))
+                
+                # Track skipped mutations
+                if "skipped" in result:
+                    all_skipped += result["skipped"]
+                    for reason, count in result.get("skip_reasons", {}).items():
+                        all_skip_reasons[reason] = all_skip_reasons.get(reason, 0) + count
                 
             elif soort == "FactuurbetalingVerstuurd":
                 # Supplier payments
@@ -188,22 +221,68 @@ def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
                 stats["payments_processed"] += result.get("created", 0)
                 stats["errors"].extend(result.get("errors", []))
                 
+                # Track skipped mutations
+                if "skipped" in result:
+                    all_skipped += result["skipped"]
+                    for reason, count in result.get("skip_reasons", {}).items():
+                        all_skip_reasons[reason] = all_skip_reasons.get(reason, 0) + count
+                
             elif soort in ["GeldOntvangen", "GeldUitgegeven"]:
                 # Direct bank transactions
                 result = process_bank_transactions(muts, company, cost_center, migration_doc, soort)
                 stats["journal_entries_created"] += result.get("created", 0)
                 stats["errors"].extend(result.get("errors", []))
                 
+                # Track skipped mutations
+                if "skipped" in result:
+                    all_skipped += result["skipped"]
+                    for reason, count in result.get("skip_reasons", {}).items():
+                        all_skip_reasons[reason] = all_skip_reasons.get(reason, 0) + count
+                
             elif soort == "Memoriaal":
                 # Manual journal entries
                 result = process_memorial_entries(muts, company, cost_center, migration_doc)
                 stats["journal_entries_created"] += result.get("created", 0)
                 stats["errors"].extend(result.get("errors", []))
+                
+                # Track skipped mutations
+                if "skipped" in result:
+                    all_skipped += result["skipped"]
+                    for reason, count in result.get("skip_reasons", {}).items():
+                        all_skip_reasons[reason] = all_skip_reasons.get(reason, 0) + count
+            else:
+                # Unhandled mutation type
+                unhandled_mutations += len(muts)
+                # Log the first few as examples
+                if unhandled_mutations <= 10:
+                    for mut in muts[:3]:  # Log up to 3 examples
+                        migration_doc.log_error(
+                            f"Unhandled mutation type '{soort}': MutatieNr={mut.get('MutatieNr')}, Omschrijving={mut.get('Omschrijving', '')[:50]}",
+                            "unhandled_type",
+                            mut
+                        )
+        
+        # Add unhandled count to stats
+        stats["unhandled_mutations"] = unhandled_mutations
+        stats["skipped_mutations"] = all_skipped
+        stats["skip_reasons"] = all_skip_reasons
+        
+        # Log final summary
+        if all_skipped > 0:
+            skip_summary = ", ".join([f"{reason}: {count}" for reason, count in all_skip_reasons.items()])
+            frappe.logger().info(f"Migration {migration_doc.name} - Total skipped: {all_skipped} ({skip_summary})")
+        
+        # Use improved categorization
+        from .eboekhouden_migration_categorizer import categorize_migration_results
+        categorized = categorize_migration_results(stats, all_skip_reasons, stats["errors"])
+        
+        # Store categorized results
+        stats["categorized_results"] = categorized
         
         return {
             "success": True,
             "stats": stats,
-            "message": f"Processed all {stats['total_mutations']} mutations (up to #{stats['highest_mutation_number']}): {stats['invoices_created']} invoices, {stats['payments_processed']} payments, {stats['journal_entries_created']} journal entries"
+            "message": categorized["improved_message"]
         }
         
     except Exception as e:
@@ -217,15 +296,21 @@ def process_sales_invoices(mutations, company, cost_center, migration_doc):
     """Process FactuurVerstuurd (sales invoices)"""
     created = 0
     errors = []
+    skipped = 0
+    skip_reasons = {}
     
     for mut in mutations:
         try:
             # Skip if already imported
             invoice_no = mut.get("Factuurnummer")
             if not invoice_no:
+                skipped += 1
+                skip_reasons["no_invoice_number"] = skip_reasons.get("no_invoice_number", 0) + 1
                 continue
                 
             if frappe.db.exists("Sales Invoice", {"eboekhouden_invoice_number": invoice_no}):
+                skipped += 1
+                skip_reasons["already_imported"] = skip_reasons.get("already_imported", 0) + 1
                 continue
             
             # Parse mutation data
@@ -306,17 +391,36 @@ def process_sales_invoices(mutations, company, cost_center, migration_doc):
         except Exception as e:
             errors.append(f"Invoice {mut.get('Factuurnummer')}: {str(e)}")
     
-    return {"created": created, "errors": errors}
+    # Log summary for this batch
+    if skipped > 0:
+        skip_summary = ", ".join([f"{reason}: {count}" for reason, count in skip_reasons.items()])
+        frappe.logger().info(f"Sales invoices - Created: {created}, Skipped: {skipped} ({skip_summary}), Failed: {len(errors)}")
+    
+    return {"created": created, "errors": errors, "skipped": skipped, "skip_reasons": skip_reasons}
 
 def process_customer_payments(mutations, company, cost_center, migration_doc):
     """Process FactuurbetalingOntvangen (customer payments)"""
     created = 0
     errors = []
+    skipped = 0
+    skip_reasons = {}
     
     for mut in mutations:
         try:
             invoice_no = mut.get("Factuurnummer")
             if not invoice_no:
+                skipped += 1
+                skip_reasons["no_invoice_number"] = skip_reasons.get("no_invoice_number", 0) + 1
+                continue
+            
+            # Check if payment already exists
+            mutation_nr = mut.get("MutatieNr")
+            if frappe.db.exists("Payment Entry", [
+                ["reference_no", "=", mutation_nr],
+                ["docstatus", "!=", 2]
+            ]):
+                skipped += 1
+                skip_reasons["already_imported"] = skip_reasons.get("already_imported", 0) + 1
                 continue
             
             # Find the related sales invoice
@@ -324,6 +428,8 @@ def process_customer_payments(mutations, company, cost_center, migration_doc):
                 {"eboekhouden_invoice_number": invoice_no}, "name")
             
             if not si_name:
+                skipped += 1
+                skip_reasons["invoice_not_found"] = skip_reasons.get("invoice_not_found", 0) + 1
                 # Invoice not found, create unreconciled payment entry
                 from .create_unreconciled_payment import create_unreconciled_payment_entry
                 result = create_unreconciled_payment_entry(mut, company, cost_center, "Customer")
@@ -345,6 +451,7 @@ def process_customer_payments(mutations, company, cost_center, migration_doc):
             from .eboekhouden_payment_naming import get_payment_entry_title, enhance_payment_entry_fields
             pe.title = get_payment_entry_title(mut, pe.party, "Receive")
             pe = enhance_payment_entry_fields(pe, mut)
+            pe.reference_no = mutation_nr  # Track mutation number
             
             # Get amount from mutation lines
             total_amount = 0
@@ -372,12 +479,19 @@ def process_customer_payments(mutations, company, cost_center, migration_doc):
         except Exception as e:
             errors.append(f"Payment {mut.get('MutatieNr')}: {str(e)}")
     
-    return {"created": created, "errors": errors}
+    # Log summary for this batch
+    if skipped > 0:
+        skip_summary = ", ".join([f"{reason}: {count}" for reason, count in skip_reasons.items()])
+        frappe.logger().info(f"Customer payments - Created: {created}, Skipped: {skipped} ({skip_summary}), Failed: {len(errors)}")
+    
+    return {"created": created, "errors": errors, "skipped": skipped, "skip_reasons": skip_reasons}
 
 def process_bank_transactions(mutations, company, cost_center, migration_doc, transaction_type):
     """Process GeldOntvangen and GeldUitgegeven (direct bank transactions)"""
     created = 0
     errors = []
+    skipped = 0
+    skip_reasons = {}
     
     # Get already processed mutations
     processed = get_processed_mutation_numbers(company)
@@ -387,6 +501,8 @@ def process_bank_transactions(mutations, company, cost_center, migration_doc, tr
             # Skip if already processed
             mutation_nr = mut.get("MutatieNr")
             if mutation_nr and is_mutation_processed(mutation_nr, processed):
+                skipped += 1
+                skip_reasons["already_imported"] = skip_reasons.get("already_imported", 0) + 1
                 continue
             
             # Create journal entry
@@ -406,6 +522,8 @@ def process_bank_transactions(mutations, company, cost_center, migration_doc, tr
                 total_amount += float(regel.get("BedragInclBTW", 0))
             
             if total_amount == 0:
+                skipped += 1
+                skip_reasons["zero_amount"] = skip_reasons.get("zero_amount", 0) + 1
                 continue
             
             # Bank account
@@ -449,7 +567,12 @@ def process_bank_transactions(mutations, company, cost_center, migration_doc, tr
         except Exception as e:
             errors.append(f"Bank transaction {mut.get('MutatieNr')}: {str(e)}")
     
-    return {"created": created, "errors": errors}
+    # Log summary for this batch
+    if skipped > 0:
+        skip_summary = ", ".join([f"{reason}: {count}" for reason, count in skip_reasons.items()])
+        frappe.logger().info(f"Bank transactions ({transaction_type}) - Created: {created}, Skipped: {skipped} ({skip_summary}), Failed: {len(errors)}")
+    
+    return {"created": created, "errors": errors, "skipped": skipped, "skip_reasons": skip_reasons}
 
 # Helper functions
 
@@ -863,15 +986,21 @@ def process_purchase_invoices(mutations, company, cost_center, migration_doc):
     """Process FactuurOntvangen (purchase invoices)"""
     created = 0
     errors = []
+    skipped = 0
+    skip_reasons = {}
     
     for mut in mutations:
         try:
             # Skip if already imported
             invoice_no = mut.get("Factuurnummer")
             if not invoice_no:
+                skipped += 1
+                skip_reasons["no_invoice_number"] = skip_reasons.get("no_invoice_number", 0) + 1
                 continue
                 
             if frappe.db.exists("Purchase Invoice", {"eboekhouden_invoice_number": invoice_no}):
+                skipped += 1
+                skip_reasons["already_imported"] = skip_reasons.get("already_imported", 0) + 1
                 continue
             
             # Parse mutation data
@@ -955,17 +1084,26 @@ def process_purchase_invoices(mutations, company, cost_center, migration_doc):
             errors.append(f"Purchase Invoice {mut.get('Factuurnummer')}: {str(e)}")
             migration_doc.log_error(f"Failed to create purchase invoice {invoice_no}: {str(e)}", "purchase_invoice", mut)
     
-    return {"created": created, "errors": errors}
+    # Log summary for this batch
+    if skipped > 0:
+        skip_summary = ", ".join([f"{reason}: {count}" for reason, count in skip_reasons.items()])
+        frappe.logger().info(f"Purchase invoices - Created: {created}, Skipped: {skipped} ({skip_summary}), Failed: {len(errors)}")
+    
+    return {"created": created, "errors": errors, "skipped": skipped, "skip_reasons": skip_reasons}
 
 def process_supplier_payments(mutations, company, cost_center, migration_doc):
     """Process FactuurbetalingVerstuurd (supplier payments)"""
     created = 0
     errors = []
+    skipped = 0
+    skip_reasons = {}
     
     for mut in mutations:
         try:
             invoice_no = mut.get("Factuurnummer")
             if not invoice_no:
+                skipped += 1
+                skip_reasons["no_invoice_number"] = skip_reasons.get("no_invoice_number", 0) + 1
                 continue
             
             # Find the related purchase invoice
@@ -973,6 +1111,8 @@ def process_supplier_payments(mutations, company, cost_center, migration_doc):
                 {"eboekhouden_invoice_number": invoice_no}, "name")
             
             if not pi_name:
+                skipped += 1
+                skip_reasons["invoice_not_found"] = skip_reasons.get("invoice_not_found", 0) + 1
                 # Invoice not found, create unreconciled payment entry
                 from .create_unreconciled_payment import create_unreconciled_payment_entry
                 result = create_unreconciled_payment_entry(mut, company, cost_center, "Supplier")
@@ -984,13 +1124,24 @@ def process_supplier_payments(mutations, company, cost_center, migration_doc):
             
             # Check if payment already exists for this mutation
             mutation_nr = mut.get("MutatieNr")
-            existing_payment = frappe.db.exists("Payment Entry", {
-                "reference_no": mutation_nr,
-                "docstatus": ["!=", 2]  # Not cancelled
-            })
+            
+            # Check both reference_no AND eboekhouden_mutation_nr fields
+            existing_payment = frappe.db.exists("Payment Entry", [
+                ["reference_no", "=", mutation_nr],
+                ["docstatus", "!=", 2]  # Not cancelled
+            ])
+            
+            if not existing_payment:
+                # Also check the custom field if it exists
+                existing_payment = frappe.db.exists("Payment Entry", [
+                    ["eboekhouden_mutation_nr", "=", mutation_nr],
+                    ["docstatus", "!=", 2]  # Not cancelled
+                ])
             
             if existing_payment:
                 # Payment already exists for this mutation, skip
+                skipped += 1
+                skip_reasons["already_imported"] = skip_reasons.get("already_imported", 0) + 1
                 continue
             
             # Get the purchase invoice
@@ -998,6 +1149,9 @@ def process_supplier_payments(mutations, company, cost_center, migration_doc):
             
             # Check if already paid
             if pi.outstanding_amount <= 0:
+                # Invoice is already paid, skip this payment
+                skipped += 1
+                skip_reasons["already_paid"] = skip_reasons.get("already_paid", 0) + 1
                 continue
             
             # Create payment entry
@@ -1016,11 +1170,17 @@ def process_supplier_payments(mutations, company, cost_center, migration_doc):
             # Get amount from MutatieRegels
             amount = 0
             for regel in mut.get("MutatieRegels", []):
-                amount += float(regel.get("BedragInvoer", 0))
+                # Try different amount fields
+                regel_amount = float(regel.get("BedragInvoer", 0) or regel.get("BedragInclBTW", 0) or regel.get("BedragExclBTW", 0))
+                amount += abs(regel_amount)  # Use absolute value to handle negative amounts
             
             if amount <= 0:
                 # Skip if no amount
                 continue
+            
+            # Ensure payment amount doesn't exceed outstanding amount
+            if amount > pi.outstanding_amount:
+                amount = pi.outstanding_amount
                 
             pe.paid_amount = amount
             pe.received_amount = pe.paid_amount
@@ -1048,23 +1208,174 @@ def process_supplier_payments(mutations, company, cost_center, migration_doc):
             pe.append("references", {
                 "reference_doctype": "Purchase Invoice",
                 "reference_name": pi_name,
-                "allocated_amount": pe.paid_amount
+                "allocated_amount": min(pe.paid_amount, pi.outstanding_amount)  # Ensure allocated amount doesn't exceed outstanding
             })
             
-            pe.insert(ignore_permissions=True)
-            pe.submit()
-            created += 1
+            try:
+                pe.insert(ignore_permissions=True)
+                pe.submit()
+                created += 1
+            except IntegrityError as ie:
+                if "Duplicate entry" in str(ie) and "eboekhouden_mutation_nr" in str(ie):
+                    # This payment was already created (race condition or retry), skip it
+                    frappe.db.rollback()
+                    continue
+                else:
+                    # Re-raise other integrity errors
+                    raise
             
+        except IntegrityError as ie:
+            if "Duplicate entry" in str(ie) and "eboekhouden_mutation_nr" in str(ie):
+                # This payment was already created (race condition or retry), skip it
+                skipped += 1
+                skip_reasons["duplicate_entry"] = skip_reasons.get("duplicate_entry", 0) + 1
+                continue
+            else:
+                errors.append(f"Payment for Invoice {mut.get('Factuurnummer')}: Database integrity error - {str(ie)}")
+                migration_doc.log_error(f"Failed to create supplier payment for invoice {invoice_no}: {str(ie)}", "supplier_payment", mut)
         except Exception as e:
             errors.append(f"Payment for Invoice {mut.get('Factuurnummer')}: {str(e)}")
             migration_doc.log_error(f"Failed to create supplier payment for invoice {invoice_no}: {str(e)}", "supplier_payment", mut)
     
-    return {"created": created, "errors": errors}
+    # Log summary for this batch
+    if skipped > 0:
+        skip_summary = ", ".join([f"{reason}: {count}" for reason, count in skip_reasons.items()])
+        frappe.logger().info(f"Supplier payments - Created: {created}, Skipped: {skipped} ({skip_summary}), Failed: {len(errors)}")
+    
+    return {"created": created, "errors": errors, "skipped": skipped, "skip_reasons": skip_reasons}
 
 def process_memorial_entries(mutations, company, cost_center, migration_doc):
-    """Process Memoriaal entries - placeholder"""
-    # Create journal entries for manual bookings
-    return {"created": 0, "errors": []}
+    """Process Memoriaal entries (manual journal entries)"""
+    created = 0
+    errors = []
+    skipped = 0
+    skip_reasons = {}
+    
+    for mut in mutations:
+        try:
+            # Check if already processed
+            mutation_nr = mut.get("MutatieNr")
+            if mutation_nr:
+                existing_je = frappe.db.exists("Journal Entry", {
+                    "eboekhouden_mutation_nr": mutation_nr,
+                    "docstatus": ["!=", 2]  # Not cancelled
+                })
+                if existing_je:
+                    skipped += 1
+                    skip_reasons["already_imported"] = skip_reasons.get("already_imported", 0) + 1
+                    continue
+            
+            # Create journal entry
+            je = frappe.new_doc("Journal Entry")
+            je.company = company
+            je.posting_date = parse_date(mut.get("Datum"))
+            je.eboekhouden_mutation_nr = mutation_nr
+            je.eboekhouden_invoice_number = mut.get("Factuurnummer")
+            
+            # Set descriptive title and remarks
+            from .eboekhouden_payment_naming import get_journal_entry_title, enhance_journal_entry_fields
+            je.title = get_journal_entry_title(mut, "Memoriaal")
+            je = enhance_journal_entry_fields(je, mut, "Manual Entry")
+            
+            # Process mutation lines
+            for regel in mut.get("MutatieRegels", []):
+                account_code = regel.get("TegenrekeningCode")
+                if not account_code:
+                    continue
+                    
+                # Get the account
+                account = get_account_by_code(account_code, company)
+                if not account:
+                    # Skip if account not found
+                    continue
+                
+                # Get amount - try different fields
+                amount = float(regel.get("BedragInclBTW", 0) or regel.get("BedragExclBTW", 0) or regel.get("BedragInvoer", 0))
+                if amount == 0:
+                    continue
+                
+                # Determine debit or credit based on amount sign
+                if amount > 0:
+                    je.append("accounts", {
+                        "account": account,
+                        "debit_in_account_currency": amount,
+                        "cost_center": cost_center
+                    })
+                else:
+                    je.append("accounts", {
+                        "account": account,
+                        "credit_in_account_currency": abs(amount),
+                        "cost_center": cost_center
+                    })
+            
+            # Validate that we have entries
+            if len(je.accounts) < 2:
+                # Journal entry needs at least 2 lines
+                errors.append(f"Memorial {mutation_nr}: Not enough account entries")
+                continue
+            
+            # Check if balanced
+            total_debit = sum(row.debit_in_account_currency for row in je.accounts)
+            total_credit = sum(row.credit_in_account_currency for row in je.accounts)
+            
+            if abs(total_debit - total_credit) > 0.01:
+                # Not balanced, try to add balancing entry
+                diff = total_debit - total_credit
+                
+                # Get a default clearing account
+                clearing_account = frappe.db.get_value("Account", {
+                    "company": company,
+                    "account_type": "Temporary",
+                    "is_group": 0
+                }, "name")
+                
+                if not clearing_account:
+                    # Try to find any suitable account
+                    clearing_account = frappe.db.get_value("Account", {
+                        "company": company,
+                        "is_group": 0,
+                        "account_name": ["like", "%clearing%"]
+                    }, "name")
+                
+                if clearing_account:
+                    if diff > 0:
+                        je.append("accounts", {
+                            "account": clearing_account,
+                            "credit_in_account_currency": diff,
+                            "cost_center": cost_center
+                        })
+                    else:
+                        je.append("accounts", {
+                            "account": clearing_account,
+                            "debit_in_account_currency": abs(diff),
+                            "cost_center": cost_center
+                        })
+            
+            # Insert and submit
+            try:
+                je.insert(ignore_permissions=True)
+                je.submit()
+                created += 1
+            except IntegrityError as ie:
+                if "Duplicate entry" in str(ie) and "eboekhouden_mutation_nr" in str(ie):
+                    # Already exists, skip
+                    frappe.db.rollback()
+                    skipped += 1
+                    skip_reasons["duplicate_entry"] = skip_reasons.get("duplicate_entry", 0) + 1
+                    continue
+                else:
+                    raise
+                    
+        except Exception as e:
+            errors.append(f"Memorial {mut.get('MutatieNr')}: {str(e)}")
+            migration_doc.log_error(f"Failed to create memorial entry {mutation_nr}: {str(e)}", "memorial", mut)
+    
+    # Log summary for this batch
+    if skipped > 0:
+        skip_summary = ", ".join([f"{reason}: {count}" for reason, count in skip_reasons.items()])
+        frappe.logger().info(f"Memorial entries - Created: {created}, Skipped: {skipped} ({skip_summary}), Failed: {len(errors)}")
+    
+    return {"created": created, "errors": errors, "skipped": skipped, "skip_reasons": skip_reasons}
 
 def get_processed_mutation_numbers(company):
     """Get list of already processed mutation numbers to avoid duplicates"""
@@ -1080,9 +1391,31 @@ def get_processed_mutation_numbers(company):
     """, company, as_dict=True)
     
     for je in je_mutations:
-        processed.add(je.eboekhouden_mutation_nr)
+        processed.add(str(je.eboekhouden_mutation_nr))
     
-    # We can add checks for other doctypes if they store mutation numbers
+    # Check payment entries - both eboekhouden_mutation_nr and reference_no
+    pe_mutations = frappe.db.sql("""
+        SELECT DISTINCT eboekhouden_mutation_nr 
+        FROM `tabPayment Entry` 
+        WHERE company = %s 
+        AND eboekhouden_mutation_nr IS NOT NULL 
+        AND eboekhouden_mutation_nr != ''
+    """, company, as_dict=True)
+    
+    for pe in pe_mutations:
+        processed.add(str(pe.eboekhouden_mutation_nr))
+    
+    # Also check reference_no for payment entries (could contain mutation numbers)
+    pe_references = frappe.db.sql("""
+        SELECT DISTINCT reference_no 
+        FROM `tabPayment Entry` 
+        WHERE company = %s 
+        AND reference_no REGEXP '^[0-9]+$'
+        AND reference_no != ''
+    """, company, as_dict=True)
+    
+    for pe in pe_references:
+        processed.add(str(pe.reference_no))
     
     return processed
 

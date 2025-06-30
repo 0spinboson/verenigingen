@@ -76,12 +76,46 @@ class VereningingenTestCase(FrappeTestCase):
             item_group.insert(ignore_permissions=True)
             
         # Ensure test Region exists
-        if not frappe.db.exists("Region", "Test Region"):
+        # Check if region with code TR already exists (which is our test region)
+        existing_region = frappe.db.get_value("Region", {"region_code": "TR"}, "name")
+        if not existing_region:
             region = frappe.get_doc({
                 "doctype": "Region",
-                "region": "Test Region"
+                "region_name": "Test Region",
+                "region_code": "TR",
+                "country": "Netherlands",
+                "is_active": 1
             })
             region.insert(ignore_permissions=True)
+            # Store the actual name that was generated
+            existing_region = region.name
+        
+        # Store the region name for use in tests
+        cls._test_region_name = existing_region
+            
+        # Ensure test Membership Type exists
+        if not frappe.db.exists("Membership Type", "Test Membership"):
+            membership_type = frappe.get_doc({
+                "doctype": "Membership Type",
+                "membership_type_name": "Test Membership",
+                "payment_interval": "Monthly",
+                "amount": 10.00,
+                "is_active": 1
+            })
+            membership_type.insert(ignore_permissions=True)
+            
+        # Ensure test Chapter exists
+        if not frappe.db.exists("Chapter", "Test Chapter"):
+            # Get the actual region name after insert
+            region_name = frappe.db.get_value("Region", {"region_code": "TR"}, "name") or "Test Region"
+            chapter = frappe.get_doc({
+                "doctype": "Chapter",
+                "name": "Test Chapter",  # Set name explicitly for prompt autoname
+                "chapter_name": "Test Chapter",
+                "region": region_name,
+                "is_active": 1
+            })
+            chapter.insert(ignore_permissions=True)
             
     def track_doc(self, doctype, name):
         """Track a document for cleanup"""
@@ -327,10 +361,11 @@ class VereningingenWorkflowTestCase(VereningingenIntegrationTestCase):
     @contextmanager
     def workflow_transaction(self):
         """Execute workflow stages within a transaction"""
-        frappe.db.begin()
+        # Note: Frappe doesn't allow explicit transactions in test context
+        # Using try/except for error handling instead
         try:
             yield
-            frappe.db.commit()
         except Exception:
+            # Clean up any partial data
             frappe.db.rollback()
             raise

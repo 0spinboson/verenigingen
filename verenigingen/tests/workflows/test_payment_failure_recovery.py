@@ -104,7 +104,7 @@ class TestPaymentFailureRecovery(VereningingenWorkflowTestCase):
             "last_name": "Member",
             "email": "payment.test@example.com",
             "contact_number": "+31698765432",
-            "payment_method": "SEPA",
+            "payment_method": "SEPA Direct Debit",
             "status": "Active",
             "primary_chapter": self.test_chapter.name
         })

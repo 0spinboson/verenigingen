@@ -1,109 +1,102 @@
 import frappe
-from verenigingen.utils.eboekhouden_api import EBoekhoudenAPI
-import json
-from collections import defaultdict
+from frappe import _
 
 @frappe.whitelist()
 def analyze_mutation_types():
-    """Analyze mutation types and their characteristics"""
+    """Analyze mutation types in the E-Boekhouden data"""
     
-    settings = frappe.get_single("E-Boekhouden Settings")
-    api = EBoekhoudenAPI(settings)
+    # First check what's in the error logs
+    error_mutations = frappe.db.sql("""
+        SELECT 
+            JSON_UNQUOTE(JSON_EXTRACT(error_details, '$.Soort')) as mutation_type,
+            COUNT(*) as count,
+            GROUP_CONCAT(DISTINCT JSON_UNQUOTE(JSON_EXTRACT(error_details, '$.MutatieNr')) LIMIT 5) as sample_mutations
+        FROM `tabE-Boekhouden Migration Error`
+        WHERE error_details IS NOT NULL
+        AND JSON_EXTRACT(error_details, '$.Soort') IS NOT NULL
+        GROUP BY mutation_type
+        ORDER BY count DESC
+    """, as_dict=True)
     
-    # Get mutations
-    result = api.get_mutations({"limit": 2000})
-    if not result["success"]:
-        return {"error": "Failed to fetch mutations"}
+    # Check successfully imported records
+    successful_records = {
+        "sales_invoices": frappe.db.count("Sales Invoice", {"eboekhouden_invoice_number": ["!=", ""]}),
+        "purchase_invoices": frappe.db.count("Purchase Invoice", {"eboekhouden_invoice_number": ["!=", ""]}),
+        "payment_entries": frappe.db.count("Payment Entry", {"eboekhouden_mutation_nr": ["!=", ""]}),
+        "journal_entries": frappe.db.count("Journal Entry", {"eboekhouden_mutation_nr": ["!=", ""]})
+    }
     
-    data = json.loads(result["data"])
-    mutations = data.get("items", [])
+    # Check for payment entries by reference_no too
+    payment_by_ref = frappe.db.sql("""
+        SELECT COUNT(*) as count
+        FROM `tabPayment Entry`
+        WHERE reference_no REGEXP '^[0-9]+$'
+        AND reference_no != ''
+    """, as_dict=True)[0].count
     
-    # Analyze by type
-    type_analysis = defaultdict(lambda: {
-        "count": 0,
-        "with_invoice": 0,
-        "with_relation": 0,
-        "sample_accounts": set(),
-        "sample_mutations": []
-    })
+    # Analyze unrecognized mutation types
+    unrecognized = []
+    recognized_types = [
+        'FactuurVerstuurd', 'FactuurOntvangen', 
+        'FactuurbetalingOntvangen', 'FactuurbetalingVerstuurd',
+        'GeldOntvangen', 'GeldUitgegeven', 'Memoriaal'
+    ]
     
-    # Also check for patterns in descriptions
-    payment_keywords = ["betaling", "payment", "ontvangen", "received", "bank"]
-    invoice_keywords = ["factuur", "invoice", "rekening", "bill"]
+    for mut in error_mutations:
+        if mut.mutation_type and mut.mutation_type not in recognized_types:
+            unrecognized.append(mut)
     
-    for mut in mutations:
-        mut_type = mut.get("type", "unknown")
-        analysis = type_analysis[mut_type]
-        
-        analysis["count"] += 1
-        
-        if mut.get("invoiceNumber"):
-            analysis["with_invoice"] += 1
-        
-        if mut.get("relationCode"):
-            analysis["with_relation"] += 1
-        
-        # Track which ledger accounts are used
-        if mut.get("ledgerId"):
-            analysis["sample_accounts"].add(mut.get("ledgerId"))
-        
-        # Keep sample mutations
-        if len(analysis["sample_mutations"]) < 5:
-            analysis["sample_mutations"].append({
-                "date": mut.get("date"),
-                "amount": mut.get("amount"),
-                "ledgerId": mut.get("ledgerId"),
-                "invoiceNumber": mut.get("invoiceNumber", ""),
-                "relationCode": mut.get("relationCode", ""),
-                "description": mut.get("description", "")[:50]  # First 50 chars
-            })
-    
-    # Convert sets to counts for JSON
-    for type_key in type_analysis:
-        type_analysis[type_key]["unique_accounts"] = len(type_analysis[type_key]["sample_accounts"])
-        del type_analysis[type_key]["sample_accounts"]
-    
-    # Check if we can get ledger account info to understand what types mean
-    ledger_info = {}
-    ledger_result = api.get_chart_of_accounts()
-    if ledger_result["success"]:
-        ledger_data = json.loads(ledger_result["data"])
-        for account in ledger_data.get("items", []):
-            ledger_info[account.get("id")] = {
-                "code": account.get("code"),
-                "name": account.get("name"),
-                "type": account.get("type", "")
-            }
-    
-    # Try to understand what each mutation type represents
-    type_meanings = {}
-    for mut_type, analysis in type_analysis.items():
-        # Look at the accounts used by this type
-        sample_account_ids = []
-        for mut in analysis["sample_mutations"]:
-            if mut["ledgerId"] and mut["ledgerId"] not in sample_account_ids:
-                sample_account_ids.append(mut["ledgerId"])
-        
-        sample_accounts = []
-        for acc_id in sample_account_ids[:3]:  # First 3 accounts
-            if acc_id in ledger_info:
-                info = ledger_info[acc_id]
-                sample_accounts.append(f"{info['code']} - {info['name']}")
-        
-        type_meanings[mut_type] = {
-            "count": analysis["count"],
-            "has_invoices": f"{analysis['with_invoice']}/{analysis['count']} ({analysis['with_invoice']/analysis['count']*100:.1f}%)",
-            "has_relations": f"{analysis['with_relation']}/{analysis['count']} ({analysis['with_relation']/analysis['count']*100:.1f}%)",
-            "sample_accounts": sample_accounts,
-            "sample_mutations": analysis["sample_mutations"][:2]  # First 2 samples
-        }
+    # Get sample of recent errors
+    recent_errors = frappe.db.sql("""
+        SELECT 
+            error_type,
+            error_message,
+            COUNT(*) as count
+        FROM `tabE-Boekhouden Migration Error`
+        WHERE creation > DATE_SUB(NOW(), INTERVAL 1 DAY)
+        GROUP BY error_type, error_message
+        ORDER BY count DESC
+        LIMIT 10
+    """, as_dict=True)
     
     return {
-        "total_mutations": len(mutations),
-        "mutation_types": dict(type_meanings),
-        "explanation": "Mutation 'type' field doesn't clearly distinguish invoices from payments",
-        "key_finding": "Need to use ledger accounts and other fields to identify transaction types"
+        "mutation_types_in_errors": error_mutations,
+        "successful_imports": successful_records,
+        "payment_entries_by_reference": payment_by_ref,
+        "unrecognized_types": unrecognized,
+        "recent_error_patterns": recent_errors
     }
 
-if __name__ == "__main__":
-    print(analyze_mutation_types())
+@frappe.whitelist()
+def get_mutation_type_samples():
+    """Get sample mutations for each type to understand the data structure"""
+    
+    samples = {}
+    
+    # Get samples for each mutation type
+    mutation_types = frappe.db.sql("""
+        SELECT DISTINCT JSON_UNQUOTE(JSON_EXTRACT(error_details, '$.Soort')) as mutation_type
+        FROM `tabE-Boekhouden Migration Error`
+        WHERE error_details IS NOT NULL
+        AND JSON_EXTRACT(error_details, '$.Soort') IS NOT NULL
+    """, as_dict=True)
+    
+    for mt in mutation_types:
+        if mt.mutation_type:
+            # Get a sample record for this type
+            sample = frappe.db.sql("""
+                SELECT error_details
+                FROM `tabE-Boekhouden Migration Error`
+                WHERE JSON_UNQUOTE(JSON_EXTRACT(error_details, '$.Soort')) = %s
+                AND error_details IS NOT NULL
+                LIMIT 1
+            """, mt.mutation_type, as_dict=True)
+            
+            if sample:
+                import json
+                try:
+                    samples[mt.mutation_type] = json.loads(sample[0].error_details)
+                except:
+                    samples[mt.mutation_type] = sample[0].error_details
+    
+    return samples

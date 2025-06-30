@@ -144,9 +144,17 @@ def create_cost_center_safe(cc_data, company, parent_cc, id_map):
     try:
         cc_code = str(cc_data.get("code", "")).strip()
         cc_name = cc_data.get("name", "").strip()
+        cc_description = cc_data.get("description", "").strip()
+        cc_id = cc_data.get("id", "")
         
+        # Try to use name, then description, then create from ID
         if not cc_name:
-            return {"success": False, "error": "No cost center name"}
+            if cc_description:
+                cc_name = cc_description
+            elif cc_id:
+                cc_name = f"Cost Center {cc_id}"
+            else:
+                return {"success": False, "error": "No cost center name, description, or ID"}
         
         # Create full name with code if available
         if cc_code:

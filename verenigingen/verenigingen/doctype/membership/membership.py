@@ -26,6 +26,22 @@ class Membership(Document):
                 fields=["name", "membership_type", "start_date", "renewal_date", "status"]
             )
             
+            # Check for overlapping memberships
+            if existing_memberships and self.start_date:
+                for existing in existing_memberships:
+                    # Check if the new membership overlaps with existing ones
+                    existing_start = getdate(existing.start_date)
+                    existing_renewal = getdate(existing.renewal_date) if existing.renewal_date else None
+                    new_start = getdate(self.start_date)
+                    
+                    # If we have both dates, check for overlap
+                    if existing_renewal and hasattr(self, 'renewal_date') and self.renewal_date:
+                        new_renewal = getdate(self.renewal_date)
+                        # Check for overlap
+                        if not (new_renewal < existing_start or new_start > existing_renewal):
+                            frappe.throw(_("This membership period overlaps with an existing active membership for this member"), 
+                                       title=_("Overlapping Membership"))
+            
             if existing_memberships:
                 membership = existing_memberships[0]
                 msg = _("This member already has an active membership:")
@@ -70,6 +86,11 @@ class Membership(Document):
         return True
         
     def validate_dates(self):
+        # Validate renewal date is not before start date
+        if self.renewal_date and self.start_date:
+            if getdate(self.renewal_date) < getdate(self.start_date):
+                frappe.throw(_("Renewal date cannot be before start date"))
+        
         # Check if minimum period enforcement is enabled for this membership type
         membership_type = frappe.get_doc("Membership Type", self.membership_type) if self.membership_type else None
         enforce_minimum = membership_type.get("enforce_minimum_period", True) if membership_type else True
@@ -188,23 +209,47 @@ class Membership(Document):
     
     def calculate_effective_amount(self):
         """Calculate the effective amount and difference from standard"""
+        amount = 0
+        
+        # Check if member has fee override
+        if self.member:
+            member = frappe.get_cached_doc("Member", self.member)
+            if member.membership_fee_override and member.membership_fee_override > 0:
+                amount = member.membership_fee_override
+                self.effective_amount = amount
+                self.membership_fee = amount
+                
+                # Calculate difference from standard
+                if self.membership_type:
+                    membership_type = frappe.get_cached_doc("Membership Type", self.membership_type)
+                    self.amount_difference = flt(amount) - flt(membership_type.amount)
+                else:
+                    self.amount_difference = 0
+                    
+                return amount
+        
+        # Check custom amount
         if self.uses_custom_amount and self.custom_amount:
-            self.effective_amount = self.custom_amount
+            amount = self.custom_amount
         elif self.membership_type:
             membership_type = frappe.get_cached_doc("Membership Type", self.membership_type)
-            self.effective_amount = membership_type.amount
-        else:
-            self.effective_amount = 0
+            amount = membership_type.amount
+            
+            # Apply discount if present
+            if hasattr(self, 'discount_percentage') and self.discount_percentage:
+                amount = amount * (1 - self.discount_percentage / 100)
+        
+        self.effective_amount = amount
+        self.membership_fee = amount
         
         # Calculate difference
-        if self.membership_type and self.effective_amount:
+        if self.membership_type and amount:
             membership_type = frappe.get_cached_doc("Membership Type", self.membership_type)
-            self.amount_difference = flt(self.effective_amount) - flt(membership_type.amount)
+            self.amount_difference = flt(amount) - flt(membership_type.amount)
         else:
             self.amount_difference = 0
-        
-        # Set membership fee field for display
-        self.membership_fee = self.effective_amount
+            
+        return amount
                 
     def on_submit(self):
         import frappe
@@ -390,7 +435,7 @@ class Membership(Document):
         new_membership.membership_type = self.membership_type
         new_membership.start_date = new_start_date
         new_membership.auto_renew = self.auto_renew
-        new_membership.payment_method = self.payment_method
+        # payment_method is not a field in Membership doctype, skip it
         new_membership.subscription_plan = self.subscription_plan
         
         # Copy custom amount settings
@@ -769,6 +814,35 @@ class Membership(Document):
         except Exception as e:
             frappe.log_error(f"Error regenerating pending invoices: {str(e)}", 
                           "Invoice Regeneration Error")
+
+    def get_membership_details(self):
+        """Get formatted membership details for display"""
+        details = {
+            "type": self.membership_type,
+            "status": self.status,
+            "start_date": self.start_date,
+            "renewal_date": self.renewal_date,
+            "member": self.member,
+            "effective_amount": self.effective_amount or self.membership_fee
+        }
+        
+        # Add payment details if available
+        if self.last_payment_date:
+            details["last_payment_date"] = self.last_payment_date
+        
+        if self.unpaid_amount:
+            details["unpaid_amount"] = self.unpaid_amount
+            
+        return details
+    
+    def get_billing_amount(self):
+        """Get the billing amount for this membership"""
+        # First check if there's an effective amount already calculated
+        if self.effective_amount:
+            return self.effective_amount
+            
+        # Otherwise calculate it
+        return self.calculate_effective_amount()
 
 # Hook functions for doc_events (outside the class)
 def on_submit(doc, method=None):

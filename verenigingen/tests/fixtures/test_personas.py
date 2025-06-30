@@ -31,12 +31,12 @@ class TestPersonas:
                 last_name="Happypath",
                 email="hannah.happypath@example.com",
                 contact_number="+31612345678",
-                payment_method="SEPA",
+                payment_method="SEPA Direct Debit",
                 iban="NL91ABNA0417164300",
                 bank_account_name="Hannah Happypath",
                 status="Active"
             )
-            .with_membership("Annual", payment_method="SEPA")
+            .with_membership("Annual", payment_method="SEPA Direct Debit")
             .with_volunteer_profile()
             .with_team_assignment("Events Team", role="Event Coordinator")
             .with_expense(50.00, "Event supplies")
@@ -64,12 +64,12 @@ class TestPersonas:
                 last_name="Paymentproblem",
                 email="peter.paymentproblem@example.com",
                 contact_number="+31687654321",
-                payment_method="SEPA",
+                payment_method="SEPA Direct Debit",
                 iban="NL01BANK0000000001",  # Problem IBAN
                 bank_account_name="Peter Paymentproblem",
                 status="Active"
             )
-            .with_membership("Monthly", payment_method="SEPA")
+            .with_membership("Monthly", payment_method="SEPA Direct Debit")
             .build())
             
         # Add payment failure history
@@ -116,10 +116,7 @@ class TestPersonas:
                 status="Active"
             )
             .with_membership("Annual", payment_method="Bank Transfer")
-            .with_volunteer_profile(
-                skills="Project Management, Event Organization, Public Speaking",
-                interests="Community Events, Youth Programs, Environmental Projects"
-            )
+            .with_volunteer_profile()
             .with_team_assignment("Events Team", role="Team Leader")
             .with_team_assignment("Outreach Team", role="Community Liaison")
             .with_expense(75.00, "Travel to community events")
@@ -226,13 +223,13 @@ class TestPersonas:
                 last_name="Suspended",
                 email="susan.suspended@example.com",
                 contact_number="+31622222222",
-                payment_method="SEPA",
+                payment_method="SEPA Direct Debit",
                 iban="NL91ABNA0417164300",
                 status="Suspended"
             )
             .with_membership(
                 "Annual",
-                payment_method="SEPA",
+                payment_method="SEPA Direct Debit",
                 status="Suspended"
             )
             .build())
