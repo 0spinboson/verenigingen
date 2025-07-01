@@ -3,20 +3,20 @@
 # See license.txt
 
 """
-Unit tests for Volunteer controller methods
-Tests the Python controller methods and assignment history management
+Unit tests for Volunteer controller whitelisted methods
+Tests the API endpoints that JavaScript calls
 """
 
 import unittest
 import frappe
-from frappe.utils import today, add_days
+from frappe.utils import today, add_days, now_datetime
 from verenigingen.tests.utils.base import VereningingenUnitTestCase
 from verenigingen.tests.utils.factories import TestDataBuilder
 from verenigingen.tests.utils.setup_helpers import TestEnvironmentSetup
 
 
-class TestVolunteerController(VereningingenUnitTestCase):
-    """Test Volunteer controller methods"""
+class TestVolunteerWhitelistMethods(VereningingenUnitTestCase):
+    """Test Volunteer whitelisted API methods as called from JavaScript"""
     
     @classmethod
     def setUpClass(cls):
