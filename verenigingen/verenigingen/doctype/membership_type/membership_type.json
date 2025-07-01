@@ -52,7 +52,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Subscription Period",
-   "options": "Monthly\nQuarterly\nBiannual\nAnnual\nLifetime\nCustom",
+   "options": "Daily\nMonthly\nQuarterly\nBiannual\nAnnual\nLifetime\nCustom",
    "reqd": 1
   },
   {
@@ -115,6 +115,13 @@
    "fieldname": "default_for_new_members",
    "fieldtype": "Check",
    "label": "Default for New Members"
+  },
+  {
+   "default": "1",
+   "fieldname": "enforce_minimum_period",
+   "fieldtype": "Check",
+   "label": "Enforce 1-Year Minimum Period",
+   "description": "When enabled, memberships of this type must be at least 1 year in duration. When disabled, memberships follow the subscription period (e.g., daily, monthly)."
   }
  ],
  "modified": "2023-01-01 00:00:00.000000",

@@ -51,7 +51,7 @@ The following legacy directories were consolidated into the organized structure:
 - `test_member_validation.js` - Member validation JavaScript tests
 
 #### Miscellaneous Files
-- `vereingingen/test_expense_simple.py` → `scripts/testing/integration/` (Fixed typo directory)
+- `verenigingen/test_expense_simple.py` → `scripts/testing/integration/` (Fixed typo directory)
 
 ## Organized Directory Structure
 

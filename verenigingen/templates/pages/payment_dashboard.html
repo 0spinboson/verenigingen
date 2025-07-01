@@ -787,7 +787,7 @@ function downloadMandateDocument() {
 
 function downloadReceipt(paymentId) {
     frappe.call({
-        method: 'vereiningen.api.payment_dashboard.download_payment_receipt',
+        method: 'verenigingen.api.payment_dashboard.download_payment_receipt',
         args: { payment_id: paymentId },
         callback: function(r) {
             if (!r.exc) {

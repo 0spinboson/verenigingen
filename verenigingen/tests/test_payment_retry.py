@@ -272,7 +272,7 @@ class TestPaymentRetryManager(unittest.TestCase):
         call_args = mock_enqueue.call_args
         
         # Verify job parameters
-        self.assertEqual(call_args[1]['method'], 'vereiningen.utils.payment_retry.execute_single_retry')
+        self.assertEqual(call_args[1]['method'], 'verenigingen.utils.payment_retry.execute_single_retry')
         self.assertEqual(call_args[1]['retry_record'], retry_record.name)
         self.assertIn('queue', call_args[1])
         

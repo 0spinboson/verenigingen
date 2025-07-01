@@ -238,7 +238,7 @@ class SEPAMandateNotificationManager:
     def _get_bank_name(self, iban):
         """Get bank name from IBAN"""
         try:
-            from vereiningen.utils.iban_validator import get_bank_from_iban
+            from verenigingen.utils.iban_validator import get_bank_from_iban
             bank_info = get_bank_from_iban(iban)
             return bank_info.get('bank_name', 'Unknown Bank') if bank_info else 'Unknown Bank'
         except:

@@ -36,7 +36,7 @@ class ChapterRole(Document):
         if self.is_chair and self.is_active and self.has_value_changed('is_chair'):
             # Find chapters using this role and update their heads
             try:
-                from vereiningen.verenigingen.doctype.chapter_role.chapter_role import update_chapters_with_role
+                from verenigingen.verenigingen.doctype.chapter_role.chapter_role import update_chapters_with_role
                 update_chapters_with_role(self.name)
             except Exception as e:
                 frappe.log_error(

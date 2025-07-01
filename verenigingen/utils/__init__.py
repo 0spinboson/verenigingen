@@ -576,3 +576,141 @@ def apply_tax_exemption_from_source(doc, method=None):
         settings = frappe.get_single("Verenigingen Settings")
         if settings.get("tax_exempt_for_contributions"):
             doc.exempt_from_tax = 1
+
+@frappe.whitelist()
+def debug_workspace_breadcrumb():
+    """Debug workspace breadcrumb issue"""
+    
+    # Get all workspaces for Verenigingen module
+    workspaces = frappe.get_all(
+        "Workspace",
+        filters={"module": "Verenigingen"},
+        fields=["name", "label", "module", "sequence_id", "is_hidden", "public"],
+        order_by="sequence_id"
+    )
+    
+    result = {"workspaces": workspaces}
+    
+    # Check which workspace would be loaded first
+    first_workspace = frappe.db.get_value(
+        "Workspace",
+        {
+            "module": "Verenigingen",
+            "is_hidden": 0,
+            "public": 1
+        },
+        "name",
+        order_by="sequence_id asc"
+    )
+    result["first_workspace"] = first_workspace
+    
+    # Check for any workspace in URL or context
+    if hasattr(frappe.local, 'request') and frappe.local.request:
+        result["current_path"] = frappe.local.request.path
+        result["request_workspace"] = frappe.form_dict.get("workspace")
+    
+    return result
+
+@frappe.whitelist()
+def debug_breadcrumb_detailed():
+    """More detailed breadcrumb debugging"""
+    result = {}
+    
+    # Check module default workspace
+    module_workspace = frappe.db.sql("""
+        SELECT w.name, w.label, w.sequence_id 
+        FROM tabWorkspace w
+        WHERE w.module = 'Verenigingen' 
+        AND w.is_hidden = 0 
+        AND w.public = 1
+        ORDER BY w.sequence_id ASC
+        LIMIT 1
+    """, as_dict=True)
+    
+    result["module_default_workspace"] = module_workspace[0] if module_workspace else None
+    
+    # Check if SEPA Management has any special flags
+    sepa_ws = frappe.get_doc("Workspace", "SEPA Management")
+    result["sepa_workspace_details"] = {
+        "name": sepa_ws.name,
+        "label": sepa_ws.label,
+        "title": sepa_ws.title,
+        "module": sepa_ws.module,
+        "sequence_id": sepa_ws.sequence_id,
+        "is_hidden": sepa_ws.is_hidden,
+        "public": sepa_ws.public,
+        "roles": [r.role for r in sepa_ws.roles]
+    }
+    
+    # Check doctype assignments
+    doctypes = frappe.get_all(
+        "DocType",
+        filters={"module": "Verenigingen"},
+        fields=["name"],
+        limit=5
+    )
+    result["sample_doctypes"] = doctypes
+    
+    return result
+
+@frappe.whitelist()
+def fix_workspace_order():
+    """Fix workspace ordering to ensure Verenigingen is the primary workspace"""
+    
+    # Update sequence IDs to ensure proper ordering
+    updates = [
+        ("Verenigingen", 1.0),        # Make it first
+        ("E-Boekhouden", 50.0),       # Secondary
+        ("SEPA Management", 100.0)    # Tertiary
+    ]
+    
+    for workspace_name, new_sequence in updates:
+        frappe.db.set_value("Workspace", workspace_name, "sequence_id", new_sequence)
+    
+    frappe.db.commit()
+    
+    # Clear cache to ensure changes take effect
+    frappe.clear_cache()
+    
+    return {"success": True, "message": "Workspace order fixed. Verenigingen should now be the primary workspace."}
+
+@frappe.whitelist()
+def debug_workspace_doctype_mapping():
+    """Debug how doctypes are mapped to workspaces"""
+    
+    # Get all workspace links
+    workspace_links = frappe.db.sql("""
+        SELECT 
+            w.name as workspace,
+            wl.link_to,
+            wl.link_name,
+            wl.link_type
+        FROM `tabWorkspace` w
+        JOIN `tabWorkspace Link` wl ON wl.parent = w.name
+        WHERE w.module = 'Verenigingen'
+        AND wl.link_type = 'DocType'
+        ORDER BY w.name, wl.idx
+    """, as_dict=True)
+    
+    # Group by workspace
+    workspace_doctypes = {}
+    for link in workspace_links:
+        workspace = link['workspace']
+        if workspace not in workspace_doctypes:
+            workspace_doctypes[workspace] = []
+        
+        doctype = link['link_to'] or link['link_name']
+        if doctype:
+            workspace_doctypes[workspace].append(doctype)
+    
+    # Check which workspace Member belongs to
+    member_workspaces = []
+    for workspace, doctypes in workspace_doctypes.items():
+        if 'Member' in doctypes:
+            member_workspaces.append(workspace)
+    
+    return {
+        "workspace_doctypes": workspace_doctypes,
+        "member_found_in": member_workspaces,
+        "total_links": len(workspace_links)
+    }

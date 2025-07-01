@@ -188,7 +188,7 @@ function retry_payment_now(frm) {
         __('Are you sure you want to retry this payment immediately?'),
         function() {
             frappe.call({
-                method: 'vereiningen.utils.payment_retry.execute_payment_retry',
+                method: 'verenigingen.utils.payment_retry.execute_payment_retry',
                 args: {
                     retry_record: frm.doc.name
                 },
@@ -239,7 +239,7 @@ function schedule_new_retry(frm) {
         primary_action_label: __('Schedule'),
         primary_action(values) {
             frappe.call({
-                method: 'vereiningen.api.payment_dashboard.retry_failed_payment',
+                method: 'verenigingen.api.payment_dashboard.retry_failed_payment',
                 args: {
                     invoice_id: frm.doc.invoice
                 },

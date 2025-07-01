@@ -122,8 +122,13 @@ class StockTransactionMigrator:
             return " | ".join(summary_parts)
             
         except Exception as e:
-            self.log_error(f"Error in stock transaction migration: {str(e)}")
-            return f"Error migrating stock transactions: {str(e)}"
+            # Use safe error logging to prevent cascading
+            from verenigingen.utils.error_log_fix import log_error_safely
+            log_error_safely(
+                message=f"Stock migration error:\n{str(e)}\n\n{frappe.get_traceback()}",
+                title="Stock Migration Failed"
+            )
+            return f"Error migrating stock transactions: {str(e)[:100]}..."
     
     def get_stock_accounts(self):
         """Get all stock accounts with their account numbers"""
@@ -247,7 +252,12 @@ class StockTransactionMigrator:
                 return False
                 
         except Exception as e:
-            self.log_error(f"Error processing stock transaction: {str(e)}")
+            # Use safe error logging
+            from verenigingen.utils.error_log_fix import log_error_safely
+            log_error_safely(
+                message=f"Error processing stock transaction for {account_code}:\n{str(e)}",
+                title=f"Stock Transaction: {account_code}"
+            )
             return False
     
     def create_stock_entry(self, posting_date, purpose, account_code, account_name, qty_change, amount, ledger_id, transaction):
@@ -327,17 +337,58 @@ class StockTransactionMigrator:
             return stock_entry
             
         except Exception as e:
-            self.log_error(f"Error creating stock entry: {str(e)}")
+            # Extract clean error message
+            error_msg = str(e)
+            if "cannot be a fraction" in error_msg:
+                # This is expected for monetary values
+                from verenigingen.utils.error_log_fix import log_error_safely
+                log_error_safely(
+                    message=f"Stock entry requires whole number quantity, but got {qty_change}. "
+                           f"This is because E-Boekhouden stores monetary values, not physical quantities.\n"
+                           f"Account: {account_code} - {account_name}",
+                    title="Stock Entry: Fractional Quantity"
+                )
+            else:
+                from verenigingen.utils.error_log_fix import log_error_safely
+                log_error_safely(
+                    message=f"Error creating stock entry:\n{error_msg}",
+                    title="Stock Entry Creation Failed"
+                )
             return None
     
     def get_or_create_migration_warehouse(self, company):
         """Get or create a warehouse for migration purposes"""
-        warehouse_name = f"e-Boekhouden Migration - {company}"
+        try:
+            # Use the fixed warehouse function that handles duplicates properly
+            from verenigingen.utils.stock_migration_warehouse_fix import get_or_create_migration_warehouse_fixed
+            return get_or_create_migration_warehouse_fixed(company)
+        except ImportError:
+            # Fallback to original logic with better duplicate handling
+            pass
         
-        if frappe.db.exists("Warehouse", warehouse_name):
-            return warehouse_name
+        # Try multiple patterns to find existing warehouse
+        # Pattern 1: Check by warehouse_name and company
+        existing = frappe.db.get_value("Warehouse", {
+            "warehouse_name": "e-Boekhouden Migration",
+            "company": company
+        }, "name")
+        
+        if existing:
+            return existing
+        
+        # Pattern 2: Check by name pattern (handles normalized company names)
+        existing = frappe.db.sql("""
+            SELECT name FROM `tabWarehouse`
+            WHERE company = %s
+            AND name LIKE %s
+            LIMIT 1
+        """, (company, "%e-Boekhouden Migration%"))
+        
+        if existing:
+            return existing[0][0]
         
         try:
+            # Create new warehouse
             warehouse = frappe.get_doc({
                 "doctype": "Warehouse",
                 "warehouse_name": "e-Boekhouden Migration",
@@ -348,8 +399,33 @@ class StockTransactionMigrator:
             warehouse.insert(ignore_permissions=True)
             return warehouse.name
             
+        except frappe.DuplicateEntryError as e:
+            # If duplicate, it means it exists but we couldn't find it
+            # Try one more time with a broader search
+            any_warehouse = frappe.db.sql("""
+                SELECT name FROM `tabWarehouse`
+                WHERE company = %s
+                AND (name LIKE %s OR warehouse_name LIKE %s)
+                LIMIT 1
+            """, (company, "%Boekhouden%", "%Boekhouden%"))
+            
+            if any_warehouse:
+                return any_warehouse[0][0]
+            
+            # Use error_log_fix for clean logging
+            from verenigingen.utils.error_log_fix import log_error_safely
+            log_error_safely(
+                message=f"Duplicate warehouse error: {str(e)}\n{frappe.get_traceback()}",
+                title=f"Migration Warehouse: Duplicate"
+            )
+            return None
+            
         except Exception as e:
-            self.log_error(f"Error creating migration warehouse: {str(e)}")
+            from verenigingen.utils.error_log_fix import log_error_safely
+            log_error_safely(
+                message=f"Error creating warehouse: {str(e)}\n{frappe.get_traceback()}",
+                title="Migration Warehouse: Creation Failed"
+            )
             return None
     
     def get_or_create_migration_item(self, account_code, account_name):

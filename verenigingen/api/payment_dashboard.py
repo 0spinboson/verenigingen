@@ -221,7 +221,7 @@ def get_mandate_history(member=None):
     )
     
     # Format mandate data
-    from vereiningen.utils.iban_validator import format_iban, get_bank_from_iban
+    from verenigingen.utils.iban_validator import format_iban, get_bank_from_iban
     
     for mandate in mandates:
         mandate['iban_formatted'] = format_iban(mandate.iban)

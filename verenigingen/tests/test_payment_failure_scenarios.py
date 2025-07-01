@@ -99,7 +99,7 @@ class TestPaymentFailureScenarios(unittest.TestCase):
         membership.insert()
         
         # Mock payment failure due to insufficient funds
-        with patch('vereinigen.api.financial.process_payment') as mock_payment:
+        with patch('verenigingen.api.financial.process_payment') as mock_payment:
             mock_payment.return_value = {
                 "success": False,
                 "error_code": "INSUFFICIENT_FUNDS",
@@ -109,7 +109,7 @@ class TestPaymentFailureScenarios(unittest.TestCase):
             
             # Attempt payment
             try:
-                from vereinigen.api.financial import process_membership_payment
+                from verenigingen.api.financial import process_membership_payment
                 result = process_membership_payment(membership.name)
                 
                 # Should handle failure gracefully
@@ -143,7 +143,7 @@ class TestPaymentFailureScenarios(unittest.TestCase):
         
         # Attempt payment with cancelled mandate
         with self.assertRaises((frappe.ValidationError, frappe.DoesNotExistError)):
-            from vereinigen.api.financial import process_membership_payment
+            from verenigingen.api.financial import process_membership_payment
             process_membership_payment(membership.name)
         
         # Restore mandate and clean up
@@ -167,7 +167,7 @@ class TestPaymentFailureScenarios(unittest.TestCase):
             mock_post.side_effect = TimeoutError("Gateway timeout")
             
             try:
-                from vereinigen.api.financial import process_membership_payment
+                from verenigingen.api.financial import process_membership_payment
                 result = process_membership_payment(membership.name)
                 
                 # Should return timeout error
@@ -195,7 +195,7 @@ class TestPaymentFailureScenarios(unittest.TestCase):
         
         # Attempt second payment
         with self.assertRaises(frappe.ValidationError):
-            from vereinigen.api.financial import process_membership_payment
+            from verenigingen.api.financial import process_membership_payment
             process_membership_payment(membership.name)
         
         membership.delete()
@@ -224,7 +224,7 @@ class TestPaymentFailureScenarios(unittest.TestCase):
         batch_invoice.insert()
         
         # Mock batch processing failure
-        with patch('vereinigen.utils.sepa_processing.generate_sepa_file') as mock_generate:
+        with patch('verenigingen.utils.sepa_processing.generate_sepa_file') as mock_generate:
             mock_generate.side_effect = Exception("File generation failed")
             
             # Attempt to process batch
@@ -331,7 +331,7 @@ class TestPaymentFailureScenarios(unittest.TestCase):
         expense.insert()
         
         # Mock reimbursement failure
-        with patch('vereinigen.api.financial.process_reimbursement') as mock_reimburse:
+        with patch('verenigingen.api.financial.process_reimbursement') as mock_reimburse:
             mock_reimburse.return_value = {
                 "success": False,
                 "error_code": "INVALID_BANK_DETAILS",
@@ -339,7 +339,7 @@ class TestPaymentFailureScenarios(unittest.TestCase):
             }
             
             try:
-                from verenigigen.api.financial import reimburse_expense
+                from verenigingen.api.financial import reimburse_expense
                 result = reimburse_expense(expense.name)
                 
                 # Should handle failure and maintain expense status

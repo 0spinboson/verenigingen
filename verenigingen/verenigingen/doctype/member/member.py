@@ -464,6 +464,14 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         # Save the member
         self.save()
         
+        # Create user account if not exists
+        if not self.user:
+            self.create_user()
+            
+        # Create customer if not exists
+        if not self.customer:
+            self.create_customer()
+        
         # Activate pending Chapter Member records
         try:
             from verenigingen.utils.application_helpers import activate_pending_chapter_membership
@@ -537,6 +545,8 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             invoice = create_membership_invoice(self, membership, membership_type, current_fee["amount"])
             
             # Update member with invoice reference
+            # Reload to avoid timestamp mismatch
+            self.reload()
             self.application_invoice = invoice.name
             self.application_payment_status = "Pending"
             self.save()
@@ -842,9 +852,18 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         # Handle name particles (tussenvoegsels) - these should be lowercase when in the middle
         if self.middle_name:
             particles = self.middle_name.strip()
-            # Ensure particles are lowercase when between first and last name
+            # Check if it's a Dutch particle (like van, de, der, etc.) or a regular middle name
+            dutch_particles = ['van', 'de', 'der', 'den', 'ter', 'te', 'het', "'t", 'op', 'in']
+            
             if particles:
-                name_parts.append(particles.lower())
+                # Split to handle compound particles like "van der"
+                words = particles.split()
+                if words and words[0].lower() in dutch_particles:
+                    # It's a particle, make it lowercase
+                    name_parts.append(particles.lower())
+                else:
+                    # It's a regular middle name, keep original casing
+                    name_parts.append(particles)
         
         if self.last_name:
             name_parts.append(self.last_name.strip())
@@ -1134,6 +1153,120 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             "subscription_action": change_data.get("subscription_action", "Pending subscription update")
         })
         # Note: Don't save here to avoid recursive save during validation
+    
+    def get_active_membership(self):
+        """Get the currently active membership for this member"""
+        active_membership = frappe.get_all(
+            "Membership",
+            filters={
+                "member": self.name,
+                "status": "Active",
+                "docstatus": 1
+            },
+            fields=["name", "membership_type", "start_date", "renewal_date", "status"],
+            order_by="start_date desc",
+            limit=1
+        )
+        
+        if active_membership:
+            return frappe.get_doc("Membership", active_membership[0].name)
+        return None
+    
+    def update_membership_status(self):
+        """Update member's membership_status field based on active memberships"""
+        active_membership = self.get_active_membership()
+        
+        if active_membership:
+            self.membership_status = "Active"
+            # Also update current membership type
+            if hasattr(self, 'current_membership_type'):
+                self.current_membership_type = active_membership.membership_type
+        else:
+            # Check for expired memberships
+            expired = frappe.get_all(
+                "Membership",
+                filters={
+                    "member": self.name,
+                    "renewal_date": ["<", today()],
+                    "docstatus": 1
+                },
+                fields=["membership_type"],
+                limit=1
+            )
+            
+            if expired:
+                self.membership_status = "Expired"
+                # Keep the last membership type even if expired
+                if hasattr(self, 'current_membership_type') and expired[0].membership_type:
+                    self.current_membership_type = expired[0].membership_type
+            else:
+                self.membership_status = "None"
+                if hasattr(self, 'current_membership_type'):
+                    self.current_membership_type = None
+                
+        return self.membership_status
+    
+    def get_other_members_at_address(self):
+        """Get other members living at the same address"""
+        if not self.primary_address:
+            return []
+            
+        # Get the address details
+        address_doc = frappe.get_doc("Address", self.primary_address)
+        if not address_doc.address_line1 or not address_doc.pincode:
+            return []
+            
+        # Sanitize the address for comparison
+        from verenigingen.utils.address_helpers import sanitize_address
+        clean_address = sanitize_address(address_doc.address_line1)
+        
+        # Get all members with primary address
+        others = frappe.get_all(
+            "Member",
+            filters={
+                "primary_address": ["is", "set"],
+                "name": ["!=", self.name]
+            },
+            fields=["name", "full_name", "primary_address", "status"]
+        )
+        
+        # Filter by matching address
+        matching_members = []
+        for other in others:
+            if other.primary_address:
+                try:
+                    other_address = frappe.get_doc("Address", other.primary_address)
+                    if (other_address.pincode == address_doc.pincode and 
+                        other_address.address_line1):
+                        other_clean = sanitize_address(other_address.address_line1)
+                        if other_clean == clean_address:
+                            matching_members.append(other)
+                except Exception:
+                    # Skip if address doesn't exist
+                    pass
+                    
+        return matching_members
+    
+    def calculate_cumulative_membership_duration(self):
+        """Calculate total membership duration in years"""
+        total_days = 0
+        
+        # Get all memberships for this member
+        memberships = frappe.get_all(
+            "Membership",
+            filters={"member": self.name, "docstatus": ["!=", 2]},
+            fields=["start_date", "renewal_date", "status"],
+            order_by="start_date"
+        )
+        
+        for membership in memberships:
+            if membership.start_date and membership.renewal_date:
+                days = date_diff(membership.renewal_date, membership.start_date)
+                if days > 0:
+                    total_days += days
+        
+        # Convert to years
+        return total_days / 365.25 if total_days > 0 else 0
     
     @frappe.whitelist()
     def get_current_membership_fee(self):
@@ -1572,11 +1705,15 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         )
         
         # Check board memberships
-        board_members = frappe.get_all(
-            "Chapter Board Member", 
-            filters={"member": self.name, "is_active": 1},
-            fields=["parent as chapter", "chapter_role", "is_active"]
-        )
+        # First get volunteer record for this member
+        volunteer = frappe.db.get_value("Volunteer", {"member": self.name}, "name")
+        board_members = []
+        if volunteer:
+            board_members = frappe.get_all(
+                "Chapter Board Member", 
+                filters={"volunteer": volunteer, "is_active": 1},
+                fields=["parent as chapter", "chapter_role", "is_active"]
+            )
         
         # Check current chapter display
         current_chapter_display = getattr(self, 'current_chapter_display', 'Not set')

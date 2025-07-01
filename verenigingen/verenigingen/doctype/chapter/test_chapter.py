@@ -42,6 +42,20 @@ class TestChapter(FrappeTestCase):
     
     def create_test_prerequisites(self):
         """Create test prerequisites"""
+        # Get or create test region
+        self.test_region = frappe.db.get_value("Region", {"region_code": "TR"}, "name")
+        if not self.test_region:
+            # Create test region if it doesn't exist
+            region = frappe.get_doc({
+                "doctype": "Region",
+                "region_name": "Test Region",
+                "region_code": "TR",
+                "country": "Netherlands",
+                "is_active": 1
+            })
+            region.insert(ignore_permissions=True)
+            self.test_region = region.name
+            
         # Create test member for chapter head
         self.test_member = frappe.get_doc({
             "doctype": "Member",
@@ -58,7 +72,7 @@ class TestChapter(FrappeTestCase):
         chapter = frappe.get_doc({
             "doctype": "Chapter",
             "name": f"Test Chapter {self.unique_id}",
-            "region": "Test Region",
+            "region": self.test_region,
             "introduction": "Test chapter for unit tests",
             "published": 1,
             "chapter_head": self.test_member.name
@@ -67,7 +81,7 @@ class TestChapter(FrappeTestCase):
         
         # Verify chapter was created correctly
         self.assertEqual(chapter.name, f"Test Chapter {self.unique_id}")
-        self.assertEqual(chapter.region, "Test Region")
+        self.assertEqual(chapter.region, self.test_region)
         # Note: chapter_head may not be set if the field doesn't exist or isn't required
         if hasattr(chapter, 'chapter_head') and chapter.chapter_head:
             self.assertEqual(chapter.chapter_head, self.test_member.name)
@@ -94,7 +108,7 @@ class TestChapter(FrappeTestCase):
         chapter = frappe.get_doc({
             "doctype": "Chapter",
             "name": f"Test Chapter {self.unique_id}",
-            "region": "Test Region",
+            "region": self.test_region,
             "introduction": "Test chapter",
             "postal_codes": "1000-1999, 2000, 3000-3099"
         })
@@ -174,6 +188,56 @@ class TestChapter(FrappeTestCase):
         # Clean up additional members
         for member in members:
             frappe.delete_doc("Member", member.name, force=True)
+    
+    def test_board_member_chapter_status_field(self):
+        """Test that board member addition sets chapter member status field correctly"""
+        # Create test volunteer and role
+        volunteer = frappe.get_doc({
+            "doctype": "Volunteer",
+            "volunteer_name": f"Board Test Volunteer {self.unique_id}",
+            "email": f"boardvol{self.unique_id}@example.com",
+            "member": self.test_member.name,
+            "status": "Active",
+            "start_date": today()
+        })
+        volunteer.insert(ignore_permissions=True)
+        
+        role = frappe.get_doc({
+            "doctype": "Chapter Role",
+            "role_name": f"Board Role {self.unique_id}",
+            "permissions_level": "Admin",
+            "is_active": 1
+        })
+        role.insert(ignore_permissions=True)
+        
+        # Create chapter
+        chapter = frappe.get_doc({
+            "doctype": "Chapter",
+            "name": f"Test Chapter Board {self.unique_id}",
+            "region": self.test_region,
+            "introduction": "Test chapter for board member status"
+        })
+        chapter.insert(ignore_permissions=True)
+        
+        # Add board member
+        if hasattr(chapter, 'add_board_member'):
+            result = chapter.add_board_member(
+                volunteer=volunteer.name,
+                role=role.name,
+                from_date=today()
+            )
+            self.assertTrue(result.get("success"))
+            
+            # Reload and check status field
+            chapter.reload()
+            self.assertEqual(len(chapter.members), 1)
+            self.assertEqual(chapter.members[0].status, "Active", 
+                            "Chapter member status should be set to Active when adding board member")
+        
+        # Clean up
+        frappe.delete_doc("Chapter", chapter.name, force=True)
+        frappe.delete_doc("Chapter Role", role.name, force=True)
+        frappe.delete_doc("Volunteer", volunteer.name, force=True)
     
     def test_chapter_statistics(self):
         """Test chapter statistics functionality"""

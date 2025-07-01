@@ -7,6 +7,7 @@ for migrating accounting data to ERPNext.
 
 import frappe
 import requests
+import json
 import xml.etree.ElementTree as ET
 from frappe.utils import getdate, today
 import json
@@ -96,16 +97,133 @@ class EBoekhoudenAPI:
             }
     
     def get_chart_of_accounts(self):
-        """Get Chart of Accounts (Ledgers)"""
-        return self.make_request("v1/ledger")
+        """Get Chart of Accounts (Ledgers) - fetches ALL accounts with pagination"""
+        try:
+            all_accounts = []
+            offset = 0
+            limit = 500  # Use 500 per page for efficiency
+            
+            while True:
+                # Get page of accounts
+                result = self.make_request("v1/ledger", "GET", {
+                    "limit": limit,
+                    "offset": offset
+                })
+                
+                if not result["success"]:
+                    return result
+                
+                data = json.loads(result["data"])
+                accounts = data.get("items", [])
+                
+                # Add accounts to collection
+                all_accounts.extend(accounts)
+                
+                # Check if we got less than requested (end of data)
+                if len(accounts) < limit:
+                    break
+                
+                # Move to next page
+                offset += limit
+                
+                # Safety check to prevent infinite loops
+                if offset > 10000:
+                    frappe.log_error("Safety limit reached in get_chart_of_accounts pagination")
+                    break
+            
+            # Return complete data in same format as before
+            return {
+                "success": True,
+                "data": json.dumps({"items": all_accounts}),
+                "status_code": 200
+            }
+            
+        except Exception as e:
+            frappe.log_error(f"Error in get_chart_of_accounts: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
     
     def get_cost_centers(self):
-        """Get Cost Centers"""
-        return self.make_request("v1/costcenter")
+        """Get Cost Centers - fetches ALL cost centers with pagination"""
+        try:
+            all_items = []
+            offset = 0
+            limit = 500
+            
+            while True:
+                result = self.make_request("v1/costcenter", "GET", {
+                    "limit": limit,
+                    "offset": offset
+                })
+                
+                if not result["success"]:
+                    return result
+                
+                data = json.loads(result["data"])
+                items = data.get("items", [])
+                all_items.extend(items)
+                
+                if len(items) < limit:
+                    break
+                
+                offset += limit
+                if offset > 10000:
+                    frappe.log_error("Safety limit reached in get_cost_centers pagination")
+                    break
+            
+            return {
+                "success": True,
+                "data": json.dumps({"items": all_items}),
+                "status_code": 200
+            }
+        except Exception as e:
+            frappe.log_error(f"Error in get_cost_centers: {str(e)}")
+            return {"success": False, "error": str(e)}
     
     def get_invoices(self, params=None):
-        """Get Invoices"""
-        return self.make_request("v1/invoice", params=params)
+        """Get Invoices - fetches ALL invoices with pagination"""
+        try:
+            all_items = []
+            offset = 0
+            limit = 500
+            
+            if not params:
+                params = {}
+            
+            while True:
+                params_with_pagination = params.copy()
+                params_with_pagination.update({
+                    "limit": limit,
+                    "offset": offset
+                })
+                
+                result = self.make_request("v1/invoice", "GET", params_with_pagination)
+                
+                if not result["success"]:
+                    return result
+                
+                data = json.loads(result["data"])
+                items = data.get("items", [])
+                all_items.extend(items)
+                
+                if len(items) < limit:
+                    break
+                
+                offset += limit
+                if offset > 50000:  # Higher limit for invoices
+                    frappe.log_error("Safety limit reached in get_invoices pagination")
+                    break
+            
+            return {
+                "success": True,
+                "data": json.dumps({"items": all_items}),
+                "status_code": 200
+            }
+        except Exception as e:
+            frappe.log_error(f"Error in get_invoices: {str(e)}")
+            return {"success": False, "error": str(e)}
     
     def get_invoice_templates(self):
         """Get Invoice Templates"""
@@ -124,26 +242,104 @@ class EBoekhoudenAPI:
         return self.make_request("v1/administration/linked")
     
     def get_relations(self, params=None):
-        """Get Relations (Customers/Suppliers)"""
-        return self.make_request("v1/relation", params=params)
+        """Get Relations (Customers/Suppliers) - fetches ALL relations with pagination"""
+        try:
+            all_items = []
+            offset = 0
+            limit = 500
+            
+            if not params:
+                params = {}
+            
+            while True:
+                params_with_pagination = params.copy()
+                params_with_pagination.update({
+                    "limit": limit,
+                    "offset": offset
+                })
+                
+                result = self.make_request("v1/relation", "GET", params_with_pagination)
+                
+                if not result["success"]:
+                    return result
+                
+                data = json.loads(result["data"])
+                items = data.get("items", [])
+                all_items.extend(items)
+                
+                if len(items) < limit:
+                    break
+                
+                offset += limit
+                if offset > 10000:
+                    frappe.log_error("Safety limit reached in get_relations pagination")
+                    break
+            
+            return {
+                "success": True,
+                "data": json.dumps({"items": all_items}),
+                "status_code": 200
+            }
+        except Exception as e:
+            frappe.log_error(f"Error in get_relations: {str(e)}")
+            return {"success": False, "error": str(e)}
     
     def get_customers(self, params=None):
         """Get Customers (Relations with type filter)"""
         if not params:
             params = {}
         params["relationType"] = "Customer"
-        return self.make_request("v1/relation", params=params)
+        return self.get_relations(params)
     
     def get_suppliers(self, params=None):
         """Get Suppliers (Relations with type filter)"""
         if not params:
             params = {}
         params["relationType"] = "Supplier"
-        return self.make_request("v1/relation", params=params)
+        return self.get_relations(params)
     
     def get_mutations(self, params=None):
-        """Get Mutations (Transactions)"""
-        return self.make_request("v1/mutation", params=params)
+        """Get Mutations (Transactions) - fetches ALL mutations with pagination"""
+        try:
+            all_items = []
+            offset = 0
+            limit = 500
+            
+            if not params:
+                params = {}
+            
+            while True:
+                params_with_pagination = params.copy()
+                params_with_pagination.update({
+                    "limit": limit,
+                    "offset": offset
+                })
+                
+                result = self.make_request("v1/mutation", "GET", params_with_pagination)
+                
+                if not result["success"]:
+                    return result
+                
+                data = json.loads(result["data"])
+                items = data.get("items", [])
+                all_items.extend(items)
+                
+                if len(items) < limit:
+                    break
+                
+                offset += limit
+                if offset > 50000:  # Higher limit for mutations
+                    frappe.log_error("Safety limit reached in get_mutations pagination")
+                    break
+            
+            return {
+                "success": True,
+                "data": json.dumps({"items": all_items}),
+                "status_code": 200
+            }
+        except Exception as e:
+            frappe.log_error(f"Error in get_mutations: {str(e)}")
+            return {"success": False, "error": str(e)}
     
     def get_documents(self, params=None):
         """Get Documents/Attachments"""

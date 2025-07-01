@@ -972,7 +972,8 @@ class BoardManager(BaseManager):
             new_member = self.chapter_doc.append("members", {
                 "member": member_id,
                 "chapter_join_date": today(),
-                "enabled": 1
+                "enabled": 1,
+                "status": "Active"  # Set required status field
             })
             
             self.log_action(

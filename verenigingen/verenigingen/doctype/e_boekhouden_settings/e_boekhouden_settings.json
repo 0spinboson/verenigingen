@@ -12,6 +12,12 @@
   "column_break_6",
   "connection_status",
   "last_tested",
+  "soap_credentials_section",
+  "soap_username",
+  "soap_security_code1",
+  "column_break_soap",
+  "soap_security_code2",
+  "soap_guid",
   "mapping_section",
   "default_company",
   "default_cost_center",
@@ -61,6 +67,40 @@
    "fieldtype": "Datetime",
    "label": "Last Tested",
    "read_only": 1
+  },
+  {
+   "fieldname": "soap_credentials_section",
+   "fieldtype": "Section Break",
+   "label": "SOAP API Credentials",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "soap_username",
+   "fieldtype": "Data",
+   "label": "SOAP Username",
+   "description": "E-Boekhouden SOAP API username"
+  },
+  {
+   "fieldname": "soap_security_code1",
+   "fieldtype": "Password",
+   "label": "Security Code 1",
+   "description": "First security code for SOAP API"
+  },
+  {
+   "fieldname": "column_break_soap",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "soap_security_code2",
+   "fieldtype": "Password",
+   "label": "Security Code 2 (GUID)",
+   "description": "Second security code (GUID format) for SOAP API"
+  },
+  {
+   "fieldname": "soap_guid",
+   "fieldtype": "Data",
+   "label": "Administration GUID",
+   "description": "Optional: GUID for specific administration/company"
   },
   {
    "fieldname": "mapping_section",

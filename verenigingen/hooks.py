@@ -68,6 +68,12 @@ doc_events = {
         "before_validate": [
             "verenigingen.utils.apply_tax_exemption_from_source"
         ],
+        "validate": [
+            "verenigingen.overrides.sales_invoice.custom_validate"
+        ],
+        "after_validate": [
+            "verenigingen.overrides.sales_invoice.after_validate"
+        ],
         "on_submit": "verenigingen.verenigingen.doctype.member.member_utils.update_member_payment_history_from_invoice",
         "on_update_after_submit": "verenigingen.verenigingen.doctype.member.member_utils.update_member_payment_history_from_invoice",
         "on_cancel": "verenigingen.verenigingen.doctype.member.member_utils.update_member_payment_history_from_invoice"

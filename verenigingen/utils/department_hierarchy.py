@@ -135,7 +135,7 @@ class DepartmentHierarchyManager:
             team = team_memberships[0]
             if team.chapter:
                 chapter = frappe.get_doc("Chapter", team.chapter)
-                return f"Chapter {chapter.chapter_name} Volunteers"
+                return f"Chapter {chapter.name} Volunteers"
             else:
                 return "National Teams"
         

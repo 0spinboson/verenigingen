@@ -32,6 +32,7 @@ def calculate_subscription_period_dates(start_date, membership_type):
     
     # Map subscription periods to billing intervals and counts
     period_mapping = {
+        "Daily": {"interval": "Day", "count": 1, "days": 1},
         "Monthly": {"interval": "Month", "count": 1},
         "Quarterly": {"interval": "Month", "count": 3},
         "Biannual": {"interval": "Month", "count": 6},
@@ -46,6 +47,11 @@ def calculate_subscription_period_dates(start_date, membership_type):
     if period_config["interval"] == "Month":
         period_end = add_months(start_date, period_config["count"]) - timedelta(days=1)
         next_period_start = add_months(start_date, period_config["count"])
+    elif period_config["interval"] == "Day":
+        # For daily intervals
+        days_to_add = period_config.get("days", 1) * period_config["count"]
+        period_end = add_days(start_date, days_to_add - 1)
+        next_period_start = add_days(start_date, days_to_add)
     else:
         # Fallback for other intervals
         period_end = add_days(start_date, 30 * period_config["count"]) - timedelta(days=1)
@@ -121,7 +127,9 @@ def format_subscription_period_description(period_start, period_end, subscriptio
     start_str = period_start.strftime("%d %B %Y")
     end_str = period_end.strftime("%d %B %Y")
     
-    if subscription_period == "Monthly":
+    if subscription_period == "Daily":
+        return f"Daily membership ({start_str} - {end_str})"
+    elif subscription_period == "Monthly":
         return f"Monthly membership ({start_str} - {end_str})"
     elif subscription_period == "Quarterly":
         return f"Quarterly membership ({start_str} - {end_str})"

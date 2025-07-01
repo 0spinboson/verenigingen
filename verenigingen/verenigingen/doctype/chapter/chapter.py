@@ -589,14 +589,8 @@ def get_chapter_permission_query_conditions(user=None):
         if "System Manager" in frappe.get_roles(user) or "Verenigingen Administrator" in frappe.get_roles(user):
             return ""
         
-        # Use single optimized query to get accessible chapters
-        accessible_chapters = get_user_accessible_chapters_optimized(user)
-        
-        if accessible_chapters:
-            chapter_list = ["'" + chapter + "'" for chapter in accessible_chapters]
-            return f"`tabChapter`.name in ({', '.join(chapter_list)})"
-        
-        # Fall back to published chapters for users without member accounts
+        # For regular users and members, show all published chapters
+        # This allows users to see all chapters on the listing page
         return "`tabChapter`.published = 1"
         
     except Exception as e:

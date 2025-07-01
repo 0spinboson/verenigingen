@@ -26,6 +26,22 @@ class Membership(Document):
                 fields=["name", "membership_type", "start_date", "renewal_date", "status"]
             )
             
+            # Check for overlapping memberships
+            if existing_memberships and self.start_date:
+                for existing in existing_memberships:
+                    # Check if the new membership overlaps with existing ones
+                    existing_start = getdate(existing.start_date)
+                    existing_renewal = getdate(existing.renewal_date) if existing.renewal_date else None
+                    new_start = getdate(self.start_date)
+                    
+                    # If we have both dates, check for overlap
+                    if existing_renewal and hasattr(self, 'renewal_date') and self.renewal_date:
+                        new_renewal = getdate(self.renewal_date)
+                        # Check for overlap
+                        if not (new_renewal < existing_start or new_start > existing_renewal):
+                            frappe.throw(_("This membership period overlaps with an existing active membership for this member"), 
+                                       title=_("Overlapping Membership"))
+            
             if existing_memberships:
                 membership = existing_memberships[0]
                 msg = _("This member already has an active membership:")
@@ -70,9 +86,18 @@ class Membership(Document):
         return True
         
     def validate_dates(self):
-        # If cancellation date is set, check if it's at least 1 year after start date
+        # Validate renewal date is not before start date
+        if self.renewal_date and self.start_date:
+            if getdate(self.renewal_date) < getdate(self.start_date):
+                frappe.throw(_("Renewal date cannot be before start date"))
+        
+        # Check if minimum period enforcement is enabled for this membership type
+        membership_type = frappe.get_doc("Membership Type", self.membership_type) if self.membership_type else None
+        enforce_minimum = membership_type.get("enforce_minimum_period", True) if membership_type else True
+        
+        # If cancellation date is set and minimum period is enforced, check if it's at least 1 year after start date
         # but allow exceptions for admins and unsubmitted memberships
-        if self.cancellation_date and self.start_date and self.docstatus == 1:
+        if self.cancellation_date and self.start_date and self.docstatus == 1 and enforce_minimum:
             min_membership_period = add_months(getdate(self.start_date), 12)
             if getdate(self.cancellation_date) < min_membership_period:
                 # Check if user is an admin
@@ -95,8 +120,11 @@ class Membership(Document):
                 months = self.get_months_from_period(membership_type.subscription_period, 
                                                   membership_type.subscription_period_in_months)
                 
-                # Ensure minimum 1-year membership period
-                if months and months < 12:
+                # Check if minimum period enforcement is enabled for this membership type
+                enforce_minimum = membership_type.get("enforce_minimum_period", True)
+                
+                # Ensure minimum 1-year membership period if enabled
+                if months and months < 12 and enforce_minimum:
                     months = 12
                     # Only show message once per session and if renewal date is not already set
                     message_key = f"renewal_message_{self.name or 'new'}"
@@ -107,20 +135,41 @@ class Membership(Document):
                 
                 if months:
                     self.renewal_date = add_to_date(self.start_date, months=months)
+                elif membership_type.subscription_period == "Daily":
+                    # Handle daily period
+                    if enforce_minimum:
+                        # Even for daily, enforce 1 year minimum
+                        self.renewal_date = add_to_date(self.start_date, months=12)
+                        message_key = f"daily_minimum_message_{self.name or 'new'}"
+                        if not frappe.flags.get(message_key) and not self.renewal_date:
+                            frappe.msgprint(_("Note: Daily membership type has minimum 1-year period enforced."), 
+                                          indicator='yellow')
+                            frappe.flags[message_key] = True
+                    else:
+                        # For daily without minimum period, set renewal to 1 day
+                        self.renewal_date = add_to_date(self.start_date, days=1)
             else:
-                # For lifetime memberships, still set a minimum 1-year initial period
-                # This allows the 1-year cancellation rule to be enforced
-                self.renewal_date = add_to_date(self.start_date, months=12)
-                # Only show message once per session and if renewal date is not already set
-                message_key = f"lifetime_message_{self.name or 'new'}"
-                if not frappe.flags.get(message_key) and not getattr(self, '_lifetime_message_shown', False):
-                    frappe.msgprint(_("Note: Although this is a lifetime membership, a 1-year minimum commitment period still applies."), 
-                                  indicator='info')
-                    frappe.flags[message_key] = True
-                    self._lifetime_message_shown = True
+                # Check if minimum period enforcement is enabled for this membership type
+                enforce_minimum = membership_type.get("enforce_minimum_period", True)
+                
+                if enforce_minimum:
+                    # For lifetime memberships, still set a minimum 1-year initial period
+                    # This allows the 1-year cancellation rule to be enforced
+                    self.renewal_date = add_to_date(self.start_date, months=12)
+                    # Only show message once per session and if renewal date is not already set
+                    message_key = f"lifetime_message_{self.name or 'new'}"
+                    if not frappe.flags.get(message_key) and not getattr(self, '_lifetime_message_shown', False):
+                        frappe.msgprint(_("Note: Although this is a lifetime membership, a 1-year minimum commitment period still applies."), 
+                                      indicator='info')
+                        frappe.flags[message_key] = True
+                        self._lifetime_message_shown = True
+                else:
+                    # For lifetime memberships without minimum period, set a far future date
+                    self.renewal_date = add_to_date(self.start_date, years=50)
     
     def get_months_from_period(self, period, custom_months=None):
         period_months = {
+            "Daily": 0,  # Will be handled specially
             "Monthly": 1,
             "Quarterly": 3,
             "Biannual": 6,
@@ -160,23 +209,47 @@ class Membership(Document):
     
     def calculate_effective_amount(self):
         """Calculate the effective amount and difference from standard"""
+        amount = 0
+        
+        # Check if member has fee override
+        if self.member:
+            member = frappe.get_cached_doc("Member", self.member)
+            if member.membership_fee_override and member.membership_fee_override > 0:
+                amount = member.membership_fee_override
+                self.effective_amount = amount
+                self.membership_fee = amount
+                
+                # Calculate difference from standard
+                if self.membership_type:
+                    membership_type = frappe.get_cached_doc("Membership Type", self.membership_type)
+                    self.amount_difference = flt(amount) - flt(membership_type.amount)
+                else:
+                    self.amount_difference = 0
+                    
+                return amount
+        
+        # Check custom amount
         if self.uses_custom_amount and self.custom_amount:
-            self.effective_amount = self.custom_amount
+            amount = self.custom_amount
         elif self.membership_type:
             membership_type = frappe.get_cached_doc("Membership Type", self.membership_type)
-            self.effective_amount = membership_type.amount
-        else:
-            self.effective_amount = 0
+            amount = membership_type.amount
+            
+            # Apply discount if present
+            if hasattr(self, 'discount_percentage') and self.discount_percentage:
+                amount = amount * (1 - self.discount_percentage / 100)
+        
+        self.effective_amount = amount
+        self.membership_fee = amount
         
         # Calculate difference
-        if self.membership_type and self.effective_amount:
+        if self.membership_type and amount:
             membership_type = frappe.get_cached_doc("Membership Type", self.membership_type)
-            self.amount_difference = flt(self.effective_amount) - flt(membership_type.amount)
+            self.amount_difference = flt(amount) - flt(membership_type.amount)
         else:
             self.amount_difference = 0
-        
-        # Set membership fee field for display
-        self.membership_fee = self.effective_amount
+            
+        return amount
                 
     def on_submit(self):
         import frappe
@@ -230,8 +303,13 @@ class Membership(Document):
     
     def on_cancel(self):
         """Handle when membership is cancelled directly (not the same as member cancellation)"""
-        # Check if membership is submitted (docstatus == 1) before enforcing the 1-year rule
-        if self.docstatus == 1 and getdate(self.start_date):
+        # Check if minimum period enforcement is enabled for this membership type
+        membership_type = frappe.get_doc("Membership Type", self.membership_type) if self.membership_type else None
+        enforce_minimum = membership_type.get("enforce_minimum_period", True) if membership_type else True
+        
+        # Check if membership is being cancelled (docstatus will be 2 during cancel)
+        # We need to check if it was submitted (now being cancelled)
+        if getdate(self.start_date) and enforce_minimum:
             min_membership_period = add_months(getdate(self.start_date), 12)
             current_date = getdate(today())
         
@@ -249,8 +327,12 @@ class Membership(Document):
         self.status = "Cancelled"
         self.cancellation_date = self.cancellation_date or nowdate()
     
-        # Update member status
-        self.update_member_status()
+        # Update member status (skip if no permission)
+        try:
+            self.update_member_status()
+        except frappe.PermissionError:
+            # Skip member status update if user doesn't have permission
+            frappe.logger().debug(f"Skipping member status update for {self.member} due to permission error")
     
         # Store subscription reference before unlinking 
         subscription_reference = self.subscription
@@ -288,8 +370,12 @@ class Membership(Document):
     def update_member_status(self):
         """Update the membership status in the Member document"""
         if self.member:
-            member = frappe.get_doc("Member", self.member)
-            member.save()  # This will trigger the update_membership_status method
+            try:
+                member = frappe.get_doc("Member", self.member)
+                member.save()  # This will trigger the update_membership_status method
+            except frappe.PermissionError:
+                # If user doesn't have permission to update member, skip
+                frappe.logger().debug(f"Skipping member status update for {self.member} due to permission error")
     
     def sync_payment_details_from_subscription(self):
         """Sync payment details from linked subscription"""
@@ -358,7 +444,7 @@ class Membership(Document):
         new_membership.membership_type = self.membership_type
         new_membership.start_date = new_start_date
         new_membership.auto_renew = self.auto_renew
-        new_membership.payment_method = self.payment_method
+        # payment_method is not a field in Membership doctype, skip it
         new_membership.subscription_plan = self.subscription_plan
         
         # Copy custom amount settings
@@ -738,6 +824,35 @@ class Membership(Document):
             frappe.log_error(f"Error regenerating pending invoices: {str(e)}", 
                           "Invoice Regeneration Error")
 
+    def get_membership_details(self):
+        """Get formatted membership details for display"""
+        details = {
+            "type": self.membership_type,
+            "status": self.status,
+            "start_date": self.start_date,
+            "renewal_date": self.renewal_date,
+            "member": self.member,
+            "effective_amount": self.effective_amount or self.membership_fee
+        }
+        
+        # Add payment details if available
+        if self.last_payment_date:
+            details["last_payment_date"] = self.last_payment_date
+        
+        if self.unpaid_amount:
+            details["unpaid_amount"] = self.unpaid_amount
+            
+        return details
+    
+    def get_billing_amount(self):
+        """Get the billing amount for this membership"""
+        # First check if there's an effective amount already calculated
+        if self.effective_amount:
+            return self.effective_amount
+            
+        # Otherwise calculate it
+        return self.calculate_effective_amount()
+
 # Hook functions for doc_events (outside the class)
 def on_submit(doc, method=None):
     """
@@ -860,8 +975,12 @@ def cancel_membership(membership_name, cancellation_date=None, cancellation_reas
         frappe.msgprint(_("Draft membership can be cancelled without restrictions"))
         return membership.name
     
-    # Check 1-year minimum period for submitted memberships
-    if membership.docstatus == 1:
+    # Check if minimum period enforcement is enabled for this membership type
+    membership_type = frappe.get_doc("Membership Type", membership.membership_type) if membership.membership_type else None
+    enforce_minimum = membership_type.get("enforce_minimum_period", True) if membership_type else True
+    
+    # Check 1-year minimum period for submitted memberships if enforcement is enabled
+    if membership.docstatus == 1 and enforce_minimum:
         min_membership_period = add_months(getdate(membership.start_date), 12)
         if getdate(cancellation_date) < min_membership_period:
             # Check if user is an admin

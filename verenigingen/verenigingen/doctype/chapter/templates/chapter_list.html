@@ -144,7 +144,7 @@
         {% if result %}
             {% for doc in result %}
                 <div class="chapter-item" data-chapter-status="{% if doc.name in user_chapters %}member{% else %}available{% endif %}">
-                    {% include "verenigingen/doctype/chapter/templates/chapter_row.html" %}
+                    {% include "verenigingen/verenigingen/doctype/chapter/templates/chapter_row.html" %}
                 </div>
             {% endfor %}
         {% else %}

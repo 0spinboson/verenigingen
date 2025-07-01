@@ -123,6 +123,23 @@
    "label": "Migrate Stock Transactions"
   },
   {
+   "fieldname": "column_break_mapping",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": 1,
+   "fieldname": "use_account_mappings",
+   "fieldtype": "Check",
+   "label": "Use Account Mappings",
+   "description": "Use configured account mappings to determine document types (Purchase Invoice vs Journal Entry)"
+  },
+  {
+   "fieldname": "setup_mappings_btn",
+   "fieldtype": "Button",
+   "label": "Setup Account Mappings",
+   "hidden": 1
+  },
+  {
    "default": 1,
    "fieldname": "dry_run",
    "fieldtype": "Check",
