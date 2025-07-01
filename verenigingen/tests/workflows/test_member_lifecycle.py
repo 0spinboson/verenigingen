@@ -465,9 +465,13 @@ class TestMemberLifecycle(VereningingenWorkflowTestCase):
         
         # Create team and join it
         with self.as_user(self.admin_user.name):
+            # Generate unique team name to avoid duplicates
+            test_id = frappe.utils.random_string(6)
+            team_name = f"Events Team {test_id}"
+            
             team = frappe.get_doc({
                 "doctype": "Team",
-                "team_name": "Events Team",
+                "team_name": team_name,
                 "chapter": self.test_chapter.name,
                 "status": "Active",
                 "team_type": "Project Team",
@@ -490,10 +494,13 @@ class TestMemberLifecycle(VereningingenWorkflowTestCase):
             
         # Test board member addition - ensure status field is set
         with self.as_user(self.admin_user.name):
-            # Create board role
+            # Create board role with unique name
+            role_id = frappe.utils.random_string(6)
+            role_name = f"Test Board Role {role_id}"
+            
             board_role = frappe.get_doc({
                 "doctype": "Chapter Role",
-                "role_name": "Test Board Role",
+                "role_name": role_name,
                 "permissions_level": "Admin",
                 "is_active": 1
             })
@@ -534,9 +541,13 @@ class TestMemberLifecycle(VereningingenWorkflowTestCase):
                     filters={"account_type": "Expense Account", "is_group": 0}, 
                     limit=1)
                 if expense_account:
+                    # Generate unique category name
+                    cat_id = frappe.utils.random_string(6)
+                    category_name = f"Test Supplies {cat_id}"
+                    
                     expense_cat = frappe.get_doc({
                         "doctype": "Expense Category",
-                        "category_name": "Test Supplies",
+                        "category_name": category_name,
                         "expense_account": expense_account[0].name
                     })
                     expense_cat.insert(ignore_permissions=True)
