@@ -23,6 +23,7 @@
   "migrate_transactions",
   "migrate_stock_transactions",
   "dry_run",
+  "clear_existing_accounts",
   "progress_section",
   "progress_percentage",
   "current_operation",
@@ -144,6 +145,13 @@
    "fieldname": "dry_run",
    "fieldtype": "Check",
    "label": "Dry Run (Preview Only)"
+  },
+  {
+   "default": 0,
+   "fieldname": "clear_existing_accounts",
+   "fieldtype": "Check",
+   "label": "Clear Existing Accounts Before Import",
+   "description": "⚠️ WARNING: This will delete all existing imported accounts and related transactions. Use only for fresh imports."
   },
   {
    "fieldname": "progress_section",

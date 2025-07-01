@@ -156,9 +156,87 @@ class EBoekhoudenMigration(Document):
             frappe.log_error(f"E-Boekhouden migration failed: {str(e)}", "E-Boekhouden Migration")
             raise
     
+    def clear_existing_accounts(self, settings):
+        """Clear all existing imported accounts before importing new ones"""
+        try:
+            company = settings.default_company
+            if not company:
+                return {"success": False, "error": "No default company set"}
+            
+            # Get all accounts for the company that have account numbers (imported accounts)
+            existing_accounts = frappe.get_all("Account", 
+                filters={
+                    "company": company,
+                    "account_number": ["!=", ""]
+                },
+                fields=["name", "account_name", "account_number"],
+                order_by="lft desc"  # Delete child accounts first
+            )
+            
+            if not existing_accounts:
+                return {"success": True, "message": "No existing imported accounts to clear", "deleted_count": 0}
+            
+            if self.dry_run:
+                return {
+                    "success": True, 
+                    "message": f"Dry Run: Would delete {len(existing_accounts)} imported accounts",
+                    "deleted_count": 0
+                }
+            
+            # Delete accounts (delete in reverse tree order to avoid constraint issues)
+            deleted_count = 0
+            errors = []
+            
+            for account in existing_accounts:
+                try:
+                    # Check if account has any GL entries
+                    has_gl_entries = frappe.db.exists("GL Entry", {"account": account.name})
+                    if has_gl_entries:
+                        # Force delete even with GL entries since this is a nuke operation
+                        frappe.db.delete("GL Entry", {"account": account.name})
+                    
+                    frappe.delete_doc("Account", account.name, force=True)
+                    deleted_count += 1
+                    frappe.logger().info(f"Deleted account: {account.account_number} - {account.account_name}")
+                    
+                except Exception as e:
+                    error_msg = f"Failed to delete account {account.account_number} ({account.name}): {str(e)}"
+                    errors.append(error_msg)
+                    self.log_error(error_msg, "account_deletion", account)
+            
+            frappe.db.commit()
+            
+            result_msg = f"Cleared {deleted_count} existing accounts"
+            if errors:
+                result_msg += f", {len(errors)} errors"
+            
+            return {
+                "success": True, 
+                "message": result_msg,
+                "deleted_count": deleted_count,
+                "errors": errors
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def migrate_chart_of_accounts(self, settings):
         """Migrate Chart of Accounts from e-Boekhouden"""
         try:
+            # Clear existing accounts if requested
+            if getattr(self, 'clear_existing_accounts', 0):
+                self.db_set({
+                    "current_operation": "Clearing existing accounts...",
+                    "progress_percentage": 5
+                })
+                frappe.db.commit()
+                
+                clear_result = self.clear_existing_accounts(settings)
+                if not clear_result["success"]:
+                    return f"Failed to clear existing accounts: {clear_result['error']}"
+                else:
+                    frappe.logger().info(f"Cleared accounts: {clear_result['message']}")
+            
             from verenigingen.utils.eboekhouden_api import EBoekhoudenAPI
             
             # Get Chart of Accounts data using new API
@@ -174,7 +252,11 @@ class EBoekhoudenMigration(Document):
             accounts_data = data.get("items", [])
             
             if self.dry_run:
-                return f"Dry Run: Found {len(accounts_data)} accounts to migrate"
+                dry_run_msg = f"Dry Run: Found {len(accounts_data)} accounts to migrate"
+                if getattr(self, 'clear_existing_accounts', 0):
+                    clear_result = self.clear_existing_accounts(settings)
+                    dry_run_msg += f"\n{clear_result['message']}"
+                return dry_run_msg
             
             # Analyze account hierarchy to determine which should be groups
             from verenigingen.utils.eboekhouden_account_group_fix import analyze_account_hierarchy
