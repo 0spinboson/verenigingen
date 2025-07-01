@@ -176,6 +176,14 @@ class EBoekhoudenMigration(Document):
             if self.dry_run:
                 return f"Dry Run: Found {len(accounts_data)} accounts to migrate"
             
+            # Analyze account hierarchy to determine which should be groups
+            from verenigingen.utils.eboekhouden_account_group_fix import analyze_account_hierarchy
+            group_accounts = analyze_account_hierarchy(accounts_data)
+            frappe.logger().info(f"Identified {len(group_accounts)} accounts that should be groups")
+            
+            # Store group accounts for use in create_account
+            self._group_accounts = group_accounts
+            
             # Create accounts in ERPNext
             created_count = 0
             skipped_count = 0
@@ -644,6 +652,22 @@ class EBoekhoudenMigration(Document):
             # Find appropriate parent account
             parent_account = self.get_parent_account(account_type, root_type, company)
             
+            # Determine if this should be a group account
+            # An account should be a group if:
+            # 1. It has no parent (root account)
+            # 2. It's identified as a group from hierarchy analysis
+            # 3. It might have child accounts
+            is_group = 0
+            
+            # Check if this account was identified as a group
+            if hasattr(self, '_group_accounts') and account_code in self._group_accounts:
+                is_group = 1
+                frappe.logger().info(f"Creating account {account_code} as group (has children)")
+            elif not parent_account:
+                # Root accounts must be groups in ERPNext
+                is_group = 1
+                frappe.logger().info(f"Creating root account {account_code} as group")
+            
             # Create new account
             account_doc = {
                 'doctype': 'Account',
@@ -652,7 +676,7 @@ class EBoekhoudenMigration(Document):
                 'parent_account': parent_account,
                 'company': company,
                 'root_type': root_type,
-                'is_group': 0,
+                'is_group': is_group,
                 'disabled': 0
             }
             

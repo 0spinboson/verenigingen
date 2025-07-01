@@ -6,7 +6,65 @@ from frappe.desk.page.setup_wizard.setup_wizard import make_records
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 
+def ensure_prerequisites():
+    """Ensure required master data exists before creating records"""
+    
+    # Ensure "All Customer Groups" exists
+    if not frappe.db.exists("Customer Group", "All Customer Groups"):
+        try:
+            all_groups = frappe.get_doc({
+                "doctype": "Customer Group",
+                "customer_group_name": "All Customer Groups",
+                "is_group": 1,
+                "parent_customer_group": ""
+            })
+            all_groups.insert(ignore_permissions=True)
+            print("Created 'All Customer Groups' customer group")
+        except Exception as e:
+            print(f"Warning: Could not create 'All Customer Groups': {str(e)}")
+    
+    # Ensure "Services" Item Group exists
+    if not frappe.db.exists("Item Group", "Services"):
+        try:
+            # Get or create parent item group first
+            if not frappe.db.exists("Item Group", "All Item Groups"):
+                all_items = frappe.get_doc({
+                    "doctype": "Item Group",
+                    "item_group_name": "All Item Groups",
+                    "is_group": 1,
+                    "parent_item_group": ""
+                })
+                all_items.insert(ignore_permissions=True)
+            
+            services_group = frappe.get_doc({
+                "doctype": "Item Group",
+                "item_group_name": "Services",
+                "is_group": 0,
+                "parent_item_group": "All Item Groups"
+            })
+            services_group.insert(ignore_permissions=True)
+            print("Created 'Services' item group")
+        except Exception as e:
+            print(f"Warning: Could not create 'Services' item group: {str(e)}")
+    
+    # Ensure "Nos" UOM exists
+    if not frappe.db.exists("UOM", "Nos"):
+        try:
+            nos_uom = frappe.get_doc({
+                "doctype": "UOM",
+                "uom_name": "Nos",
+                "name": "Nos"
+            })
+            nos_uom.insert(ignore_permissions=True)
+            print("Created 'Nos' unit of measure")
+        except Exception as e:
+            print(f"Warning: Could not create 'Nos' UOM: {str(e)}")
+
+
 def make_custom_records():
+    # First ensure prerequisites exist
+    ensure_prerequisites()
+    
     records = [
         {'doctype': "Party Type", "party_type": "Member", "account_type": "Receivable"},
         # Customer Group for donors
@@ -206,6 +264,12 @@ def execute_after_install():
         # Validate dependencies
         validate_app_dependencies()
         
+        # Create E-Boekhouden custom fields first
+        create_eboekhouden_custom_fields()
+        
+        # Create default E-Boekhouden Settings
+        create_default_eboekhouden_settings()
+        
         # Execute the setup function from this file
         setup_verenigingen()
         
@@ -231,6 +295,33 @@ def execute_after_install():
     except Exception as e:
         frappe.logger().error(f"Error during Verenigingen setup: {str(e)}")
         print(f"Error during setup: {str(e)}")
+
+
+def create_eboekhouden_custom_fields():
+    """Create E-Boekhouden custom fields during installation"""
+    try:
+        from verenigingen.utils.create_eboekhouden_custom_fields import create_eboekhouden_tracking_fields
+        create_eboekhouden_tracking_fields()
+        print("✅ Created E-Boekhouden custom fields")
+    except Exception as e:
+        print(f"⚠️ Failed to create E-Boekhouden custom fields: {str(e)}")
+
+
+def create_default_eboekhouden_settings():
+    """Create default E-Boekhouden Settings single document"""
+    try:
+        if not frappe.db.exists("E-Boekhouden Settings", "E-Boekhouden Settings"):
+            settings = frappe.get_doc({
+                "doctype": "E-Boekhouden Settings",
+                "api_url": "https://secure.e-boekhouden.nl/verhuur/api_rpc.php",
+                "source_application": "Verenigingen App"
+            })
+            settings.insert(ignore_permissions=True)
+            print("✅ Created default E-Boekhouden Settings")
+        else:
+            print("✅ E-Boekhouden Settings already exists")
+    except Exception as e:
+        print(f"⚠️ Failed to create E-Boekhouden Settings: {str(e)}")
 
 def setup_tax_exemption_on_install():
     """Set up tax exemption during installation if enabled"""
