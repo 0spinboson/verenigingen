@@ -39,7 +39,8 @@ def analyze_all_mutations():
     print(f"  - Sales Invoices (with eboekhouden_invoice_number): {frappe.db.count('Sales Invoice', {'eboekhouden_invoice_number': ['!=', '']})}")
     print(f"  - Purchase Invoices (with eboekhouden_invoice_number): {frappe.db.count('Purchase Invoice', {'eboekhouden_invoice_number': ['!=', '']})}")
     print(f"  - Payment Entries (with eboekhouden_mutation_nr): {frappe.db.count('Payment Entry', {'eboekhouden_mutation_nr': ['!=', '']})}")
-    print(f"  - Payment Entries (with reference_no as number): {frappe.db.sql('SELECT COUNT(*) FROM `tabPayment Entry` WHERE reference_no REGEXP \"^[0-9]+$\"')[0][0]}")
+    number_pattern = "^[0-9]+$"
+    print(f"  - Payment Entries (with reference_no as number): {frappe.db.sql('SELECT COUNT(*) FROM `tabPayment Entry` WHERE reference_no REGEXP %s', number_pattern)[0][0]}")
     print(f"  - Journal Entries (with eboekhouden_mutation_nr): {frappe.db.count('Journal Entry', {'eboekhouden_mutation_nr': ['!=', '']})}")
     
     # 4. Check for specific mutation types in error details
