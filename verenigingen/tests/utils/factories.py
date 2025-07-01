@@ -170,6 +170,10 @@ class TestCleanupManager:
         for item in reversed(sorted_stack):
             try:
                 if frappe.db.exists(item["doctype"], item["name"]):
+                    # Check if document is submitted and needs to be cancelled first
+                    doc = frappe.get_doc(item["doctype"], item["name"])
+                    if hasattr(doc, 'docstatus') and doc.docstatus == 1:
+                        doc.cancel()
                     frappe.delete_doc(item["doctype"], item["name"], force=True)
             except Exception as e:
                 errors.append({

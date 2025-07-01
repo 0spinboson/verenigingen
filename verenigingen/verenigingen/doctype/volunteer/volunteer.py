@@ -32,12 +32,18 @@ class Volunteer(Document):
     def validate(self):
         """Validate volunteer data"""
         self.validate_required_fields()
+        self.validate_member_link()
         self.validate_dates()
         
     def validate_required_fields(self):
         """Check if required fields are filled"""
         if not self.start_date:
             self.start_date = today()
+            
+    def validate_member_link(self):
+        """Validate that member link is valid"""
+        if self.member and not frappe.db.exists("Member", self.member):
+            frappe.throw(_("Member {0} does not exist").format(self.member), frappe.DoesNotExistError)
             
     def validate_dates(self):
         """Validate date fields in child tables"""

@@ -464,6 +464,14 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         # Save the member
         self.save()
         
+        # Create user account if not exists
+        if not self.user:
+            self.create_user()
+            
+        # Create customer if not exists
+        if not self.customer:
+            self.create_customer()
+        
         # Activate pending Chapter Member records
         try:
             from verenigingen.utils.application_helpers import activate_pending_chapter_membership
@@ -1200,29 +1208,42 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
     
     def get_other_members_at_address(self):
         """Get other members living at the same address"""
-        if not self.address_line1 or not self.postal_code:
+        if not self.primary_address:
+            return []
+            
+        # Get the address details
+        address_doc = frappe.get_doc("Address", self.primary_address)
+        if not address_doc.address_line1 or not address_doc.pincode:
             return []
             
         # Sanitize the address for comparison
         from verenigingen.utils.address_helpers import sanitize_address
-        clean_address = sanitize_address(self.address_line1)
+        clean_address = sanitize_address(address_doc.address_line1)
         
+        # Get all members with primary address
         others = frappe.get_all(
             "Member",
             filters={
-                "postal_code": self.postal_code,
+                "primary_address": ["is", "set"],
                 "name": ["!=", self.name]
             },
-            fields=["name", "full_name", "address_line1", "status"]
+            fields=["name", "full_name", "primary_address", "status"]
         )
         
-        # Filter by sanitized address
+        # Filter by matching address
         matching_members = []
         for other in others:
-            if other.address_line1:
-                other_clean = sanitize_address(other.address_line1)
-                if other_clean == clean_address:
-                    matching_members.append(other)
+            if other.primary_address:
+                try:
+                    other_address = frappe.get_doc("Address", other.primary_address)
+                    if (other_address.pincode == address_doc.pincode and 
+                        other_address.address_line1):
+                        other_clean = sanitize_address(other_address.address_line1)
+                        if other_clean == clean_address:
+                            matching_members.append(other)
+                except Exception:
+                    # Skip if address doesn't exist
+                    pass
                     
         return matching_members
     

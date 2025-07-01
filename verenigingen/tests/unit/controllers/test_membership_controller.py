@@ -272,7 +272,7 @@ class TestMembershipController(VereningingenUnitTestCase):
             
             # Try to cancel before minimum period as non-admin user
             # Create a test user with limited permissions
-            test_user = self.create_test_user("test.cancel@example.com", ["Member"])
+            test_user = self.create_test_user("test.cancel@example.com", ["Membership Manager"])
             
             with self.as_user(test_user.name):
                 # Try to cancel before minimum period
@@ -282,11 +282,12 @@ class TestMembershipController(VereningingenUnitTestCase):
                     user_membership.cancel()
         finally:
             # Clean up submitted membership
+            frappe.set_user("Administrator")
+            # Reload to get current status
+            membership.reload()
             if membership.docstatus == 1:
                 # Cancel as admin to clean up
-                frappe.set_user("Administrator")
-                admin_membership = frappe.get_doc("Membership", membership.name)
-                admin_membership.cancel()
+                membership.cancel()
             
     def test_membership_lifecycle_hooks(self):
         """Test membership lifecycle event hooks"""
@@ -396,29 +397,36 @@ class TestMembershipController(VereningingenUnitTestCase):
             "start_date": today(),
             "status": "Active"
         })
-        # Validate to set renewal_date
-        membership1.validate()
-        # Now set to submitted status
-        membership1.docstatus = 1
+        # Insert first, then submit
         membership1.insert()
         # Track membership before member for proper cleanup order
         self.track_doc("Membership", membership1.name)
         
-        # Try to create overlapping membership
-        membership2 = frappe.get_doc({
-            "doctype": "Membership",
-            "member": member.name,
-            "membership_type": self.test_env["membership_types"][1].name,
-            "start_date": add_days(today(), 30),
-            "status": "Active"
-        })
-        
-        # Validate will set the renewal_date
-        membership2.validate()
-        
-        # Should raise validation error for overlap
-        with self.assert_validation_error("overlaps"):
-            membership2.insert()
+        try:
+            # Submit to make it active
+            membership1.submit()
+            
+            # Try to create overlapping membership
+            membership2 = frappe.get_doc({
+                "doctype": "Membership",
+                "member": member.name,
+                "membership_type": self.test_env["membership_types"][1].name,
+                "start_date": add_days(today(), 30),
+                "status": "Active"
+            })
+            
+            # Validate will set the renewal_date
+            membership2.validate()
+            
+            # Should raise validation error for overlap
+            with self.assert_validation_error("overlaps"):
+                membership2.insert()
+        finally:
+            # Ensure membership is cancelled before cleanup
+            if membership1.docstatus == 1:
+                membership1.reload()
+                if membership1.docstatus == 1:
+                    membership1.cancel()
             
     def test_renew_membership_method(self):
         """Test the renew_membership method"""

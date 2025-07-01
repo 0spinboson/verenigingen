@@ -189,6 +189,56 @@ class TestChapter(FrappeTestCase):
         for member in members:
             frappe.delete_doc("Member", member.name, force=True)
     
+    def test_board_member_chapter_status_field(self):
+        """Test that board member addition sets chapter member status field correctly"""
+        # Create test volunteer and role
+        volunteer = frappe.get_doc({
+            "doctype": "Volunteer",
+            "volunteer_name": f"Board Test Volunteer {self.unique_id}",
+            "email": f"boardvol{self.unique_id}@example.com",
+            "member": self.test_member.name,
+            "status": "Active",
+            "start_date": today()
+        })
+        volunteer.insert(ignore_permissions=True)
+        
+        role = frappe.get_doc({
+            "doctype": "Chapter Role",
+            "role_name": f"Board Role {self.unique_id}",
+            "permissions_level": "Admin",
+            "is_active": 1
+        })
+        role.insert(ignore_permissions=True)
+        
+        # Create chapter
+        chapter = frappe.get_doc({
+            "doctype": "Chapter",
+            "name": f"Test Chapter Board {self.unique_id}",
+            "region": self.test_region,
+            "introduction": "Test chapter for board member status"
+        })
+        chapter.insert(ignore_permissions=True)
+        
+        # Add board member
+        if hasattr(chapter, 'add_board_member'):
+            result = chapter.add_board_member(
+                volunteer=volunteer.name,
+                role=role.name,
+                from_date=today()
+            )
+            self.assertTrue(result.get("success"))
+            
+            # Reload and check status field
+            chapter.reload()
+            self.assertEqual(len(chapter.members), 1)
+            self.assertEqual(chapter.members[0].status, "Active", 
+                            "Chapter member status should be set to Active when adding board member")
+        
+        # Clean up
+        frappe.delete_doc("Chapter", chapter.name, force=True)
+        frappe.delete_doc("Chapter Role", role.name, force=True)
+        frappe.delete_doc("Volunteer", volunteer.name, force=True)
+    
     def test_chapter_statistics(self):
         """Test chapter statistics functionality"""
         chapter = frappe.get_doc({

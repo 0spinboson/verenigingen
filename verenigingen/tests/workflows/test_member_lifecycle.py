@@ -488,6 +488,39 @@ class TestMemberLifecycle(VereningingenWorkflowTestCase):
             })
             team.save(ignore_permissions=True)
             
+        # Test board member addition - ensure status field is set
+        with self.as_user(self.admin_user.name):
+            # Create board role
+            board_role = frappe.get_doc({
+                "doctype": "Chapter Role",
+                "role_name": "Test Board Role",
+                "permissions_level": "Admin",
+                "is_active": 1
+            })
+            board_role.insert(ignore_permissions=True)
+            self.track_doc("Chapter Role", board_role.name)
+            
+            # Add as board member
+            chapter = frappe.get_doc("Chapter", self.test_chapter.name)
+            result = chapter.add_board_member(
+                volunteer=volunteer_name,
+                role=board_role.name,
+                from_date=today()
+            )
+            self.assertTrue(result.get("success"), "Board member addition failed")
+            
+            # Reload and verify status field is set
+            chapter.reload()
+            member_in_chapter = None
+            for cm in chapter.members:
+                if cm.member == context.get("member_name"):
+                    member_in_chapter = cm
+                    break
+            
+            self.assertIsNotNone(member_in_chapter, "Member not found in chapter members")
+            self.assertEqual(member_in_chapter.status, "Active", 
+                           "Chapter member status field should be set to Active")
+            
         # Submit an expense
         with self.as_user(user_email):
             # Get or create expense category

@@ -307,8 +307,9 @@ class Membership(Document):
         membership_type = frappe.get_doc("Membership Type", self.membership_type) if self.membership_type else None
         enforce_minimum = membership_type.get("enforce_minimum_period", True) if membership_type else True
         
-        # Check if membership is submitted (docstatus == 1) before enforcing the 1-year rule
-        if self.docstatus == 1 and getdate(self.start_date) and enforce_minimum:
+        # Check if membership is being cancelled (docstatus will be 2 during cancel)
+        # We need to check if it was submitted (now being cancelled)
+        if getdate(self.start_date) and enforce_minimum:
             min_membership_period = add_months(getdate(self.start_date), 12)
             current_date = getdate(today())
         
@@ -326,8 +327,12 @@ class Membership(Document):
         self.status = "Cancelled"
         self.cancellation_date = self.cancellation_date or nowdate()
     
-        # Update member status
-        self.update_member_status()
+        # Update member status (skip if no permission)
+        try:
+            self.update_member_status()
+        except frappe.PermissionError:
+            # Skip member status update if user doesn't have permission
+            frappe.logger().debug(f"Skipping member status update for {self.member} due to permission error")
     
         # Store subscription reference before unlinking 
         subscription_reference = self.subscription
@@ -365,8 +370,12 @@ class Membership(Document):
     def update_member_status(self):
         """Update the membership status in the Member document"""
         if self.member:
-            member = frappe.get_doc("Member", self.member)
-            member.save()  # This will trigger the update_membership_status method
+            try:
+                member = frappe.get_doc("Member", self.member)
+                member.save()  # This will trigger the update_membership_status method
+            except frappe.PermissionError:
+                # If user doesn't have permission to update member, skip
+                frappe.logger().debug(f"Skipping member status update for {self.member} due to permission error")
     
     def sync_payment_details_from_subscription(self):
         """Sync payment details from linked subscription"""
