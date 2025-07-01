@@ -131,6 +131,27 @@ def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
                     "E-Boekhouden Migration"
                 )
         
+        # Load relations data for enhanced customer/supplier names
+        frappe.publish_realtime(
+            "migration_progress",
+            {"message": "Loading relations data for enhanced naming..."},
+            user=frappe.session.user
+        )
+        
+        relations_result = api.get_relaties()
+        relations_data = {}
+        if relations_result["success"]:
+            for relation in relations_result.get("relations", []):
+                code = relation.get("Code") or relation.get("ID")
+                if code:
+                    relations_data[str(code)] = relation
+            migration_doc.log_error(f"Loaded {len(relations_data)} relation records for enhanced naming")
+        else:
+            migration_doc.log_error(f"Failed to load relations: {relations_result.get('error', 'Unknown error')}")
+        
+        # Store relations data for use throughout migration
+        migration_doc._relations_data = relations_data
+        
         # Update progress
         frappe.publish_realtime(
             "migration_progress",
@@ -175,7 +196,8 @@ def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
         for soort, muts in mutations_by_type.items():
             if soort == "FactuurVerstuurd":
                 # Sales invoices
-                result = process_sales_invoices(muts, company, cost_center, migration_doc)
+                relations_data = getattr(migration_doc, '_relations_data', {})
+                result = process_sales_invoices(muts, company, cost_center, migration_doc, relations_data)
                 stats["invoices_created"] += result.get("created", 0)
                 stats["errors"].extend(result.get("errors", []))
                 
@@ -193,7 +215,8 @@ def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
                     stats["invoices_created"] += result.get("created_purchase_invoices", 0)
                     stats["journal_entries_created"] += result.get("created_journal_entries", 0)
                 else:
-                    result = process_purchase_invoices(muts, company, cost_center, migration_doc)
+                    relations_data = getattr(migration_doc, '_relations_data', {})
+                    result = process_purchase_invoices(muts, company, cost_center, migration_doc, relations_data)
                     stats["invoices_created"] += result.get("created", 0)
                 stats["errors"].extend(result.get("errors", []))
                 
@@ -205,7 +228,8 @@ def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
                 
             elif soort == "FactuurbetalingOntvangen":
                 # Customer payments
-                result = process_customer_payments(muts, company, cost_center, migration_doc)
+                relations_data = getattr(migration_doc, '_relations_data', {})
+                result = process_customer_payments(muts, company, cost_center, migration_doc, relations_data)
                 stats["payments_processed"] += result.get("created", 0)
                 stats["errors"].extend(result.get("errors", []))
                 
@@ -217,7 +241,8 @@ def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
                 
             elif soort == "FactuurbetalingVerstuurd":
                 # Supplier payments
-                result = process_supplier_payments(muts, company, cost_center, migration_doc)
+                relations_data = getattr(migration_doc, '_relations_data', {})
+                result = process_supplier_payments(muts, company, cost_center, migration_doc, relations_data)
                 stats["payments_processed"] += result.get("created", 0)
                 stats["errors"].extend(result.get("errors", []))
                 
@@ -292,7 +317,7 @@ def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
             "error": str(e)
         }
 
-def process_sales_invoices(mutations, company, cost_center, migration_doc):
+def process_sales_invoices(mutations, company, cost_center, migration_doc, relation_data_map=None):
     """Process FactuurVerstuurd (sales invoices)"""
     created = 0
     errors = []
@@ -318,8 +343,9 @@ def process_sales_invoices(mutations, company, cost_center, migration_doc):
             customer_code = mut.get("RelatieCode")
             description = mut.get("Omschrijving", "")
             
-            # Get or create customer
-            customer = get_or_create_customer(customer_code, description)
+            # Get or create customer with relation data
+            relation_data = migration_doc._relations_data.get(str(customer_code)) if hasattr(migration_doc, '_relations_data') else None
+            customer = get_or_create_customer(customer_code, description, relation_data)
             
             # Create sales invoice
             si = frappe.new_doc("Sales Invoice")
@@ -398,7 +424,7 @@ def process_sales_invoices(mutations, company, cost_center, migration_doc):
     
     return {"created": created, "errors": errors, "skipped": skipped, "skip_reasons": skip_reasons}
 
-def process_customer_payments(mutations, company, cost_center, migration_doc):
+def process_customer_payments(mutations, company, cost_center, migration_doc, relation_data_map=None):
     """Process FactuurbetalingOntvangen (customer payments)"""
     created = 0
     errors = []
@@ -449,7 +475,10 @@ def process_customer_payments(mutations, company, cost_center, migration_doc):
             
             # Set descriptive title
             from .eboekhouden_payment_naming import get_payment_entry_title, enhance_payment_entry_fields
-            pe.title = get_payment_entry_title(mut, pe.party, "Receive")
+            # Get relation data for this customer
+            customer_code = mut.get("RelatieCode")
+            relation_data = relation_data_map.get(customer_code) if relation_data_map and customer_code else None
+            pe.title = get_payment_entry_title(mut, pe.party, "Receive", relation_data)
             pe = enhance_payment_entry_fields(pe, mut)
             pe.reference_no = mutation_nr  # Track mutation number
             
@@ -586,13 +615,12 @@ def parse_date(date_str):
     else:
         return date_str  # Already in correct format
 
-def get_or_create_customer(code, description=""):
-    """Get or create customer based on code and description"""
+def get_or_create_customer(code, description="", relation_data=None):
+    """Get or create customer based on code, description, and relation data"""
     if not code:
         # Try to extract from description
-        if description:
-            # Look for patterns in description
-            return "E-Boekhouden Import Customer"
+        if description and description.strip():
+            return create_customer_from_description(description)
         return "E-Boekhouden Import Customer"
     
     # Check if customer exists with this code
@@ -600,23 +628,108 @@ def get_or_create_customer(code, description=""):
     if customer:
         return customer
     
+    # Create meaningful customer name
+    customer_name = get_meaningful_customer_name(code, description, relation_data)
+    
     # Create new customer
     customer = frappe.new_doc("Customer")
-    customer.customer_name = f"Customer {code}"
+    customer.customer_name = customer_name
     customer.eboekhouden_relation_code = code
     customer.customer_group = frappe.db.get_value("Customer Group", {"is_group": 0}, "name") or "All Customer Groups"
-    customer.territory = frappe.db.get_value("Territory", {"is_group": 0}, "name") or "All Territories"
+    
+    # Use proper territory selection (avoid "Rest Of The World")
+    territory = get_proper_territory(relation_data)
+    customer.territory = territory
+    
     customer.insert(ignore_permissions=True)
     
     return customer.name
 
-def get_or_create_supplier(code, description=""):
-    """Get or create supplier based on code and description"""
+def get_meaningful_customer_name(code, description, relation_data):
+    """Create a meaningful customer name from available data"""
+    # Try to get actual customer name from relation data
+    if relation_data:
+        # Check for company name
+        if relation_data.get('Bedrijf') and relation_data['Bedrijf'].strip():
+            return relation_data['Bedrijf'].strip()
+        
+        # Check for contact name
+        if relation_data.get('Contactpersoon') and relation_data['Contactpersoon'].strip():
+            return relation_data['Contactpersoon'].strip()
+        
+        # Check for name field
+        if relation_data.get('Naam') and relation_data['Naam'].strip():
+            return relation_data['Naam'].strip()
+    
+    # Fall back to description if meaningful
+    if description and description.strip() and description.strip() != code:
+        clean_desc = description.strip()
+        # Avoid generic descriptions
+        if not any(word in clean_desc.lower() for word in ['customer', 'klant', 'debtor', 'debiteur']):
+            return clean_desc
+    
+    # Last resort: use code with prefix
+    return f"Customer {code}"
+
+def create_customer_from_description(description):
+    """Create customer from description when no code is available"""
+    clean_desc = description.strip()
+    
+    # Check if this customer already exists
+    existing = frappe.db.get_value("Customer", {"customer_name": clean_desc}, "name")
+    if existing:
+        return existing
+    
+    # Create new customer
+    customer = frappe.new_doc("Customer")
+    customer.customer_name = clean_desc
+    customer.customer_group = frappe.db.get_value("Customer Group", {"is_group": 0}, "name") or "All Customer Groups"
+    customer.territory = get_proper_territory()
+    customer.insert(ignore_permissions=True)
+    
+    return customer.name
+
+def get_proper_territory(relation_data=None):
+    """Get appropriate territory, avoiding 'Rest Of The World'"""
+    # Try to determine territory from relation data
+    if relation_data:
+        country = relation_data.get('Land', '').strip()
+        if country:
+            # Check if territory exists for this country
+            territory = frappe.db.get_value("Territory", {"territory_name": country}, "name")
+            if territory:
+                return territory
+    
+    # Get the company's home country territory
+    default_country = frappe.db.get_default("country")
+    if default_country:
+        home_territory = frappe.db.get_value("Territory", {"territory_name": default_country}, "name")
+        if home_territory:
+            return home_territory
+    
+    # Get territories, preferring specific ones over "Rest Of The World"
+    territories = frappe.get_all("Territory", 
+        filters={"is_group": 0}, 
+        fields=["name", "territory_name"],
+        order_by="territory_name")
+    
+    # Filter out "Rest Of The World" and similar generic territories
+    preferred_territories = [t for t in territories 
+        if not any(word in t.territory_name.lower() 
+            for word in ['rest', 'world', 'other', 'misc', 'unknown'])]
+    
+    if preferred_territories:
+        return preferred_territories[0].name
+    
+    # Fall back to any territory if needed
+    return territories[0].name if territories else "All Territories"
+
+def get_or_create_supplier(code, description="", relation_data=None):
+    """Get or create supplier based on code, description, and relation data"""
     if not code:
         # Try to extract from description
-        if description:
-            # Look for patterns in description
-            return "E-Boekhouden Import Supplier"
+        if description and description.strip():
+            return create_supplier_from_description(description)
         return "E-Boekhouden Import Supplier"
     
     # Check if supplier exists with this code
@@ -624,10 +737,56 @@ def get_or_create_supplier(code, description=""):
     if supplier:
         return supplier
     
+    # Create meaningful supplier name
+    supplier_name = get_meaningful_supplier_name(code, description, relation_data)
+    
     # Create new supplier
     supplier = frappe.new_doc("Supplier")
-    supplier.supplier_name = f"Supplier {code}"
+    supplier.supplier_name = supplier_name
     supplier.eboekhouden_relation_code = code
+    supplier.supplier_group = frappe.db.get_value("Supplier Group", {"is_group": 0}, "name") or "All Supplier Groups"
+    supplier.insert(ignore_permissions=True)
+    
+    return supplier.name
+
+def get_meaningful_supplier_name(code, description, relation_data):
+    """Create a meaningful supplier name from available data"""
+    # Try to get actual supplier name from relation data
+    if relation_data:
+        # Check for company name
+        if relation_data.get('Bedrijf') and relation_data['Bedrijf'].strip():
+            return relation_data['Bedrijf'].strip()
+        
+        # Check for contact name
+        if relation_data.get('Contactpersoon') and relation_data['Contactpersoon'].strip():
+            return relation_data['Contactpersoon'].strip()
+        
+        # Check for name field
+        if relation_data.get('Naam') and relation_data['Naam'].strip():
+            return relation_data['Naam'].strip()
+    
+    # Fall back to description if meaningful
+    if description and description.strip() and description.strip() != code:
+        clean_desc = description.strip()
+        # Avoid generic descriptions
+        if not any(word in clean_desc.lower() for word in ['supplier', 'leverancier', 'creditor', 'crediteur']):
+            return clean_desc
+    
+    # Last resort: use code with prefix
+    return f"Supplier {code}"
+
+def create_supplier_from_description(description):
+    """Create supplier from description when no code is available"""
+    clean_desc = description.strip()
+    
+    # Check if this supplier already exists
+    existing = frappe.db.get_value("Supplier", {"supplier_name": clean_desc}, "name")
+    if existing:
+        return existing
+    
+    # Create new supplier
+    supplier = frappe.new_doc("Supplier")
+    supplier.supplier_name = clean_desc
     supplier.supplier_group = frappe.db.get_value("Supplier Group", {"is_group": 0}, "name") or "All Supplier Groups"
     supplier.insert(ignore_permissions=True)
     
@@ -812,7 +971,11 @@ def create_payment_journal_entry(mut, company, cost_center, party_type):
                 "credit_in_account_currency": abs(total_amount),
                 "cost_center": cost_center,
                 "party_type": party_type,
-                "party": get_or_create_customer(mut.get("RelatieCode"), mut.get("Omschrijving", ""))
+                "party": get_or_create_customer(
+                    mut.get("RelatieCode"), 
+                    mut.get("Omschrijving", ""),
+                    migration_doc._relations_data.get(str(mut.get("RelatieCode"))) if hasattr(migration_doc, '_relations_data') else None
+                )
             })
         else:
             party_account = frappe.db.get_value("Company", company, "default_payable_account")
@@ -822,7 +985,11 @@ def create_payment_journal_entry(mut, company, cost_center, party_type):
                 "debit_in_account_currency": abs(total_amount),
                 "cost_center": cost_center,
                 "party_type": party_type,
-                "party": get_or_create_supplier(mut.get("RelatieCode"), mut.get("Omschrijving", ""))
+                "party": get_or_create_supplier(
+                    mut.get("RelatieCode"), 
+                    mut.get("Omschrijving", ""),
+                    migration_doc._relations_data.get(str(mut.get("RelatieCode"))) if hasattr(migration_doc, '_relations_data') else None
+                )
             })
             je.append("accounts", {
                 "account": bank_account,
@@ -982,7 +1149,7 @@ def fix_account_type(account_code, company, target_type):
     if account and account.account_type != target_type:
         frappe.db.set_value("Account", account.name, "account_type", target_type)
 
-def process_purchase_invoices(mutations, company, cost_center, migration_doc):
+def process_purchase_invoices(mutations, company, cost_center, migration_doc, relation_data_map=None):
     """Process FactuurOntvangen (purchase invoices)"""
     created = 0
     errors = []
@@ -1008,8 +1175,9 @@ def process_purchase_invoices(mutations, company, cost_center, migration_doc):
             supplier_code = mut.get("RelatieCode")
             description = mut.get("Omschrijving", "")
             
-            # Get or create supplier
-            supplier = get_or_create_supplier(supplier_code, description)
+            # Get or create supplier with relation data for meaningful names
+            relation_data = relation_data_map.get(supplier_code) if supplier_code else None
+            supplier = get_or_create_supplier(supplier_code, description, relation_data)
             
             # Create purchase invoice
             pi = frappe.new_doc("Purchase Invoice")
@@ -1091,7 +1259,7 @@ def process_purchase_invoices(mutations, company, cost_center, migration_doc):
     
     return {"created": created, "errors": errors, "skipped": skipped, "skip_reasons": skip_reasons}
 
-def process_supplier_payments(mutations, company, cost_center, migration_doc):
+def process_supplier_payments(mutations, company, cost_center, migration_doc, relation_data_map=None):
     """Process FactuurbetalingVerstuurd (supplier payments)"""
     created = 0
     errors = []
@@ -1164,7 +1332,10 @@ def process_supplier_payments(mutations, company, cost_center, migration_doc):
             
             # Set descriptive title
             from .eboekhouden_payment_naming import get_payment_entry_title, enhance_payment_entry_fields
-            pe.title = get_payment_entry_title(mut, pe.party, "Pay")
+            # Get relation data for this supplier
+            supplier_code = mut.get("RelatieCode")
+            relation_data = relation_data_map.get(supplier_code) if relation_data_map and supplier_code else None
+            pe.title = get_payment_entry_title(mut, pe.party, "Pay", relation_data)
             pe = enhance_payment_entry_fields(pe, mut)
             
             # Get amount from MutatieRegels

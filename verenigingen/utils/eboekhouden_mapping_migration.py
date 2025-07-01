@@ -93,8 +93,8 @@ def create_purchase_invoice_from_mutation(mut, company, cost_center):
         description = mut.get("Omschrijving", "")
         invoice_no = mut.get("Factuurnummer")
         
-        # Get or create supplier
-        supplier = get_or_create_supplier(supplier_code, description)
+        # Get or create supplier with relation data for meaningful names
+        supplier = get_or_create_supplier(supplier_code, description, relation_data=None)
         
         # Create purchase invoice
         pi = frappe.new_doc("Purchase Invoice")
@@ -200,7 +200,7 @@ def create_journal_entry_from_mutation(mut, company, cost_center, transaction_ca
                 "credit_in_account_currency": total_amount,
                 "cost_center": cost_center,
                 "party_type": "Supplier" if supplier_code else None,
-                "party": get_or_create_supplier(supplier_code, description) if supplier_code else None,
+                "party": get_or_create_supplier(supplier_code, description, relation_data=None) if supplier_code else None,
                 "user_remark": description
             })
             

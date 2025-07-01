@@ -57,7 +57,7 @@ def create_unreconciled_payment_entry(mutation, company, cost_center, payment_ty
             description = mutation.get("Omschrijving", "")
             
             if relation_code:
-                pe.party = get_or_create_customer(relation_code, description)
+                pe.party = get_or_create_customer(relation_code, description, relation_data=None)
             else:
                 # Try to extract party info from description
                 # For SEPA transfers, the description often contains the party name
@@ -79,7 +79,7 @@ def create_unreconciled_payment_entry(mutation, company, cost_center, payment_ty
                         customer.insert(ignore_permissions=True)
                         pe.party = customer.name
                 else:
-                    pe.party = get_or_create_customer("UNMATCHED", "Unmatched Customer Payment")
+                    pe.party = get_or_create_customer("UNMATCHED", "Unmatched Customer Payment", relation_data=None)
                     
         else:  # Supplier
             pe.payment_type = "Pay"
@@ -90,7 +90,7 @@ def create_unreconciled_payment_entry(mutation, company, cost_center, payment_ty
             description = mutation.get("Omschrijving", "")
             
             if relation_code:
-                pe.party = get_or_create_supplier(relation_code, description)
+                pe.party = get_or_create_supplier(relation_code, description, relation_data=None)
             else:
                 # Try to extract party info from description
                 if description and len(description) > 10:
@@ -109,7 +109,7 @@ def create_unreconciled_payment_entry(mutation, company, cost_center, payment_ty
                         supplier.insert(ignore_permissions=True)
                         pe.party = supplier.name
                 else:
-                    pe.party = get_or_create_supplier("UNMATCHED", "Unmatched Supplier Payment")
+                    pe.party = get_or_create_supplier("UNMATCHED", "Unmatched Supplier Payment", relation_data=None)
         
         # Common fields
         pe.company = company
@@ -117,7 +117,7 @@ def create_unreconciled_payment_entry(mutation, company, cost_center, payment_ty
         pe.cost_center = cost_center
         
         # Set title with clear indication that it's unreconciled
-        original_title = get_payment_entry_title(mutation, pe.party, pe.payment_type)
+        original_title = get_payment_entry_title(mutation, pe.party, pe.payment_type, relation_data=None)
         if hasattr(pe, 'title'):
             pe.title = f"[UNRECONCILED] {original_title}"
         

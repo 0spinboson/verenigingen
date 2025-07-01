@@ -5,9 +5,10 @@ Provides better naming schemes for Payment Entries and Journal Entries
 
 import frappe
 from frappe.utils import formatdate, flt
+import re
 
 
-def get_payment_entry_title(mutation, party_name, payment_type):
+def get_payment_entry_title(mutation, party_name, payment_type, relation_data=None):
     """
     Generate a descriptive title for Payment Entry
     
@@ -22,30 +23,111 @@ def get_payment_entry_title(mutation, party_name, payment_type):
         date = date_str.split("T")[0] if "T" in date_str else date_str
         parts.append(date)
     
-    # Party name (shortened if too long)
-    if party_name:
-        short_name = party_name[:30] + "..." if len(party_name) > 30 else party_name
+    # Enhanced party name resolution
+    enhanced_party_name = get_enhanced_party_name(party_name, mutation, relation_data)
+    if enhanced_party_name:
+        short_name = enhanced_party_name[:30] + "..." if len(enhanced_party_name) > 30 else enhanced_party_name
         parts.append(short_name)
+    
+    # Payment type indicator
+    type_indicators = {
+        "Receive": "⬅",  # Money coming in
+        "Pay": "➡",      # Money going out
+    }
+    if payment_type in type_indicators:
+        parts.append(type_indicators[payment_type])
     
     # Invoice number
     invoice_no = mutation.get("Factuurnummer")
     if invoice_no:
-        parts.append(f"INV-{invoice_no}")
+        parts.append(f"#{invoice_no}")
     
-    # Amount
+    # Amount with currency
     amount = 0
     for regel in mutation.get("MutatieRegels", []):
         amount += abs(float(regel.get("BedragInvoer", 0) or regel.get("BedragInclBTW", 0)))
     if amount:
         parts.append(f"€{amount:,.2f}")
     
-    # Description (shortened)
-    description = mutation.get("Omschrijving", "")
+    # Description (shortened and cleaned)
+    description = get_meaningful_description(mutation)
     if description:
-        short_desc = description[:40] + "..." if len(description) > 40 else description
+        short_desc = description[:35] + "..." if len(description) > 35 else description
         parts.append(short_desc)
     
     return " - ".join(parts)
+
+def get_enhanced_party_name(party_name, mutation, relation_data=None):
+    """Get the most meaningful party name from available data"""
+    # If we have relation data, use it to get a better name
+    if relation_data:
+        # Try company name first
+        if relation_data.get('Bedrijf') and relation_data['Bedrijf'].strip():
+            return relation_data['Bedrijf'].strip()
+        
+        # Try contact person
+        if relation_data.get('Contactpersoon') and relation_data['Contactpersoon'].strip():
+            return relation_data['Contactpersoon'].strip()
+        
+        # Try name field
+        if relation_data.get('Naam') and relation_data['Naam'].strip():
+            return relation_data['Naam'].strip()
+    
+    # Try to extract meaningful name from mutation description
+    description = mutation.get("Omschrijving", "")
+    if description:
+        # Look for patterns like "Payment from ABC Company" or "Betaling van XYZ"
+        import re
+        patterns = [
+            r'(?:van|from|to|naar)\s+([A-Za-z][A-Za-z\s&\.\-]{2,30})',
+            r'([A-Za-z][A-Za-z\s&\.\-]{3,30})\s+(?:payment|betaling|invoice|factuur)',
+        ]
+        
+        for pattern in patterns:
+            match = re.search(pattern, description, re.IGNORECASE)
+            if match:
+                extracted_name = match.group(1).strip()
+                # Avoid generic terms
+                if not any(word in extracted_name.lower() 
+                          for word in ['payment', 'betaling', 'invoice', 'factuur', 'customer', 'supplier']):
+                    return extracted_name
+    
+    # Fall back to provided party name if it's meaningful
+    if party_name and party_name.strip():
+        # Check if it's a generic name
+        if not re.match(r'^(Customer|Supplier)\s+\d+$', party_name):
+            return party_name.strip()
+    
+    # Extract relation code for display
+    relation_code = mutation.get("RelatieCode")
+    if relation_code:
+        return f"Relation {relation_code}"
+    
+    return party_name or "Unknown Party"
+
+def get_meaningful_description(mutation):
+    """Extract the most meaningful description from mutation data"""
+    description = mutation.get("Omschrijving", "").strip()
+    
+    if not description:
+        return ""
+    
+    # Clean up common redundant phrases
+    cleanup_patterns = [
+        r'^(Payment|Betaling|Invoice|Factuur)\s+(from|van|to|naar)\s+',
+        r'\s+\(.*\)$',  # Remove trailing parentheses
+        r'^Mutatie\s+\d+:\s*',  # Remove mutation number prefix
+    ]
+    
+    cleaned = description
+    for pattern in cleanup_patterns:
+        cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE).strip()
+    
+    # If nothing meaningful left, return original
+    if len(cleaned) < 3:
+        return description
+    
+    return cleaned
 
 
 def get_journal_entry_title(mutation, transaction_type):
