@@ -58,7 +58,7 @@ class TestJavaScriptAPIIntegration(VereningingenIntegrationTestCase):
         
         # API call from JavaScript
         result = frappe.call(
-            "vereiningen.verenigingen.doctype.volunteer.volunteer.Volunteer.add_activity",
+            "verenigingen.verenigingen.doctype.volunteer.volunteer.Volunteer.add_activity",
             doc=volunteer.as_dict(),
             **activity_data
         )
@@ -70,7 +70,7 @@ class TestJavaScriptAPIIntegration(VereningingenIntegrationTestCase):
         # Simulate "End Activity" button click
         activity = volunteer.activities[0]
         end_result = frappe.call(
-            "vereiningen.vereiningen.doctype.volunteer.volunteer.Volunteer.end_activity",
+            "verenigingen.verenigingen.doctype.volunteer.volunteer.Volunteer.end_activity",
             doc=volunteer.as_dict(),
             activity_name=activity.name,
             end_time=frappe.utils.now_datetime()
@@ -82,7 +82,7 @@ class TestJavaScriptAPIIntegration(VereningingenIntegrationTestCase):
         
         # Simulate "View Timeline" button click
         history = frappe.call(
-            "vereiningen.verenigingen.doctype.volunteer.volunteer.Volunteer.get_volunteer_history",
+            "verenigingen.verenigingen.doctype.volunteer.volunteer.Volunteer.get_volunteer_history",
             doc=volunteer.as_dict()
         )
         
@@ -113,7 +113,7 @@ class TestJavaScriptAPIIntegration(VereningingenIntegrationTestCase):
         for i, member in enumerate(members):
             roles = ["President", "Secretary", "Treasurer"]
             result = frappe.call(
-                "vereiningen.vereiningen.doctype.chapter.chapter.Chapter.add_board_member",
+                "verenigingen.verenigingen.doctype.chapter.chapter.Chapter.add_board_member",
                 doc=chapter.as_dict(),
                 member=member.name,
                 role=roles[i],
@@ -130,7 +130,7 @@ class TestJavaScriptAPIIntegration(VereningingenIntegrationTestCase):
             
         # Simulate role transition for President
         transition_result = frappe.call(
-            "vereiningen.vereiningen.doctype.chapter.chapter.Chapter.transition_board_role",
+            "verenigingen.verenigingen.doctype.chapter.chapter.Chapter.transition_board_role",
             doc=chapter.as_dict(),
             member=members[0].name,
             new_role="Board Member",
@@ -145,7 +145,7 @@ class TestJavaScriptAPIIntegration(VereningingenIntegrationTestCase):
         
         # Simulate "View Board History" button click
         history = frappe.call(
-            "vereiningen.verenigingen.doctype.chapter.chapter.get_chapter_board_history",
+            "verenigingen.verenigingen.doctype.chapter.chapter.get_chapter_board_history",
             chapter_name=chapter.name,
             include_inactive=True
         )
@@ -155,7 +155,7 @@ class TestJavaScriptAPIIntegration(VereningingenIntegrationTestCase):
         
         # Simulate "Sync with Volunteer System" button click
         sync_result = frappe.call(
-            "vereiningen.verenigingen.doctype.volunteer.volunteer.sync_chapter_board_members",
+            "verenigingen.verenigingen.doctype.volunteer.volunteer.sync_chapter_board_members",
             chapter_name=chapter.name
         )
         
@@ -180,7 +180,7 @@ class TestJavaScriptAPIIntegration(VereningingenIntegrationTestCase):
         
         # Simulate "Create Customer" button click
         customer_result = frappe.call(
-            "vereiningen.vereiningen.doctype.member.member.Member.create_customer",
+            "verenigingen.verenigingen.doctype.member.member.Member.create_customer",
             doc=member.as_dict()
         )
         
@@ -191,7 +191,7 @@ class TestJavaScriptAPIIntegration(VereningingenIntegrationTestCase):
         
         # Simulate "Create User" button click
         user_result = frappe.call(
-            "vereiningen.vereiningen.doctype.member.member.Member.create_user",
+            "verenigingen.verenigingen.doctype.member.member.Member.create_user",
             doc=member.as_dict()
         )
         
@@ -202,7 +202,7 @@ class TestJavaScriptAPIIntegration(VereningingenIntegrationTestCase):
         
         # Simulate "Create Volunteer" button click
         volunteer_result = frappe.call(
-            "vereiningen.vereiningen.doctype.volunteer.volunteer.create_volunteer_from_member",
+            "verenigingen.verenigingen.doctype.volunteer.volunteer.create_volunteer_from_member",
             member_name=member.name
         )
         
@@ -226,7 +226,7 @@ class TestJavaScriptAPIIntegration(VereningingenIntegrationTestCase):
         
         # Simulate "Process Payment" button click - validate mandate
         validation_result = frappe.call(
-            "vereiningen.vereiningen.doctype.member.member.validate_mandate_creation",
+            "verenigingen.verenigingen.doctype.member.member.validate_mandate_creation",
             member_name=member.name
         )
         
@@ -246,7 +246,7 @@ class TestJavaScriptAPIIntegration(VereningingenIntegrationTestCase):
         
         # Verify member has active mandate
         active_mandate = frappe.call(
-            "vereiningen.verenigingen.doctype.member.member.Member.get_active_sepa_mandate",
+            "verenigingen.verenigingen.doctype.member.member.Member.get_active_sepa_mandate",
             doc=member.as_dict()
         )
         
@@ -319,7 +319,7 @@ class TestJavaScriptAPIIntegration(VereningingenIntegrationTestCase):
         
         # Get current fee
         current_fee = frappe.call(
-            "vereiningen.verenigingen.doctype.member.member.Member.get_current_membership_fee",
+            "verenigingen.verenigingen.doctype.member.member.Member.get_current_membership_fee",
             doc=member.as_dict()
         )
         
@@ -332,7 +332,7 @@ class TestJavaScriptAPIIntegration(VereningingenIntegrationTestCase):
         
         # Get display fee (should show override)
         display_fee = frappe.call(
-            "vereiningen.vereiningen.doctype.member.member.Member.get_display_membership_fee",
+            "verenigingen.verenigingen.doctype.member.member.Member.get_display_membership_fee",
             doc=member.as_dict()
         )
         
@@ -365,7 +365,7 @@ class TestJavaScriptAPIIntegration(VereningingenIntegrationTestCase):
         
         # Get skills by category
         categorized_skills = frappe.call(
-            "vereiningen.vereiningen.doctype.volunteer.volunteer.Volunteer.get_skills_by_category",
+            "verenigingen.verenigingen.doctype.volunteer.volunteer.Volunteer.get_skills_by_category",
             doc=volunteer.as_dict()
         )
         
@@ -387,7 +387,7 @@ class TestJavaScriptAPIIntegration(VereningingenIntegrationTestCase):
         # Attempt to create user should fail gracefully
         with self.assertRaises(Exception):
             frappe.call(
-                "vereiningen.vereiningen.doctype.member.member.Member.create_user",
+                "verenigingen.verenigingen.doctype.member.member.Member.create_user",
                 doc=member.as_dict()
             )
             
@@ -397,7 +397,7 @@ class TestJavaScriptAPIIntegration(VereningingenIntegrationTestCase):
         
         # Now should succeed
         user_result = frappe.call(
-            "vereiningen.vereiningen.doctype.member.member.Member.create_user",
+            "verenigingen.verenigingen.doctype.member.member.Member.create_user",
             doc=member.as_dict()
         )
         
@@ -427,7 +427,7 @@ class TestJavaScriptAPIIntegration(VereningingenIntegrationTestCase):
         for member in members:
             try:
                 frappe.call(
-                    "vereiningen.verenigingen.doctype.chapter.chapter.Chapter.add_board_member",
+                    "verenigingen.verenigingen.doctype.chapter.chapter.Chapter.add_board_member",
                     doc=chapter.as_dict(),
                     member=member.name,
                     role="Board Member",

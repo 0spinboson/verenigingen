@@ -72,7 +72,7 @@ class TestMemberWhitelistMethods(VereningingenUnitTestCase):
         
         # Test via API call (simulating JavaScript)
         customer_name = frappe.call(
-            "vereiningen.vereiningen.doctype.member.member.Member.create_customer",
+            "verenigingen.verenigingen.doctype.member.member.Member.create_customer",
             doc=member.as_dict()
         )
         
@@ -142,7 +142,7 @@ class TestMemberWhitelistMethods(VereningingenUnitTestCase):
         
         # Test via API call
         active_mandate = frappe.call(
-            "vereiningen.verenigingen.doctype.member.member.Member.get_active_sepa_mandate",
+            "verenigingen.verenigingen.doctype.member.member.Member.get_active_sepa_mandate",
             doc=member.as_dict()
         )
         
@@ -183,7 +183,7 @@ class TestMemberWhitelistMethods(VereningingenUnitTestCase):
             
         # Test via API call
         donations = frappe.call(
-            "vereiningen.verenigingen.doctype.member.member.Member.get_linked_donations",
+            "verenigingen.verenigingen.doctype.member.member.Member.get_linked_donations",
             doc=member.as_dict()
         )
         
@@ -209,7 +209,7 @@ class TestMemberWhitelistMethods(VereningingenUnitTestCase):
         
         # Test via API call
         fee = frappe.call(
-            "vereiningen.verenigingen.doctype.member.member.Member.get_current_membership_fee",
+            "verenigingen.verenigingen.doctype.member.member.Member.get_current_membership_fee",
             doc=member.as_dict()
         )
         
@@ -227,7 +227,7 @@ class TestMemberWhitelistMethods(VereningingenUnitTestCase):
         
         # Test via API call
         display_fee = frappe.call(
-            "vereiningen.vereiningen.doctype.member.member.Member.get_display_membership_fee",
+            "verenigingen.verenigingen.doctype.member.member.Member.get_display_membership_fee",
             doc=member.as_dict()
         )
         
@@ -246,7 +246,7 @@ class TestMemberWhitelistMethods(VereningingenUnitTestCase):
         
         # Test via API call
         result = frappe.call(
-            "vereiningen.vereiningen.doctype.member.member.Member.reject_application",
+            "verenigingen.verenigingen.doctype.member.member.Member.reject_application",
             doc=member.as_dict(),
             rejection_reason="Incomplete documentation"
         )
@@ -275,7 +275,7 @@ class TestMemberWhitelistMethods(VereningingenUnitTestCase):
         
         # Test via API call
         result = frappe.call(
-            "vereiningen.vereiningen.doctype.member.member.Member.update_membership_duration",
+            "verenigingen.verenigingen.doctype.member.member.Member.update_membership_duration",
             doc=member.as_dict()
         )
         
@@ -295,7 +295,7 @@ class TestMemberWhitelistMethods(VereningingenUnitTestCase):
         
         # Test via API call
         member_id = frappe.call(
-            "vereiningen.verenigingen.doctype.member.member.Member.ensure_member_id",
+            "verenigingen.verenigingen.doctype.member.member.Member.ensure_member_id",
             doc=member.as_dict()
         )
         
@@ -331,7 +331,7 @@ class TestMemberWhitelistMethods(VereningingenUnitTestCase):
         
         # Test via API call
         html = frappe.call(
-            "vereiningen.vereiningen.doctype.member.member.Member.get_address_members_html",
+            "verenigingen.verenigingen.doctype.member.member.Member.get_address_members_html",
             doc=member2.as_dict()
         )
         
@@ -348,7 +348,7 @@ class TestMemberWhitelistMethods(VereningingenUnitTestCase):
         
         # Test is_chapter_management_enabled
         enabled = frappe.call(
-            "vereiningen.verenigingen.doctype.member.member.is_chapter_management_enabled"
+            "verenigingen.verenigingen.doctype.member.member.is_chapter_management_enabled"
         )
         self.assertIsInstance(enabled, bool)
         
@@ -372,7 +372,7 @@ class TestMemberWhitelistMethods(VereningingenUnitTestCase):
         self.track_doc("Member", new_member.name)
         
         member_id = frappe.call(
-            "vereiningen.verenigingen.doctype.member.member.assign_member_id",
+            "verenigingen.verenigingen.doctype.member.member.assign_member_id",
             member_name=new_member.name
         )
         self.assertTrue(member_id)
@@ -396,7 +396,7 @@ class TestMemberWhitelistMethods(VereningingenUnitTestCase):
         
         # Test derive_bic_from_iban
         bic = frappe.call(
-            "vereiningen.verenigingen.doctype.member.member.derive_bic_from_iban",
+            "verenigingen.verenigingen.doctype.member.member.derive_bic_from_iban",
             iban=member.iban
         )
         self.assertEqual(bic, "ABNANL2A")  # Expected BIC for this IBAN
@@ -418,7 +418,7 @@ class TestMemberWhitelistMethods(VereningingenUnitTestCase):
         
         # Test getting current subscription details
         details = frappe.call(
-            "vereiningen.vereiningen.doctype.member.member.Member.get_current_subscription_details",
+            "verenigingen.verenigingen.doctype.member.member.Member.get_current_subscription_details",
             doc=member.as_dict()
         )
         
@@ -496,7 +496,7 @@ class TestMemberWhitelistMethods(VereningingenUnitTestCase):
         
         # Create mandate via API
         mandate_result = frappe.call(
-            "vereiningen.verenigingen.doctype.member.member.create_and_link_mandate_enhanced",
+            "verenigingen.verenigingen.doctype.member.member.create_and_link_mandate_enhanced",
             member_name=member.name,
             bank_account_name=member.bank_account_name,
             iban=member.iban
@@ -595,7 +595,7 @@ class TestMemberWhitelistMethods(VereningingenUnitTestCase):
         
         # Test customer creation idempotency
         customer1 = frappe.call(
-            "vereiningen.verenigingen.doctype.member.member.Member.create_customer",
+            "verenigingen.verenigingen.doctype.member.member.Member.create_customer",
             doc=member.as_dict()
         )
         

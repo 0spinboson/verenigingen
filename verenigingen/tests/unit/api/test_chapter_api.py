@@ -67,7 +67,7 @@ class TestChapterWhitelistMethods(VereningingenUnitTestCase):
         
         # Test via API call (simulating JavaScript)
         result = frappe.call(
-            "vereiningen.verenigingen.doctype.chapter.chapter.Chapter.add_board_member",
+            "verenigingen.verenigingen.doctype.chapter.chapter.Chapter.add_board_member",
             doc=chapter.as_dict(),
             member=member.name,
             role="Board Member",
@@ -438,7 +438,7 @@ class TestChapterWhitelistMethods(VereningingenUnitTestCase):
         
         # Leave chapter
         result = frappe.call(
-            "verenigingen.vereiningen.doctype.chapter.chapter.leave_chapter",
+            "verenigingen.verenigingen.doctype.chapter.chapter.leave_chapter",
             member_name=member.name,
             chapter_name=chapter.name
         )

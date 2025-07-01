@@ -69,7 +69,7 @@ class TestVolunteerWhitelistMethods(VereningingenUnitTestCase):
         
         # Test via API call (simulating JavaScript)
         result = frappe.call(
-            "vereiningen.verenigingen.doctype.volunteer.volunteer.Volunteer.add_activity",
+            "verenigingen.verenigingen.doctype.volunteer.volunteer.Volunteer.add_activity",
             doc=volunteer.as_dict(),
             activity_type="Training",
             description="Test training session",
@@ -93,7 +93,7 @@ class TestVolunteerWhitelistMethods(VereningingenUnitTestCase):
         # Test invalid hours
         with self.assertRaises(frappe.ValidationError):
             frappe.call(
-                "vereiningen.verenigingen.doctype.volunteer.volunteer.Volunteer.add_activity",
+                "verenigingen.verenigingen.doctype.volunteer.volunteer.Volunteer.add_activity",
                 doc=volunteer.as_dict(),
                 activity_type="Training", 
                 description="Invalid hours",
@@ -104,7 +104,7 @@ class TestVolunteerWhitelistMethods(VereningingenUnitTestCase):
         # Test missing required fields
         with self.assertRaises(Exception):
             frappe.call(
-                "vereiningen.verenigingen.doctype.volunteer.volunteer.Volunteer.add_activity",
+                "verenigingen.verenigingen.doctype.volunteer.volunteer.Volunteer.add_activity",
                 doc=volunteer.as_dict(),
                 activity_type="",  # Missing activity type
                 description="Missing type",
@@ -118,7 +118,7 @@ class TestVolunteerWhitelistMethods(VereningingenUnitTestCase):
         
         # First add an activity
         frappe.call(
-            "vereiningen.verenigingen.doctype.volunteer.volunteer.Volunteer.add_activity",
+            "verenigingen.verenigingen.doctype.volunteer.volunteer.Volunteer.add_activity",
             doc=volunteer.as_dict(),
             activity_type="Event Support",
             description="Test event",
@@ -131,7 +131,7 @@ class TestVolunteerWhitelistMethods(VereningingenUnitTestCase):
         
         # End the activity
         result = frappe.call(
-            "vereiningen.verenigingen.doctype.volunteer.volunteer.Volunteer.end_activity",
+            "verenigingen.verenigingen.doctype.volunteer.volunteer.Volunteer.end_activity",
             doc=volunteer.as_dict(),
             activity_name=activity_name,
             end_time=now_datetime()
@@ -150,7 +150,7 @@ class TestVolunteerWhitelistMethods(VereningingenUnitTestCase):
         # Add multiple activities
         for i in range(3):
             frappe.call(
-                "vereiningen.verenigingen.doctype.volunteer.volunteer.Volunteer.add_activity",
+                "verenigingen.verenigingen.doctype.volunteer.volunteer.Volunteer.add_activity",
                 doc=volunteer.as_dict(),
                 activity_type="Training",
                 description=f"Activity {i+1}",
@@ -162,7 +162,7 @@ class TestVolunteerWhitelistMethods(VereningingenUnitTestCase):
         
         # Get history
         history = frappe.call(
-            "vereiningen.verenigingen.doctype.volunteer.volunteer.Volunteer.get_volunteer_history",
+            "verenigingen.verenigingen.doctype.volunteer.volunteer.Volunteer.get_volunteer_history",
             doc=volunteer.as_dict()
         )
         
@@ -190,7 +190,7 @@ class TestVolunteerWhitelistMethods(VereningingenUnitTestCase):
         
         # Get skills by category
         skills = frappe.call(
-            "vereiningen.verenigingen.doctype.volunteer.volunteer.Volunteer.get_skills_by_category",
+            "verenigingen.verenigingen.doctype.volunteer.volunteer.Volunteer.get_skills_by_category",
             doc=volunteer.as_dict()
         )
         
@@ -226,7 +226,7 @@ class TestVolunteerWhitelistMethods(VereningingenUnitTestCase):
         
         # Calculate total hours
         total_hours = frappe.call(
-            "vereiningen.verenigingen.doctype.volunteer.volunteer.Volunteer.calculate_total_hours",
+            "verenigingen.verenigingen.doctype.volunteer.volunteer.Volunteer.calculate_total_hours",
             doc=volunteer.as_dict()
         )
         
@@ -239,7 +239,7 @@ class TestVolunteerWhitelistMethods(VereningingenUnitTestCase):
         
         # Create minimal employee
         employee_name = frappe.call(
-            "vereiningen.verenigingen.doctype.volunteer.volunteer.Volunteer.create_minimal_employee",
+            "verenigingen.verenigingen.doctype.volunteer.volunteer.Volunteer.create_minimal_employee",
             doc=volunteer.as_dict()
         )
         
@@ -252,7 +252,7 @@ class TestVolunteerWhitelistMethods(VereningingenUnitTestCase):
         
         # Test idempotency - calling again should return same employee
         employee_name_2 = frappe.call(
-            "vereiningen.verenigingen.doctype.volunteer.volunteer.Volunteer.create_minimal_employee",
+            "verenigingen.verenigingen.doctype.volunteer.volunteer.Volunteer.create_minimal_employee",
             doc=volunteer.as_dict()
         )
         self.assertEqual(employee_name, employee_name_2)
@@ -350,7 +350,7 @@ class TestVolunteerWhitelistMethods(VereningingenUnitTestCase):
         
         # Get aggregated assignments
         assignments = frappe.call(
-            "vereiningen.verenigingen.doctype.volunteer.volunteer.Volunteer.get_aggregated_assignments",
+            "verenigingen.verenigingen.doctype.volunteer.volunteer.Volunteer.get_aggregated_assignments",
             doc=volunteer.as_dict()
         )
         
