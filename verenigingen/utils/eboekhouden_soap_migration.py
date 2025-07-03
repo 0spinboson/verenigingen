@@ -449,18 +449,15 @@ def process_sales_invoices(mutations, company, cost_center, migration_doc, relat
             for regel in mut.get("MutatieRegels", []):
                 amount = float(regel.get("BedragExclBTW", 0))
                 if amount > 0:
-                    si.append("items", {
-                        "item_code": get_or_create_item(
-                            regel.get("TegenrekeningCode"), 
-                            company, 
-                            "Sales",
-                            mut.get("Omschrijving")
-                        ),
-                        "qty": 1,
-                        "rate": amount,
-                        "income_account": get_account_by_code(regel.get("TegenrekeningCode"), company),
-                        "cost_center": cost_center
-                    })
+                    from verenigingen.utils.smart_tegenrekening_mapper import create_invoice_line_for_tegenrekening
+                    
+                    line_dict = create_invoice_line_for_tegenrekening(
+                        tegenrekening_code=regel.get("TegenrekeningCode"),
+                        amount=amount,
+                        description=regel.get("Omschrijving", "") or mut.get("Omschrijving", ""),
+                        transaction_type="sales"
+                    )
+                    si.append("items", line_dict)
             
             si.insert(ignore_permissions=True)
             si.submit()
@@ -1272,18 +1269,15 @@ def process_purchase_invoices(mutations, company, cost_center, migration_doc, re
             for regel in mut.get("MutatieRegels", []):
                 amount = float(regel.get("BedragExclBTW", 0))
                 if amount > 0:
-                    pi.append("items", {
-                        "item_code": get_or_create_item(
-                            regel.get("TegenrekeningCode"),
-                            company,
-                            "Purchase",
-                            mut.get("Omschrijving")
-                        ),
-                        "qty": 1,
-                        "rate": amount,
-                        "expense_account": get_expense_account_by_code(regel.get("TegenrekeningCode"), company),
-                        "cost_center": cost_center
-                    })
+                    from verenigingen.utils.smart_tegenrekening_mapper import create_invoice_line_for_tegenrekening
+                    
+                    line_dict = create_invoice_line_for_tegenrekening(
+                        tegenrekening_code=regel.get("TegenrekeningCode"),
+                        amount=amount,
+                        description=regel.get("Omschrijving", "") or mut.get("Omschrijving", ""),
+                        transaction_type="purchase"
+                    )
+                    pi.append("items", line_dict)
             
             pi.insert(ignore_permissions=True)
             pi.submit()

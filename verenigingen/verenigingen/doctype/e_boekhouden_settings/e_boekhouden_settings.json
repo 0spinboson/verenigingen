@@ -23,7 +23,9 @@
   "default_cost_center",
   "column_break_11",
   "default_currency",
-  "fiscal_year_start_month"
+  "fiscal_year_start_month",
+  "account_groups_section",
+  "account_group_mappings"
  ],
  "fields": [
   {
@@ -138,6 +140,19 @@
    "fieldtype": "Select",
    "label": "Fiscal Year Start Month",
    "options": "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12"
+  },
+  {
+   "fieldname": "account_groups_section",
+   "fieldtype": "Section Break",
+   "label": "Account Group Mappings",
+   "description": "Configure custom account group names and hierarchies",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "account_group_mappings",
+   "fieldtype": "Long Text",
+   "label": "Account Group Mappings",
+   "description": "Paste account group codes and names in format: 'code <space> name' (one per line). Example:\n001 Vaste activa\n002 Liquide middelen\n055 Opbrengsten\n056 Personeelskosten"
   }
  ],
  "index_web_pages_for_search": 1,

@@ -55,12 +55,25 @@ def process_purchase_invoices(mutations, company, cost_center, migration_doc):
             pi.company = company
             pi.cost_center = cost_center
             
+            # Set creditors account to avoid account currency validation errors
+            creditors_account = get_creditors_account(company)
+            if creditors_account:
+                pi.credit_to = creditors_account
+            
+            # Get a proper expense account for this company
+            expense_account = frappe.db.get_value("Account", {
+                "company": company,
+                "account_type": "Expense Account",
+                "is_group": 0
+            }, "name")
+            
             # Add line item
             pi.append("items", {
                 "item_code": get_default_item("expense"),
                 "qty": 1,
                 "rate": abs(flt(mut.get("amount", 0))),
-                "cost_center": cost_center
+                "cost_center": cost_center,
+                "expense_account": expense_account  # Explicitly set expense account
             })
             
             pi.insert(ignore_permissions=True)
@@ -149,10 +162,50 @@ def get_or_create_customer(mutation):
     return "Guest"
 
 def get_or_create_supplier(mutation):
-    return frappe.db.get_value("Supplier", {"supplier_name": "Miscellaneous"}) or "Miscellaneous"
+    """Get or create supplier for mutation"""
+    # Try to find existing supplier first 
+    existing_supplier = frappe.db.get_value("Supplier", {"disabled": 0}, "name")
+    if existing_supplier:
+        return existing_supplier
+    
+    # Create a default supplier if none exists
+    supplier_name = "Default Supplier"
+    try:
+        if not frappe.db.exists("Supplier", supplier_name):
+            supplier = frappe.new_doc("Supplier")
+            supplier.supplier_name = supplier_name
+            supplier.supplier_group = "All Supplier Groups"
+            supplier.insert(ignore_permissions=True)
+            return supplier.name
+        else:
+            return supplier_name
+    except Exception:
+        # Fallback to any existing supplier
+        return frappe.db.get_value("Supplier", {"disabled": 0}, "name")
 
 def get_default_item(item_type):
-    return "ITEM-001"
+    """Get default item for the given type"""
+    # Try to find existing item first
+    existing_item = frappe.db.get_value("Item", {"disabled": 0}, "name")
+    if existing_item:
+        return existing_item
+    
+    # Create a default item if none exists
+    item_name = f"Default {item_type.title()} Item"
+    try:
+        if not frappe.db.exists("Item", item_name):
+            item = frappe.new_doc("Item")
+            item.item_code = item_name
+            item.item_name = item_name
+            item.item_group = "All Item Groups"
+            item.stock_uom = "Nos"
+            item.insert(ignore_permissions=True)
+            return item.name
+        else:
+            return item_name
+    except Exception:
+        # Fallback to any existing item
+        return frappe.db.get_value("Item", {"disabled": 0}, "name")
 
 def get_account_from_ledger(mutation):
     return frappe.db.get_value("Account", {"is_group": 0}, "name")
@@ -171,3 +224,24 @@ def get_correct_receivable_account(company):
         # Fallback if the module is not available
         return frappe.db.get_value("Account", 
             {"account_number": "13900", "company": company}, "name")
+
+def get_creditors_account(company):
+    """Get the default creditors account for purchase invoices"""
+    # First try to find a Payable account
+    creditors_account = frappe.db.get_value("Account", {
+        "company": company,
+        "account_type": "Payable",
+        "is_group": 0
+    }, "name")
+    
+    if creditors_account:
+        return creditors_account
+    
+    # Fallback to any liability account
+    creditors_account = frappe.db.get_value("Account", {
+        "company": company,
+        "root_type": "Liability",
+        "is_group": 0
+    }, "name")
+    
+    return creditors_account

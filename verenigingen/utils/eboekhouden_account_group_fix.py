@@ -11,60 +11,35 @@ import json
 def analyze_account_hierarchy(accounts_data):
     """
     Analyze account hierarchy to determine which accounts should be groups
+    UPDATED: Don't use account number hierarchy - only use explicit group indicators
     
     Args:
         accounts_data: List of account data from E-Boekhouden
         
     Returns:
-        dict: Mapping of account codes that should be groups
+        set: Set of account codes that should be groups (very conservative)
     """
-    # Build parent-child relationships
-    parent_child_map = {}
-    account_codes = set()
+    group_accounts = set()
     
-    for account in accounts_data:
-        code = account.get('code', '')
-        if not code:
-            continue
-            
-        account_codes.add(code)
-        
-        # Try to determine parent from code structure
-        # Dutch accounting often uses hierarchical numbering
-        # e.g., 80 -> 800 -> 8000 -> 80001
-        potential_parents = []
-        
-        # For 5-digit codes, try 4, 3, 2, 1 digit parents
-        # For 4-digit codes, try 3, 2, 1 digit parents, etc.
-        for i in range(len(code) - 1, 0, -1):
-            potential_parent = code[:i]
-            if potential_parent in account_codes:
-                potential_parents.append(potential_parent)
-        
-        if potential_parents:
-            # Use the most specific (longest) parent
-            parent = potential_parents[0]
-            if parent not in parent_child_map:
-                parent_child_map[parent] = []
-            parent_child_map[parent].append(code)
-    
-    # Any account that has children should be a group
-    group_accounts = set(parent_child_map.keys())
-    
-    # Also check for accounts that look like group accounts based on naming
+    # Only mark accounts as groups if they have explicit group indicators in the name
     for account in accounts_data:
         code = account.get('code', '')
         name = account.get('description', '').lower()
         
-        # Common indicators of group accounts in Dutch
+        # Very conservative indicators of group accounts in Dutch
+        # Only mark as group if explicitly named as such
         group_indicators = [
-            'totaal', 'total', 'groep', 'group',
-            'categorie', 'category', 'hoofdgroep',
-            'subtotaal', 'subtotal'
+            'totaal', 'total', 'subtotaal', 'subtotal',
+            'hoofdgroep', 'subgroep', 'categorie groep'
         ]
         
+        # Only mark as group if the name explicitly indicates it's a grouping account
         if any(indicator in name for indicator in group_indicators):
             group_accounts.add(code)
+            frappe.logger().info(f"Marking {code} as group due to name indicator: {name}")
+    
+    # Log the conservative approach
+    frappe.logger().info(f"Conservative group detection: {len(group_accounts)} accounts marked as groups")
     
     return group_accounts
 

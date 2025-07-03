@@ -142,17 +142,19 @@ def create_purchase_invoice_from_mutation(mut, company, cost_center):
         
         pi.cost_center = cost_center
         
-        # Add line items
+        # Add line items using smart tegenrekening mapping
+        from verenigingen.utils.smart_tegenrekening_mapper import create_invoice_line_for_tegenrekening
+        
         for regel in mut.get("MutatieRegels", []):
             amount = float(regel.get("BedragExclBTW", 0))
             if amount > 0:
-                pi.append("items", {
-                    "item_code": get_or_create_item(regel.get("TegenrekeningCode")),
-                    "qty": 1,
-                    "rate": amount,
-                    "expense_account": get_expense_account_by_code(regel.get("TegenrekeningCode"), company),
-                    "cost_center": cost_center
-                })
+                line_dict = create_invoice_line_for_tegenrekening(
+                    tegenrekening_code=regel.get("TegenrekeningCode"),
+                    amount=amount,
+                    description=regel.get("Omschrijving", "") or mut.get("Omschrijving", ""),
+                    transaction_type="purchase"
+                )
+                pi.append("items", line_dict)
         
         pi.insert(ignore_permissions=True)
         pi.submit()

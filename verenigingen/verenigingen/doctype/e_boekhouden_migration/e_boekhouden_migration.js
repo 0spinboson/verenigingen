@@ -1340,31 +1340,81 @@ function import_transactions_rest(frm, options) {
 				return;
 			}
 			
-			// REST API is working, start import
-			frappe.call({
-				method: 'verenigingen.verenigingen.doctype.e_boekhouden_migration.e_boekhouden_migration.start_transaction_import',
-				args: {
-					migration_name: frm.doc.name,
-					import_type: 'all'
-				},
-				callback: function(r) {
-					if (r.message && r.message.success) {
-						frappe.show_alert({
-							message: __('REST API transaction import started! This may take several minutes.'),
-							indicator: 'green'
-						});
-						frm.reload_doc();
-						
-						// Start progress monitoring
-						show_migration_progress(frm);
-					} else {
-						frappe.msgprint({
-							title: __('Import Failed'),
-							message: r.message.error || __('Unknown error'),
-							indicator: 'red'
-						});
+			// REST API is working, configure and save the document first
+			// Configure for transaction-only import
+			frm.set_value('migrate_accounts', 0);
+			frm.set_value('migrate_cost_centers', 0);
+			frm.set_value('migrate_customers', 1); // Import new customers if needed
+			frm.set_value('migrate_suppliers', 1); // Import new suppliers if needed
+			frm.set_value('migrate_transactions', 1);
+			frm.set_value('dry_run', options.dry_run ? 1 : 0);
+			
+			// Set dates - retrieve mutation 0 date for start, today for end
+			if (options.date_from) {
+				frm.set_value('date_from', options.date_from);
+			} else {
+				// Get mutation 0 date as start date
+				frappe.call({
+					method: 'verenigingen.utils.eboekhouden_rest_iterator.test_mutation_zero',
+					async: false,
+					callback: function(r) {
+						if (r.message && r.message.success && r.message.result.mutation_0_exists) {
+							const mutation_0_date = r.message.result.mutation_0_data.date;
+							frm.set_value('date_from', mutation_0_date);
+						} else {
+							// Fallback to detected range or 5 years
+							if (window.eboekhouden_date_range) {
+								frm.set_value('date_from', window.eboekhouden_date_range.earliest_date);
+							} else {
+								const today = frappe.datetime.get_today();
+								const fiveYearsAgo = frappe.datetime.add_days(today, -1825);
+								frm.set_value('date_from', fiveYearsAgo);
+							}
+						}
 					}
-				}
+				});
+			}
+			
+			if (options.date_to) {
+				frm.set_value('date_to', options.date_to);
+			} else {
+				// Always use today as end date for complete import
+				frm.set_value('date_to', frappe.datetime.get_today());
+			}
+			
+			// Save document first, then start import
+			frm.save().then(() => {
+				frappe.call({
+					method: 'verenigingen.verenigingen.doctype.e_boekhouden_migration.e_boekhouden_migration.start_transaction_import',
+					args: {
+						migration_name: frm.doc.name,
+						import_type: 'all'
+					},
+					callback: function(r) {
+						if (r.message && r.message.success) {
+							frappe.show_alert({
+								message: __('REST API transaction import started! This may take several minutes.'),
+								indicator: 'green'
+							});
+							frm.reload_doc();
+							
+							// Start progress monitoring
+							show_migration_progress(frm);
+						} else {
+							frappe.msgprint({
+								title: __('Import Failed'),
+								message: r.message.error || __('Unknown error'),
+								indicator: 'red'
+							});
+						}
+					}
+				});
+			}).catch(err => {
+				frappe.msgprint({
+					title: __('Save Failed'),
+					message: __('Failed to save migration document: ') + err.message,
+					indicator: 'red'
+				});
 			});
 		}
 	
