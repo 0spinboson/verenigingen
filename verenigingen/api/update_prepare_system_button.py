@@ -60,11 +60,10 @@ def analyze_eboekhouden_data():
                 "error": date_range_result.get("error", "Failed to get date range")
             }
         
-        # Get recent mutations for analysis
-        today = frappe.utils.today()
-        one_year_ago = frappe.utils.add_years(today, -1)
-        
-        result = api.get_mutations(date_from=one_year_ago, date_to=today)
+        # Get mutations for analysis
+        # IMPORTANT: SOAP API only returns the most recent 500 mutations
+        # regardless of date range or mutation number parameters
+        result = api.get_mutations()
         
         if not result["success"]:
             return {
@@ -137,12 +136,23 @@ def analyze_eboekhouden_data():
                 "is_group": 0
             })
         
-        # Try to estimate total mutations by checking a higher range
+        # Get the highest mutation number from the available data
         total_estimate = None
-        high_range_result = api.get_mutations(mutation_nr_from=10000, mutation_nr_to=10100)
-        if high_range_result["success"] and len(high_range_result["mutations"]) > 0:
-            # If we get results in the 10000 range, there are at least 10000+ mutations
-            total_estimate = "10,000+"
+        mutation_numbers = []
+        for mut in mutations:
+            if mut.get("MutatieNr"):
+                try:
+                    mutation_numbers.append(int(mut.get("MutatieNr")))
+                except:
+                    pass
+        
+        if mutation_numbers:
+            highest_num = max(mutation_numbers)
+            lowest_num = min(mutation_numbers)
+            # If we have 500 mutations and they're not starting from 1,
+            # there are definitely more mutations in the system
+            if len(mutations) == 500 and lowest_num > 1:
+                total_estimate = f"{highest_num}+ (showing only last 500)"
         
         # Convert sets to counts for JSON serialization
         summary = {
@@ -212,6 +222,8 @@ def generate_insights(analysis, mutation_count=0):
     
     # Add warning about limited data
     if mutation_count == 500:
-        insights.insert(0, "⚠️ Analysis limited to most recent 500 mutations. Full migration will process ALL historical data.")
+        insights.insert(0, "⚠️ SOAP API limitation: Analysis shows only the most recent 500 mutations.")
+        insights.insert(1, "The actual migration will also be limited to these 500 most recent transactions.")
+        insights.insert(2, "To import older transactions, REST API credentials are required.")
     
     return insights

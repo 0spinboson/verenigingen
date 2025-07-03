@@ -51,6 +51,7 @@ def migrate_cost_centers_with_hierarchy(settings):
         # Build parent-child relationships first
         parent_map = {}  # Maps E-Boekhouden ID to its parent ID
         root_level_ccs = []  # Cost centers with no parent
+        has_children = set()  # Track which cost centers have children
         
         for cc_data in cost_centers_data:
             cc_id = cc_data.get("id")
@@ -59,6 +60,7 @@ def migrate_cost_centers_with_hierarchy(settings):
             if cc_id:
                 if parent_id > 0:
                     parent_map[cc_id] = parent_id
+                    has_children.add(parent_id)  # Parent has at least one child
                 else:
                     root_level_ccs.append(cc_id)
         
@@ -71,6 +73,7 @@ def migrate_cost_centers_with_hierarchy(settings):
             if not parent_id or parent_id not in parent_map:
                 return depth
             return get_depth(parent_id, depth + 1)
+        
         
         # Sort by depth (parents first) then by ID
         sorted_cost_centers = sorted(cost_centers_data, 
@@ -98,7 +101,7 @@ def migrate_cost_centers_with_hierarchy(settings):
                     erpnext_parent = root_cc
                 
                 result = create_cost_center_safe(
-                    cc_data, company, erpnext_parent, id_to_name_map
+                    cc_data, company, erpnext_parent, id_to_name_map, has_children
                 )
                 
                 if result["success"]:
@@ -137,10 +140,12 @@ def migrate_cost_centers_with_hierarchy(settings):
             "error": str(e)
         }
 
-def create_cost_center_safe(cc_data, company, parent_cc, id_map):
+def create_cost_center_safe(cc_data, company, parent_cc, id_map, has_children=None):
     """
     Create a single cost center with guaranteed valid parent
     """
+    if has_children is None:
+        has_children = set()
     try:
         cc_code = str(cc_data.get("code", "")).strip()
         cc_name = cc_data.get("name", "").strip()
@@ -166,10 +171,21 @@ def create_cost_center_safe(cc_data, company, parent_cc, id_map):
         existing = frappe.db.get_value("Cost Center", {
             "cost_center_name": full_cc_name,
             "company": company
-        }, "name")
+        }, ["name", "is_group"], as_dict=True)
         
         if existing:
-            return {"success": False, "exists": True, "name": existing}
+            # Check if this existing cost center needs to be updated to a group
+            cc_id = cc_data.get("id")
+            if cc_id and cc_id in has_children and not existing.is_group:
+                # Update to group
+                try:
+                    frappe.db.set_value("Cost Center", existing.name, "is_group", 1)
+                    frappe.db.commit()
+                    frappe.logger().info(f"Updated cost center {existing.name} to group")
+                except Exception as e:
+                    frappe.logger().error(f"Failed to update cost center {existing.name} to group: {str(e)}")
+            
+            return {"success": False, "exists": True, "name": existing.name}
         
         # Ensure parent exists and is valid
         if parent_cc:
@@ -183,7 +199,13 @@ def create_cost_center_safe(cc_data, company, parent_cc, id_map):
         cc.cost_center_name = full_cc_name
         cc.company = company
         cc.parent_cost_center = parent_cc
-        cc.is_group = 0  # Default to not a group
+        
+        # Check if this cost center has children (is a parent/group)
+        cc_id = cc_data.get("id")
+        if cc_id and cc_id in has_children:
+            cc.is_group = 1  # This is a parent/group cost center
+        else:
+            cc.is_group = 0  # This is a leaf cost center
         
         # Add custom field to track e-boekhouden ID
         if hasattr(cc, 'eboekhouden_id'):
@@ -279,6 +301,45 @@ def add_eboekhouden_id_field():
         custom_field.insert(ignore_permissions=True)
         return {"success": True, "message": "Field added"}
     return {"success": True, "message": "Field already exists"}
+
+@frappe.whitelist()
+def fix_cost_center_groups(company):
+    """
+    Fix cost centers that should be groups based on having children
+    """
+    try:
+        # Find all cost centers that have children but are not marked as groups
+        non_group_parents = frappe.db.sql("""
+            SELECT DISTINCT parent.name, parent.cost_center_name
+            FROM `tabCost Center` parent
+            INNER JOIN `tabCost Center` child ON child.parent_cost_center = parent.name
+            WHERE parent.company = %s 
+            AND parent.is_group = 0
+        """, company, as_dict=True)
+        
+        fixed_count = 0
+        for cc in non_group_parents:
+            try:
+                frappe.db.set_value("Cost Center", cc.name, "is_group", 1)
+                frappe.logger().info(f"Fixed cost center {cc.name} ({cc.cost_center_name}) - set as group")
+                fixed_count += 1
+            except Exception as e:
+                frappe.logger().error(f"Failed to fix cost center {cc.name}: {str(e)}")
+        
+        frappe.db.commit()
+        
+        return {
+            "success": True,
+            "fixed": fixed_count,
+            "message": f"Fixed {fixed_count} cost centers to be groups"
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error fixing cost center groups: {str(e)}", "E-Boekhouden")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 @frappe.whitelist()
 def cleanup_cost_centers(company):

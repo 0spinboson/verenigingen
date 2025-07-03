@@ -55,7 +55,7 @@
             "fieldtype": "Select",
             "in_list_view": 1,
             "label": "Target Document Type",
-            "options": "Purchase Invoice\nJournal Entry",
+            "options": "Sales Invoice\nPurchase Invoice\nExpense Claim\nJournal Entry",
             "reqd": 1,
             "default": "Purchase Invoice"
         },
@@ -63,7 +63,7 @@
             "fieldname": "transaction_category",
             "fieldtype": "Select",
             "label": "Transaction Category",
-            "options": "\nWages and Salaries\nSocial Charges\nPension Contributions\nTax Payments\nBank Charges\nGeneral Expenses\nOther",
+            "options": "\nMembership Income\nDonations\nEvent Income\nOther Income\nOffice Expenses\nProgram Expenses\nVolunteer Expenses\nMarketing & Communications\nProfessional Services\nBank Charges\nTax Payments\nGeneral Expenses\nOther",
             "description": "Category for better organization"
         },
         {

@@ -101,6 +101,7 @@ frappe.ready(() => {
         document.getElementById('import-config-btn').addEventListener('click', importConfiguration);
         
         // Quick actions
+        document.getElementById('review-account-types-btn').addEventListener('click', openAccountTypeReview);
         document.getElementById('refresh-status-btn').addEventListener('click', loadInitialStatus);
         document.getElementById('clear-mappings-btn').addEventListener('click', clearAllMappings);
         
@@ -840,4 +841,10 @@ frappe.ready(() => {
             updateBulkEditButton();
         }
     });
+
+    // Open Account Type Review Page
+    function openAccountTypeReview() {
+        // Open the existing full-featured account type review page in same tab
+        window.location.href = '/eboekhouden_mapping_review';
+    }
 });

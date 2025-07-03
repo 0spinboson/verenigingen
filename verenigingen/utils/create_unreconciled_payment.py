@@ -90,7 +90,11 @@ def create_unreconciled_payment_entry(mutation, company, cost_center, payment_ty
             description = mutation.get("Omschrijving", "")
             
             if relation_code:
-                pe.party = get_or_create_supplier(relation_code, description, relation_data=None)
+                # Ensure supplier exists before creating payment
+                supplier = get_or_create_supplier(relation_code, description, relation_data=None)
+                if not supplier:
+                    return {"success": False, "error": f"Could not create supplier for code {relation_code}"}
+                pe.party = supplier
             else:
                 # Try to extract party info from description
                 if description and len(description) > 10:

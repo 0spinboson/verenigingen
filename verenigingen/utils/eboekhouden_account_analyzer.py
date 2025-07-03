@@ -88,8 +88,9 @@ def analyze_account_patterns(accounts):
             r"aov\b|anw\b"
         ],
         "bank_charges": [
-            r"bank|kosten|charges|fee|provisie|commission",
-            r"rente|interest|financieringskosten",
+            r"bankkosten|bank\s+charges|bank\s+fee|banking\s+fees",
+            r"provisie\s+bank|commission\s+bank",
+            r"rente\s+bank|bank\s+interest",
             r"betalingsverkeer|transaction\s+costs"
         ]
     }

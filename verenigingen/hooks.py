@@ -346,8 +346,15 @@ fixtures = [
     {
         "doctype": "Custom Field",
         "filters": [
-            ["dt", "in", ["Membership Termination Request", "Sales Invoice", "Membership", "Donation"]],
-            ["fieldname", "like", "btw_%"]
+            [
+                ["dt", "in", ["Membership Termination Request", "Sales Invoice", "Membership", "Donation"]],
+                ["fieldname", "like", "btw_%"]
+            ],
+            "or",
+            [
+                ["dt", "=", "Account"],
+                ["fieldname", "=", "eboekhouden_grootboek_nummer"]
+            ]
         ]
     }
 ]

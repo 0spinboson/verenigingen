@@ -27,12 +27,14 @@ def normalize_mutation_type(soort):
         "FactuurbetalingVerstuurd": "FactuurbetalingVerstuurd",
         "GeldOntvangen": "GeldOntvangen",
         "GeldUitgegeven": "GeldUitgegeven",
-        "Memoriaal": "Memoriaal"
+        "Memoriaal": "Memoriaal",
+        "BeginBalans": "BeginBalans",
+        "Beginbalans": "BeginBalans"
     }
     
     # Return if already in correct form
     if soort in full_names:
-        return soort
+        return full_names[soort]
     
     # Normalize case-insensitively
     soort_lower = soort.lower()
@@ -54,7 +56,9 @@ def normalize_mutation_type(soort):
         "factuur ontvangen": "FactuurOntvangen",
         "geld ontvangen": "GeldOntvangen",
         "geld uitgegeven": "GeldUitgegeven",
-        "memoriaal": "Memoriaal"
+        "memoriaal": "Memoriaal",
+        "beginbalans": "BeginBalans",
+        "begin balans": "BeginBalans"
     }
     
     # Check abbreviation mappings

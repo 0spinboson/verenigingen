@@ -12,10 +12,11 @@ from datetime import timedelta
 @frappe.whitelist()
 def migrate_mutations_grouped(migration_doc, settings):
     """
-    Migrate mutations by grouping them into balanced journal entries
+    Migrate mutations using native transaction types instead of creating journal entries for everything
     """
     try:
         from verenigingen.utils.eboekhouden_api import EBoekhoudenAPI
+        from .eboekhouden_transaction_type_mapper import simplify_migration_process
         
         api = EBoekhoudenAPI(settings)
         company = settings.default_company
@@ -65,66 +66,72 @@ def migrate_mutations_grouped(migration_doc, settings):
             else:
                 current_date = current_date.replace(month=current_date.month + 1, day=1)
         
-        # Group mutations by a composite key to handle the invoice number issue
-        # Key format: entryNumber|relationCode|date|invoiceNumber
-        entry_groups = defaultdict(list)
-        ungrouped = []
+        # Group mutations by document type using native E-boekhouden types
+        mutations_by_doc_type = defaultdict(list)
         
         for mut in all_mutations:
-            entry_num = mut.get("entryNumber")
-            if entry_num:
-                # Create composite key to ensure proper grouping
-                relation_code = mut.get("relationCode", "")
-                date = mut.get("date", "")
-                invoice_num = mut.get("invoiceNumber", "")
+            # Use the simplified mapper to determine document type
+            mapping_result = simplify_migration_process(mut)
+            doc_type = mapping_result["document_type"]
+            
+            # Add mapping info to mutation for later use
+            mut["_mapping_info"] = mapping_result
+            
+            mutations_by_doc_type[doc_type].append(mut)
+        
+        # Import processing functions
+        from .eboekhouden_unified_processor import (
+            process_sales_invoices,
+            process_purchase_invoices, 
+            process_payment_entries,
+            process_journal_entries_grouped
+        )
+        
+        # Process mutations by document type
+        stats = {
+            "sales_invoices": 0,
+            "purchase_invoices": 0,
+            "payment_entries": 0,
+            "journal_entries": 0,
+            "failed": 0,
+            "errors": []
+        }
+        
+        # Process each document type
+        for doc_type, mutations in mutations_by_doc_type.items():
+            if doc_type == "Sales Invoice":
+                result = process_sales_invoices(mutations, company, cost_center, migration_doc)
+                stats["sales_invoices"] += result.get("created", 0)
+                stats["errors"].extend(result.get("errors", []))
                 
-                # Use composite key to prevent mixing different parties' invoices
-                group_key = f"{entry_num}|{relation_code}|{date}|{invoice_num}"
-                entry_groups[group_key].append(mut)
-            else:
-                ungrouped.append(mut)
+            elif doc_type == "Purchase Invoice":
+                result = process_purchase_invoices(mutations, company, cost_center, migration_doc)
+                stats["purchase_invoices"] += result.get("created", 0)
+                stats["errors"].extend(result.get("errors", []))
+                
+            elif doc_type == "Payment Entry":
+                result = process_payment_entries(mutations, company, cost_center, migration_doc)
+                stats["payment_entries"] += result.get("created", 0)
+                stats["errors"].extend(result.get("errors", []))
+                
+            elif doc_type == "Journal Entry":
+                # For journal entries, still group by entry number
+                result = process_journal_entries_grouped(mutations, company, cost_center, migration_doc)
+                stats["journal_entries"] += result.get("created", 0)
+                stats["errors"].extend(result.get("errors", []))
+                
+            stats["failed"] += len(result.get("errors", []))
         
-        # Create journal entries from grouped mutations
-        created = 0
-        failed = 0
-        skipped = 0
-        
-        # Process grouped entries
-        for group_key, mutations in entry_groups.items():
-            # Extract entry number from composite key
-            entry_num = group_key.split('|')[0]
-            result = create_journal_entry_from_group(
-                entry_num, mutations, company, cost_center, migration_doc, group_key
-            )
-            
-            if result["success"]:
-                created += 1
-            elif result.get("reason") == "skip":
-                skipped += 1
-            else:
-                failed += 1
-        
-        # Process ungrouped mutations (create individual entries with suspense account)
-        for mut in ungrouped:
-            result = create_journal_entry_from_single(
-                mut, company, cost_center, migration_doc
-            )
-            
-            if result["success"]:
-                created += 1
-            elif result.get("reason") == "skip":
-                skipped += 1
-            else:
-                failed += 1
+        total_created = (stats["sales_invoices"] + stats["purchase_invoices"] + 
+                        stats["payment_entries"] + stats["journal_entries"])
         
         return {
             "success": True,
-            "created": created,
-            "failed": failed,
-            "skipped": skipped,
+            "created": total_created,
+            "failed": stats["failed"],
             "total_mutations": len(all_mutations),
-            "grouped_entries": len(entry_groups),
-            "ungrouped_mutations": len(ungrouped)
+            "stats": stats,
+            "message": f"Created {total_created} documents using native transaction types"
         }
         
     except Exception as e:

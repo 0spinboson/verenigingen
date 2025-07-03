@@ -263,6 +263,20 @@ class EBoekhoudenMigration(Document):
                 else:
                     frappe.logger().info(f"Cleared accounts: {clear_result['message']}")
             
+            # Ensure root accounts exist before importing
+            self.db_set({
+                "current_operation": "Creating root account structure...",
+                "progress_percentage": 8
+            })
+            frappe.db.commit()
+            
+            root_result = self.ensure_root_accounts(settings)
+            if not root_result["success"]:
+                frappe.logger().warning(f"Root account creation issues: {root_result.get('error', 'Unknown error')}")
+                # Continue anyway - some root accounts might exist
+            else:
+                frappe.logger().info(f"Root accounts: {root_result['message']}")
+            
             from verenigingen.utils.eboekhouden_api import EBoekhoudenAPI
             
             # Get Chart of Accounts data using new API
@@ -292,11 +306,25 @@ class EBoekhoudenMigration(Document):
             # Store group accounts for use in create_account
             self._group_accounts = group_accounts
             
+            # Store all account codes to check parent-child relationships
+            self._all_account_codes = set(account.get('code', '') for account in accounts_data if account.get('code'))
+            frappe.logger().info(f"Stored {len(self._all_account_codes)} account codes for hierarchy analysis")
+            
+            # Sort accounts by code length to ensure parents are created before children
+            # This ensures that account "80" is created before "800", which is created before "8000"
+            sorted_accounts = sorted(accounts_data, key=lambda x: (len(x.get('code', '')), x.get('code', '')))
+            frappe.logger().info(f"Sorted accounts for hierarchical creation")
+            
             # Create accounts in ERPNext
             created_count = 0
             skipped_count = 0
             
-            for account_data in accounts_data:
+            # Log first few accounts to see what we're processing
+            frappe.logger().info(f"Processing {len(sorted_accounts)} accounts")
+            for i, acc in enumerate(sorted_accounts[:10]):
+                frappe.logger().info(f"Account {i}: code={acc.get('code')}, group={acc.get('group')}, category={acc.get('category')}, desc={acc.get('description')[:30] if acc.get('description') else 'N/A'}")
+            
+            for account_data in sorted_accounts:
                 try:
                     if self.create_account(account_data):
                         created_count += 1
@@ -313,6 +341,98 @@ class EBoekhoudenMigration(Document):
         except Exception as e:
             return f"Error migrating Chart of Accounts: {str(e)}"
     
+    def ensure_root_accounts(self, settings):
+        """Ensure root accounts exist based on E-boekhouden categories and Dutch accounting standards"""
+        try:
+            company = settings.default_company
+            if not company:
+                return {"success": False, "error": "No default company set"}
+            
+            # Define root accounts based on E-boekhouden categories and Dutch standards
+            root_accounts = [
+                # Main root categories matching E-boekhouden structure
+                {"account_name": "Activa", "root_type": "Asset", "account_number": "0", "category": "BAL"},
+                {"account_name": "Passiva", "root_type": "Liability", "account_number": "3", "category": "BAL"},  
+                {"account_name": "Eigen Vermogen", "root_type": "Equity", "account_number": "5", "category": "BAL"},
+                {"account_name": "Opbrengsten", "root_type": "Income", "account_number": "8", "category": "VW"},
+                {"account_name": "Kosten", "root_type": "Expense", "account_number": "6", "category": "VW"},
+            ]
+            
+            created = []
+            errors = []
+            existing = []
+            
+            for acc in root_accounts:
+                try:
+                    # Check if a root account of this type already exists
+                    existing_account = frappe.db.get_value("Account", {
+                        "company": company,
+                        "root_type": acc["root_type"],
+                        "parent_account": ["in", ["", None]],
+                        "is_group": 1
+                    }, "name")
+                    
+                    if existing_account:
+                        existing.append(f"{acc['account_name']} ({existing_account})")
+                        frappe.logger().info(f"Root account for {acc['root_type']} already exists: {existing_account}")
+                        continue
+                    
+                    # Try to create root account using ERPNext's account creation method
+                    # This bypasses the parent_account requirement for true root accounts
+                    account = frappe.new_doc("Account")
+                    account.account_name = acc["account_name"]
+                    account.company = company
+                    account.root_type = acc["root_type"]
+                    account.is_group = 1
+                    account.account_number = acc["account_number"]
+                    
+                    # Use special validation flags for root accounts
+                    account.flags.ignore_validate = True
+                    account.flags.ignore_mandatory = True
+                    
+                    # Try multiple creation methods
+                    try:
+                        account.save(ignore_permissions=True)
+                        created.append(f"{acc['account_name']} ({acc['root_type']})")
+                        frappe.logger().info(f"Created root account: {account.name}")
+                    except:
+                        # If save fails, try insert
+                        try:
+                            account.insert(ignore_permissions=True)
+                            created.append(f"{acc['account_name']} ({acc['root_type']})")
+                            frappe.logger().info(f"Created root account via insert: {account.name}")
+                        except Exception as e2:
+                            errors.append(f"{acc['account_name']}: {str(e2)}")
+                            frappe.logger().error(f"Failed to create root account {acc['account_name']}: {str(e2)}")
+                    
+                except Exception as e:
+                    errors.append(f"{acc['account_name']}: {str(e)}")
+                    frappe.logger().error(f"Error processing root account {acc['account_name']}: {str(e)}")
+            
+            # If no accounts were created or existed, this indicates a fundamental issue
+            total_available = len(created) + len(existing)
+            if total_available == 0:
+                return {
+                    "success": False,
+                    "error": "No root accounts available - this will cause Chart of Accounts import to fail",
+                    "details": {"created": created, "existing": existing, "errors": errors}
+                }
+            
+            # Commit any successful creations
+            if created:
+                frappe.db.commit()
+            
+            return {
+                "success": True,
+                "created": created,
+                "existing": existing,
+                "errors": errors,
+                "message": f"Root accounts ready: {len(created)} created, {len(existing)} existing, {len(errors)} errors"
+            }
+            
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+    
     def migrate_cost_centers(self, settings):
         """Migrate Cost Centers from e-Boekhouden with proper hierarchy"""
         try:
@@ -328,8 +448,15 @@ class EBoekhoudenMigration(Document):
                 self.imported_records += result["created"]
                 self.total_records += result["total"]
                 
-                # Run cleanup to fix any orphaned cost centers
+                # Run cleanup to fix any orphaned cost centers and group flags
                 if settings.default_company:
+                    # First fix any cost centers that should be groups
+                    from verenigingen.utils.eboekhouden_cost_center_fix import fix_cost_center_groups
+                    group_fix_result = fix_cost_center_groups(settings.default_company)
+                    if group_fix_result["success"] and group_fix_result["fixed"] > 0:
+                        self.log_error(f"Fixed {group_fix_result['fixed']} cost centers to be groups")
+                    
+                    # Then cleanup orphaned cost centers
                     cleanup_result = cleanup_cost_centers(settings.default_company)
                     if cleanup_result["success"] and cleanup_result["fixed"] > 0:
                         self.log_error(f"Fixed {cleanup_result['fixed']} orphaned cost centers")
@@ -689,92 +816,38 @@ class EBoekhoudenMigration(Document):
             account_code = account_data.get('code', '')
             account_name = account_data.get('description', '')
             category = account_data.get('category', '')
+            group_code = account_data.get('group', '')
             
             if not account_code or not account_name:
                 self.log_error(f"Invalid account data: code={account_code}, name={account_name}")
                 return False
+            
+            # Clean up account name - remove duplicate account code if present
+            # E-Boekhouden sometimes includes the code in the name like "88210 - 88210 - Advertenties in vm"
+            if account_name.startswith(f"{account_code} - "):
+                # Remove the first occurrence of "code - "
+                account_name = account_name[len(account_code) + 3:]
+            
+            # Also check if the name starts with just the code (without dash)
+            if account_name.startswith(account_code):
+                account_name = account_name[len(account_code):].lstrip(" -")
+            
+            # If account name is empty after cleaning, use a default
+            if not account_name.strip():
+                account_name = f"Account {account_code}"
             
             # Truncate account name if too long (ERPNext limit is 140 chars)
             if len(account_name) > 120:  # Leave room for account code
                 account_name = account_name[:120] + "..."
                 frappe.logger().info(f"Truncated long account name for {account_code}")
             
-            # Create full account name with code
-            full_account_name = f"{account_code} - {account_name}"
+            # Use the cleaned account name without the code
+            full_account_name = account_name
             if len(full_account_name) > 140:
-                # If still too long, truncate the description part more aggressively
-                max_desc_length = 140 - len(account_code) - 3  # 3 for " - "
-                account_name = account_name[:max_desc_length]
-                full_account_name = f"{account_code} - {account_name}"
+                # If too long, truncate
+                full_account_name = account_name[:137] + "..."
             
-            # Check if account already exists
-            if frappe.db.exists("Account", {"account_number": account_code}):
-                frappe.logger().info(f"Account {account_code} already exists, skipping")
-                return False
-            
-            # Map e-Boekhouden categories to ERPNext account types and root types
-            # ERPNext valid account types: Bank, Cash, Receivable, Payable, Tax, etc.
-            category_mapping = {
-                'BTWRC': {'account_type': 'Tax', 'root_type': 'Liability'},
-                'AF6': {'account_type': 'Tax', 'root_type': 'Liability'}, 
-                'AF19': {'account_type': 'Tax', 'root_type': 'Liability'},
-                'AFOVERIG': {'account_type': 'Tax', 'root_type': 'Liability'},
-                'VOOR': {'account_type': 'Tax', 'root_type': 'Liability'},
-                'VW': {'account_type': '', 'root_type': 'Expense'},  # No specific type for general expense
-                'BAL': {'account_type': 'Fixed Asset', 'root_type': 'Asset'},  # Balance sheet assets
-                'FIN': {'account_type': 'Bank', 'root_type': 'Asset'},
-                'KAS': {'account_type': 'Cash', 'root_type': 'Asset'}
-            }
-            
-            # Get mapping or default
-            mapping = category_mapping.get(category, {'account_type': '', 'root_type': 'Expense'})
-            account_type = mapping['account_type']
-            root_type = mapping['root_type']
-            
-            # For account codes, try to infer type from the code itself if category mapping fails
-            if not account_type and account_code:
-                if account_code.startswith(('1', '2')):  # Asset accounts typically start with 1-2
-                    if account_code.startswith('15'):  # Bank accounts often 15xx
-                        account_type = 'Bank'
-                        root_type = 'Asset'
-                    elif account_code.startswith('16'):  # Cash accounts often 16xx
-                        account_type = 'Cash' 
-                        root_type = 'Asset'
-                    elif account_code.startswith('13'):  # Receivables often 13xx
-                        # Don't use 'Receivable' type to avoid party requirements in journal entries
-                        account_type = 'Current Asset'
-                        root_type = 'Asset'
-                    else:
-                        account_type = 'Current Asset'
-                        root_type = 'Asset'
-                elif account_code.startswith(('3', '4')):  # Asset/Liability accounts typically 3-4
-                    if account_code.startswith('30'):  # Inventory/Stock accounts often 30xx
-                        # Stock accounts require special handling - create as Current Asset for migration
-                        # but note that they should be converted to Stock type manually if needed
-                        account_type = 'Current Asset'
-                        root_type = 'Asset'
-                        frappe.logger().info(f"Account {account_code} appears to be inventory - created as Current Asset, convert to Stock type manually if needed")
-                    elif account_code.startswith('44'):  # Payables often 44xx
-                        # Don't use 'Payable' type to avoid party requirements in journal entries
-                        account_type = 'Current Liability'
-                        root_type = 'Liability'
-                    elif account_code.startswith('4'):
-                        account_type = 'Current Liability'
-                        root_type = 'Liability'
-                    else:  # Account codes starting with 3 (non-30)
-                        account_type = 'Current Asset'
-                        root_type = 'Asset'
-                elif account_code.startswith('5'):  # Equity typically 5
-                    account_type = ''
-                    root_type = 'Equity'
-                elif account_code.startswith('8'):  # Income typically 8
-                    account_type = ''
-                    root_type = 'Income'
-                elif account_code.startswith(('6', '7')):  # Expenses typically 6-7
-                    account_type = ''
-                    root_type = 'Expense'
-            
-            # Get default company
+            # Get default company first
             settings = frappe.get_single("E-Boekhouden Settings")
             company = settings.default_company
             
@@ -782,21 +855,235 @@ class EBoekhoudenMigration(Document):
                 self.log_error("No default company set in E-Boekhouden Settings")
                 return False
             
-            # Find appropriate parent account
-            parent_account = self.get_parent_account(account_type, root_type, company)
+            # Check if account already exists
+            # Check both by account_number and by name (which includes company suffix)
+            existing_by_number = frappe.db.exists("Account", {"account_number": account_code, "company": company})
+            
+            # Get company abbreviation
+            company_abbr = frappe.db.get_value("Company", company, "abbr")
+            existing_by_name = frappe.db.exists("Account", {"name": f"{full_account_name} - {company_abbr}"})
+            
+            if existing_by_number or existing_by_name:
+                frappe.logger().info(f"SKIPPING - Account {account_code} already exists (by_number={existing_by_number}, by_name={existing_by_name})")
+                return False
+            
+            # Map e-Boekhouden categories to ERPNext account types and root types
+            # Based on e-Boekhouden REST API specification
+            category_mapping = {
+                # Tax-related categories
+                'BTWRC': {'account_type': 'Tax', 'root_type': 'Liability'},  # VAT current account
+                'AF6': {'account_type': 'Tax', 'root_type': 'Liability'},    # Turnover tax low rate
+                'AF19': {'account_type': 'Tax', 'root_type': 'Liability'},   # Turnover tax high rate
+                'AFOVERIG': {'account_type': 'Tax', 'root_type': 'Liability'}, # Turnover tax other
+                'AF': {'account_type': 'Tax', 'root_type': 'Liability'},     # Turnover tax
+                'VOOR': {'account_type': 'Tax', 'root_type': 'Asset'},       # Input tax (VAT receivable)
+                
+                # Balance sheet categories
+                'BAL': {'account_type': '', 'root_type': None},  # Balance sheet - need to determine from code
+                'FIN': {'account_type': 'Bank', 'root_type': 'Asset'},       # Liquid Assets - ALWAYS Bank accounts
+                'DEB': {'account_type': 'Current Asset', 'root_type': 'Asset'},           # Debtors (not Receivable to avoid party requirement)
+                'CRED': {'account_type': 'Current Liability', 'root_type': 'Liability'},      # Creditors (not Payable to avoid party requirement)
+                
+                # Profit & Loss category - ALL VW accounts are P&L accounts  
+                'VW': {'account_type': '', 'root_type': 'Expense'},  # Default VW to Expense (except opbrengsten)
+            }
+            
+            # Get mapping or default
+            mapping = category_mapping.get(category, {'account_type': '', 'root_type': None})
+            account_type = mapping['account_type']
+            root_type = mapping['root_type']
+            
+            # Handle BAL and VW categories - need to determine root_type from account code
+            if root_type is None:
+                if category == 'BAL':
+                    # Balance sheet accounts
+                    if account_code.startswith(('0', '1', '2')):
+                        root_type = 'Asset'
+                    elif account_code.startswith(('3', '4')):
+                        root_type = 'Liability'
+                    elif account_code.startswith('5'):
+                        root_type = 'Equity'
+                    else:
+                        # Default for unknown BAL accounts
+                        root_type = 'Asset'
+                        frappe.logger().warning(f"Unknown BAL account code pattern: {account_code}")
+                elif category == 'VW':
+                    # Profit & Loss accounts - simple rule: opbrengsten = income, everything else = expense
+                    if 'opbrengst' in account_name.lower() or 'omzet' in account_name.lower():
+                        root_type = 'Income'
+                        frappe.logger().info(f"VW account {account_code} classified as Income (opbrengsten pattern)")
+                    else:
+                        # ALL other VW accounts are expenses (as per user requirement)
+                        root_type = 'Expense'
+                        frappe.logger().info(f"VW account {account_code} classified as Expense (VW category, non-opbrengsten)")
+            
+            # Enhanced account type determination - prioritize Dutch rekeninggroepen over account codes
+            if not account_type and account_code:
+                # PRIORITY 1: Dutch Rekeninggroepen (Account Groups) - most reliable
+                if group_code:
+                    # Dutch standard rekeninggroepen mapping
+                    if group_code == "001":  # Vaste activa
+                        account_type = 'Fixed Asset'
+                        root_type = 'Asset'
+                    elif group_code == "002":  # Liquide middelen - KEY for bank accounts!
+                        account_type = 'Bank'
+                        root_type = 'Asset'
+                        frappe.logger().info(f"Account {account_code} classified as Bank due to group 002 (Liquide middelen)")
+                    elif group_code == "003":  # Voorraden
+                        account_type = 'Current Asset'  # Use Current Asset instead of Stock for migration simplicity
+                        root_type = 'Asset'
+                    elif group_code == "004":  # Vorderingen
+                        account_type = 'Current Asset'  # Avoid Receivable to prevent party requirements
+                        root_type = 'Asset'
+                    elif group_code == "005":  # Overlopende activa
+                        account_type = 'Current Asset'
+                        root_type = 'Asset'
+                    elif group_code == "006":  # Kortlopende schulden
+                        account_type = 'Current Liability'
+                        root_type = 'Liability'
+                    elif group_code == "007":  # Langlopende schulden
+                        account_type = 'Current Liability'
+                        root_type = 'Liability'
+                    elif group_code == "008":  # Overlopende passiva
+                        account_type = 'Current Liability'
+                        root_type = 'Liability'
+                    elif group_code.startswith("05"):  # Eigen vermogen (050, 051, 052)
+                        account_type = ''
+                        root_type = 'Equity'
+                    elif group_code == "055":  # Opbrengsten (Income)
+                        account_type = ''
+                        root_type = 'Income'
+                    elif group_code in ["056", "057", "058", "059"]:  # Various cost types
+                        account_type = ''
+                        root_type = 'Expense'
+                        frappe.logger().info(f"Account {account_code} classified as Expense due to group {group_code} (Dutch cost group)")
+                
+                # PRIORITY 2: Account name patterns - supplement group classification
+                if not account_type:
+                    account_name_lower = account_name.lower()
+                    
+                    # Cash patterns (only detect cash, not banks - banks should come from FIN category)
+                    if 'kas' in account_name_lower and 'bank' not in account_name_lower:
+                        account_type = 'Cash'
+                        root_type = 'Asset'
+                    
+                    # BTW/VAT patterns
+                    elif 'btw' in account_name_lower or 'vat' in account_name_lower:
+                        account_type = 'Tax'
+                        root_type = 'Liability'
+                    
+                    # Receivables and payables patterns
+                    elif 'te ontvangen' in account_name_lower:
+                        account_type = 'Current Asset'  # Avoid Receivable to prevent party requirements
+                        root_type = 'Asset'
+                    elif 'te betalen' in account_name_lower:
+                        account_type = 'Current Liability'  # Avoid Payable to prevent party requirements
+                        root_type = 'Liability'
+                    elif 'vooruitontvangen' in account_name_lower:
+                        account_type = 'Current Liability'
+                        root_type = 'Liability'
+                    elif 'vooruitbetaald' in account_name_lower:
+                        account_type = 'Current Asset'
+                        root_type = 'Asset'
+                    
+                    # Depreciation patterns
+                    elif 'afschrijving' in account_name_lower and ('cum' in account_name_lower or 'cumul' in account_name_lower):
+                        account_type = 'Accumulated Depreciation'
+                        root_type = 'Asset'
+                    elif 'afschrijving' in account_name_lower:
+                        account_type = 'Depreciation'
+                        root_type = 'Expense'
+                    
+                    # Equity patterns  
+                    elif any(pattern in account_name_lower for pattern in ['reserve', 'reservering', 'vermogen']):
+                        account_type = ''
+                        root_type = 'Equity'
+                    
+                    # Income patterns
+                    elif any(pattern in account_name_lower for pattern in ['omzet', 'opbrengst']):
+                        account_type = ''
+                        root_type = 'Income'
+                    
+                    # Expense patterns
+                    elif 'kosten' in account_name_lower:
+                        account_type = ''
+                        root_type = 'Expense'
+                
+                # PRIORITY 3: Account code patterns - fallback only when group and name don't provide clear answer
+                if not account_type and not root_type:
+                    # Only use account codes as last resort and respect category boundaries
+                    if category == 'VW':  # P&L accounts - already handled in category logic above
+                        # VW accounts should have been handled by category logic, this is fallback
+                        account_type = ''
+                        root_type = 'Expense'  # Default VW to expense
+                    elif category == 'BAL':  # Balance sheet accounts
+                        if account_code.startswith(('0', '1', '2')):
+                            account_type = 'Current Asset'
+                            root_type = 'Asset'
+                        elif account_code.startswith(('3', '4')):
+                            account_type = 'Current Liability'
+                            root_type = 'Liability'
+                        elif account_code.startswith('5'):
+                            account_type = ''
+                            root_type = 'Equity'
+                    else:
+                        # Unknown category, use basic code patterns
+                        if account_code.startswith(('0', '1', '2')):
+                            account_type = 'Current Asset'
+                            root_type = 'Asset'
+                        elif account_code.startswith(('6', '7', '8')):
+                            account_type = ''
+                            root_type = 'Expense'
+            
+            # Check if this should be a root account
+            # With our Dutch root account structure in place, very few accounts should be truly root
+            is_root_account = False
+            parent_account = None
+            
+            # IMPORTANT: We now have Dutch root accounts (Activa, Passiva, Eigen Vermogen, Opbrengsten, Kosten)
+            # Only treat accounts as root if they are truly meant to be at the top level
+            # Most E-boekhouden accounts should be children of these root accounts
+            
+            frappe.logger().info(f"Analyzing account {account_code}: len={len(account_code)}, group={group_code}, category={category}")
+            
+            # Very restrictive root account logic - only truly top-level accounts
+            if (len(account_code) == 1 or  # Single digit codes like "0", "3", "5", "6", "8"
+                (len(account_code) == 2 and account_code in ['00', '30', '50', '60', '80'])):  # Very specific two-digit roots
+                is_root_account = True
+                frappe.logger().info(f"Account {account_code} identified as ROOT account (single digit or specific two-digit)")
+            else:
+                # All other accounts should find appropriate parents from our root structure
+                # This includes accounts with group codes like 001-010 - they should be children, not roots
+                frappe.logger().info(f"Account {account_code} will be child account (not root)")
+            
+            # For all non-root accounts, find appropriate parent from our Dutch root structure
+            if not is_root_account:
+                parent_account = self.get_parent_account(account_type, root_type, company)
+                
+                # If no specific parent found, ensure we at least get the appropriate root account
+                if not parent_account:
+                    # Find the appropriate Dutch root account based on root_type
+                    parent_account = frappe.db.get_value("Account", {
+                        "company": company,
+                        "root_type": root_type,
+                        "is_group": 1,
+                        "parent_account": ["in", ["", None]]
+                    }, "name")
+                    
+                    if parent_account:
+                        frappe.logger().info(f"Using Dutch root account as parent for {account_code}: {parent_account}")
+                    else:
+                        frappe.logger().warning(f"No Dutch root account found for {account_code} with root_type {root_type}")
+                        return False  # Skip account if no parent can be found
             
             # Determine if this should be a group account
-            # An account should be a group if:
-            # 1. It has no parent (root account)
-            # 2. It's identified as a group from hierarchy analysis
-            # 3. It might have child accounts
             is_group = 0
             
             # Check if this account was identified as a group
             if hasattr(self, '_group_accounts') and account_code in self._group_accounts:
                 is_group = 1
                 frappe.logger().info(f"Creating account {account_code} as group (has children)")
-            elif not parent_account:
+            elif is_root_account:
                 # Root accounts must be groups in ERPNext
                 is_group = 1
                 frappe.logger().info(f"Creating root account {account_code} as group")
@@ -806,12 +1093,16 @@ class EBoekhoudenMigration(Document):
                 'doctype': 'Account',
                 'account_name': full_account_name,  # Use the properly formatted name
                 'account_number': account_code,
-                'parent_account': parent_account,
+                'eboekhouden_grootboek_nummer': account_code,  # Also populate E-boekhouden field
                 'company': company,
                 'root_type': root_type,
                 'is_group': is_group,
                 'disabled': 0
             }
+            
+            # Only set parent_account if one was found
+            if parent_account:
+                account_doc['parent_account'] = parent_account
             
             # Only set account_type if it's not empty (some accounts don't need a specific type)
             if account_type:
@@ -819,8 +1110,19 @@ class EBoekhoudenMigration(Document):
             
             account = frappe.get_doc(account_doc)
             
+            frappe.logger().info(f"Attempting to create account: {account_code} - {account_name}, is_group={is_group}, parent={parent_account}, root_type={root_type}")
+            
             account.insert(ignore_permissions=True)
-            frappe.logger().info(f"Created account: {account_code} - {account_name}")
+            frappe.logger().info(f"Successfully created account: {account_code} - {account_name}")
+            
+            # If this is a bank account, try to create corresponding Bank Account record
+            if account_type == 'Bank':
+                try:
+                    self.create_bank_account_for_coa_account(account, account_name)
+                except Exception as e:
+                    frappe.logger().error(f"Failed to create Bank Account for {account_code}: {str(e)}")
+                    # Don't fail the entire account creation if bank account creation fails
+            
             return True
             
         except Exception as e:
@@ -828,6 +1130,59 @@ class EBoekhoudenMigration(Document):
             account_ref = account_data.get('code', 'Unknown') if 'account_data' in locals() else 'Unknown'
             self.log_error(f"Failed to create account {account_ref}: {str(e)}", "account", account_data if 'account_data' in locals() else {})
             return False
+    
+    def create_bank_account_for_coa_account(self, account_doc, account_name):
+        """
+        Create Bank Account record for a Chart of Accounts bank account
+        """
+        try:
+            from verenigingen.utils.eboekhouden_enhanced_coa_import import (
+                extract_bank_info_from_account_name,
+                get_or_create_bank,
+                create_bank_account_record
+            )
+            
+            # Extract bank information from account name
+            bank_info = extract_bank_info_from_account_name(account_name)
+            
+            if bank_info.get("account_number"):
+                # Check if Bank Account already exists
+                existing_bank_account = None
+                if bank_info.get("iban"):
+                    existing_bank_account = frappe.db.exists("Bank Account", {"iban": bank_info["iban"]})
+                
+                if not existing_bank_account and bank_info.get("account_number"):
+                    existing_bank_account = frappe.db.exists("Bank Account", {"bank_account_no": bank_info["account_number"]})
+                
+                if not existing_bank_account:
+                    # Create or get Bank record
+                    bank_name = get_or_create_bank(bank_info)
+                    
+                    # Create Bank Account record
+                    account_data = {
+                        "name": account_doc.name,
+                        "account_name": account_name,
+                        "account_number": getattr(account_doc, 'account_number', None)
+                    }
+                    
+                    bank_account = create_bank_account_record(
+                        account=account_data,
+                        bank_name=bank_name,
+                        bank_info=bank_info,
+                        company=account_doc.company
+                    )
+                    
+                    if bank_account:
+                        frappe.logger().info(f"Created Bank Account: {bank_account} for account: {account_doc.name}")
+                        return bank_account
+                else:
+                    frappe.logger().info(f"Bank Account already exists for account: {account_name}")
+            
+            return None
+            
+        except Exception as e:
+            frappe.logger().error(f"Error creating bank account for {account_doc.name}: {str(e)}")
+            return None
     
     def get_parent_account(self, account_type, root_type, company):
         """Get appropriate parent account for the new account with enhanced logic"""
@@ -1595,19 +1950,37 @@ def start_migration_api(migration_name, dry_run=1):
         return {"success": False, "error": str(e)}
 
 @frappe.whitelist()
-def start_migration(migration_name):
-    """API method to start migration process"""
+def start_migration(migration_name, setup_only=False):
+    """API method to start migration process
+    
+    Args:
+        migration_name: Name of the migration document
+        setup_only: If True, only migrate CoA, customers, suppliers (skip transactions)
+    """
     try:
         migration = frappe.get_doc("E-Boekhouden Migration", migration_name)
         if migration.migration_status != "Draft":
             return {"success": False, "error": "Migration must be in Draft status to start"}
+        
+        # If setup_only, configure the migration to skip transactions
+        if setup_only:
+            # Temporarily set migration flags for setup-only mode
+            migration.db_set({
+                "migrate_accounts": 1,
+                "migrate_cost_centers": 1,
+                "migrate_customers": 1,
+                "migrate_suppliers": 1,
+                "migrate_transactions": 0  # Skip transactions
+            })
+            frappe.db.commit()
         
         # Start migration in background
         frappe.enqueue(
             method="verenigingen.verenigingen.doctype.e_boekhouden_migration.e_boekhouden_migration.run_migration_background",
             queue="long",
             timeout=3600,
-            migration_name=migration_name
+            migration_name=migration_name,
+            setup_only=setup_only
         )
         
         return {"success": True, "message": "Migration started in background"}
@@ -1617,7 +1990,7 @@ def start_migration(migration_name):
         return {"success": False, "error": str(e)}
 
 
-def run_migration_background(migration_name):
+def run_migration_background(migration_name, setup_only=False):
     """Run migration in background"""
     try:
         migration = frappe.get_doc("E-Boekhouden Migration", migration_name)
@@ -1628,6 +2001,139 @@ def run_migration_background(migration_name):
         migration.migration_status = "Failed"
         migration.error_log = str(e)
         migration.save()
+
+
+@frappe.whitelist()
+def cleanup_chart_of_accounts(company, delete_all_accounts=False):
+    """Clean up chart of accounts
+    
+    Args:
+        company: The company to clean up accounts for
+        delete_all_accounts: If True, delete ALL accounts (not just E-Boekhouden). 
+                           If False, only delete E-Boekhouden imported accounts.
+    """
+    try:
+        delete_all_accounts = delete_all_accounts.lower() == "true" if isinstance(delete_all_accounts, str) else delete_all_accounts
+        
+        # First run cleanup of all imported data to remove any transactions
+        if delete_all_accounts:
+            frappe.logger().info("Running cleanup of all imported data first...")
+            cleanup_result = debug_cleanup_all_imported_data(company)
+            if not cleanup_result.get("success", True):
+                frappe.logger().warning(f"Cleanup of imported data had issues: {cleanup_result}")
+        
+        accounts_deleted = 0
+        failed_deletions = []
+        
+        # Build the SQL query based on what we're deleting
+        if delete_all_accounts:
+            # Get ALL accounts except the root company account
+            where_clause = """
+                WHERE company = %s
+                AND root_type IS NOT NULL
+            """
+            delete_type = "all"
+        else:
+            # Get only E-Boekhouden accounts
+            where_clause = """
+                WHERE company = %s
+                AND eboekhouden_grootboek_nummer IS NOT NULL
+                AND eboekhouden_grootboek_nummer != ''
+            """
+            delete_type = "E-Boekhouden"
+        
+        # Get accounts with proper ordering for deletion
+        # Use (rgt - lft) to determine depth - smaller values are leaf nodes
+        accounts = frappe.db.sql(f"""
+            SELECT 
+                name, 
+                is_group, 
+                account_name,
+                parent_account,
+                lft,
+                rgt,
+                root_type,
+                account_type,
+                (rgt - lft) as node_width
+            FROM `tabAccount`
+            {where_clause}
+            ORDER BY node_width ASC, rgt DESC
+        """, company, as_dict=True)
+        
+        frappe.logger().info(f"Found {len(accounts)} {delete_type} accounts to delete")
+        
+        # Delete accounts one by one, starting from leaf nodes
+        for account in accounts:
+            try:
+                # Check if account still exists (it might have been deleted as a child of another)
+                if frappe.db.exists("Account", account.name):
+                    if not delete_all_accounts:
+                        # When deleting only E-Boekhouden accounts, check for non-E-Boekhouden children
+                        non_eb_children = frappe.db.sql("""
+                            SELECT COUNT(*) as count
+                            FROM `tabAccount`
+                            WHERE parent_account = %s
+                            AND company = %s
+                            AND (eboekhouden_grootboek_nummer IS NULL OR eboekhouden_grootboek_nummer = '')
+                        """, (account.name, company), as_dict=True)[0]['count']
+                        
+                        if non_eb_children > 0:
+                            # Skip this account as it has non-E-Boekhouden children
+                            failed_deletions.append({
+                                "account": account.account_name,
+                                "error": f"Has {non_eb_children} non-E-Boekhouden child accounts"
+                            })
+                            continue
+                    
+                    # Delete the account
+                    frappe.delete_doc("Account", account.name, force=True, ignore_permissions=True)
+                    accounts_deleted += 1
+                    frappe.logger().info(f"Deleted account: {account.account_name}")
+                    
+            except Exception as e:
+                error_msg = str(e)
+                if "existing transaction" in error_msg:
+                    # Account has transactions - this is expected for some accounts
+                    failed_deletions.append({
+                        "account": account.account_name,
+                        "error": "Has existing transactions - cannot delete"
+                    })
+                elif "child nodes" in error_msg:
+                    # This shouldn't happen with our ordering, but log it
+                    failed_deletions.append({
+                        "account": account.account_name,
+                        "error": "Still has child nodes - this indicates an ordering issue"
+                    })
+                elif "mandatory" in error_msg.lower():
+                    # Some accounts are mandatory and cannot be deleted
+                    failed_deletions.append({
+                        "account": account.account_name,
+                        "error": "Mandatory account cannot be deleted"
+                    })
+                else:
+                    failed_deletions.append({
+                        "account": account.account_name,
+                        "error": error_msg
+                    })
+                frappe.log_error(f"Failed to delete account {account.account_name}: {error_msg}")
+        
+        frappe.db.commit()
+        
+        result = {
+            "success": True,
+            "accounts_deleted": accounts_deleted,
+            "message": f"Deleted {accounts_deleted} {delete_type} accounts"
+        }
+        
+        if failed_deletions:
+            result["failed_deletions"] = failed_deletions
+            result["message"] += f" ({len(failed_deletions)} failed)"
+        
+        return result
+        
+    except Exception as e:
+        frappe.db.rollback()
+        return {"success": False, "error": str(e)}
 
 
 @frappe.whitelist()
@@ -1783,77 +2289,298 @@ def debug_cleanup_all_imported_data(company=None):
         
         # 3. Clean up Sales Invoices (proper cancellation sequence)
         sales_invoices_deleted = 0
-        try:
-            sales_invoices = frappe.get_all("Sales Invoice",
-                filters={
-                    "company": company,
-                    "remarks": ["like", "%e-Boekhouden%"]
-                },
-                fields=["name", "docstatus"])
-            
-            for si in sales_invoices:
+        
+        def cleanup_sales_invoices(si_list, method_name):
+            deleted = 0
+            for si in si_list:
                 try:
+                    if not frappe.db.exists("Sales Invoice", si.name):
+                        continue
+                    
+                    # First, aggressively clean up any GL Entries for this Sales Invoice
+                    try:
+                        frappe.db.sql("""
+                            DELETE FROM `tabGL Entry` 
+                            WHERE voucher_type = 'Sales Invoice' 
+                            AND voucher_no = %s
+                        """, si.name)
+                    except:
+                        pass
+                        
                     si_doc = frappe.get_doc("Sales Invoice", si.name)
                     
                     # Cancel if submitted
                     if si_doc.docstatus == 1:
+                        # Set ignore_linked_doctypes to handle GL Entries properly
                         si_doc.ignore_linked_doctypes = (
                             "GL Entry",
-                            "Stock Ledger Entry",
+                            "Stock Ledger Entry", 
                             "Payment Ledger Entry",
                             "Repost Payment Ledger",
                             "Repost Payment Ledger Items",
-                            "Repost Accounting Ledger",
-                            "Repost Accounting Ledger Items"
+                            "Repost Accounting Ledger", 
+                            "Repost Accounting Ledger Items",
+                            "Unreconcile Payment",
+                            "Unreconcile Payment Entries",
                         )
-                        si_doc.cancel()
+                        try:
+                            si_doc.cancel()
+                        except:
+                            # If cancellation fails, try direct status update
+                            frappe.db.sql("UPDATE `tabSales Invoice` SET docstatus = 2 WHERE name = %s", si.name)
                     
-                    # Delete after cancellation
-                    frappe.delete_doc("Sales Invoice", si.name)
-                    sales_invoices_deleted += 1
+                    # Delete after cancellation - try multiple approaches
+                    try:
+                        frappe.delete_doc("Sales Invoice", si.name)
+                    except:
+                        # If delete_doc fails, try direct SQL deletion
+                        try:
+                            frappe.db.sql("DELETE FROM `tabSales Invoice` WHERE name = %s", si.name)
+                        except:
+                            pass
+                    
+                    deleted += 1
                 except Exception as e:
-                    frappe.log_error(f"Failed to delete Sales Invoice {si.name}: {str(e)}")
+                    frappe.log_error(f"Failed to delete Sales Invoice {si.name} via {method_name}: {str(e)}")
                     pass
+            return deleted
+        
+        # Method 1: By eboekhouden_invoice_number field (PRIMARY METHOD)
+        # This is the most reliable way to identify E-Boekhouden invoices
+        try:
+            eboekhouden_invoices = frappe.get_all("Sales Invoice", filters=[
+                ["company", "=", company],
+                ["eboekhouden_invoice_number", "is", "set"],
+                ["eboekhouden_invoice_number", "!=", ""],
+                ["docstatus", "!=", 2]
+            ], fields=["name", "docstatus"])
+            
+            sales_invoices_deleted += cleanup_sales_invoices(eboekhouden_invoices, "eboekhouden_invoice_number")
         except Exception as e:
-            frappe.log_error(f"Error cleaning sales invoices: {str(e)}")
+            frappe.log_error(f"Error with eboekhouden_invoice_number-based SI cleanup: {str(e)}")
+        
+        # Method 2: By remarks field (secondary method)
+        try:
+            remarks_invoices = frappe.get_all("Sales Invoice", filters=[
+                ["company", "=", company],
+                ["remarks", "like", "%e-Boekhouden%"],
+                ["docstatus", "!=", 2]
+            ], fields=["name", "docstatus"])
+            
+            sales_invoices_deleted += cleanup_sales_invoices(remarks_invoices, "remarks")
+        except Exception as e:
+            frappe.log_error(f"Error with remarks-based SI cleanup: {str(e)}")
+        
+        # Method 3: By eboekhouden_mutation_nr field (if it exists)
+        try:
+            # Check if the field exists
+            if frappe.db.has_column("Sales Invoice", "eboekhouden_mutation_nr"):
+                mutation_invoices = frappe.get_all("Sales Invoice", filters=[
+                    ["company", "=", company],
+                    ["eboekhouden_mutation_nr", "is", "set"],
+                    ["eboekhouden_mutation_nr", "!=", ""],
+                    ["docstatus", "!=", 2]
+                ], fields=["name", "docstatus"])
+                
+                sales_invoices_deleted += cleanup_sales_invoices(mutation_invoices, "mutation_nr")
+        except Exception as e:
+            frappe.log_error(f"Error with mutation_nr-based SI cleanup: {str(e)}")
+        
+        # Method 4: By numeric invoice number pattern (backup method)
+        try:
+            # E-Boekhouden invoices often have numeric invoice numbers
+            # Patterns: SINV-[0-9]+, ACC-SINV-YYYY-[0-9]+
+            numeric_invoices = frappe.db.sql("""
+                SELECT name, docstatus FROM `tabSales Invoice`
+                WHERE company = %s
+                AND (
+                    name REGEXP '^SINV-[0-9]+$'
+                    OR name REGEXP '^ACC-SINV-[0-9]{4}-[0-9]+$'
+                )
+                AND docstatus != 2
+            """, (company,), as_dict=True)
+            
+            sales_invoices_deleted += cleanup_sales_invoices(numeric_invoices, "numeric_pattern")
+        except Exception as e:
+            frappe.log_error(f"Error with numeric pattern SI cleanup: {str(e)}")
+        
+        # Method 5: By custom field or other identifying marks
+        try:
+            # Check for any sales invoices created during migration period
+            migration_period_invoices = frappe.db.sql("""
+                SELECT si.name, si.docstatus 
+                FROM `tabSales Invoice` si
+                WHERE si.company = %s
+                AND si.docstatus != 2
+                AND EXISTS (
+                    SELECT 1 FROM `tabJournal Entry` je
+                    WHERE je.company = %s
+                    AND je.user_remark LIKE '%%Migrated from e-Boekhouden%%'
+                    AND DATE(si.creation) = DATE(je.creation)
+                )
+                LIMIT 100
+            """, (company, company), as_dict=True)
+            
+            sales_invoices_deleted += cleanup_sales_invoices(migration_period_invoices, "migration_period")
+        except Exception as e:
+            frappe.log_error(f"Error with migration period SI cleanup: {str(e)}")
         
         results["sales_invoices_deleted"] = sales_invoices_deleted
         
+        # Note: If you want to delete ALL sales invoices for the company (DANGEROUS!), 
+        # you can uncomment the following code:
+        # 
+        # # Method 5: Nuclear option - delete ALL sales invoices for the company
+        # # WARNING: This will delete ALL sales invoices, not just E-Boekhouden ones!
+        # if frappe.flags.nuclear_cleanup:
+        #     try:
+        #         all_invoices = frappe.get_all("Sales Invoice", filters=[
+        #             ["company", "=", company],
+        #             ["docstatus", "!=", 2]
+        #         ], fields=["name", "docstatus"])
+        #         
+        #         sales_invoices_deleted += cleanup_sales_invoices(all_invoices, "nuclear")
+        #     except Exception as e:
+        #         frappe.log_error(f"Error with nuclear SI cleanup: {str(e)}")
+        
         # 4. Clean up Purchase Invoices (proper cancellation sequence)
         purchase_invoices_deleted = 0
-        try:
-            purchase_invoices = frappe.get_all("Purchase Invoice",
-                filters={
-                    "company": company,
-                    "remarks": ["like", "%e-Boekhouden%"]
-                },
-                fields=["name", "docstatus"])
-            
-            for pi in purchase_invoices:
+        
+        def cleanup_purchase_invoices(pi_list, method_name):
+            deleted = 0
+            for pi in pi_list:
                 try:
+                    if not frappe.db.exists("Purchase Invoice", pi.name):
+                        continue
+                    
+                    # First, aggressively clean up any GL Entries for this Purchase Invoice
+                    try:
+                        frappe.db.sql("""
+                            DELETE FROM `tabGL Entry` 
+                            WHERE voucher_type = 'Purchase Invoice' 
+                            AND voucher_no = %s
+                        """, pi.name)
+                    except:
+                        pass
+                        
                     pi_doc = frappe.get_doc("Purchase Invoice", pi.name)
                     
                     # Cancel if submitted
                     if pi_doc.docstatus == 1:
+                        # Set ignore_linked_doctypes to handle GL Entries properly
                         pi_doc.ignore_linked_doctypes = (
                             "GL Entry",
-                            "Stock Ledger Entry",
+                            "Stock Ledger Entry", 
                             "Payment Ledger Entry",
                             "Repost Payment Ledger",
                             "Repost Payment Ledger Items",
-                            "Repost Accounting Ledger",
-                            "Repost Accounting Ledger Items"
+                            "Repost Accounting Ledger", 
+                            "Repost Accounting Ledger Items",
+                            "Unreconcile Payment",
+                            "Unreconcile Payment Entries",
                         )
-                        pi_doc.cancel()
+                        try:
+                            pi_doc.cancel()
+                        except:
+                            # If cancellation fails, try direct status update
+                            frappe.db.sql("UPDATE `tabPurchase Invoice` SET docstatus = 2 WHERE name = %s", pi.name)
                     
-                    # Delete after cancellation
-                    frappe.delete_doc("Purchase Invoice", pi.name)
-                    purchase_invoices_deleted += 1
+                    # Delete after cancellation - try multiple approaches
+                    try:
+                        frappe.delete_doc("Purchase Invoice", pi.name)
+                    except:
+                        # If delete_doc fails, try direct SQL deletion
+                        try:
+                            frappe.db.sql("DELETE FROM `tabPurchase Invoice` WHERE name = %s", pi.name)
+                        except:
+                            pass
+                    
+                    deleted += 1
                 except Exception as e:
-                    frappe.log_error(f"Failed to delete Purchase Invoice {pi.name}: {str(e)}")
+                    frappe.log_error(f"Failed to delete Purchase Invoice {pi.name} via {method_name}: {str(e)}")
                     pass
+            return deleted
+        
+        # Method 1: By eboekhouden_invoice_number field (PRIMARY METHOD)
+        try:
+            # Check if the field exists
+            if frappe.db.has_column("Purchase Invoice", "eboekhouden_invoice_number"):
+                eboekhouden_pinvoices = frappe.get_all("Purchase Invoice", filters=[
+                    ["company", "=", company],
+                    ["eboekhouden_invoice_number", "is", "set"],
+                    ["eboekhouden_invoice_number", "!=", ""],
+                    ["docstatus", "!=", 2]
+                ], fields=["name", "docstatus"])
+                
+                purchase_invoices_deleted += cleanup_purchase_invoices(eboekhouden_pinvoices, "eboekhouden_invoice_number")
         except Exception as e:
-            frappe.log_error(f"Error cleaning purchase invoices: {str(e)}")
+            frappe.log_error(f"Error with eboekhouden_invoice_number-based PI cleanup: {str(e)}")
+        
+        # Method 2: By remarks field (secondary method)
+        try:
+            remarks_pinvoices = frappe.get_all("Purchase Invoice", filters=[
+                ["company", "=", company],
+                ["remarks", "like", "%e-Boekhouden%"],
+                ["docstatus", "!=", 2]
+            ], fields=["name", "docstatus"])
+            
+            purchase_invoices_deleted += cleanup_purchase_invoices(remarks_pinvoices, "remarks")
+        except Exception as e:
+            frappe.log_error(f"Error with remarks-based PI cleanup: {str(e)}")
+        
+        # Method 3: By eboekhouden_mutation_nr field (if it exists)
+        try:
+            # Check if the field exists
+            if frappe.db.has_column("Purchase Invoice", "eboekhouden_mutation_nr"):
+                mutation_pinvoices = frappe.get_all("Purchase Invoice", filters=[
+                    ["company", "=", company],
+                    ["eboekhouden_mutation_nr", "is", "set"],
+                    ["eboekhouden_mutation_nr", "!=", ""],
+                    ["docstatus", "!=", 2]
+                ], fields=["name", "docstatus"])
+                
+                purchase_invoices_deleted += cleanup_purchase_invoices(mutation_pinvoices, "mutation_nr")
+        except Exception as e:
+            frappe.log_error(f"Error with mutation_nr-based PI cleanup: {str(e)}")
+        
+        # Method 4: By numeric invoice number pattern (backup method)
+        try:
+            # E-Boekhouden invoices often have numeric invoice numbers
+            # Patterns: PINV-[0-9]+, ACC-PINV-YYYY-[0-9]+
+            numeric_pinvoices = frappe.db.sql("""
+                SELECT name, docstatus FROM `tabPurchase Invoice`
+                WHERE company = %s
+                AND (
+                    name REGEXP '^PINV-[0-9]+$'
+                    OR name REGEXP '^ACC-PINV-[0-9]{4}-[0-9]+$'
+                )
+                AND docstatus != 2
+            """, (company,), as_dict=True)
+            
+            purchase_invoices_deleted += cleanup_purchase_invoices(numeric_pinvoices, "numeric_pattern")
+        except Exception as e:
+            frappe.log_error(f"Error with numeric pattern PI cleanup: {str(e)}")
+        
+        # Method 5: By custom field or other identifying marks
+        try:
+            # Check for any purchase invoices created during migration period
+            migration_period_pinvoices = frappe.db.sql("""
+                SELECT pi.name, pi.docstatus 
+                FROM `tabPurchase Invoice` pi
+                WHERE pi.company = %s
+                AND pi.docstatus != 2
+                AND EXISTS (
+                    SELECT 1 FROM `tabJournal Entry` je
+                    WHERE je.company = %s
+                    AND je.user_remark LIKE '%%Migrated from e-Boekhouden%%'
+                    AND DATE(pi.creation) = DATE(je.creation)
+                )
+                LIMIT 100
+            """, (company, company), as_dict=True)
+            
+            purchase_invoices_deleted += cleanup_purchase_invoices(migration_period_pinvoices, "migration_period")
+        except Exception as e:
+            frappe.log_error(f"Error with migration period PI cleanup: {str(e)}")
         
         results["purchase_invoices_deleted"] = purchase_invoices_deleted
         
@@ -3289,4 +4016,274 @@ def debug_fix_parent_account_errors(migration_name=None):
         }
         
     except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@frappe.whitelist()
+def start_transaction_import(migration_name, import_type="recent"):
+    """Start importing transactions with option for recent (SOAP) or all (REST)
+    
+    Args:
+        migration_name: Name of the migration document
+        import_type: 'recent' for last 500 via SOAP, 'all' for full history via REST
+    """
+    try:
+        migration = frappe.get_doc("E-Boekhouden Migration", migration_name)
+        if migration.migration_status != "Draft":
+            return {"success": False, "error": "Migration must be in Draft status to start"}
+        
+        # Configure migration for transaction import
+        migration.db_set({
+            "migrate_accounts": 0,  # Skip accounts
+            "migrate_cost_centers": 0,  # Skip cost centers
+            "migrate_customers": 1,  # Import any new customers found
+            "migrate_suppliers": 1,  # Import any new suppliers found  
+            "migrate_transactions": 1  # Import transactions
+        })
+        frappe.db.commit()
+        
+        # For REST API full import, use different method
+        if import_type == "all":
+            # Check if REST API is configured
+            settings = frappe.get_single("E-Boekhouden Settings")
+            if not settings.rest_api_token:
+                return {"success": False, "error": "REST API token not configured. Please configure in E-Boekhouden Settings."}
+            
+            # Start REST API import in background
+            frappe.enqueue(
+                method="verenigingen.utils.eboekhouden_rest_full_migration.start_full_rest_import",
+                queue="long",
+                timeout=7200,  # 2 hours for full import
+                migration_name=migration_name
+            )
+            
+            return {"success": True, "message": "Full transaction import started via REST API"}
+        else:
+            # Use standard SOAP migration for recent 500
+            frappe.enqueue(
+                method="verenigingen.verenigingen.doctype.e_boekhouden_migration.e_boekhouden_migration.run_migration_background",
+                queue="long", 
+                timeout=3600,
+                migration_name=migration_name,
+                setup_only=False
+            )
+            
+            return {"success": True, "message": "Recent transaction import started via SOAP API"}
+        
+    except Exception as e:
+        frappe.log_error(f"Error starting transaction import: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+
+@frappe.whitelist()
+def check_rest_api_status():
+    """Check if REST API is configured and working"""
+    try:
+        settings = frappe.get_single("E-Boekhouden Settings")
+        
+        if not settings.rest_api_token:
+            return {
+                "configured": False,
+                "message": "REST API token not configured"
+            }
+        
+        # Try a simple REST API call to verify it works
+        from verenigingen.utils.eboekhouden_rest_iterator import EBoekhoudenRESTIterator
+        
+        try:
+            iterator = EBoekhoudenRESTIterator()
+            # Try to get session token
+            if iterator.session_token:
+                return {
+                    "configured": True,
+                    "working": True,
+                    "message": "REST API is configured and working"
+                }
+            else:
+                return {
+                    "configured": True,
+                    "working": False,
+                    "message": "REST API token configured but authentication failed"
+                }
+        except Exception as e:
+            return {
+                "configured": True,
+                "working": False,
+                "message": f"REST API error: {str(e)}"
+            }
+            
+    except Exception as e:
+        return {
+            "configured": False,
+            "error": str(e)
+        }
+
+
+@frappe.whitelist()
+def update_account_type_mapping(account_name, new_account_type, company):
+    """Update the account type for a specific account
+    
+    Args:
+        account_name: Either the account name (doctype name) or account_name field
+        new_account_type: The new account type to set
+        company: Company name
+    """
+    try:
+        # First try to find by name (doctype primary key)
+        if frappe.db.exists("Account", account_name):
+            account = frappe.get_doc("Account", account_name)
+        # Otherwise try by account_name field
+        elif frappe.db.exists("Account", {"account_name": account_name, "company": company}):
+            account = frappe.get_doc("Account", {"account_name": account_name, "company": company})
+        else:
+            return {"success": False, "error": f"Account {account_name} not found"}
+        
+        # Validate it's from the right company
+        if account.company != company:
+            return {"success": False, "error": f"Account {account_name} belongs to different company"}
+        
+        # Update account type
+        account.account_type = new_account_type
+        account.save(ignore_permissions=True)
+        
+        frappe.db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Updated account type for {account.account_name} to {new_account_type}"
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error updating account type: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+
+@frappe.whitelist()
+def get_account_type_recommendations(company, show_all=False):
+    """Get recommended account types for E-Boekhouden imported accounts
+    
+    Args:
+        company: Company name
+        show_all: If True, show all accounts (not just those without types)
+    """
+    try:
+        # Build the query based on whether we want all accounts or just untyped ones
+        if show_all:
+            # Get ALL imported accounts with parent information
+            accounts = frappe.db.sql("""
+                SELECT 
+                    a.name, a.account_name, a.eboekhouden_grootboek_nummer,
+                    a.account_type, a.is_group, a.parent_account, a.root_type,
+                    p.eboekhouden_grootboek_nummer as parent_group_number
+                FROM `tabAccount` a
+                LEFT JOIN `tabAccount` p ON a.parent_account = p.name
+                WHERE a.company = %s
+                AND a.eboekhouden_grootboek_nummer != ''
+                ORDER BY a.eboekhouden_grootboek_nummer
+            """, company, as_dict=True)
+        else:
+            # Get only accounts without types
+            accounts = frappe.db.sql("""
+                SELECT 
+                    a.name, a.account_name, a.eboekhouden_grootboek_nummer,
+                    a.account_type, a.is_group, a.parent_account, a.root_type,
+                    p.eboekhouden_grootboek_nummer as parent_group_number
+                FROM `tabAccount` a
+                LEFT JOIN `tabAccount` p ON a.parent_account = p.name
+                WHERE a.company = %s
+                AND a.eboekhouden_grootboek_nummer != ''
+                AND (a.account_type = '' OR a.account_type IS NULL)
+                ORDER BY a.eboekhouden_grootboek_nummer
+            """, company, as_dict=True)
+        
+        recommendations = []
+        
+        for account in accounts:
+            account_code = account.eboekhouden_grootboek_nummer
+            account_name = account.account_name.lower()
+            
+            # Recommend account type based on code and name patterns
+            recommended_type = None
+            
+            # === E-BOEKHOUDEN API CATEGORY-BASED CLASSIFICATION ===
+            # Use logical inference of original E-Boekhouden categories based on account patterns
+            
+            # Infer likely E-Boekhouden category from account characteristics
+            inferred_category = None
+            
+            # VW category inference - Profit & Loss accounts (codes 4, 6, 7, 8) - CHECK FIRST
+            if account_code.startswith(("4", "6", "7", "8")):
+                inferred_category = 'VW'
+                # Simple rule: opbrengsten = income, everything else = expense  
+                if "opbrengst" in account_name or "omzet" in account_name:
+                    recommended_type = "Income Account"
+                elif "afschrijving" in account_name:
+                    recommended_type = "Depreciation"
+                else:
+                    recommended_type = "Expense Account"
+            
+            # FIN category inference - Liquid assets (should be Bank accounts) - CHECK AFTER VW
+            elif ('liquide' in account_name or 
+                  account_code in ['10480', '10620'] or
+                  (any(bank in account_name for bank in ['bank', 'triodos', 'abn', 'asn', 'mollie', 'paypal', 'zettle']) or
+                   ' ing ' in account_name or account_name.startswith('ing ') or account_name.endswith(' ing'))):
+                inferred_category = 'FIN'
+                recommended_type = "Bank"
+            
+            # DEB category inference - Debtors (should be receivables/current assets)
+            elif "debiteur" in account_name or (account_code.startswith("13") and "te ontvangen" in account_name):
+                inferred_category = 'DEB'
+                recommended_type = "Current Asset"  # Use Current Asset to avoid party requirements
+            
+            # CRED category inference - Creditors (should be payables/current liabilities)
+            elif "crediteur" in account_name or "te betalen" in account_name:
+                inferred_category = 'CRED'
+                recommended_type = "Current Liability"  # Use Current Liability to avoid party requirements
+            
+            # VAT/BTW category inference - Tax accounts
+            elif "btw" in account_name or "vat" in account_name:
+                inferred_category = 'VAT'
+                recommended_type = "Tax"
+            
+            # BAL category inference - Balance sheet accounts (everything else)
+            else:
+                inferred_category = 'BAL'
+                # For BAL accounts, use root_type to determine account type
+                if account.root_type == "Asset":
+                    if account_code.startswith("05"):
+                        recommended_type = "Equity"  # Misclassified equity accounts
+                    else:
+                        recommended_type = "Current Asset"
+                elif account.root_type == "Liability":
+                    if "vooruitontvangen" in account_name:
+                        recommended_type = "Current Liability"
+                    else:
+                        recommended_type = "Current Liability"
+                elif account.root_type == "Equity":
+                    recommended_type = "Equity"
+                else:
+                    recommended_type = "Current Asset"  # Default fallback
+            
+            # Log the inferred category for debugging
+            if inferred_category:
+                frappe.logger().info(f"Account {account_code} ({account_name}) inferred as E-Boekhouden category '{inferred_category}' -> {recommended_type}")
+            
+            if recommended_type or not account.is_group:
+                recommendations.append({
+                    "account": account.name,
+                    "account_name": account.account_name,
+                    "account_code": account.eboekhouden_grootboek_nummer,
+                    "current_type": account.account_type or "Not Set",
+                    "recommended_type": recommended_type or "Not Sure",
+                    "is_group": account.is_group
+                })
+        
+        return {
+            "success": True,
+            "recommendations": recommendations,
+            "total_accounts": len(recommendations)
+        }
+        
+    except Exception as e:
+        frappe.log_error(f"Error getting account recommendations: {str(e)}")
         return {"success": False, "error": str(e)}

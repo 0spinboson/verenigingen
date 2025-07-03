@@ -58,7 +58,8 @@ class MigrationCategorizer:
                     "missing_required_field": 0,
                     "invalid_date": 0,
                     "invalid_amount": 0,
-                    "missing_party": 0
+                    "missing_party": 0,
+                    "negative_stock": 0
                 },
                 "color": "yellow"
             },
@@ -71,7 +72,14 @@ class MigrationCategorizer:
                 "subcategories": {
                     "database_error": 0,
                     "configuration_error": 0,
-                    "unknown_error": 0
+                    "unknown_error": 0,
+                    "missing_supplier": 0,
+                    "missing_customer": 0,
+                    "cost_center_not_group": 0,
+                    "missing_reference": 0,
+                    "permission_error": 0,
+                    "invalid_link": 0,
+                    "accounting_error": 0
                 },
                 "color": "red"
             },
@@ -82,6 +90,14 @@ class MigrationCategorizer:
                 "description": "Duplicate processing attempts (not actual failures)",
                 "count": 0,
                 "color": "purple"
+            },
+            
+            # Unhandled mutation types
+            "unhandled_type": {
+                "label": "Unhandled Types",
+                "description": "Mutation types not supported by this migration",
+                "count": 0,
+                "color": "gray"
             }
         }
         
@@ -97,13 +113,29 @@ class MigrationCategorizer:
             "Due Date cannot be before": ("validation_error", "invalid_date"),
             "is mandatory": ("validation_error", "missing_required_field"),
             
-            # System errors
+            # System errors - Missing entities
+            "Could not find Party: Supplier": ("system_error", "missing_supplier"),
+            "Could not find Party: Customer": ("system_error", "missing_customer"),
             "does not exist": ("system_error", "configuration_error"),
             "Stock Received But Not Billed": ("system_error", "configuration_error"),
+            "is not a group node": ("system_error", "cost_center_not_group"),
+            "not found": ("system_error", "missing_reference"),
+            
+            # Permission errors
+            "Not permitted": ("system_error", "permission_error"),
+            "insufficient permissions": ("system_error", "permission_error"),
+            
+            # Financial errors
+            "negative stock": ("validation_error", "negative_stock"),
+            "Cannot create accounting entries": ("system_error", "accounting_error"),
             
             # Retry attempts
             "Duplicate entry": ("retry_attempt", None),
-            "already exists": ("already_exists", None)
+            "already exists": ("already_exists", None),
+            
+            # Link validation errors
+            "LinkValidationError": ("system_error", "invalid_link"),
+            "Link Error": ("system_error", "invalid_link")
         }
     
     def categorize_result(self, success, error_msg=None, skip_reason=None):
@@ -174,7 +206,7 @@ class MigrationCategorizer:
         
         # Show in order of importance
         order = ["imported", "unmatched_handled", "already_exists", 
-                "business_skip", "validation_error", "system_error", "retry_attempt"]
+                "business_skip", "validation_error", "system_error", "retry_attempt", "unhandled_type"]
         
         for key in order:
             if key in summary["categories"]:
@@ -208,6 +240,9 @@ def categorize_migration_results(stats, skip_reasons, errors):
     for _ in range(imported):
         categorizer.add_result("imported")
     
+    # IMPORTANT: Do NOT count unhandled mutations as part of the categorization
+    # They are mutations of types we don't process (e.g., BeginBalans, etc.)
+    
     # Add skipped records
     for reason, count in skip_reasons.items():
         if reason == "already_imported":
@@ -237,6 +272,11 @@ def categorize_migration_results(stats, skip_reasons, errors):
         if not categorized:
             categorizer.add_result("system_error", "unknown_error")
             error_counts["system_error:unknown"] += 1
+    
+    # Add unhandled mutations if present
+    unhandled_count = stats.get("unhandled_mutations", 0)
+    for _ in range(unhandled_count):
+        categorizer.add_result("unhandled_type")
     
     summary = categorizer.get_summary()
     summary["improved_message"] = categorizer.get_improved_message()

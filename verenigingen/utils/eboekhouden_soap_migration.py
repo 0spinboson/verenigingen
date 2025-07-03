@@ -12,7 +12,9 @@ from pymysql.err import IntegrityError
 
 def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
     """
-    Main migration function using SOAP API with mutation ID ranges
+    Main migration function using hybrid SOAP/REST approach:
+    - SOAP for Chart of Accounts and Relations
+    - REST for Mutations (to overcome 500-record limitation)
     
     Args:
         migration_doc: The migration document
@@ -20,6 +22,20 @@ def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
         use_account_mappings: Whether to use account mappings for document type determination
     """
     from .eboekhouden_soap_api import EBoekhoudenSOAPAPI
+    
+    # Pre-migration fixes
+    try:
+        # Fix known cost center issues
+        cost_centers = frappe.db.get_all("Cost Center",
+            filters={"cost_center_name": ["like", "%maanden - NVV%"]},
+            fields=["name", "is_group"])
+        
+        for cc in cost_centers:
+            if not cc.is_group:
+                frappe.db.set_value("Cost Center", cc.name, "is_group", 1)
+                frappe.db.commit()
+    except Exception as e:
+        frappe.log_error(f"Cost center fix error: {str(e)}", "E-Boekhouden Pre-Migration")
     
     try:
         api = EBoekhoudenSOAPAPI(settings)
@@ -73,63 +89,73 @@ def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
         # Pre-process: Fix account types before migration
         fix_account_types_for_migration(company)
         
-        # First, get the highest mutation number to understand the range
-        highest_result = api.get_highest_mutation_number()
-        if not highest_result["success"]:
-            return {
-                "success": False,
-                "error": f"Failed to determine mutation range: {highest_result.get('error')}"
-            }
-        
-        highest_mutation_nr = highest_result["highest_mutation_number"]
-        if highest_mutation_nr == 0:
-            return {
-                "success": False,
-                "error": "No mutations found in E-Boekhouden"
-            }
-        
-        # Process mutations in batches of 500
-        batch_size = 500
-        all_mutations = []
-        
-        # Check if we're resuming from a specific mutation number
-        start_from = 1
-        if hasattr(migration_doc, 'resume_from_mutation') and migration_doc.resume_from_mutation:
-            start_from = migration_doc.resume_from_mutation
-            frappe.publish_realtime(
-                "migration_progress",
-                {"message": f"Resuming from mutation number {start_from}..."},
-                user=frappe.session.user
-            )
-        
-        # Update migration doc with progress
+        # Get mutations via SOAP API (limited to 500 most recent)
         frappe.publish_realtime(
             "migration_progress",
-            {"message": f"Found highest mutation number: {highest_mutation_nr}. Starting batch processing from #{start_from}..."},
+            {"message": "Fetching mutations via SOAP API (limited to 500 most recent)..."},
             user=frappe.session.user
         )
         
-        # Process from start_from to highest mutation number
-        for start_nr in range(start_from, highest_mutation_nr + 1, batch_size):
-            end_nr = min(start_nr + batch_size - 1, highest_mutation_nr)
-            
-            # Update progress
+        # Get all available mutations (will be max 500 most recent)
+        result = api.get_mutations()
+        
+        if not result["success"]:
+            return {
+                "success": False,
+                "error": f"Failed to fetch mutations: {result.get('error', 'Unknown error')}"
+            }
+        
+        all_mutations = result.get("mutations", [])
+        
+        # Get highest mutation number
+        mutation_numbers = []
+        for mut in all_mutations:
+            nr = mut.get("MutatieNr")
+            if nr:
+                try:
+                    mutation_numbers.append(int(nr))
+                except:
+                    pass
+        
+        highest_mutation_nr = max(mutation_numbers) if mutation_numbers else 0
+        
+        # Log the actual range we got
+        if mutation_numbers:
+            min_mutation = min(mutation_numbers)
+            max_mutation = max(mutation_numbers)
             frappe.publish_realtime(
                 "migration_progress",
-                {"message": f"Processing mutations {start_nr} to {end_nr}..."},
+                {"message": f"Retrieved {len(all_mutations)} mutations (range: {min_mutation} to {max_mutation})"},
                 user=frappe.session.user
             )
-            
-            result = api.get_mutations(mutation_nr_from=start_nr, mutation_nr_to=end_nr)
-            
-            if result["success"]:
-                all_mutations.extend(result["mutations"])
-            else:
-                # Log error but continue with other batches
-                frappe.log_error(
-                    f"Failed to get mutations {start_nr}-{end_nr}: {result.get('error')}",
-                    "E-Boekhouden Migration"
-                )
+        else:
+            frappe.publish_realtime(
+                "migration_progress",
+                {"message": f"Retrieved {len(all_mutations)} mutations"},
+                user=frappe.session.user
+            )
+        
+        # Log what we actually got
+        mutation_numbers = []
+        for mut in all_mutations:
+            nr = mut.get("MutatieNr")
+            if nr:
+                mutation_numbers.append(int(nr))
+        
+        if mutation_numbers:
+            min_mutation = min(mutation_numbers)
+            max_mutation = max(mutation_numbers)
+            frappe.publish_realtime(
+                "migration_progress",
+                {"message": f"Fetched {len(all_mutations)} mutations (range: {min_mutation} to {max_mutation})"},
+                user=frappe.session.user
+            )
+        else:
+            frappe.publish_realtime(
+                "migration_progress",
+                {"message": f"Fetched {len(all_mutations)} mutations"},
+                user=frappe.session.user
+            )
         
         # Load relations data for enhanced customer/supplier names
         frappe.publish_realtime(
@@ -150,7 +176,8 @@ def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
             migration_doc.log_error(f"Failed to load relations: {relations_result.get('error', 'Unknown error')}")
         
         # Store relations data for use throughout migration
-        migration_doc._relations_data = relations_data
+        # Use a proper attribute name without underscore prefix
+        migration_doc.relations_data = relations_data
         
         # Update progress
         frappe.publish_realtime(
@@ -196,7 +223,7 @@ def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
         for soort, muts in mutations_by_type.items():
             if soort == "FactuurVerstuurd":
                 # Sales invoices
-                relations_data = getattr(migration_doc, '_relations_data', {})
+                relations_data = getattr(migration_doc, 'relations_data', {})
                 result = process_sales_invoices(muts, company, cost_center, migration_doc, relations_data)
                 stats["invoices_created"] += result.get("created", 0)
                 stats["errors"].extend(result.get("errors", []))
@@ -215,7 +242,7 @@ def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
                     stats["invoices_created"] += result.get("created_purchase_invoices", 0)
                     stats["journal_entries_created"] += result.get("created_journal_entries", 0)
                 else:
-                    relations_data = getattr(migration_doc, '_relations_data', {})
+                    relations_data = getattr(migration_doc, 'relations_data', {})
                     result = process_purchase_invoices(muts, company, cost_center, migration_doc, relations_data)
                     stats["invoices_created"] += result.get("created", 0)
                 stats["errors"].extend(result.get("errors", []))
@@ -275,6 +302,18 @@ def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
                     all_skipped += result["skipped"]
                     for reason, count in result.get("skip_reasons", {}).items():
                         all_skip_reasons[reason] = all_skip_reasons.get(reason, 0) + count
+                        
+            elif soort == "BeginBalans":
+                # Opening balance entries
+                result = process_beginbalans_entries(muts, company, cost_center, migration_doc)
+                stats["journal_entries_created"] += result.get("created", 0)
+                stats["errors"].extend(result.get("errors", []))
+                
+                # Track skipped mutations
+                if "skipped" in result:
+                    all_skipped += result["skipped"]
+                    for reason, count in result.get("skip_reasons", {}).items():
+                        all_skip_reasons[reason] = all_skip_reasons.get(reason, 0) + count
             else:
                 # Unhandled mutation type
                 unhandled_mutations += len(muts)
@@ -311,10 +350,18 @@ def migrate_using_soap(migration_doc, settings, use_account_mappings=True):
         }
         
     except Exception as e:
-        frappe.log_error(f"SOAP migration error: {str(e)}", "E-Boekhouden Migration")
+        import traceback
+        error_details = f"SOAP migration error: {str(e)}\n\nTraceback:\n{traceback.format_exc()}"
+        frappe.log_error(error_details, "E-Boekhouden Migration")
+        
+        # Better error message for debugging
+        error_msg = str(e)
+        if "missing_customer" in error_msg:
+            error_msg = f"Error accessing data: {error_msg}. This might be a code issue with dictionary access."
+        
         return {
             "success": False,
-            "error": str(e)
+            "error": error_msg
         }
 
 def process_sales_invoices(mutations, company, cost_center, migration_doc, relation_data_map=None):
@@ -344,7 +391,7 @@ def process_sales_invoices(mutations, company, cost_center, migration_doc, relat
             description = mut.get("Omschrijving", "")
             
             # Get or create customer with relation data
-            relation_data = migration_doc._relations_data.get(str(customer_code)) if hasattr(migration_doc, '_relations_data') else None
+            relation_data = migration_doc.relations_data.get(str(customer_code)) if hasattr(migration_doc, 'relations_data') else None
             customer = get_or_create_customer(customer_code, description, relation_data)
             
             # Create sales invoice
@@ -403,7 +450,12 @@ def process_sales_invoices(mutations, company, cost_center, migration_doc, relat
                 amount = float(regel.get("BedragExclBTW", 0))
                 if amount > 0:
                     si.append("items", {
-                        "item_code": get_or_create_item(regel.get("TegenrekeningCode")),
+                        "item_code": get_or_create_item(
+                            regel.get("TegenrekeningCode"), 
+                            company, 
+                            "Sales",
+                            mut.get("Omschrijving")
+                        ),
                         "qty": 1,
                         "rate": amount,
                         "income_account": get_account_by_code(regel.get("TegenrekeningCode"), company),
@@ -732,6 +784,10 @@ def get_or_create_supplier(code, description="", relation_data=None):
             return create_supplier_from_description(description)
         return "E-Boekhouden Import Supplier"
     
+    # First check if supplier exists with code as the name (for backward compatibility)
+    if frappe.db.exists("Supplier", code):
+        return code
+    
     # Check if supplier exists with this code
     supplier = frappe.db.get_value("Supplier", {"eboekhouden_relation_code": code}, "name")
     if supplier:
@@ -748,6 +804,15 @@ def get_or_create_supplier(code, description="", relation_data=None):
     supplier.insert(ignore_permissions=True)
     
     return supplier.name
+
+def ensure_supplier_compatibility(supplier_name, code):
+    """Ensure supplier can be found by both name and code"""
+    # If the supplier name is different from code, we need to handle lookups by code
+    if supplier_name and supplier_name != code and code:
+        # Store mapping for quick lookup
+        cache_key = f"supplier_code_map_{code}"
+        frappe.cache().set_value(cache_key, supplier_name, expires_in_sec=3600)
+    return supplier_name
 
 def get_meaningful_supplier_name(code, description, relation_data):
     """Create a meaningful supplier name from available data"""
@@ -792,41 +857,12 @@ def create_supplier_from_description(description):
     
     return supplier.name
 
-def get_or_create_item(code):
-    """Get or create item for invoice line"""
-    if not code:
-        code = "MISC"
+def get_or_create_item(code, company=None, transaction_type="Both", description=None):
+    """Get or create item for invoice line with improved naming"""
+    # Use the improved item naming logic
+    from .eboekhouden_improved_item_naming import get_or_create_item_improved
     
-    item_name = f"Service {code}"
-    if not frappe.db.exists("Item", item_name):
-        try:
-            item = frappe.new_doc("Item")
-            item.item_code = item_name
-            item.item_name = item_name
-            item.item_group = frappe.db.get_value("Item Group", {"is_group": 0}, "name") or "Services"
-            item.stock_uom = "Nos"
-            item.is_stock_item = 0
-            item.insert(ignore_permissions=True)
-        except Exception as e:
-            frappe.log_error(f"Failed to create item {item_name}: {str(e)}")
-            # Return a default item
-            default_item = frappe.db.get_value("Item", {"is_stock_item": 0}, "name")
-            if default_item:
-                return default_item
-            # As last resort, create a generic item
-            try:
-                generic = frappe.new_doc("Item")
-                generic.item_code = "Generic Service"
-                generic.item_name = "Generic Service"
-                generic.item_group = frappe.db.get_value("Item Group", {"is_group": 0}, "name")
-                generic.stock_uom = "Nos"
-                generic.is_stock_item = 0
-                generic.insert(ignore_permissions=True)
-                return generic.name
-            except:
-                raise Exception("Cannot create items for invoices")
-    
-    return item_name
+    return get_or_create_item_improved(code, company, transaction_type, description)
 
 def get_account_by_code(code, company):
     """Get account by E-Boekhouden code"""
@@ -1237,7 +1273,12 @@ def process_purchase_invoices(mutations, company, cost_center, migration_doc, re
                 amount = float(regel.get("BedragExclBTW", 0))
                 if amount > 0:
                     pi.append("items", {
-                        "item_code": get_or_create_item(regel.get("TegenrekeningCode")),
+                        "item_code": get_or_create_item(
+                            regel.get("TegenrekeningCode"),
+                            company,
+                            "Purchase",
+                            mut.get("Omschrijving")
+                        ),
                         "qty": 1,
                         "rate": amount,
                         "expense_account": get_expense_account_by_code(regel.get("TegenrekeningCode"), company),
@@ -1321,6 +1362,23 @@ def process_supplier_payments(mutations, company, cost_center, migration_doc, re
                 skipped += 1
                 skip_reasons["already_paid"] = skip_reasons.get("already_paid", 0) + 1
                 continue
+            
+            # Ensure supplier exists before creating payment
+            if not frappe.db.exists("Supplier", pi.supplier):
+                # Try to create supplier based on relation code
+                supplier_code = mut.get("RelatieCode")
+                if supplier_code:
+                    relation_data = relation_data_map.get(supplier_code) if relation_data_map else None
+                    new_supplier = get_or_create_supplier(supplier_code, mut.get("Omschrijving", ""), relation_data)
+                    # Update the invoice's supplier if needed
+                    if new_supplier and new_supplier != pi.supplier:
+                        frappe.db.set_value("Purchase Invoice", pi.name, "supplier", new_supplier)
+                        pi.supplier = new_supplier
+                else:
+                    # Cannot create payment without valid supplier
+                    errors.append(f"Payment for Invoice {mut.get('Factuurnummer')}: Supplier '{pi.supplier}' not found and no relation code available")
+                    migration_doc.log_error(f"Supplier '{pi.supplier}' not found for invoice {invoice_no}", "supplier_payment", mut)
+                    continue
             
             # Create payment entry
             pe = frappe.new_doc("Payment Entry")
@@ -1545,6 +1603,108 @@ def process_memorial_entries(mutations, company, cost_center, migration_doc):
     if skipped > 0:
         skip_summary = ", ".join([f"{reason}: {count}" for reason, count in skip_reasons.items()])
         frappe.logger().info(f"Memorial entries - Created: {created}, Skipped: {skipped} ({skip_summary}), Failed: {len(errors)}")
+    
+    return {"created": created, "errors": errors, "skipped": skipped, "skip_reasons": skip_reasons}
+
+def process_beginbalans_entries(mutations, company, cost_center, migration_doc):
+    """Process BeginBalans (opening balance) entries"""
+    created = 0
+    errors = []
+    skipped = 0
+    skip_reasons = {}
+    
+    frappe.logger().info(f"Processing {len(mutations)} BeginBalans entries")
+    
+    # Check if opening balance already exists
+    existing_opening_balance = frappe.db.exists("Journal Entry", {
+        "company": company,
+        "user_remark": ["like", "%Opening Balance%"],
+        "docstatus": ["!=", 2]
+    })
+    
+    if existing_opening_balance:
+        skip_reasons["opening_balance_exists"] = len(mutations)
+        skipped = len(mutations)
+        frappe.logger().info(f"Opening balance already exists: {existing_opening_balance}")
+        return {"created": 0, "errors": [], "skipped": skipped, "skip_reasons": skip_reasons}
+    
+    # Group all BeginBalans entries into a single journal entry
+    je = frappe.new_doc("Journal Entry")
+    je.posting_date = "2019-01-01"  # Default opening date
+    je.company = company
+    je.user_remark = "Opening Balance - E-Boekhouden BeginBalans"
+    
+    for mut in mutations:
+        try:
+            mutation_dict = mut
+            
+            # Get account code and amount
+            account_code = mutation_dict.get("Rekening", "")
+            debit_amount = float(mutation_dict.get("BedragDebet", 0) or 0)
+            credit_amount = float(mutation_dict.get("BedragCredit", 0) or 0)
+            description = mutation_dict.get("Omschrijving", "")
+            
+            if not account_code:
+                errors.append(f"BeginBalans entry without account code: {mutation_dict}")
+                continue
+            
+            # Find the ERPNext account
+            account = frappe.db.get_value(
+                "Account",
+                {"account_number": account_code, "company": company},
+                "name"
+            )
+            
+            if not account:
+                # Try without company filter
+                account = frappe.db.get_value(
+                    "Account",
+                    {"account_number": account_code},
+                    "name"
+                )
+            
+            if not account:
+                errors.append(f"Account not found for code {account_code}: {description}")
+                continue
+            
+            # Add to journal entry
+            je.append("accounts", {
+                "account": account,
+                "debit_in_account_currency": debit_amount,
+                "credit_in_account_currency": credit_amount,
+                "user_remark": description or f"Opening balance for {account_code}",
+                "cost_center": cost_center
+            })
+            
+        except Exception as e:
+            errors.append(f"Error processing BeginBalans {mutation_dict}: {str(e)}")
+    
+    # Save the journal entry if it has entries and is balanced
+    if len(je.accounts) >= 2:
+        try:
+            total_debit = sum(acc.debit_in_account_currency for acc in je.accounts)
+            total_credit = sum(acc.credit_in_account_currency for acc in je.accounts)
+            
+            if abs(total_debit - total_credit) < 0.01:
+                je.insert(ignore_permissions=True)
+                je.submit()
+                created = 1
+                frappe.logger().info(f"Created opening balance journal entry {je.name}")
+            else:
+                errors.append(f"Opening balance not balanced. Debit: {total_debit}, Credit: {total_credit}")
+                skipped = len(mutations)
+                skip_reasons["unbalanced"] = len(mutations)
+        except Exception as e:
+            errors.append(f"Error creating opening balance journal entry: {str(e)}")
+            skipped = len(mutations)
+            skip_reasons["creation_error"] = len(mutations)
+    else:
+        skipped = len(mutations)
+        skip_reasons["insufficient_accounts"] = len(mutations)
+    
+    if skipped > 0:
+        skip_summary = ", ".join([f"{reason}: {count}" for reason, count in skip_reasons.items()])
+        frappe.logger().info(f"BeginBalans entries - Created: {created}, Skipped: {skipped} ({skip_summary}), Failed: {len(errors)}")
     
     return {"created": created, "errors": errors, "skipped": skipped, "skip_reasons": skip_reasons}
 
