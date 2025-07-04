@@ -13,7 +13,7 @@
  "modified_by": "Administrator",
  "name": "Verenigingen-Install-Email-Templates",
  "owner": "Administrator",
- "path": "/install_email_templates",
+ "path": "install_email_templates",
  "reference_document": "Email Template",
  "show_form_tour": 0,
  "show_full_form": 0,

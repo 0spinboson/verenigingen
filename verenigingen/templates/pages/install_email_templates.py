@@ -47,6 +47,31 @@ def install_templates():
         # Install basic templates
         basic_count = create_application_email_templates()
         
+        # Enable all newly created templates
+        basic_templates = [
+            "membership_application_confirmation",
+            "membership_welcome", 
+            "volunteer_welcome",
+            "membership_payment_failed"
+        ]
+        
+        for template_name in basic_templates:
+            if frappe.db.exists("Email Template", template_name):
+                frappe.db.set_value("Email Template", template_name, "enabled", 1)
+        
+        # Also enable enhanced and comprehensive templates if they exist
+        enhanced_templates = ["membership_application_rejected", "membership_rejection_incomplete"]
+        for template_name in enhanced_templates:
+            if frappe.db.exists("Email Template", template_name):
+                frappe.db.set_value("Email Template", template_name, "enabled", 1)
+        
+        # Enable comprehensive templates (all expense and notification templates)
+        comprehensive_templates = frappe.get_all("Email Template", 
+            filters=[["name", "like", "expense_%"], ["name", "like", "termination_%"], ["name", "like", "donation_%"]],
+            fields=["name"])
+        for template in comprehensive_templates:
+            frappe.db.set_value("Email Template", template.name, "enabled", 1)
+        
         # Install enhanced templates
         enhanced_count = 0
         try:

@@ -387,7 +387,8 @@ def create_comprehensive_email_templates():
                     "name": template_name,
                     "subject": template_data["subject"],
                     "use_html": 1,
-                    "response": template_data["response"]
+                    "response": template_data["response"],
+                    "enabled": 1
                 })
                 template_doc.insert(ignore_permissions=True)
                 created_count += 1
