@@ -78,20 +78,26 @@ class Team(Document):
                     )
             return
 
-        # Get old team members for comparison
-        old_members = {(m.volunteer, m.role, str(m.from_date)): m 
-                      for m in (self._doc_before_save.team_members or []) 
-                      if m.volunteer}
+        # Get old team members - group by volunteer and from_date (not role)
+        old_members_by_volunteer = {}
+        for m in (self._doc_before_save.team_members or []):
+            if m.volunteer:
+                key = (m.volunteer, str(m.from_date))
+                old_members_by_volunteer[key] = m
         
-        # Check current team members
-        current_members = {(m.volunteer, m.role, str(m.from_date)): m 
-                          for m in (self.team_members or []) 
-                          if m.volunteer}
+        # Check current team members - group by volunteer and from_date
+        current_members_by_volunteer = {}
+        for m in (self.team_members or []):
+            if m.volunteer:
+                key = (m.volunteer, str(m.from_date))
+                current_members_by_volunteer[key] = m
 
-        # Find new assignments (members added or reactivated)
-        for key, member in current_members.items():
-            if key not in old_members:
-                # New member
+        # Process each current member
+        for key, member in current_members_by_volunteer.items():
+            volunteer_id, from_date = key
+            
+            if key not in old_members_by_volunteer:
+                # New member assignment
                 if member.is_active:
                     self.add_team_assignment_history(
                         member.volunteer,
@@ -99,9 +105,30 @@ class Team(Document):
                         member.from_date
                     )
             else:
-                old_member = old_members[key]
+                old_member = old_members_by_volunteer[key]
+                
+                # Check for role changes (same volunteer, same from_date, different role/role_type)
+                role_changed = (old_member.role != member.role or 
+                               old_member.role_type != member.role_type)
+                
+                if role_changed and old_member.is_active and member.is_active:
+                    # Role changed - complete old assignment and create new one
+                    change_date = frappe.utils.today()
+                    self.complete_team_assignment_history(
+                        old_member.volunteer,
+                        old_member.role,
+                        old_member.from_date,
+                        change_date
+                    )
+                    # Start new assignment with new role using today's date
+                    self.add_team_assignment_history(
+                        member.volunteer,
+                        member.role,
+                        change_date  # Use change date, not original from_date
+                    )
+                
                 # Check if member was reactivated
-                if not old_member.is_active and member.is_active:
+                elif not old_member.is_active and member.is_active:
                     self.add_team_assignment_history(
                         member.volunteer,
                         member.role,
@@ -118,8 +145,8 @@ class Team(Document):
                     )
 
         # Find removed assignments
-        for key, old_member in old_members.items():
-            if key not in current_members and old_member.is_active:
+        for key, old_member in old_members_by_volunteer.items():
+            if key not in current_members_by_volunteer and old_member.is_active:
                 # Member was removed entirely
                 end_date = frappe.utils.today()
                 self.complete_team_assignment_history(

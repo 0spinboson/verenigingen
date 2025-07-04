@@ -48,7 +48,7 @@ def notify_about_orphaned_records():
         # Add appropriate roles or specific users as recipients
         membership_managers = frappe.get_all(
             "Has Role", 
-            filters={"role": "Membership Manager", "parenttype": "User"},
+            filters={"role": "Verenigingen Manager", "parenttype": "User"},
             fields=["parent"]
         )
         

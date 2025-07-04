@@ -181,7 +181,7 @@ def has_system_access(user):
         system_roles = [
             "System Manager", 
             "Verenigingen Administrator", 
-            "Membership Manager",
+            "Verenigingen Manager",
             "Chapter Manager",
             "Governance Auditor"
         ]

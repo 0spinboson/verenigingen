@@ -20,6 +20,7 @@ on_app_init = ["verenigingen.setup.doctype_overrides.setup_subscription_override
 app_include_css = [
     "/assets/verenigingen/css/verenigingen_custom.css",
     "/assets/verenigingen/css/volunteer_portal.css"
+    # Note: brand_colors.css loaded per-template to avoid 404 errors
 ]
 app_include_js = [
     # Removed termination_dashboard.js as it's a React component and causes import errors
@@ -108,9 +109,14 @@ doc_events = {
         "on_submit": "verenigingen.utils.payment_notifications.on_payment_submit"
     },
     
-    # Volunteer department sync
+    # Volunteer expense approver sync (native ERPNext system)
     "Volunteer": {
-        "on_update": "verenigingen.utils.department_hierarchy.update_volunteer_employee_department"
+        "on_update": "verenigingen.utils.native_expense_helpers.update_employee_approver"
+    },
+    
+    # Brand Settings - regenerate CSS when colors change (Single doctype)
+    "Brand Settings": {
+        "on_update": "verenigingen.utils.brand_css_generator.generate_brand_css_file"
     },
 }
 
@@ -158,8 +164,8 @@ scheduler_events = {
         # SEPA mandate expiry notifications
         "verenigingen.utils.sepa_notifications.check_and_send_expiry_notifications",
         
-        # Department hierarchy sync
-        "verenigingen.utils.department_hierarchy.sync_approvers",
+        # Native expense approver sync
+        "verenigingen.utils.native_expense_helpers.refresh_all_expense_approvers",
     ],
     "weekly": [
         # Termination reports and reviews

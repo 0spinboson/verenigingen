@@ -4,53 +4,8 @@
 
 {% block style %}
 <link href="/assets/verenigingen/css/tailwind.css" rel="stylesheet">
-<style>
-/* Override Tailwind CSS custom properties to use our brand colors */
-:root {
-    --color-primary-500: var(--brand-primary, #39E4A5) !important;
-    --color-primary-600: var(--brand-primary-hover, #CB2929) !important;
-    --color-secondary-500: var(--brand-secondary, #49ad58) !important;
-    --color-secondary-600: var(--brand-secondary-hover, #015a52) !important;
-    --color-accent-500: var(--brand-accent, #4463F0) !important;
-    --color-accent-600: var(--brand-accent-hover, #4d2673) !important;
-}
-
-/* Override primary colors to use brand variables */
-.bg-primary-100 { background-color: color-mix(in srgb, var(--brand-primary) 10%, white) !important; }
-.bg-primary-500 { background-color: var(--brand-primary) !important; }
-.bg-primary-600 { background-color: var(--brand-primary) !important; }
-.text-primary-500 { color: var(--brand-primary) !important; }
-.text-primary-600 { color: var(--brand-primary) !important; }
-
-/* Override secondary colors */
-.text-secondary-500 { color: var(--brand-secondary) !important; }
-.text-secondary-600 { color: var(--brand-secondary) !important; }
-
-/* Override accent colors */
-.text-accent-500 { color: var(--brand-accent) !important; }
-.text-accent-600 { color: var(--brand-accent) !important; }
-
-/* Override warning colors */
-.text-warning-600 { color: var(--brand-warning) !important; }
-
-/* Override success/danger colors */
-.bg-success-100 { background-color: color-mix(in srgb, var(--brand-success) 10%, white) !important; }
-.bg-success-500 { background-color: var(--brand-success) !important; }
-.text-success-800 { color: var(--brand-success) !important; }
-.bg-danger-100 { background-color: color-mix(in srgb, var(--brand-error) 10%, white) !important; }
-.text-danger-600 { color: var(--brand-error) !important; }
-.text-danger-800 { color: var(--brand-error) !important; }
-.bg-warning-100 { background-color: color-mix(in srgb, var(--brand-warning) 10%, white) !important; }
-.text-warning-800 { color: var(--brand-warning) !important; }
-
-/* Force override .form-header specifically */
-.form-header {
-    --tw-gradient-from: var(--brand-primary, #39E4A5) !important;
-    --tw-gradient-to: var(--brand-primary-hover, #CB2929) !important;
-    --color-primary-500: var(--brand-primary, #39E4A5) !important;
-    --color-primary-600: var(--brand-primary-hover, #CB2929) !important;
-}
-</style>
+{% from "templates/macros/brand_css.html" import brand_css %}
+{{ brand_css() }}
 {% endblock %}
 
 {% block page_content %}
@@ -93,27 +48,27 @@
         <div class="bg-red-600 rounded-xl text-white p-8 mb-8 shadow-lg animate-slide-up">
             <h2 class="text-3xl font-bold mb-6">{{ _("Hello, {0}!").format(member.first_name or member.full_name) }}</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div class="text-center">
-                    <h4 class="text-lg font-medium opacity-90 mb-2">{{ _("Member ID") }}</h4>
+                <div class="text-center min-h-[80px] flex flex-col justify-center">
+                    <h4 class="text-lg font-medium opacity-90 mb-2">{{ _("ID") }}</h4>
                     <div class="text-2xl font-bold">{{ member.member_id or _("Pending") }}</div>
                 </div>
-                <div class="text-center">
-                    <h4 class="text-lg font-medium opacity-90 mb-2">{{ _("Membership Status") }}</h4>
-                    <div class="text-2xl font-bold">
+                <div class="text-center min-h-[80px] flex flex-col justify-center">
+                    <h4 class="text-lg font-medium opacity-90 mb-2">{{ _("Status") }}</h4>
+                    <div class="text-xl font-bold">
                         {% if membership %}
-                        <span class="inline-block px-4 py-2 bg-success-500 text-white rounded-full text-lg font-semibold">{{ _(membership.status) }}</span>
+                        <span class="inline-block px-3 py-1 bg-success-500 text-white rounded-full text-sm font-semibold">{{ _(membership.status) }}</span>
                         {% else %}
-                        <span class="inline-block px-4 py-2 bg-warning-500 text-white rounded-full text-lg font-semibold">{{ _("No Active Membership") }}</span>
+                        <span class="inline-block px-3 py-1 bg-warning-500 text-white rounded-full text-sm font-semibold">{{ _("No Membership") }}</span>
                         {% endif %}
                     </div>
                 </div>
-                <div class="text-center">
-                    <h4 class="text-lg font-medium opacity-90 mb-2">{{ _("Member Since") }}</h4>
+                <div class="text-center min-h-[80px] flex flex-col justify-center">
+                    <h4 class="text-lg font-medium opacity-90 mb-2">{{ _("Since") }}</h4>
                     <div class="text-2xl font-bold">{{ frappe.utils.formatdate(member.creation, "MMM yyyy") }}</div>
                 </div>
                 {% if volunteer %}
-                <div class="text-center">
-                    <h4 class="text-lg font-medium opacity-90 mb-2">{{ _("Volunteer Hours (This Year)") }}</h4>
+                <div class="text-center min-h-[80px] flex flex-col justify-center">
+                    <h4 class="text-lg font-medium opacity-90 mb-2">{{ _("Hours") }}</h4>
                     <div class="text-2xl font-bold">{{ volunteer_hours or 0 }}</div>
                 </div>
                 {% endif %}

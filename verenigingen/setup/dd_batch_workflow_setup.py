@@ -45,14 +45,14 @@ def create_dd_batch_workflow():
         workflow_doc.append("states", {
             "state": "Validation Failed", 
             "doc_status": "0",
-            "allow_edit": "Membership Manager"
+            "allow_edit": "Verenigingen Manager"
         })
         
         # State 4: Pending Approval (Manager review needed)
         workflow_doc.append("states", {
             "state": "Pending Approval",
             "doc_status": "0", 
-            "allow_edit": "Membership Manager"
+            "allow_edit": "Verenigingen Manager"
         })
         
         # State 5: Pending Senior Approval (High-value batches)
@@ -111,7 +111,7 @@ def create_dd_batch_workflow():
             "state": "Draft",
             "action": "Validate",
             "next_state": "Pending Validation",
-            "allowed": "Membership Manager"
+            "allowed": "Verenigingen Manager"
         })
         
         # Pending Validation → Validation Failed (Fail Validation)
@@ -143,7 +143,7 @@ def create_dd_batch_workflow():
             "state": "Validation Failed",
             "action": "Re-validate",
             "next_state": "Pending Validation",
-            "allowed": "Membership Manager"
+            "allowed": "Verenigingen Manager"
         })
         
         # Pending Approval → Approved (Approve)
@@ -151,7 +151,7 @@ def create_dd_batch_workflow():
             "state": "Pending Approval",
             "action": "Approve",
             "next_state": "Approved",
-            "allowed": "Membership Manager"
+            "allowed": "Verenigingen Manager"
         })
         
         # Pending Senior Approval → Approved (Senior Approve)
@@ -303,7 +303,7 @@ def create_required_roles():
     
     print("   👥 Creating required roles...")
     
-    required_roles = ["Membership Manager", "Finance Manager"]
+    required_roles = ["Verenigingen Manager", "Finance Manager"]
     
     for role_name in required_roles:
         if not frappe.db.exists("Role", role_name):

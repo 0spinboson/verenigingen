@@ -64,6 +64,6 @@ def generate_test_members_from_onboarding():
 def cleanup_test_data():
     """Clean up test members"""
     # Import the cleanup function from templates/pages
-    from vereiningen.templates.pages.onboarding_member_setup import cleanup_test_data as cleanup_impl
+    from verenigingen.templates.pages.onboarding_member_setup import cleanup_test_data as cleanup_impl
     
     return cleanup_impl()

@@ -265,7 +265,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Membership Manager",
+   "role": "Verenigingen Manager",
    "share": 1,
    "write": 1
   },
@@ -279,8 +279,10 @@
    "share": 1
   },
   {
+   "if_owner": 1,
    "read": 1,
-   "role": "Verenigingen Member"
+   "role": "Verenigingen Member",
+   "write": 1
   }
  ],
  "sort_field": "modified",

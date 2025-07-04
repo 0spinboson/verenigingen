@@ -6,7 +6,24 @@ import time
 import frappe
 from frappe import _
 from frappe.utils import today, now_datetime, getdate, add_days
+from verenigingen.utils.dutch_name_utils import (
+    is_dutch_installation, 
+    get_full_last_name, 
+    format_dutch_full_name
+)
 # Import moved inside function to avoid circular imports
+
+
+def map_payment_method(payment_method):
+    """Map form payment method values to Member doctype values"""
+    payment_method_map = {
+        "bank_transfer": "Bank Transfer",
+        "sepa_direct_debit": "SEPA Direct Debit",
+        "credit_card": "Credit Card",
+        "cash": "Cash",
+        "other": "Other"
+    }
+    return payment_method_map.get(payment_method, payment_method)
 
 
 def generate_application_id():
@@ -221,7 +238,7 @@ def create_member_from_application(data, application_id, address=None):
         "newsletter_opt_in": data.get("newsletter_opt_in", 1),
         "application_source": data.get("application_source", "Website"),
         "notes": data.get("additional_notes", ""),
-        "payment_method": data.get("payment_method", ""),
+        "payment_method": map_payment_method(data.get("payment_method", "")),
         "current_chapter_display": data.get("selected_chapter", ""),
         # Bank details for bank transfer/direct debit
         "iban": data.get("iban", ""),
@@ -336,8 +353,22 @@ def create_volunteer_record(member):
         return None
         
     try:
-        # Create volunteer name from member's full name or first/last name
-        volunteer_name = member.full_name or f"{member.first_name} {member.last_name}".strip()
+        # Create volunteer name using Dutch naming conventions if applicable
+        if member.full_name:
+            # Use the member's properly formatted full_name (which includes Dutch naming if applicable)
+            volunteer_name = member.full_name
+        elif is_dutch_installation() and hasattr(member, 'tussenvoegsel') and member.tussenvoegsel:
+            # For Dutch installations, format name with tussenvoegsel
+            volunteer_name = format_dutch_full_name(
+                member.first_name, 
+                None,  # Don't use middle_name when tussenvoegsel is available
+                member.tussenvoegsel, 
+                member.last_name
+            )
+        else:
+            # Standard name formatting for non-Dutch installations
+            volunteer_name = f"{member.first_name} {member.last_name}".strip()
+            
         if not volunteer_name:
             volunteer_name = member.email  # Fallback to email if no name available
         

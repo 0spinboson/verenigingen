@@ -1,16 +1,13 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "field:settings_name",
+ "autoname": "",
  "creation": "2025-01-01 00:00:00.000000",
  "default_view": "List",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "settings_name",
-  "is_active",
-  "column_break_3",
   "description",
   "section_break_4",
   "logo",
@@ -37,25 +34,6 @@
   "background_secondary_color"
  ],
  "fields": [
-  {
-   "fieldname": "settings_name",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Settings Name",
-   "reqd": 1,
-   "unique": 1
-  },
-  {
-   "default": "0",
-   "fieldname": "is_active",
-   "fieldtype": "Check",
-   "in_list_view": 1,
-   "label": "Is Active"
-  },
-  {
-   "fieldname": "column_break_3",
-   "fieldtype": "Column Break"
-  },
   {
    "fieldname": "description",
    "fieldtype": "Text",
@@ -218,7 +196,7 @@
   }
  ],
  "index_web_pages_for_search": 1,
- "issingle": 0,
+ "issingle": 1,
  "links": [],
  "modified": "2025-01-01 00:00:00.000000",
  "modified_by": "Administrator",

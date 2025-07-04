@@ -306,13 +306,13 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Membership Manager",
+   "role": "Verenigingen Manager",
    "share": 1,
    "write": 1
   },
   {
    "read": 1,
-   "role": "Membership User"
+   "role": "Verenigingen Staff"
   }
  ],
  "sort_field": "modified",

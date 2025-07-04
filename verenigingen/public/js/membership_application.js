@@ -670,7 +670,7 @@ class MembershipApplication {
             application_source_details: $('#application_source_details').val() || '',
             
             // Step 5: Payment Details
-            payment_method: $('input[name="payment_method_selection"]:checked').val() || $('#payment_method').val() || '',
+            payment_method: $('input[name="payment_method"]:checked').val() || $('#payment_method').val() || '',
             
             
             // Bank Account Details (SEPA Direct Debit)

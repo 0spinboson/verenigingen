@@ -354,7 +354,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Membership Manager",
+   "role": "Verenigingen Manager",
    "share": 1,
    "submit": 1,
    "write": 1
@@ -365,7 +365,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Membership User",
+   "role": "Verenigingen Staff",
    "share": 1
   },
   {
@@ -379,6 +379,11 @@
    "role": "Verenigingen Administrator",
    "share": 1,
    "write": 1
+  },
+  {
+   "if_owner": 1,
+   "read": 1,
+   "role": "Verenigingen Member"
   }
  ],
  "row_format": "Dynamic",

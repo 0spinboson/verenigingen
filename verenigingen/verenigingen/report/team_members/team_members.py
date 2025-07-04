@@ -15,7 +15,7 @@ def execute(filters=None):
 	if not (frappe.session.user == "Administrator" or 
 	        "System Manager" in frappe.get_roles() or 
 	        "Verenigingen Administrator" in frappe.get_roles() or
-	        "Membership Manager" in frappe.get_roles() or
+	        "Verenigingen Manager" in frappe.get_roles() or
 	        "Volunteer Manager" in frappe.get_roles()):
 		
 		# Check if user is a member of this team

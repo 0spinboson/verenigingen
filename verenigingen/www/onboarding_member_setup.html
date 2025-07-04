@@ -278,7 +278,7 @@ frappe.ready(function() {
             btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> ' + __('Cleaning...');
             
             frappe.call({
-                method: 'vereiningen.www.onboarding_member_setup.cleanup_test_data',
+                method: 'verenigingen.www.onboarding_member_setup.cleanup_test_data',
                 callback: function(r) {
                     if (r.message && r.message.success) {
                         testResultDiv.innerHTML = 

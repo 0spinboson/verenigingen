@@ -209,7 +209,7 @@ def has_permission(doc, user=None, ptype=None):
         user = frappe.session.user
     
     # Admin roles have full access
-    if frappe.db.get_value("Has Role", {"parent": user, "role": ["in", ["System Manager", "Membership Manager", "Verenigingen Administrator"]]}, "name"):
+    if frappe.db.get_value("Has Role", {"parent": user, "role": ["in", ["System Manager", "Verenigingen Manager", "Verenigingen Administrator"]]}, "name"):
         return True
     
     # Members can only access their own mandates
@@ -229,7 +229,7 @@ def get_permission_query_conditions(user=None):
         user = frappe.session.user
     
     # Admin roles can see all mandates
-    if frappe.db.get_value("Has Role", {"parent": user, "role": ["in", ["System Manager", "Membership Manager", "Verenigingen Administrator"]]}, "name"):
+    if frappe.db.get_value("Has Role", {"parent": user, "role": ["in", ["System Manager", "Verenigingen Manager", "Verenigingen Administrator"]]}, "name"):
         return ""
     
     # Members can only see their own mandates

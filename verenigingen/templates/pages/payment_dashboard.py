@@ -10,7 +10,7 @@ def get_context(context):
     is_member = frappe.db.exists("Has Role", {"parent": frappe.session.user, "role": "Verenigingen Member"})
     is_admin = frappe.db.exists("Has Role", {
         "parent": frappe.session.user, 
-        "role": ["in", ["System Manager", "Membership Manager", "Verenigingen Administrator"]]
+        "role": ["in", ["System Manager", "Verenigingen Manager", "Verenigingen Administrator"]]
     })
     
     if not is_member and not is_admin:

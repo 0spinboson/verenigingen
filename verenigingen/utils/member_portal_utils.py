@@ -203,7 +203,7 @@ def get_user_appropriate_home_page():
         return "/member_portal"  # Could be a volunteer-specific portal later
     
     # System users get the app
-    system_roles = ["System Manager", "Verenigingen Administrator", "Membership Manager"]
+    system_roles = ["System Manager", "Verenigingen Administrator", "Verenigingen Manager"]
     if any(role in user_roles for role in system_roles):
         return "/app"
     

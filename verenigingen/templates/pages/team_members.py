@@ -40,7 +40,7 @@ def get_context(context):
         frappe.throw(_("You must be registered as a volunteer to access team information"), frappe.PermissionError)
     
     # Security check: Only allow team members or admins to view team members
-    admin_roles = ["System Manager", "Verenigingen Administrator", "Membership Manager", "Volunteer Manager"]
+    admin_roles = ["System Manager", "Verenigingen Administrator", "Verenigingen Manager", "Volunteer Manager"]
     user_roles = frappe.get_roles(user)
     is_admin = any(role in user_roles for role in admin_roles)
     

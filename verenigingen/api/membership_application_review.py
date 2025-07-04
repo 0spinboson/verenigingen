@@ -250,7 +250,7 @@ def get_user_chapter_access():
     user = frappe.session.user
     
     # Admin roles see all chapters
-    admin_roles = ["System Manager", "Verenigingen Administrator", "Membership Manager"]
+    admin_roles = ["System Manager", "Verenigingen Administrator", "Verenigingen Manager"]
     if any(role in frappe.get_roles(user) for role in admin_roles):
         return {
             "restrict_to_chapters": False,
@@ -318,7 +318,7 @@ def has_approval_permission(member):
         return True
     
     # Association/Membership managers have permission
-    if any(role in frappe.get_roles(user) for role in ["Verenigingen Administrator", "Membership Manager"]):
+    if any(role in frappe.get_roles(user) for role in ["Verenigingen Administrator", "Verenigingen Manager"]):
         return True
     
     # Check if user is a board member of the member's chapter
@@ -498,7 +498,7 @@ def get_pending_applications(chapter=None, days_overdue=None):
     
     # Check user permissions
     user = frappe.session.user
-    if not any(role in frappe.get_roles(user) for role in ["System Manager", "Verenigingen Administrator", "Membership Manager"]):
+    if not any(role in frappe.get_roles(user) for role in ["System Manager", "Verenigingen Administrator", "Verenigingen Manager"]):
         # Regular users can only see applications for their chapter
         user_member = frappe.db.get_value("Member", {"user": user}, "name")
         if user_member:
@@ -753,7 +753,7 @@ def fix_backend_member_statuses():
 def get_application_stats():
     """Get statistics for membership applications"""
     # Check permissions
-    if not any(role in frappe.get_roles() for role in ["System Manager", "Verenigingen Administrator", "Membership Manager"]):
+    if not any(role in frappe.get_roles() for role in ["System Manager", "Verenigingen Administrator", "Verenigingen Manager"]):
         frappe.throw(_("Insufficient permissions"))
     
     stats = {}

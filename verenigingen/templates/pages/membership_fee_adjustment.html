@@ -7,6 +7,8 @@
 
 {% block style %}
 <link href="/assets/verenigingen/css/tailwind.css" rel="stylesheet">
+{% from "templates/macros/brand_css.html" import brand_css %}
+{{ brand_css() }}
 <style>
 /* Custom slider styling to prevent overflow and match brand colors */
 #fee-slider {

@@ -30,16 +30,8 @@ class BrandSettings(Document):
 				))
 	
 	def validate_active_settings(self):
-		"""Ensure only one settings can be active at a time"""
-		if self.is_active:
-			# Deactivate all other settings
-			existing_active = frappe.get_all("Brand Settings", 
-				filters={"is_active": 1, "name": ["!=", self.name]}, 
-				fields=["name"])
-			
-			for setting in existing_active:
-				frappe.db.set_value("Brand Settings", setting.name, "is_active", 0)
-				frappe.msgprint(_("Deactivated {0} as only one Brand Settings can be active").format(setting.name))
+		"""No longer needed for Single doctype"""
+		pass
 	
 	def is_valid_hex_color(self, color):
 		"""Check if color is a valid hex color"""
@@ -94,14 +86,13 @@ class BrandSettings(Document):
 		frappe.clear_cache()
 		
 		# Trigger CSS rebuild for brand changes
-		if self.is_active:
-			frappe.publish_realtime("brand_settings_updated", {
-				"message": "Brand settings updated",
-				"settings_name": self.settings_name
-			})
-			
-			# Sync with Owl Theme Settings if available
-			self.sync_to_owl_theme()
+		frappe.publish_realtime("brand_settings_updated", {
+			"message": "Brand settings updated",
+			"settings_name": "Brand Settings"
+		})
+		
+		# Sync with Owl Theme Settings if available
+		self.sync_to_owl_theme()
 	
 	def sync_to_owl_theme(self):
 		"""Sync Brand Settings to Owl Theme Settings if owl_theme app is installed"""
@@ -159,44 +150,42 @@ class BrandSettings(Document):
 
 @frappe.whitelist()
 def get_active_brand_settings():
-	"""Get the currently active brand settings"""
+	"""Get the brand settings (now a Single doctype)"""
 	# Try to get from cache first
 	cached_settings = frappe.cache().get_value("active_brand_settings")
 	if cached_settings:
 		return cached_settings
 	
-	# Get from database
-	active_settings = frappe.get_all("Brand Settings", 
-		filters={"is_active": 1}, 
-		fields=["*"],
-		limit=1)
-	
-	if active_settings:
-		settings = active_settings[0]
+	try:
+		# Get Brand Settings as a Single doctype
+		settings_doc = frappe.get_single("Brand Settings")
+		settings = settings_doc.as_dict()
+		
 		# Cache for 1 hour
 		frappe.cache().set_value("active_brand_settings", settings, expires_in_sec=3600)
 		return settings
-	
-	# Return default settings if none found
-	default_settings = {
-		"logo": None,
-		"primary_color": "#cf3131",
-		"primary_hover_color": "#b82828", 
-		"secondary_color": "#01796f",
-		"secondary_hover_color": "#015a52",
-		"accent_color": "#663399",
-		"accent_hover_color": "#4d2673",
-		"success_color": "#28a745",
-		"warning_color": "#ffc107",
-		"error_color": "#dc3545", 
-		"info_color": "#17a2b8",
-		"text_primary_color": "#333333",
-		"text_secondary_color": "#666666",
-		"background_primary_color": "#ffffff",
-		"background_secondary_color": "#f8f9fa"
-	}
-	
-	return default_settings
+		
+	except Exception:
+		# Return default settings if Brand Settings doesn't exist yet
+		default_settings = {
+			"logo": None,
+			"primary_color": "#cf3131",
+			"primary_hover_color": "#b82828", 
+			"secondary_color": "#01796f",
+			"secondary_hover_color": "#015a52",
+			"accent_color": "#663399",
+			"accent_hover_color": "#4d2673",
+			"success_color": "#28a745",
+			"warning_color": "#ffc107",
+			"error_color": "#dc3545", 
+			"info_color": "#17a2b8",
+			"text_primary_color": "#333333",
+			"text_secondary_color": "#666666",
+			"background_primary_color": "#ffffff",
+			"background_secondary_color": "#f8f9fa"
+		}
+		
+		return default_settings
 
 @frappe.whitelist()
 def generate_brand_css():

@@ -13,6 +13,11 @@ from verenigingen.verenigingen.doctype.member.mixins.payment_mixin import Paymen
 from verenigingen.verenigingen.doctype.member.mixins.sepa_mixin import SEPAMandateMixin
 from verenigingen.verenigingen.doctype.member.mixins.chapter_mixin import ChapterMixin
 from verenigingen.verenigingen.doctype.member.mixins.termination_mixin import TerminationMixin
+from verenigingen.utils.dutch_name_utils import (
+    is_dutch_installation, 
+    get_full_last_name, 
+    format_dutch_full_name
+)
 
 
 
@@ -75,7 +80,7 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         
         # Check user permissions for fee override
         user_roles = frappe.get_roles(frappe.session.user)
-        authorized_roles = ["System Manager", "Membership Manager", "Verenigingen Administrator"]
+        authorized_roles = ["System Manager", "Verenigingen Manager", "Verenigingen Administrator"]
         
         if not any(role in user_roles for role in authorized_roles):
             frappe.throw(
@@ -843,32 +848,42 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
                     
     def update_full_name(self):
         """Update the full name based on first names, name particles (tussenvoegsels), and last name"""
-        # Build full name with proper handling of name particles
-        name_parts = []
-        
-        if self.first_name:
-            name_parts.append(self.first_name.strip())
-        
-        # Handle name particles (tussenvoegsels) - these should be lowercase when in the middle
-        if self.middle_name:
-            particles = self.middle_name.strip()
-            # Check if it's a Dutch particle (like van, de, der, etc.) or a regular middle name
-            dutch_particles = ['van', 'de', 'der', 'den', 'ter', 'te', 'het', "'t", 'op', 'in']
+        # For Dutch installations, prioritize tussenvoegsel field over middle_name
+        if is_dutch_installation() and hasattr(self, 'tussenvoegsel') and self.tussenvoegsel:
+            full_name = format_dutch_full_name(
+                self.first_name, 
+                None,  # Don't use middle_name for Dutch names when tussenvoegsel is available
+                self.tussenvoegsel, 
+                self.last_name
+            )
+        else:
+            # Build full name with proper handling of name particles (legacy approach)
+            name_parts = []
             
-            if particles:
-                # Split to handle compound particles like "van der"
-                words = particles.split()
-                if words and words[0].lower() in dutch_particles:
-                    # It's a particle, make it lowercase
-                    name_parts.append(particles.lower())
-                else:
-                    # It's a regular middle name, keep original casing
-                    name_parts.append(particles)
+            if self.first_name:
+                name_parts.append(self.first_name.strip())
+            
+            # Handle name particles (tussenvoegsels) - these should be lowercase when in the middle
+            if self.middle_name:
+                particles = self.middle_name.strip()
+                # Check if it's a Dutch particle (like van, de, der, etc.) or a regular middle name
+                dutch_particles = ['van', 'de', 'der', 'den', 'ter', 'te', 'het', "'t", 'op', 'in']
+                
+                if particles:
+                    # Split to handle compound particles like "van der"
+                    words = particles.split()
+                    if words and words[0].lower() in dutch_particles:
+                        # It's a particle, make it lowercase
+                        name_parts.append(particles.lower())
+                    else:
+                        # It's a regular middle name, keep original casing
+                        name_parts.append(particles)
+            
+            if self.last_name:
+                name_parts.append(self.last_name.strip())
+            
+            full_name = " ".join(name_parts)
         
-        if self.last_name:
-            name_parts.append(self.last_name.strip())
-        
-        full_name = " ".join(name_parts)
         if self.full_name != full_name:
             self.full_name = full_name
             
@@ -1029,7 +1044,18 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
         user = frappe.new_doc("User")
         user.email = self.email
         user.first_name = self.first_name
-        user.last_name = self.last_name
+        
+        # Handle Dutch naming conventions for User creation
+        if is_dutch_installation() and hasattr(self, 'tussenvoegsel') and self.tussenvoegsel:
+            # For Dutch installations, use combined last name with tussenvoegsel
+            user.last_name = get_full_last_name(self.last_name, self.tussenvoegsel)
+            # Don't use middle_name for User when we have tussenvoegsel
+        else:
+            # Standard naming for non-Dutch installations or when no tussenvoegsel
+            user.last_name = self.last_name
+            if self.middle_name:
+                user.middle_name = self.middle_name
+        
         user.send_welcome_email = 1
         user.user_type = "System User"
         
@@ -2164,7 +2190,7 @@ def assign_member_id(member_name):
         frappe.throw(_("Insufficient permissions to assign member ID"))
     
     # Only allow System Manager and Membership Manager roles to manually assign member IDs
-    allowed_roles = ["System Manager", "Membership Manager"]
+    allowed_roles = ["System Manager", "Verenigingen Manager"]
     user_roles = frappe.get_roles(frappe.session.user)
     if not any(role in user_roles for role in allowed_roles):
         frappe.throw(_("Only System Managers and Membership Managers can manually assign member IDs"))

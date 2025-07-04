@@ -53,7 +53,7 @@ def create_simple_dd_batch_workflow():
         workflow_doc.append("states", {
             "state": "Draft",
             "doc_status": "0",
-            "allow_edit": "Membership Manager"
+            "allow_edit": "Verenigingen Manager"
         })
         
         # State 2: Pending (Awaiting approval)
@@ -74,7 +74,7 @@ def create_simple_dd_batch_workflow():
         workflow_doc.append("states", {
             "state": "Rejected",
             "doc_status": "0",
-            "allow_edit": "Membership Manager"
+            "allow_edit": "Verenigingen Manager"
         })
         
         # State 5: Submitted (Sent to bank)
@@ -98,7 +98,7 @@ def create_simple_dd_batch_workflow():
             "state": "Draft",
             "action": "Submit",
             "next_state": "Pending",
-            "allowed": "Membership Manager"
+            "allowed": "Verenigingen Manager"
         })
         
         # Pending → Approved (Approve)
@@ -122,7 +122,7 @@ def create_simple_dd_batch_workflow():
             "state": "Rejected",
             "action": "Submit",
             "next_state": "Pending", 
-            "allowed": "Membership Manager"
+            "allowed": "Verenigingen Manager"
         })
         
         # Approved → Submitted (Send to bank)

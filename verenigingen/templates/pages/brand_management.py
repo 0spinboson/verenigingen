@@ -22,12 +22,8 @@ def get_context(context):
     context.no_cache = 1
     context.title = _("Brand Management")
     
-    # Get all brand settings
-    all_settings = frappe.get_all("Brand Settings", 
-        fields=["name", "settings_name", "description", "is_active", "logo", "primary_color", "secondary_color", "accent_color"],
-        order_by="is_active desc, modified desc")
-    
-    context.brand_settings = all_settings
+    # Brand Settings is now a Single doctype - no need for list
+    # context.brand_settings is no longer needed
     
     # Get active settings for preview
     from verenigingen.verenigingen.doctype.brand_settings.brand_settings import get_active_brand_settings, check_owl_theme_integration

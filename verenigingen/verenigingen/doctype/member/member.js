@@ -29,6 +29,15 @@ frappe.ui.form.on('Member', {
         UIUtils.setup_payment_history_grid(frm);
         UIUtils.setup_member_id_display(frm);
         
+        // Handle Dutch naming field visibility
+        setup_dutch_naming_fields(frm);
+        
+        // Add custom User link button
+        setup_user_link_button(frm);
+        
+        // Add custom Customer link button
+        setup_customer_link_button(frm);
+        
         // Add all action buttons with proper consolidation
         add_consolidated_action_buttons(frm);
         
@@ -64,8 +73,6 @@ frappe.ui.form.on('Member', {
         // Show volunteer info if exists
         VolunteerUtils.show_volunteer_info(frm);
         
-        // Show board memberships if any
-        UIUtils.show_board_memberships(frm);
         
         // Setup chapter membership history display and utilities (with delay for async loading)
         setTimeout(() => {
@@ -1927,4 +1934,142 @@ function create_default_email_templates() {
         freeze: true,
         freeze_message: __('Creating default email templates...')
     });
+}
+
+// ==================== DUTCH NAMING SYSTEM ====================
+
+function setup_dutch_naming_fields(frm) {
+    // Check if this is a Dutch installation and show/hide tussenvoegsel field accordingly
+    frappe.call({
+        method: 'verenigingen.utils.dutch_name_utils.is_dutch_installation',
+        callback: function(r) {
+            if (r.message) {
+                // This is a Dutch installation, show the tussenvoegsel field
+                frm.toggle_display('tussenvoegsel', true);
+                
+                // Add a refresh handler for name fields to update full_name
+                setup_dutch_name_refresh_handlers(frm);
+            } else {
+                // Not a Dutch installation, keep the field hidden
+                frm.toggle_display('tussenvoegsel', false);
+            }
+        }
+    });
+}
+
+function setup_dutch_name_refresh_handlers(frm) {
+    // Add event handlers to update full_name when Dutch name fields change
+    frm.fields_dict.first_name.$input.on('blur', function() {
+        update_dutch_full_name(frm);
+    });
+    
+    frm.fields_dict.middle_name.$input.on('blur', function() {
+        update_dutch_full_name(frm);
+    });
+    
+    frm.fields_dict.tussenvoegsel.$input.on('blur', function() {
+        update_dutch_full_name(frm);
+    });
+    
+    frm.fields_dict.last_name.$input.on('blur', function() {
+        update_dutch_full_name(frm);
+    });
+}
+
+function update_dutch_full_name(frm) {
+    // Call server method to update full_name using Dutch naming conventions
+    if (frm.doc.first_name || frm.doc.last_name) {
+        frappe.call({
+            method: 'verenigingen.utils.dutch_name_utils.format_dutch_full_name',
+            args: {
+                first_name: frm.doc.first_name || '',
+                middle_name: frm.doc.middle_name || '',
+                tussenvoegsel: frm.doc.tussenvoegsel || '',
+                last_name: frm.doc.last_name || ''
+            },
+            callback: function(r) {
+                if (r.message && r.message !== frm.doc.full_name) {
+                    frm.set_value('full_name', r.message);
+                }
+            }
+        });
+    }
+}
+
+// ==================== USER LINK MANAGEMENT ====================
+
+function setup_user_link_button(frm) {
+    // Add a custom User link button if member has linked user
+    if (frm.doc.user && !frm.doc.__islocal) {
+        frm.add_custom_button(__('View User Account'), function() {
+            frappe.set_route('Form', 'User', frm.doc.user);
+        }, __('Links'));
+        
+        // Also add in the connections area if dashboard exists
+        if (frm.dashboard && frm.dashboard.stats_area) {
+            // Add custom link entry to dashboard
+            const user_link = `
+                <div class="col-sm-6">
+                    <div class="document-link" data-doctype="User">
+                        <div class="document-link-badge">
+                            <span class="count">1</span>
+                            <a class="badge-link" href="#Form/User/${encodeURIComponent(frm.doc.user)}">
+                                ${__('User')}
+                            </a>
+                        </div>
+                        <div class="document-link-item">
+                            <a href="#Form/User/${encodeURIComponent(frm.doc.user)}" 
+                               class="text-muted text-underline">
+                                ${frm.doc.user}
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Find existing dashboard and append user link
+            const connections_area = frm.dashboard.stats_area_parent;
+            if (connections_area && !connections_area.find('[data-doctype="User"]').length) {
+                connections_area.append(user_link);
+            }
+        }
+    }
+}
+
+function setup_customer_link_button(frm) {
+    // Add a custom Customer link button if member has linked customer
+    if (frm.doc.customer && !frm.doc.__islocal) {
+        frm.add_custom_button(__('View Customer Record'), function() {
+            frappe.set_route('Form', 'Customer', frm.doc.customer);
+        }, __('Links'));
+        
+        // Also add in the connections area if dashboard exists
+        if (frm.dashboard && frm.dashboard.stats_area) {
+            // Add custom link entry to dashboard
+            const customer_link = `
+                <div class="col-sm-6">
+                    <div class="document-link" data-doctype="Customer">
+                        <div class="document-link-badge">
+                            <span class="count">1</span>
+                            <a class="badge-link" href="#Form/Customer/${encodeURIComponent(frm.doc.customer)}">
+                                ${__('Customer')}
+                            </a>
+                        </div>
+                        <div class="document-link-item">
+                            <a href="#Form/Customer/${encodeURIComponent(frm.doc.customer)}" 
+                               class="text-muted text-underline">
+                                ${frm.doc.customer}
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Find existing dashboard and append customer link
+            const connections_area = frm.dashboard.stats_area_parent;
+            if (connections_area && !connections_area.find('[data-doctype="Customer"]').length) {
+                connections_area.append(customer_link);
+            }
+        }
+    }
 }

@@ -587,49 +587,69 @@ def _import_rest_mutations_batch(migration_name, mutations, settings):
                     pi.credit_to = _get_payable_account(company)
                     
                     # Debug: Log what we're about to add
-                    debug_info.append(f"About to add items for mutation {mutation_id}, ledger_id: {ledger_id}")
+                    debug_info.append(f"About to add items for mutation {mutation_id}, rows: {len(rows)}")
                     
-                    # Add item line using smart tegenrekening mapping
-                    try:
-                        line_dict = create_invoice_line_for_tegenrekening(
-                            tegenrekening_code=str(ledger_id) if ledger_id else None,
-                            amount=amount,
-                            description=description,
-                            transaction_type="purchase"
-                        )
-                        if line_dict and isinstance(line_dict, dict):
-                            # Validate expense account exists
-                            if line_dict.get("expense_account"):
-                                # Check if expense account exists
-                                if not frappe.db.exists("Account", line_dict["expense_account"]):
-                                    debug_info.append(f"Expense account {line_dict['expense_account']} not found, using fallback")
-                                    # Get any expense account
-                                    fallback_account = frappe.db.get_value("Account", {
-                                        "company": company,
-                                        "account_type": "Expense Account",
-                                        "is_group": 0
-                                    }, "name")
-                                    if fallback_account:
-                                        line_dict["expense_account"] = fallback_account
-                                    else:
-                                        line_dict["expense_account"] = "44009 - Onvoorziene kosten - NVV"
-                            pi.append("items", line_dict)
-                        else:
-                            debug_info.append(f"Smart mapping returned invalid result: {line_dict}")
-                            # Fallback to basic item
-                            pi.append("items", {
-                                "item_code": "E-Boekhouden Import Item",
-                                "qty": 1,
-                                "rate": amount,
-                                "description": description
-                            })
-                    except Exception as e:
-                        debug_info.append(f"Smart mapping error: {str(e)}")
-                        # Fallback to basic item
+                    # Process each row as a separate line item
+                    if rows and len(rows) > 0:
+                        for idx, row in enumerate(rows):
+                            row_amount = frappe.utils.flt(row.get("amount", 0), 2)
+                            row_ledger_id = row.get("ledgerId")
+                            row_description = row.get("description", description)
+                            
+                            # Skip rows with zero amount
+                            if row_amount == 0:
+                                continue
+                                
+                            # Add item line using smart tegenrekening mapping
+                            try:
+                                line_dict = create_invoice_line_for_tegenrekening(
+                                    tegenrekening_code=str(row_ledger_id) if row_ledger_id else None,
+                                    amount=abs(row_amount),  # Use absolute value for invoice lines
+                                    description=row_description,
+                                    transaction_type="purchase"
+                                )
+                                if line_dict and isinstance(line_dict, dict):
+                                    # Validate expense account exists
+                                    if line_dict.get("expense_account"):
+                                        # Check if expense account exists
+                                        if not frappe.db.exists("Account", line_dict["expense_account"]):
+                                            debug_info.append(f"Expense account {line_dict['expense_account']} not found, using fallback")
+                                            # Get any expense account
+                                            fallback_account = frappe.db.get_value("Account", {
+                                                "company": company,
+                                                "account_type": "Expense Account",
+                                                "is_group": 0
+                                            }, "name")
+                                            if fallback_account:
+                                                line_dict["expense_account"] = fallback_account
+                                            else:
+                                                line_dict["expense_account"] = "44009 - Onvoorziene kosten - NVV"
+                                    pi.append("items", line_dict)
+                                else:
+                                    debug_info.append(f"Smart mapping returned invalid result for row {idx}: {line_dict}")
+                                    # Fallback to basic item
+                                    pi.append("items", {
+                                        "item_code": "E-Boekhouden Import Item",
+                                        "qty": 1,
+                                        "rate": abs(row_amount),
+                                        "description": row_description
+                                    })
+                            except Exception as e:
+                                debug_info.append(f"Smart mapping error for row {idx}: {str(e)}")
+                                # Fallback to basic item
+                                pi.append("items", {
+                                    "item_code": "E-Boekhouden Import Item", 
+                                    "qty": 1,
+                                    "rate": abs(row_amount),
+                                    "description": row_description
+                                })
+                    else:
+                        # No rows found, use total amount as single line
+                        debug_info.append(f"No rows found, using total amount: {amount}")
                         pi.append("items", {
-                            "item_code": "E-Boekhouden Import Item", 
+                            "item_code": "E-Boekhouden Import Item",
                             "qty": 1,
-                            "rate": amount,
+                            "rate": abs(amount),
                             "description": description
                         })
                     
@@ -640,7 +660,7 @@ def _import_rest_mutations_batch(migration_name, mutations, settings):
                     debug_info.append(f"Successfully created Purchase Invoice for mutation {mutation_id}")
                     
                 elif mutation_type == 2:  # Sales Invoice (FactuurVerstuurd)
-                    debug_info.append(f"Creating Sales Invoice for mutation {mutation_id}, ledger_id: {ledger_id}")
+                    debug_info.append(f"Creating Sales Invoice for mutation {mutation_id}")
                     
                     # Create Sales Invoice
                     si = frappe.new_doc("Sales Invoice")
@@ -652,49 +672,69 @@ def _import_rest_mutations_batch(migration_name, mutations, settings):
                     customer = _get_or_create_customer(relation_id, debug_info)
                     si.customer = customer
                     
-                    debug_info.append(f"Customer set to: {customer}")
+                    debug_info.append(f"Customer set to: {customer}, rows: {len(rows)}")
                     
-                    # Add item line using smart tegenrekening mapping
-                    try:
-                        line_dict = create_invoice_line_for_tegenrekening(
-                            tegenrekening_code=str(ledger_id) if ledger_id else None,
-                            amount=amount,
-                            description=description,
-                            transaction_type="sales"
-                        )
-                        if line_dict and isinstance(line_dict, dict):
-                            # Validate income account exists
-                            if line_dict.get("income_account"):
-                                # Check if income account exists
-                                if not frappe.db.exists("Account", line_dict["income_account"]):
-                                    debug_info.append(f"Income account {line_dict['income_account']} not found, using fallback")
-                                    # Get any income account
-                                    fallback_account = frappe.db.get_value("Account", {
-                                        "company": company,
-                                        "account_type": "Income Account",
-                                        "is_group": 0
-                                    }, "name")
-                                    if fallback_account:
-                                        line_dict["income_account"] = fallback_account
-                                    else:
-                                        line_dict["income_account"] = "80005 - Donaties - direct op bankrekening - NVV"
-                            si.append("items", line_dict)
-                        else:
-                            debug_info.append(f"Smart mapping returned invalid result: {line_dict}")
-                            # Fallback to basic item
-                            si.append("items", {
-                                "item_code": "E-Boekhouden Import Item",
-                                "qty": 1,
-                                "rate": amount,
-                                "description": description
-                            })
-                    except Exception as e:
-                        debug_info.append(f"Smart mapping error: {str(e)}")
-                        # Fallback to basic item
+                    # Process each row as a separate line item
+                    if rows and len(rows) > 0:
+                        for idx, row in enumerate(rows):
+                            row_amount = frappe.utils.flt(row.get("amount", 0), 2)
+                            row_ledger_id = row.get("ledgerId")
+                            row_description = row.get("description", description)
+                            
+                            # Skip rows with zero amount
+                            if row_amount == 0:
+                                continue
+                                
+                            # Add item line using smart tegenrekening mapping
+                            try:
+                                line_dict = create_invoice_line_for_tegenrekening(
+                                    tegenrekening_code=str(row_ledger_id) if row_ledger_id else None,
+                                    amount=abs(row_amount),  # Use absolute value for invoice lines
+                                    description=row_description,
+                                    transaction_type="sales"
+                                )
+                                if line_dict and isinstance(line_dict, dict):
+                                    # Validate income account exists
+                                    if line_dict.get("income_account"):
+                                        # Check if income account exists
+                                        if not frappe.db.exists("Account", line_dict["income_account"]):
+                                            debug_info.append(f"Income account {line_dict['income_account']} not found, using fallback")
+                                            # Get any income account
+                                            fallback_account = frappe.db.get_value("Account", {
+                                                "company": company,
+                                                "account_type": "Income Account",
+                                                "is_group": 0
+                                            }, "name")
+                                            if fallback_account:
+                                                line_dict["income_account"] = fallback_account
+                                            else:
+                                                line_dict["income_account"] = "80005 - Donaties - direct op bankrekening - NVV"
+                                    si.append("items", line_dict)
+                                else:
+                                    debug_info.append(f"Smart mapping returned invalid result for row {idx}: {line_dict}")
+                                    # Fallback to basic item
+                                    si.append("items", {
+                                        "item_code": "E-Boekhouden Import Item",
+                                        "qty": 1,
+                                        "rate": abs(row_amount),
+                                        "description": row_description
+                                    })
+                            except Exception as e:
+                                debug_info.append(f"Smart mapping error for row {idx}: {str(e)}")
+                                # Fallback to basic item
+                                si.append("items", {
+                                    "item_code": "E-Boekhouden Import Item",
+                                    "qty": 1,
+                                    "rate": abs(row_amount),
+                                    "description": row_description
+                                })
+                    else:
+                        # No rows found, use total amount as single line
+                        debug_info.append(f"No rows found, using total amount: {amount}")
                         si.append("items", {
                             "item_code": "E-Boekhouden Import Item",
                             "qty": 1,
-                            "rate": amount,
+                            "rate": abs(amount),
                             "description": description
                         })
                     
@@ -705,42 +745,158 @@ def _import_rest_mutations_batch(migration_name, mutations, settings):
                     debug_info.append(f"Successfully created Sales Invoice for mutation {mutation_id}")
                     
                 elif mutation_type in [3, 4]:  # Payment Entries (Customer/Supplier Payments)
-                    debug_info.append(f"Creating Payment Entry for mutation {mutation_id}")
-                    
-                    # Create Payment Entry
-                    pe = frappe.new_doc("Payment Entry")
-                    pe.company = company
-                    pe.posting_date = mutation.get("date")
-                    pe.paid_amount = amount
-                    pe.received_amount = amount
-                    pe.reference_no = mutation.get("invoiceNumber", f"EBH-{mutation_id}")
-                    pe.reference_date = mutation.get("date")
-                    
-                    if mutation_type == 3:  # Customer Payment
-                        pe.payment_type = "Receive"
-                        pe.party_type = "Customer"
+                    # Check if this is a multi-line payment (split payment, overpayment, etc.)
+                    if len(rows) > 1:
+                        debug_info.append(f"Multi-line payment mutation {mutation_id} - creating Journal Entry instead")
+                        
+                        # Create Journal Entry for complex payment
+                        je = frappe.new_doc("Journal Entry")
+                        je.company = company
+                        je.posting_date = mutation.get("date")
+                        je.user_remark = f"E-Boekhouden REST Import - Payment Mutation {mutation_id} (Type {mutation_type})"
+                        je.voucher_type = "Journal Entry"
+                        
+                        # Add invoice reference if available
+                        invoice_number = mutation.get("invoiceNumber")
+                        if invoice_number:
+                            je.user_remark += f" - Invoice: {invoice_number}"
+                            # Try to find matching invoice for reconciliation
+                            matching_invoice = frappe.db.get_value("Purchase Invoice", 
+                                {"bill_no": invoice_number}, "name") or frappe.db.get_value("Sales Invoice", 
+                                {"name": invoice_number}, "name")
+                            if matching_invoice:
+                                debug_info.append(f"Found matching invoice {matching_invoice} for payment reconciliation")
+                        
                         relation_id = mutation.get("relationId")
-                        customer = _get_or_create_customer(relation_id, debug_info)
-                        pe.party = customer
-                    else:  # Supplier Payment
-                        pe.payment_type = "Pay"
-                        pe.party_type = "Supplier"
+                        total_debit = 0
+                        total_credit = 0
+                        
+                        for row in rows:
+                            row_amount = frappe.utils.flt(row.get("amount", 0), 2)
+                            row_ledger_id = row.get("ledgerId")
+                            row_description = row.get("description", description)
+                            
+                            # Skip rows with zero amount
+                            if row_amount == 0:
+                                continue
+                            
+                            # Get account mapping for this row
+                            row_account = None
+                            row_party_type = None
+                            row_party = None
+                            
+                            if row_ledger_id:
+                                # Check ledger mapping
+                                mapping = frappe.db.get_value('E-Boekhouden Ledger Mapping', 
+                                    {'ledger_id': str(row_ledger_id)}, 
+                                    ['erpnext_account'], as_dict=True)
+                                
+                                if mapping and mapping.get('erpnext_account'):
+                                    row_account = mapping['erpnext_account']
+                                    
+                                    # Check if it's a receivable/payable account
+                                    account_type = frappe.db.get_value('Account', row_account, 'account_type')
+                                    
+                                    if account_type == 'Receivable' and relation_id:
+                                        row_party_type = "Customer"
+                                        row_party = _get_or_create_customer(relation_id, debug_info)
+                                    elif account_type == 'Payable' and relation_id:
+                                        row_party_type = "Supplier"
+                                        row_party = _get_or_create_supplier(relation_id, debug_info)
+                            
+                            # If no account found, use smart mapping
+                            if not row_account:
+                                line_dict = create_invoice_line_for_tegenrekening(
+                                    tegenrekening_code=str(row_ledger_id) if row_ledger_id else None,
+                                    amount=abs(row_amount),
+                                    description=row_description,
+                                    transaction_type="purchase" if mutation_type == 4 else "sales"
+                                )
+                                row_account = line_dict.get("expense_account" if mutation_type == 4 else "income_account") or _get_bank_account(company)
+                            
+                            # Create journal entry line
+                            entry_line = {
+                                "account": row_account,
+                                "debit_in_account_currency": frappe.utils.flt(row_amount if row_amount > 0 else 0, 2),
+                                "credit_in_account_currency": frappe.utils.flt(abs(row_amount) if row_amount < 0 else 0, 2),
+                                "cost_center": cost_center,
+                                "user_remark": row_description
+                            }
+                            
+                            # Add party details if needed
+                            if row_party_type and row_party:
+                                entry_line["party_type"] = row_party_type
+                                entry_line["party"] = row_party
+                                
+                                # Try to link to specific invoice for reconciliation
+                                if invoice_number and row_party_type in ["Customer", "Supplier"]:
+                                    invoice_doctype = "Sales Invoice" if row_party_type == "Customer" else "Purchase Invoice"
+                                    invoice_field = "name" if row_party_type == "Customer" else "bill_no"
+                                    
+                                    matching_invoice = frappe.db.get_value(invoice_doctype, 
+                                        {invoice_field: invoice_number, 
+                                         "customer" if row_party_type == "Customer" else "supplier": row_party}, 
+                                        "name")
+                                    
+                                    if matching_invoice:
+                                        entry_line["reference_type"] = invoice_doctype
+                                        entry_line["reference_name"] = matching_invoice
+                                        debug_info.append(f"Linked payment journal entry line to {invoice_doctype} {matching_invoice}")
+                            
+                            je.append("accounts", entry_line)
+                            
+                            # Track totals for balance validation
+                            total_debit += entry_line["debit_in_account_currency"]
+                            total_credit += entry_line["credit_in_account_currency"]
+                        
+                        # Check if balanced
+                        debug_info.append(f"Payment JE total debit: {total_debit}, total credit: {total_credit}")
+                        if abs(total_debit - total_credit) > 0.01:
+                            debug_info.append(f"WARNING: Payment journal entry not balanced! Difference: {total_debit - total_credit}")
+                        
+                        je.save()
+                        je.submit()
+                        imported += 1
+                        debug_info.append(f"Successfully created Journal Entry for multi-line payment mutation {mutation_id}")
+                    
+                    else:
+                        # Single line payment - create standard Payment Entry
+                        debug_info.append(f"Creating Payment Entry for mutation {mutation_id}")
+                        
+                        # Create Payment Entry
+                        pe = frappe.new_doc("Payment Entry")
+                        pe.company = company
+                        pe.posting_date = mutation.get("date")
+                        pe.paid_amount = abs(amount)  # Use absolute value
+                        pe.received_amount = abs(amount)
+                        pe.reference_no = mutation.get("invoiceNumber", f"EBH-{mutation_id}")
+                        pe.reference_date = mutation.get("date")
+                        
                         relation_id = mutation.get("relationId")
-                        supplier = _get_or_create_supplier(relation_id, debug_info)
-                        pe.party = supplier
-                    
-                    # Set bank account (default cash account)
-                    if pe.payment_type == "Receive":  # Customer Payment
-                        pe.paid_from = _get_receivable_account(company)
-                        pe.paid_to = _get_bank_account(company)
-                    else:  # Supplier Payment
-                        pe.paid_from = _get_bank_account(company)
-                        pe.paid_to = _get_payable_account(company)
-                    
-                    pe.save()
-                    pe.submit()
-                    imported += 1
-                    debug_info.append(f"Successfully created Payment Entry for mutation {mutation_id}")
+                        
+                        if mutation_type == 3:  # Customer Payment
+                            pe.payment_type = "Receive"
+                            pe.party_type = "Customer"
+                            customer = _get_or_create_customer(relation_id, debug_info)
+                            pe.party = customer
+                        else:  # Supplier Payment
+                            pe.payment_type = "Pay"
+                            pe.party_type = "Supplier"
+                            supplier = _get_or_create_supplier(relation_id, debug_info)
+                            pe.party = supplier
+                        
+                        # Set bank account (default cash account)
+                        if pe.payment_type == "Receive":  # Customer Payment
+                            pe.paid_from = _get_receivable_account(company)
+                            pe.paid_to = _get_bank_account(company)
+                        else:  # Supplier Payment
+                            pe.paid_from = _get_bank_account(company)
+                            pe.paid_to = _get_payable_account(company)
+                        
+                        pe.save()
+                        pe.submit()
+                        imported += 1
+                        debug_info.append(f"Successfully created Payment Entry for mutation {mutation_id}")
                     
                 else:  # Journal Entries (Money Received/Sent, General)
                     debug_info.append(f"Creating Journal Entry for mutation {mutation_id} (Type {mutation_type})")
@@ -758,77 +914,181 @@ def _import_rest_mutations_batch(migration_name, mutations, settings):
                     je.user_remark = f"E-Boekhouden REST Import - Mutation {mutation_id} (Type {mutation_type})"
                     je.voucher_type = "Journal Entry"
                     
-                    # Get the actual account from ledger mapping
-                    account_to_use = None
-                    party_type = None
-                    party = None
+                    # Add invoice reference if available
+                    invoice_number = mutation.get("invoiceNumber")
+                    if invoice_number:
+                        je.user_remark += f" - Invoice: {invoice_number}"
+                        # Try to find matching invoice for reconciliation
+                        if relation_id:
+                            # Look for existing Purchase/Sales Invoice with this bill_no/name
+                            matching_invoice = frappe.db.get_value("Purchase Invoice", 
+                                {"bill_no": invoice_number}, "name") or frappe.db.get_value("Sales Invoice", 
+                                {"name": invoice_number}, "name")
+                            if matching_invoice:
+                                debug_info.append(f"Found matching invoice {matching_invoice} for reconciliation")
                     
-                    if ledger_id:
-                        # Check ledger mapping to get the actual account
-                        mapping = frappe.db.get_value('E-Boekhouden Ledger Mapping', 
-                            {'ledger_id': str(ledger_id)}, 
-                            ['erpnext_account'], as_dict=True)
+                    # Check if this is a multi-line journal entry
+                    if len(rows) > 1:
+                        # Multi-line journal entry - process each row separately
+                        debug_info.append(f"Multi-line journal entry with {len(rows)} rows")
+                        total_debit = 0
+                        total_credit = 0
                         
-                        if mapping and mapping.get('erpnext_account'):
-                            account_to_use = mapping['erpnext_account']
+                        for row in rows:
+                            row_amount = frappe.utils.flt(row.get("amount", 0), 2)
+                            row_ledger_id = row.get("ledgerId")
+                            row_description = row.get("description", description)
                             
-                            # Check if it's a receivable/payable account
-                            account_type = frappe.db.get_value('Account', account_to_use, 'account_type')
-                            debug_info.append(f"Account {account_to_use} has type: {account_type}")
+                            # Get account mapping for this row
+                            row_account = None
+                            row_party_type = None
+                            row_party = None
                             
-                            if account_type == 'Receivable':
-                                party_type = "Customer"
-                                party = _get_or_create_customer(relation_id, debug_info)
-                            elif account_type == 'Payable':
-                                party_type = "Supplier"
-                                party = _get_or_create_supplier(relation_id, debug_info)
+                            if row_ledger_id:
+                                # Check ledger mapping
+                                mapping = frappe.db.get_value('E-Boekhouden Ledger Mapping', 
+                                    {'ledger_id': str(row_ledger_id)}, 
+                                    ['erpnext_account'], as_dict=True)
+                                
+                                if mapping and mapping.get('erpnext_account'):
+                                    row_account = mapping['erpnext_account']
+                                    
+                                    # Check if it's a receivable/payable account
+                                    account_type = frappe.db.get_value('Account', row_account, 'account_type')
+                                    
+                                    if account_type == 'Receivable' and relation_id:
+                                        row_party_type = "Customer"
+                                        row_party = _get_or_create_customer(relation_id, debug_info)
+                                    elif account_type == 'Payable' and relation_id:
+                                        row_party_type = "Supplier"
+                                        row_party = _get_or_create_supplier(relation_id, debug_info)
+                            
+                            # If no account found, use smart mapping
+                            if not row_account:
+                                line_dict = create_invoice_line_for_tegenrekening(
+                                    tegenrekening_code=str(row_ledger_id) if row_ledger_id else None,
+                                    amount=abs(row_amount),
+                                    description=row_description,
+                                    transaction_type="purchase"
+                                )
+                                row_account = line_dict.get("expense_account") or "44009 - Onvoorziene kosten - NVV"
+                            
+                            # Create journal entry line
+                            entry_line = {
+                                "account": row_account,
+                                "debit_in_account_currency": frappe.utils.flt(row_amount if row_amount > 0 else 0, 2),
+                                "credit_in_account_currency": frappe.utils.flt(abs(row_amount) if row_amount < 0 else 0, 2),
+                                "cost_center": cost_center,
+                                "user_remark": row_description
+                            }
+                            
+                            # Add party details if needed
+                            if row_party_type and row_party:
+                                entry_line["party_type"] = row_party_type
+                                entry_line["party"] = row_party
+                                
+                                # Try to link to specific invoice for reconciliation
+                                if invoice_number and row_party_type in ["Customer", "Supplier"]:
+                                    invoice_doctype = "Sales Invoice" if row_party_type == "Customer" else "Purchase Invoice"
+                                    invoice_field = "name" if row_party_type == "Customer" else "bill_no"
+                                    
+                                    matching_invoice = frappe.db.get_value(invoice_doctype, 
+                                        {invoice_field: invoice_number, 
+                                         "customer" if row_party_type == "Customer" else "supplier": row_party}, 
+                                        "name")
+                                    
+                                    if matching_invoice:
+                                        entry_line["reference_type"] = invoice_doctype
+                                        entry_line["reference_name"] = matching_invoice
+                                        debug_info.append(f"Linked journal entry line to {invoice_doctype} {matching_invoice}")
+                            
+                            je.append("accounts", entry_line)
+                            
+                            # Track totals for balance validation
+                            total_debit += entry_line["debit_in_account_currency"]
+                            total_credit += entry_line["credit_in_account_currency"]
+                        
+                        # Check if balanced
+                        debug_info.append(f"Total debit: {total_debit}, Total credit: {total_credit}")
+                        if abs(total_debit - total_credit) > 0.01:
+                            debug_info.append(f"WARNING: Journal entry not balanced! Difference: {total_debit - total_credit}")
                     
-                    # If no account found, use smart mapping as fallback
-                    if not account_to_use:
-                        line_dict = create_invoice_line_for_tegenrekening(
-                            tegenrekening_code=str(ledger_id) if ledger_id else None,
-                            amount=amount,
-                            description=description,
-                            transaction_type="purchase"
-                        )
-                        account_to_use = line_dict.get("expense_account") or "44009 - Onvoorziene kosten - NVV"
-                    
-                    # Create balanced journal entry - handle negative amounts
-                    # For negative amounts, flip debit/credit
-                    if amount > 0:
-                        first_debit = amount
-                        first_credit = 0
-                        second_debit = 0
-                        second_credit = amount
                     else:
-                        first_debit = 0
-                        first_credit = abs(amount)
-                        second_debit = abs(amount)
-                        second_credit = 0
-                    
-                    first_entry = {
-                        "account": account_to_use,
-                        "debit_in_account_currency": first_debit,
-                        "credit_in_account_currency": first_credit,
-                        "cost_center": cost_center,
-                        "user_remark": description
-                    }
-                    
-                    # Add party details if needed
-                    if party_type and party:
-                        first_entry["party_type"] = party_type
-                        first_entry["party"] = party
-                    
-                    je.append("accounts", first_entry)
-                    
-                    # Second entry (bank/contra account)
-                    je.append("accounts", {
-                        "account": _get_bank_account(company),
-                        "debit_in_account_currency": second_debit,
-                        "credit_in_account_currency": second_credit,
-                        "cost_center": cost_center,
-                        "user_remark": description
-                    })
+                        # Single line entry - create a two-line entry with bank as contra
+                        # Get the actual account from ledger mapping
+                        account_to_use = None
+                        party_type = None
+                        party = None
+                        
+                        if ledger_id:
+                            # Check ledger mapping to get the actual account
+                            mapping = frappe.db.get_value('E-Boekhouden Ledger Mapping', 
+                                {'ledger_id': str(ledger_id)}, 
+                                ['erpnext_account'], as_dict=True)
+                            
+                            if mapping and mapping.get('erpnext_account'):
+                                account_to_use = mapping['erpnext_account']
+                                
+                                # Check if it's a receivable/payable account
+                                account_type = frappe.db.get_value('Account', account_to_use, 'account_type')
+                                debug_info.append(f"Account {account_to_use} has type: {account_type}")
+                                
+                                if account_type == 'Receivable':
+                                    party_type = "Customer"
+                                    party = _get_or_create_customer(relation_id, debug_info)
+                                elif account_type == 'Payable':
+                                    party_type = "Supplier"
+                                    party = _get_or_create_supplier(relation_id, debug_info)
+                        
+                        # If no account found, use smart mapping as fallback
+                        if not account_to_use:
+                            line_dict = create_invoice_line_for_tegenrekening(
+                                tegenrekening_code=str(ledger_id) if ledger_id else None,
+                                amount=abs(amount),
+                                description=description,
+                                transaction_type="purchase"
+                            )
+                            account_to_use = line_dict.get("expense_account") or "44009 - Onvoorziene kosten - NVV"
+                        
+                        # Use proper precision
+                        amount = frappe.utils.flt(amount, 2)
+                        
+                        # Create balanced journal entry - handle negative amounts
+                        # For negative amounts, flip debit/credit
+                        if amount > 0:
+                            first_debit = amount
+                            first_credit = 0
+                            second_debit = 0
+                            second_credit = amount
+                        else:
+                            first_debit = 0
+                            first_credit = abs(amount)
+                            second_debit = abs(amount)
+                            second_credit = 0
+                        
+                        first_entry = {
+                            "account": account_to_use,
+                            "debit_in_account_currency": first_debit,
+                            "credit_in_account_currency": first_credit,
+                            "cost_center": cost_center,
+                            "user_remark": description
+                        }
+                        
+                        # Add party details if needed
+                        if party_type and party:
+                            first_entry["party_type"] = party_type
+                            first_entry["party"] = party
+                        
+                        je.append("accounts", first_entry)
+                        
+                        # Second entry (bank/contra account)
+                        je.append("accounts", {
+                            "account": _get_bank_account(company),
+                            "debit_in_account_currency": second_debit,
+                            "credit_in_account_currency": second_credit,
+                            "cost_center": cost_center,
+                            "user_remark": description
+                        })
                     
                     je.save()
                     je.submit()

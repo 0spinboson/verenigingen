@@ -10,6 +10,7 @@
   "aanhef",
   "first_name",
   "middle_name",
+  "tussenvoegsel",
   "last_name",
   "full_name",
   "pronouns",
@@ -69,12 +70,12 @@
   "chapter_assigned_by",
   "previous_chapter",
   "chapter_change_reason",
-  "board_memberships_section",
-  "board_memberships_html",
   "chapter_membership_history_section",
   "chapter_membership_history",
   "volunteer_details_section",
   "volunteer_details_html",
+  "volunteer_assignment_history_section",
+  "volunteer_assignment_history",
   "administration_tab",
   "application_section",
   "application_id",
@@ -118,17 +119,6 @@
   "donation_interest"
  ],
  "fields": [
-  {
-   "depends_on": "eval:doc.name",
-   "fieldname": "board_memberships_section",
-   "fieldtype": "Section Break",
-   "label": "Board and Team Memberships"
-  },
-  {
-   "fieldname": "board_memberships_html",
-   "fieldtype": "HTML",
-   "label": "Board and Team Memberships"
-  },
   {
    "depends_on": "eval:doc.customer",
    "fieldname": "payment_history_section",
@@ -350,10 +340,16 @@
    "reqd": 1
   },
   {
-   "description": "Prefixes like 'van', 'de', 'von', etc.",
    "fieldname": "middle_name",
    "fieldtype": "Data",
-   "label": "Name Particles"
+   "label": "Middle Names"
+  },
+  {
+   "description": "Dutch name particles/prefixes (van, de, van der, etc.)",
+   "fieldname": "tussenvoegsel",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Tussenvoegsel"
   },
   {
    "fieldname": "last_name",
@@ -472,14 +468,16 @@
    "fieldname": "user",
    "fieldtype": "Link",
    "label": "User",
-   "options": "User"
+   "options": "User",
+   "show_dashboard": 1
   },
   {
    "description": "Link to ERPNext Employee record for expense claims and HR operations",
    "fieldname": "employee",
    "fieldtype": "Link",
    "label": "Employee",
-   "options": "Employee"
+   "options": "Employee",
+   "show_dashboard": 1
   },
   {
    "collapsible": 1,
@@ -695,6 +693,19 @@
    "label": "Volunteer Information"
   },
   {
+   "depends_on": "eval:doc.name",
+   "fieldname": "volunteer_assignment_history_section",
+   "fieldtype": "Section Break",
+   "label": "Volunteer Assignment History"
+  },
+  {
+   "description": "Historical record of all volunteer assignments and roles",
+   "fieldname": "volunteer_assignment_history",
+   "fieldtype": "Table",
+   "label": "Volunteer Assignment History",
+   "options": "Volunteer Assignment"
+  },
+  {
    "depends_on": "eval:!doc.__islocal",
    "fieldname": "fee_management_section",
    "fieldtype": "Section Break",
@@ -826,19 +837,9 @@
    "group": "Volunteer",
    "link_doctype": "Volunteer Expense",
    "link_fieldname": "volunteer"
-  },
-  {
-   "group": "Administration",
-   "link_doctype": "User",
-   "link_fieldname": "name"
-  },
-  {
-   "group": "Administration",
-   "link_doctype": "Customer",
-   "link_fieldname": "name"
   }
  ],
- "modified": "2025-06-22 20:44:30.548792",
+ "modified": "2025-07-04 21:56:18.824987",
  "modified_by": "Administrator",
  "module": "Verenigingen",
  "name": "Member",
@@ -864,7 +865,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Membership Manager",
+   "role": "Verenigingen Manager",
    "share": 1,
    "write": 1
   },
@@ -872,7 +873,7 @@
    "email": 1,
    "print": 1,
    "read": 1,
-   "role": "Membership User",
+   "role": "Verenigingen Staff",
    "share": 1
   },
   {
@@ -896,7 +897,7 @@
   {
    "permlevel": 1,
    "read": 1,
-   "role": "Membership Manager",
+   "role": "Verenigingen Manager",
    "write": 1
   },
   {
@@ -913,6 +914,12 @@
    "report": 1,
    "role": "Chapter Board Member",
    "share": 1
+  },
+  {
+   "if_owner": 1,
+   "read": 1,
+   "role": "Verenigingen Member",
+   "write": 1
   }
  ],
  "row_format": "Dynamic",

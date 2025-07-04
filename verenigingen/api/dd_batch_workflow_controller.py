@@ -290,9 +290,9 @@ def can_user_approve_batch(batch):
     if risk_level == "High":
         return "Finance Manager" in user_roles
     elif risk_level == "Medium":
-        return "Membership Manager" in user_roles or "Finance Manager" in user_roles
+        return "Verenigingen Manager" in user_roles or "Finance Manager" in user_roles
     else:  # Low risk
-        return "Membership Manager" in user_roles or "Finance Manager" in user_roles
+        return "Verenigingen Manager" in user_roles or "Finance Manager" in user_roles
     
     return False
 
@@ -405,7 +405,7 @@ def get_batches_pending_approval():
         elif "Finance Manager" in user_roles:
             # Finance Manager can see all pending approvals
             filters["approval_status"] = ["in", ["Pending Approval", "Pending Senior Approval"]]
-        elif "Membership Manager" in user_roles:
+        elif "Verenigingen Manager" in user_roles:
             # Membership Manager can only see regular approvals
             filters["approval_status"] = "Pending Approval"
         else:

@@ -369,62 +369,42 @@
         </div>
     </div>
 
-    <!-- Brand Settings List -->
+    <!-- Brand Settings Actions -->
     <div class="settings-list">
         <div class="settings-header">
-            <h3>{{ _("Brand Settings") }}</h3>
-            <a href="/app/new/Brand%20Settings" class="btn btn-primary">
-                <i class="fa fa-plus"></i> {{ _("Create New") }}
+            <h3>{{ _("Manage Brand Settings") }}</h3>
+            <a href="/app/brand-settings" class="btn btn-primary">
+                <i class="fa fa-cog"></i> {{ _("Open Settings") }}
             </a>
         </div>
 
-        {% if brand_settings %}
-            {% for setting in brand_settings %}
-            <div class="settings-item">
-                <div class="settings-info">
-                    <h4>
-                        {{ setting.settings_name }}
-                        {% if setting.is_active %}
-                        <span class="active-badge">{{ _("Active") }}</span>
-                        {% endif %}
-                    </h4>
-                    {% if setting.description %}
-                    <p>{{ setting.description }}</p>
-                    {% endif %}
-                    {% if setting.logo %}
-                    <div class="mini-logo-preview">
-                        <img src="{{ setting.logo }}" alt="{{ _('Logo') }}" class="mini-logo">
-                    </div>
-                    {% endif %}
-                    <div class="color-mini-preview">
-                        <div class="color-mini" style="background-color: {{ setting.primary_color }}" title="{{ _('Primary') }}: {{ setting.primary_color }}"></div>
-                        <div class="color-mini" style="background-color: {{ setting.secondary_color }}" title="{{ _('Secondary') }}: {{ setting.secondary_color }}"></div>
-                        <div class="color-mini" style="background-color: {{ setting.accent_color }}" title="{{ _('Accent') }}: {{ setting.accent_color }}"></div>
-                    </div>
-                </div>
+        <div class="settings-item">
+            <div class="settings-info">
+                <h4>
+                    {{ _("Brand Settings") }}
+                    <span class="active-badge">{{ _("Active") }}</span>
+                </h4>
+                <p>{{ _("Configure your organization's brand colors, logo, and visual identity") }}</p>
+                {% if active_settings.description %}
+                <p><em>{{ active_settings.description }}</em></p>
+                {% endif %}
                 
-                <div class="settings-actions">
-                    <a href="/app/brand-settings/{{ setting.name }}" class="btn btn-outline">
-                        <i class="fa fa-edit"></i> {{ _("Edit") }}
-                    </a>
-                    {% if not setting.is_active %}
-                    <button class="btn btn-success" onclick="activateSettings('{{ setting.name }}')">
-                        <i class="fa fa-check"></i> {{ _("Activate") }}
-                    </button>
-                    {% endif %}
+                <div class="color-mini-preview">
+                    <div class="color-mini" style="background-color: {{ active_settings.primary_color }}" title="{{ _('Primary') }}: {{ active_settings.primary_color }}"></div>
+                    <div class="color-mini" style="background-color: {{ active_settings.secondary_color }}" title="{{ _('Secondary') }}: {{ active_settings.secondary_color }}"></div>
+                    <div class="color-mini" style="background-color: {{ active_settings.accent_color }}" title="{{ _('Accent') }}: {{ active_settings.accent_color }}"></div>
                 </div>
             </div>
-            {% endfor %}
-        {% else %}
-            <div class="empty-state">
-                <div class="icon">🎨</div>
-                <h3>{{ _("No Brand Settings") }}</h3>
-                <p>{{ _("Create your first brand settings to customize colors") }}</p>
-                <a href="/app/new/Brand%20Settings" class="btn btn-primary">
-                    <i class="fa fa-plus"></i> {{ _("Create Brand Settings") }}
+            
+            <div class="settings-actions">
+                <a href="/app/brand-settings" class="btn btn-outline">
+                    <i class="fa fa-edit"></i> {{ _("Edit Settings") }}
                 </a>
+                <button class="btn btn-secondary" onclick="regenerateBrandCSS()">
+                    <i class="fa fa-refresh"></i> {{ _("Refresh CSS") }}
+                </button>
             </div>
-        {% endif %}
+        </div>
     </div>
 
     <!-- Owl Theme Integration -->
@@ -507,35 +487,29 @@
 </style>
 
 <script>
-function activateSettings(settingsName) {
-    if (confirm('{{ _("Are you sure you want to activate these brand settings? This will deactivate the current active settings.") }}')) {
-        frappe.call({
-            method: 'frappe.client.set_value',
-            args: {
-                doctype: 'Brand Settings',
-                name: settingsName,
-                fieldname: 'is_active',
-                value: 1
-            },
-            callback: function(r) {
-                if (r.message) {
-                    frappe.show_alert({
-                        message: '{{ _("Brand settings activated successfully!") }}',
-                        indicator: 'green'
-                    });
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 1000);
-                }
-            },
-            error: function() {
+function regenerateBrandCSS() {
+    frappe.call({
+        method: 'verenigingen.utils.brand_css_generator.regenerate_brand_css',
+        callback: function(r) {
+            if (r.message && r.message.success) {
                 frappe.show_alert({
-                    message: '{{ _("Error activating brand settings") }}',
+                    message: '{{ _("Brand CSS refreshed successfully!") }}',
+                    indicator: 'green'
+                });
+            } else {
+                frappe.show_alert({
+                    message: r.message ? r.message.message : '{{ _("Error refreshing CSS") }}',
                     indicator: 'red'
                 });
             }
-        });
-    }
+        },
+        error: function() {
+            frappe.show_alert({
+                message: '{{ _("Error refreshing brand CSS") }}',
+                indicator: 'red'
+            });
+        }
+    });
 }
 
 function syncToOwlTheme() {

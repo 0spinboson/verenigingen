@@ -70,7 +70,7 @@ def has_member_permission(doc, user=None, permission_type=None):
     frappe.logger().debug(f"Checking Member permissions for user {user} with roles {frappe.get_roles(user)}")
     
     # Admin roles always have access
-    admin_roles = ["System Manager", "Membership Manager", "Verenigingen Administrator"]
+    admin_roles = ["System Manager", "Verenigingen Manager", "Verenigingen Administrator"]
     if any(role in frappe.get_roles(user) for role in admin_roles):
         frappe.logger().debug(f"User {user} has admin role, granting access")
         return True
@@ -89,7 +89,7 @@ def has_membership_permission(doc, user=None, permission_type=None):
     frappe.logger().debug(f"Checking Membership permissions for user {user} with roles {frappe.get_roles(user)}")
     
     # Admin roles always have access
-    admin_roles = ["System Manager", "Membership Manager", "Verenigingen Administrator"]
+    admin_roles = ["System Manager", "Verenigingen Manager", "Verenigingen Administrator"]
     if any(role in frappe.get_roles(user) for role in admin_roles):
         frappe.logger().debug(f"User {user} has admin role, granting access")
         return True
@@ -192,7 +192,7 @@ def get_member_permission_query(user):
     if not user:
         user = frappe.session.user
 
-    admin_roles = ["System Manager", "Membership Manager", "Verenigingen Administrator"]
+    admin_roles = ["System Manager", "Verenigingen Manager", "Verenigingen Administrator"]
     if any(role in frappe.get_roles(user) for role in admin_roles):
         frappe.logger().debug(f"User {user} has admin role, granting full access")
         return ""
@@ -218,7 +218,7 @@ def can_view_financial_info(doctype, name=None, user=None):
         
     # System managers and Verenigingen managers can always view
     if ("System Manager" in frappe.get_roles(user) or 
-        "Membership Manager" in frappe.get_roles(user)):
+        "Verenigingen Manager" in frappe.get_roles(user)):
         return True
     
     # Get the member for this user
@@ -258,7 +258,7 @@ def check_member_payment_access(member_name, user=None):
         
     # Admins can access all
     if ("System Manager" in frappe.get_roles(user) or 
-        "Membership Manager" in frappe.get_roles(user)):
+        "Verenigingen Manager" in frappe.get_roles(user)):
         return True
         
     # Allow members to view their own payment info
@@ -388,7 +388,7 @@ def get_chapter_member_permission_query(user):
         user = frappe.session.user
         
     # Admin roles get full access
-    admin_roles = ["System Manager", "Membership Manager", "Verenigingen Administrator"]
+    admin_roles = ["System Manager", "Verenigingen Manager", "Verenigingen Administrator"]
     if any(role in frappe.get_roles(user) for role in admin_roles):
         return ""
     
@@ -487,7 +487,7 @@ def get_volunteer_permission_query(user):
         user = frappe.session.user
         
     # Admin roles get full access
-    admin_roles = ["System Manager", "Membership Manager", "Verenigingen Administrator", "Volunteer Manager"]
+    admin_roles = ["System Manager", "Verenigingen Manager", "Verenigingen Administrator", "Volunteer Manager"]
     if any(role in frappe.get_roles(user) for role in admin_roles):
         return ""
     
@@ -505,7 +505,7 @@ def get_team_member_permission_query(user):
         user = frappe.session.user
         
     # Admin roles get full access
-    admin_roles = ["System Manager", "Membership Manager", "Verenigingen Administrator", "Volunteer Manager"]
+    admin_roles = ["System Manager", "Verenigingen Manager", "Verenigingen Administrator", "Volunteer Manager"]
     if any(role in frappe.get_roles(user) for role in admin_roles):
         return ""
     

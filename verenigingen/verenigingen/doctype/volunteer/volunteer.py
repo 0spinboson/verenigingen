@@ -4,6 +4,11 @@ from frappe.model.document import Document
 from frappe.contacts.address_and_contact import load_address_and_contact
 from frappe.utils import getdate, today, add_days, cint
 from frappe.query_builder import DocType
+from verenigingen.utils.dutch_name_utils import (
+    is_dutch_installation, 
+    get_full_last_name, 
+    format_dutch_full_name
+)
 
 class Volunteer(Document):
     def onload(self):
@@ -667,7 +672,7 @@ class Volunteer(Document):
     
     @frappe.whitelist()
     def create_minimal_employee(self):
-        """Create a minimal employee record for ERPNext integration"""
+        """Create a minimal employee record for ERPNext integration using native ERPNext system"""
         try:
             # Check if employee already exists
             if self.employee_id:
@@ -691,10 +696,8 @@ class Volunteer(Document):
             first_name = name_parts[0] if name_parts else "Volunteer"
             last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
             
-            # Get department based on volunteer assignments
-            from verenigingen.utils.department_hierarchy import DepartmentHierarchyManager
-            dept_manager = DepartmentHierarchyManager()
-            department = dept_manager.get_volunteer_department(self.name)
+            # Get expense approver based on volunteer's board positions and teams (native ERPNext approach)
+            expense_approver = self.get_expense_approver_from_assignments()
             
             # Create minimal employee record with required fields
             employee_data = {
@@ -707,8 +710,7 @@ class Volunteer(Document):
                 "gender": "Prefer not to say",  # Required field with default
                 "date_of_birth": "1990-01-01",  # Required field with default
                 "date_of_joining": frappe.utils.today(),  # Required field with today's date
-                "department": department  # Set department, let hierarchy handle approver
-                # Note: Don't set expense_approver - department hierarchy will provide it
+                "expense_approver": expense_approver  # Direct approver assignment (native ERPNext)
             }
             
             # Add optional fields if available
@@ -739,13 +741,113 @@ class Volunteer(Document):
                 except Exception as e:
                     frappe.log_error(f"Error updating Member {self.member} with employee ID: {str(e)}", "Member Update Error")
             
-            frappe.logger().info(f"Created minimal employee {employee.name} for volunteer {self.name}")
+            frappe.logger().info(f"Created minimal employee {employee.name} for volunteer {self.name} with approver {expense_approver}")
             
             return employee.name
             
         except Exception as e:
             frappe.log_error(f"Error creating minimal employee for volunteer {self.name}: {str(e)}", "Employee Creation Error")
             frappe.throw(_("Unable to create employee record: {0}").format(str(e)))
+    
+    def get_expense_approver_from_assignments(self):
+        """Get appropriate expense approver based on volunteer's assignments (native ERPNext approach)"""
+        try:
+            # Priority 1: If volunteer is on national board, use national treasurer/financial officer
+            settings = frappe.get_single("Verenigingen Settings")
+            if settings.national_board_chapter:
+                national_board_member = frappe.db.exists("Chapter Board Member", {
+                    "parent": settings.national_board_chapter,
+                    "volunteer": self.name,
+                    "is_active": 1
+                })
+                
+                if national_board_member:
+                    # For national board members, find another national board member who can approve
+                    national_approver = self.get_board_financial_approver(settings.national_board_chapter, exclude_volunteer=self.name)
+                    if national_approver:
+                        return national_approver
+            
+            # Priority 2: For chapter members, find chapter treasurer/financial officer
+            if self.member:
+                chapter_memberships = frappe.get_all("Chapter Member",
+                    filters={"member": self.member, "enabled": 1},
+                    fields=["parent"])
+                
+                for membership in chapter_memberships:
+                    chapter_approver = self.get_board_financial_approver(membership.parent)
+                    if chapter_approver:
+                        return chapter_approver
+            
+            # Priority 3: For team members, find chapter approver through team's chapter
+            team_memberships = frappe.get_all("Team Member",
+                filters={"volunteer": self.name, "status": "Active"},
+                fields=["parent"])
+            
+            for team_membership in team_memberships:
+                team_doc = frappe.get_doc("Team", team_membership.parent)
+                if team_doc.chapter:
+                    team_chapter_approver = self.get_board_financial_approver(team_doc.chapter)
+                    if team_chapter_approver:
+                        return team_chapter_approver
+            
+            # Priority 4: Fallback to any system manager with expense approver role
+            fallback_approver = frappe.db.get_value("User", 
+                {"enabled": 1, "name": ["!=", "Administrator"]}, 
+                "name", 
+                order_by="creation")
+            
+            if fallback_approver:
+                # Ensure user has expense approver role
+                self.ensure_user_has_expense_approver_role(fallback_approver)
+                return fallback_approver
+            
+            # Last resort: Administrator
+            return "Administrator"
+            
+        except Exception as e:
+            frappe.log_error(f"Error determining expense approver for volunteer {self.name}: {str(e)}", "Expense Approver Error")
+            return "Administrator"  # Safe fallback
+    
+    def get_board_financial_approver(self, chapter_name, exclude_volunteer=None):
+        """Get financial approver from chapter board (treasurer, financial officer, etc.)"""
+        # Priority order for financial approval roles
+        financial_roles = ["Treasurer", "Financial Officer", "Secretary-Treasurer", "Board Chair", "Secretary"]
+        
+        for role in financial_roles:
+            board_members = frappe.get_all("Chapter Board Member",
+                filters={
+                    "parent": chapter_name,
+                    "chapter_role": role,
+                    "is_active": 1,
+                    "volunteer": ["!=", exclude_volunteer] if exclude_volunteer else ["!=", ""]
+                },
+                fields=["volunteer"])
+            
+            for member in board_members:
+                volunteer_doc = frappe.get_doc("Volunteer", member.volunteer)
+                user_email = volunteer_doc.email or volunteer_doc.personal_email
+                
+                if user_email and frappe.db.exists("User", user_email):
+                    user = frappe.get_doc("User", user_email)
+                    if user.enabled:
+                        # Ensure user has expense approver role
+                        self.ensure_user_has_expense_approver_role(user_email)
+                        return user_email
+        
+        return None
+    
+    def ensure_user_has_expense_approver_role(self, user_email):
+        """Ensure user has expense approver role for ERPNext expense claims"""
+        try:
+            user = frappe.get_doc("User", user_email)
+            user_roles = [r.role for r in user.roles]
+            
+            if "Expense Approver" not in user_roles:
+                user.append("roles", {"role": "Expense Approver"})
+                user.save(ignore_permissions=True)
+                frappe.logger().info(f"Added Expense Approver role to user {user_email}")
+        except Exception as e:
+            frappe.log_error(f"Error adding expense approver role to {user_email}: {str(e)}", "Role Assignment Error")
     
     def assign_employee_role(self, employee_id):
         """Assign limited employee role to the user for expense declarations"""
@@ -929,8 +1031,25 @@ def create_volunteer_from_member(member_doc):
         
         # Create new volunteer record
         volunteer = frappe.new_doc("Volunteer")
+        
+        # Use proper Dutch naming if applicable
+        if member_doc.full_name:
+            # Use the member's properly formatted full_name (which includes Dutch naming if applicable)  
+            volunteer_name = member_doc.full_name
+        elif is_dutch_installation() and hasattr(member_doc, 'tussenvoegsel') and member_doc.tussenvoegsel:
+            # For Dutch installations, format name with tussenvoegsel
+            volunteer_name = format_dutch_full_name(
+                member_doc.first_name,
+                None,  # Don't use middle_name when tussenvoegsel is available
+                member_doc.tussenvoegsel,
+                member_doc.last_name
+            )
+        else:
+            # Standard name formatting for non-Dutch installations
+            volunteer_name = f"{member_doc.first_name} {member_doc.last_name}".strip()
+        
         volunteer.update({
-            "volunteer_name": member_doc.full_name,
+            "volunteer_name": volunteer_name,
             "member": member_doc.name,
             "email": org_email,
             "personal_email": member_doc.email,
@@ -1002,71 +1121,84 @@ def sync_chapter_board_members():
     return {"updated_count": updated_count}
 
 def create_organization_user_for_volunteer(volunteer, member_doc):
-    """Create organization user account for volunteer"""
+    """Link volunteer to existing member user account instead of creating new one"""
     try:
-        org_email = volunteer.email
-        
-        if not org_email:
-            return False
+        # Check if member already has a user account from membership approval
+        if member_doc.user:
+            existing_user = frappe.get_doc("User", member_doc.user)
             
-        # Check if user already exists
-        if frappe.db.exists("User", org_email):
+            # Add volunteer role to existing user if not already present
+            existing_roles = [role.role for role in existing_user.roles]
+            volunteer_role = "Verenigingen Volunteer"
+            
+            if volunteer_role not in existing_roles and frappe.db.exists("Role", volunteer_role):
+                existing_user.append("roles", {"role": volunteer_role})
+                existing_user.save(ignore_permissions=True)
+                frappe.msgprint(_("Added volunteer role to existing user account"))
+            
+            # Link existing user to volunteer record
+            volunteer.user = existing_user.name
+            volunteer.save(ignore_permissions=True)
+            
+            frappe.msgprint(_("Linked volunteer to existing member user account {0}").format(existing_user.email))
+            return True
+        
+        # Fallback: if no member user exists, check for organizational email user
+        org_email = volunteer.email
+        if org_email and frappe.db.exists("User", org_email):
             existing_user = frappe.get_doc("User", org_email)
             
             # Link existing user to volunteer if not already linked
             if not volunteer.user:
                 volunteer.user = existing_user.name
                 volunteer.save(ignore_permissions=True)
-            
-            # Keep the existing personal user account on the member record
-            # Only link to member if no personal user account exists
                 
             frappe.msgprint(_("Linked existing user account {0} to volunteer").format(org_email))
             return True
         
-        # Create new user account
-        user = frappe.get_doc({
-            "doctype": "User",
-            "email": org_email,
-            "first_name": member_doc.first_name or "",
-            "last_name": member_doc.last_name or "",
-            "full_name": member_doc.full_name or "",
-            "send_welcome_email": 1,
-            "user_type": "System User",
-            "new_password": frappe.generate_hash(length=12)
-        })
+        # Last resort: create new user account only if no existing user found
+        if org_email:
+            user = frappe.get_doc({
+                "doctype": "User",
+                "email": org_email,
+                "first_name": member_doc.first_name or "",
+                "last_name": member_doc.last_name or "",
+                "full_name": member_doc.full_name or "",
+                "send_welcome_email": 1,
+                "user_type": "System User",
+                "new_password": frappe.generate_hash(length=12)
+            })
+            
+            # Add volunteer-related roles
+            volunteer_roles = ["Verenigingen Volunteer", "Verenigingen Member"]
+            
+            for role in volunteer_roles:
+                if frappe.db.exists("Role", role):
+                    user.append("roles", {"role": role})
+            
+            # Add default system roles for volunteers
+            default_roles = ["All"]
+            for role in default_roles:
+                if frappe.db.exists("Role", role):
+                    user.append("roles", {"role": role})
+            
+            user.insert(ignore_permissions=True)
+            
+            # Link user to volunteer record
+            volunteer.user = user.name
+            volunteer.save(ignore_permissions=True)
+            
+            frappe.logger().info(f"Created new user {org_email} for volunteer {volunteer.name}")
+            frappe.msgprint(_("Created new user account {0} for volunteer").format(org_email))
+            return True
         
-        # Add volunteer-related roles
-        volunteer_roles = ["Verenigingen Volunteer", "Verenigingen Member"]
-        
-        for role in volunteer_roles:
-            if frappe.db.exists("Role", role):
-                user.append("roles", {"role": role})
-        
-        # Add default system roles for volunteers
-        default_roles = ["All"]
-        for role in default_roles:
-            if frappe.db.exists("Role", role):
-                user.append("roles", {"role": role})
-        
-        user.insert(ignore_permissions=True)
-        
-        # Link user to volunteer record
-        volunteer.user = user.name
-        volunteer.save(ignore_permissions=True)
-        
-        # Keep the existing personal user account on the member record
-        # The volunteer record will have the organization user account
-        # This allows members to have both personal and organization accounts
-        
-        frappe.logger().info(f"Created organization user {org_email} for volunteer {volunteer.name}")
-        return True
+        return False
         
     except frappe.DuplicateEntryError:
-        frappe.msgprint(_("User account {0} already exists").format(org_email))
+        frappe.msgprint(_("User account already exists"))
         return False
     except Exception as e:
-        frappe.log_error(f"Error creating organization user: {str(e)}")
+        frappe.log_error(f"Error linking user to volunteer: {str(e)}")
         raise e
 
 @frappe.whitelist()

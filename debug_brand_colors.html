@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Brand Colors</title>
+</head>
+<body>
+    <h1>Brand Settings Debug</h1>
+    
+    <script>
+        fetch('/api/method/frappe.client.get', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                doctype: 'Brand Settings',
+                name: 'Brand Settings'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Brand Settings:', data);
+            if (data.message) {
+                document.getElementById('debug-info').innerHTML = `
+                    <p>Primary Color: ${data.message.primary_color}</p>
+                    <p>Secondary Color: ${data.message.secondary_color}</p>
+                    <p>Accent Color: ${data.message.accent_color}</p>
+                `;
+            } else {
+                document.getElementById('debug-info').innerHTML = '<p>Brand Settings not found or error loading</p>';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            document.getElementById('debug-info').innerHTML = '<p>Error loading brand settings</p>';
+        });
+    </script>
+    
+    <div id="debug-info">Loading...</div>
+</body>
+</html>

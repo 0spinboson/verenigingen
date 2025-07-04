@@ -49,7 +49,7 @@ class DepartmentHierarchyManager:
         
         for chapter in chapters:
             # Main chapter department
-            chapter_dept = f"Chapter {chapter.chapter_name}"
+            chapter_dept = f"Chapter {chapter.name}"
             self._ensure_department(chapter_dept, parent="Chapters")
             
             # Sub-departments

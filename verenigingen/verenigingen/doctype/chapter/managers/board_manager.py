@@ -749,7 +749,7 @@ class BoardManager(BaseManager):
         # Create lookup for old board members
         old_board_members = {bm.name: bm for bm in old_doc.board_members if bm.name}
 
-        # Check each current board member for deactivation
+        # Check each current board member for changes
         members_to_remove = []
         for board_member in self.chapter_doc.board_members or []:
             if not board_member.name:
@@ -759,10 +759,45 @@ class BoardManager(BaseManager):
             if not old_board_member:
                 continue
 
-            # Check if board member was deactivated
+            # Check for role changes (same volunteer, same activity status, different role)
             if (old_board_member.is_active == 1 and 
-                board_member.is_active == 0 and 
-                board_member.volunteer):
+                board_member.is_active == 1 and 
+                board_member.volunteer and
+                old_board_member.chapter_role != board_member.chapter_role):
+                
+                # Role changed - complete old assignment and create new one
+                change_date = today()
+                
+                # Complete old role assignment
+                self.update_volunteer_assignment_history(
+                    board_member.volunteer,
+                    old_board_member.chapter_role,  # Use old role
+                    board_member.from_date,
+                    change_date
+                )
+                
+                # Start new role assignment
+                self.add_volunteer_assignment_history(
+                    board_member.volunteer,
+                    board_member.chapter_role,  # Use new role
+                    change_date
+                )
+                
+                self.log_action(
+                    "Board member role changed",
+                    {
+                        "volunteer": board_member.volunteer,
+                        "volunteer_name": board_member.volunteer_name,
+                        "old_role": old_board_member.chapter_role,
+                        "new_role": board_member.chapter_role,
+                        "change_date": change_date
+                    }
+                )
+
+            # Check if board member was deactivated
+            elif (old_board_member.is_active == 1 and 
+                  board_member.is_active == 0 and 
+                  board_member.volunteer):
 
                 # Set to_date if not already set
                 if not board_member.to_date:
