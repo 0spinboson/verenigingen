@@ -133,38 +133,78 @@ class Team(Document):
         """Add active assignment to volunteer history when joining team"""
         from verenigingen.utils.assignment_history_manager import AssignmentHistoryManager
         
+        # Get the team member to access role_type
+        team_member = None
+        for member in self.team_members:
+            if member.volunteer == volunteer_id and str(member.from_date) == str(start_date):
+                team_member = member
+                break
+        
+        if not team_member:
+            print(f"Could not find team member for volunteer {volunteer_id}")
+            return
+        
+        # Use role_type as primary, append optional role name if provided
+        role_description = team_member.role_type
+        if role and role.strip():
+            role_description = f"{team_member.role_type} - {role}"
+        
         success = AssignmentHistoryManager.add_assignment_history(
             volunteer_id=volunteer_id,
             assignment_type="Team",
             reference_doctype="Team",
             reference_name=self.name,
-            role=role,
+            role=role_description,
             start_date=start_date
         )
         
         if success:
-            print(f"Added team assignment history for volunteer {volunteer_id}: {role}")
+            print(f"Added team assignment history for volunteer {volunteer_id}: {role_description}")
         else:
-            print(f"Error adding team assignment history for volunteer {volunteer_id}: {role}")
+            print(f"Error adding team assignment history for volunteer {volunteer_id}: {role_description}")
     
     def complete_team_assignment_history(self, volunteer_id: str, role: str, start_date: str, end_date: str):
         """Complete volunteer assignment history when leaving team"""
         from verenigingen.utils.assignment_history_manager import AssignmentHistoryManager
+        
+        # Get the team member to access role_type
+        team_member = None
+        for member in self.team_members:
+            if member.volunteer == volunteer_id and str(member.from_date) == str(start_date):
+                team_member = member
+                break
+        
+        # If not in current members, check the old document
+        if not team_member and hasattr(self, '_doc_before_save'):
+            for member in self._doc_before_save.team_members or []:
+                if member.volunteer == volunteer_id and str(member.from_date) == str(start_date):
+                    team_member = member
+                    break
+        
+        if not team_member:
+            print(f"Could not find team member for volunteer {volunteer_id}")
+            # Use role as-is if we can't find the member
+            role_description = role
+        else:
+            # Use role_type as primary, append optional role name if provided
+            role_description = team_member.role_type
+            if role and role.strip():
+                role_description = f"{team_member.role_type} - {role}"
         
         success = AssignmentHistoryManager.complete_assignment_history(
             volunteer_id=volunteer_id,
             assignment_type="Team",
             reference_doctype="Team",
             reference_name=self.name,
-            role=role,
+            role=role_description,
             start_date=start_date,
             end_date=end_date
         )
         
         if success:
-            print(f"Completed team assignment history for volunteer {volunteer_id}: {role}")
+            print(f"Completed team assignment history for volunteer {volunteer_id}: {role_description}")
         else:
-            print(f"Error completing team assignment history for volunteer {volunteer_id}: {role}")
+            print(f"Error completing team assignment history for volunteer {volunteer_id}: {role_description}")
 
 @frappe.whitelist()
 def get_team_members(team):

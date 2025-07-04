@@ -16,34 +16,54 @@ def get_context(context):
     if not frappe.has_permission("Member", "create"):
         frappe.throw(_("Not permitted"), frappe.PermissionError)
     
-    # Get existing test members count
-    test_members_count = frappe.db.count("Member", 
-        filters={"email": ["like", "%@testvereniging.nl"]}
+    # Get member count
+    context.member_count = frappe.db.count("Member")
+    
+    # Get test members
+    test_members = frappe.get_all("Member",
+        filters={"email": ["like", "%@email.nl"]},
+        fields=["name", "full_name", "status"],
+        limit=10
     )
     
-    context.test_members_count = test_members_count
-    context.has_test_members = test_members_count > 0
+    context.test_members = test_members
+    context.test_members_count = len(test_members)
+    context.has_test_members = len(test_members) > 0
+    
+    # Get membership types
+    membership_types = frappe.get_all("Membership Type", 
+        fields=["name", "membership_type_name"],
+        limit=5
+    )
+    
+    context.membership_types = membership_types
+    context.membership_types_count = len(membership_types)
+    context.has_membership_types = len(membership_types) > 0
     
     return context
 
 @frappe.whitelist()
 def generate_test_members_from_onboarding():
     """Generate test members from the onboarding page"""
-    from verenigingen.api.generate_test_members import generate_test_members
+    # Use the new method that properly creates Pending members
+    from verenigingen.utils.create_test_pending_members import create_test_pending_members
     
-    result = generate_test_members()
+    result = create_test_pending_members()
     
     # Mark onboarding step as complete if successful
-    if result.get("success") and result.get("summary", {}).get("created", 0) > 0:
-        frappe.db.set_value("Onboarding Step", "Verenigingen-Create-Member", "is_complete", 1)
-        frappe.db.commit()
+    if result.get("success") and result.get("created", 0) > 0:
+        try:
+            frappe.db.set_value("Onboarding Step", "Verenigingen-Create-Member", "is_complete", 1)
+            frappe.db.commit()
+        except:
+            pass  # Ignore if onboarding step doesn't exist
     
     return result
 
 @frappe.whitelist()
-def create_single_member():
-    """Redirect to create a single member"""
-    return {
-        "redirect": "/app/member/new-member-1",
-        "message": _("Redirecting to create a new member...")
-    }
+def cleanup_test_data():
+    """Clean up test members"""
+    # Import the cleanup function from templates/pages
+    from vereiningen.templates.pages.onboarding_member_setup import cleanup_test_data as cleanup_impl
+    
+    return cleanup_impl()

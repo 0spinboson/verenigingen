@@ -237,7 +237,7 @@ verenigingen.member_form = {
     
     setup_custom_buttons: function(frm) {
         // Add buttons for member-specific actions
-        if (frm.doc.name) {
+        if (frm.doc.name && !frm.is_new()) {
             // Contact request button is already added in UIUtils.setup_contact_requests_section
             
             // Add volunteer creation button if not already a volunteer
@@ -337,8 +337,15 @@ function update_other_members_at_address(frm) {
     console.log('Member:', frm.doc.name);
     console.log('Primary Address:', frm.doc.primary_address);
     
-    if (!frm.doc.name || !frm.doc.primary_address) {
-        console.log('No name or address, clearing field');
+    // Skip for new records
+    if (frm.is_new() || !frm.doc.name || frm.doc.name.startsWith('new-')) {
+        console.log('New record, skipping address member lookup');
+        frm.set_value('other_members_at_address', '<div class="text-muted">Save member to see other members at this address</div>');
+        return;
+    }
+    
+    if (!frm.doc.primary_address) {
+        console.log('No address, clearing field');
         frm.set_value('other_members_at_address', '<div class="text-muted">No address selected</div>');
         return;
     }
@@ -987,60 +994,7 @@ function get_member_current_chapters(member_name) {
     });
 }
 
-// ==================== ADDRESS MEMBERS FUNCTIONALITY ====================
-
-// Address members display functions
-function update_other_members_at_address(frm) {
-    console.log('Updating other members at address for:', frm.doc.name);
-    
-    if (!frm.doc.name || !frm.doc.primary_address) {
-        // Clear the field if no address or new document
-        frm.set_df_property('other_members_at_address', 'options', 
-            '<div class="text-muted">No address selected</div>');
-        frm.refresh_field('other_members_at_address');
-        return;
-    }
-    
-    // Show loading state
-    frm.set_df_property('other_members_at_address', 'options', 
-        '<div class="text-muted"><i class="fa fa-spinner fa-spin"></i> Loading other members...</div>');
-    frm.refresh_field('other_members_at_address');
-    
-    // Call API method to get other members at the same address
-    frappe.call({
-        method: 'verenigingen.api.member_management.get_address_members_html_api',
-        args: {
-            member_id: frm.doc.name
-        },
-        callback: function(r) {
-            if (r.message && r.message.success && r.message.html) {
-                frm.set_df_property('other_members_at_address', 'options', r.message.html);
-                frm.refresh_field('other_members_at_address');
-                
-                // Add click handlers for view buttons
-                setTimeout(() => {
-                    $(frm.fields_dict.other_members_at_address.$wrapper).off('click', '.view-member-btn').on('click', '.view-member-btn', function(e) {
-                        e.preventDefault();
-                        const memberName = $(this).data('member');
-                        if (memberName) {
-                            frappe.set_route('Form', 'Member', memberName);
-                        }
-                    });
-                }, 100);
-            } else {
-                frm.set_df_property('other_members_at_address', 'options', 
-                    '<div class="text-muted">No other members found at this address</div>');
-                frm.refresh_field('other_members_at_address');
-            }
-        },
-        error: function(r) {
-            console.error('Error getting other members at address:', r);
-            frm.set_df_property('other_members_at_address', 'options', 
-                '<div class="text-muted text-danger">Error loading member information</div>');
-            frm.refresh_field('other_members_at_address');
-        }
-    });
-}
+// (Duplicate function removed - using the one defined earlier)
 
 function display_other_members_at_address(frm, members) {
     if (!members || members.length === 0) {

@@ -7,6 +7,7 @@ class SmartTegenrekeningMapper:
         self.company = company
         self._ledger_mapping_cache = None
         self._account_cache = {}
+        self._logged_missing_ledgers = set()  # Track logged missing ledgers to avoid spam
     
     def get_item_for_tegenrekening(self, account_code, description="", transaction_type="purchase", amount=0):
         """
@@ -86,21 +87,26 @@ class SmartTegenrekeningMapper:
         item_name = self._generate_item_name(account_details.account_name, account_code)
         
         # Determine item properties
-        is_sales_item = 0
-        is_purchase_item = 0
+        # Always enable both sales and purchase for flexibility
+        is_sales_item = 1
+        is_purchase_item = 1
         item_group = "E-Boekhouden Import"
         
+        # Check account name for specific patterns to determine proper categorization
+        account_name_lower = account_details.account_name.lower()
+        
         if account_details.account_type == "Income Account":
-            is_sales_item = 1
             item_group = "Revenue Items"
+        elif account_details.account_type == "Cost of Goods Sold":
+            item_group = "Cost of Goods Sold Items"
         elif account_details.account_type == "Expense Account":
-            is_purchase_item = 1  
             item_group = "Expense Items"
+        # Special handling for material/inkoop accounts that should be COGS
+        elif any(keyword in account_name_lower for keyword in ['inkoop', 'materiaal', 'grondstoffen', 'kostprijs']):
+            item_group = "Cost of Goods Sold Items"
         elif transaction_type == "sales":
-            is_sales_item = 1
             item_group = "Revenue Items"
         else:
-            is_purchase_item = 1
             item_group = "Expense Items"
         
         try:
@@ -114,10 +120,12 @@ class SmartTegenrekeningMapper:
             item.is_sales_item = is_sales_item
             item.is_purchase_item = is_purchase_item
             
-            # Note: ERPNext Items don't have default account fields
-            # Account mapping is handled during invoice creation
-            
-            # Note: Item will be linked to account via item_code pattern EB-{account_code}
+            # Add Item Default to link to the expense/income account
+            item.append("item_defaults", {
+                "company": self.company,
+                "expense_account": erpnext_account if is_purchase_item else None,
+                "income_account": erpnext_account if is_sales_item else None
+            })
             
             item.insert(ignore_permissions=True)
             
@@ -138,6 +146,22 @@ class SmartTegenrekeningMapper:
         if account_code in self._account_cache:
             return self._account_cache[account_code]
         
+        # First check if this is a ledger ID (all digits) vs account code
+        if str(account_code).isdigit() and len(str(account_code)) > 5:
+            # This looks like a ledger ID, not an account code
+            # Try to get the actual account code from ledger mapping
+            from .eboekhouden_ledger_mapping import get_account_code_from_ledger_id
+            mapped_code = get_account_code_from_ledger_id(account_code)
+            if mapped_code:
+                account_code = mapped_code
+            else:
+                # Log once and return None
+                if account_code not in self._logged_missing_ledgers:
+                    frappe.log_error(f"Ledger ID {account_code} not found in mapping", "Tegenrekening Mapping")
+                    self._logged_missing_ledgers.add(account_code)
+                self._account_cache[account_code] = None
+                return None
+        
         # Try by eboekhouden_grootboek_nummer field
         account = frappe.db.get_value("Account", {
             "company": self.company,
@@ -150,6 +174,10 @@ class SmartTegenrekeningMapper:
                 "company": self.company,
                 "account_number": account_code
             }, "name")
+        
+        if not account:
+            # Log missing account code for debugging
+            frappe.log_error(f"Account code {account_code} not found in company {self.company}", "Tegenrekening Mapping")
         
         self._account_cache[account_code] = account
         return account
@@ -174,22 +202,29 @@ class SmartTegenrekeningMapper:
             item_name = "Generic Income Item"
             item_group = "Revenue Items"
             account_type = "Income Account"
+            # Use specific income account from existing CoA
+            fallback_account = "80005 - Donaties - direct op bankrekening - NVV"  # Generic income
         else:
             item_code = "EB-GENERIC-EXPENSE"
             item_name = "Generic Expense Item"
             item_group = "Expense Items"
             account_type = "Expense Account"
+            # Use algemene kosten (general expenses) from existing CoA
+            fallback_account = "44009 - Onvoorziene kosten - NVV"  # Unforeseen expenses as fallback
         
         # Ensure fallback item exists
         if not frappe.db.exists("Item", item_code):
-            self._create_fallback_item(item_code, item_name, item_group, transaction_type)
+            self._create_fallback_item(item_code, item_name, item_group, transaction_type, account)
         
-        # Get appropriate account
+        # Get appropriate account - try to find one first, use fallback if not found
         account = frappe.db.get_value("Account", {
             "company": self.company,
             "account_type": account_type,
             "is_group": 0
         }, "name")
+        
+        if not account:
+            account = fallback_account
         
         return {
             'item_code': item_code,
@@ -199,7 +234,7 @@ class SmartTegenrekeningMapper:
             'source': 'fallback'
         }
     
-    def _create_fallback_item(self, item_code, item_name, item_group, transaction_type):
+    def _create_fallback_item(self, item_code, item_name, item_group, transaction_type, account=None):
         """Create fallback generic item"""
         try:
             item = frappe.new_doc("Item")
@@ -208,8 +243,18 @@ class SmartTegenrekeningMapper:
             item.item_group = item_group
             item.stock_uom = "Nos"
             item.is_stock_item = 0
-            item.is_sales_item = 1 if transaction_type == "sales" else 0
-            item.is_purchase_item = 1 if transaction_type == "purchase" else 0
+            # Always enable both for flexibility
+            item.is_sales_item = 1
+            item.is_purchase_item = 1
+            
+            # Add Item Default if account provided
+            if account:
+                item.append("item_defaults", {
+                    "company": self.company,
+                    "expense_account": account if transaction_type == "purchase" else None,
+                    "income_account": account if transaction_type == "sales" else None
+                })
+            
             item.insert(ignore_permissions=True)
         except:
             pass  # Ignore if already exists
@@ -240,7 +285,15 @@ def create_invoice_line_for_tegenrekening(tegenrekening_code, amount, descriptio
     # Check if mapping was successful
     if not item_mapping or not isinstance(item_mapping, dict):
         frappe.log_error(f"Smart mapping failed for tegenrekening {tegenrekening_code}: {item_mapping}")
-        return None
+        # Return basic fallback
+        return {
+            "item_code": "E-Boekhouden Import Item",
+            "item_name": "E-Boekhouden Import Item",
+            "description": description or "E-Boekhouden Import",
+            "qty": 1,
+            "rate": abs(float(amount)),
+            "amount": abs(float(amount))
+        }
     
     # Get cost center
     cost_center = frappe.db.get_value("Cost Center", {
@@ -259,10 +312,29 @@ def create_invoice_line_for_tegenrekening(tegenrekening_code, amount, descriptio
     }
     
     # Add account field based on transaction type
-    if transaction_type == "sales":
-        line_dict["income_account"] = item_mapping.get('account')
-    else:
-        line_dict["expense_account"] = item_mapping.get('account')
+    account = item_mapping.get('account')
+    
+    # If no account from mapping, try to get from item defaults
+    if not account and item_mapping.get('item_code'):
+        item_code = item_mapping.get('item_code')
+        if frappe.db.exists("Item", item_code):
+            if transaction_type == "sales":
+                account = frappe.db.get_value("Item Default", {
+                    "parent": item_code,
+                    "company": mapper.company
+                }, "income_account")
+            else:
+                account = frappe.db.get_value("Item Default", {
+                    "parent": item_code,
+                    "company": mapper.company
+                }, "expense_account")
+    
+    # Only add account field if we have an account
+    if account:
+        if transaction_type == "sales":
+            line_dict["income_account"] = account
+        else:
+            line_dict["expense_account"] = account
     
     return line_dict
 
