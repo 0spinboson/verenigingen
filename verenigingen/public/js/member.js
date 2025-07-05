@@ -125,15 +125,8 @@ window.UIUtils = window.UIUtils || {
     }
 };
 
-// Define minimal other Utils to prevent errors
-window.SepaUtils = window.SepaUtils || {
-    check_sepa_mandate_status: function(frm) {
-        console.log('SEPA mandate status check placeholder');
-    },
-    create_sepa_mandate_with_dialog: function(frm) {
-        frappe.msgprint('SEPA mandate creation will be available after full utilities load.');
-    }
-};
+// SepaUtils will be loaded from sepa-utils.js via frappe.require
+// No need to define placeholders as they override the real functions
 
 window.ChapterUtils = window.ChapterUtils || {
     suggest_chapter_from_address: function(frm) {

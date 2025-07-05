@@ -71,12 +71,23 @@ class DirectDebitBatch(Document):
             company = frappe.get_doc("Company", settings.company or frappe.defaults.get_global_default('company'))
             
             # Validate required settings
-            required_settings = ['company_iban', 'company_bic', 'creditor_id']
+            required_settings = ['company_iban', 'creditor_id', 'company_account_holder']
             missing_settings = []
             
             for setting in required_settings:
                 if not hasattr(settings, setting) or not getattr(settings, setting):
                     missing_settings.append(setting)
+            
+            # BIC is optional - can be derived from IBAN
+            if not getattr(settings, 'company_bic', None) and getattr(settings, 'company_iban', None):
+                # Try to derive BIC from IBAN
+                from verenigingen.utils.iban_validator import derive_bic_from_iban
+                derived_bic = derive_bic_from_iban(settings.company_iban)
+                if derived_bic:
+                    frappe.logger().info(f"Derived BIC {derived_bic} from company IBAN")
+                    settings.company_bic = derived_bic
+                else:
+                    missing_settings.append('company_bic (could not be derived from IBAN)')
             
             if missing_settings:
                 error_msg = _("Missing required settings in Verenigingen Settings: {0}").format(
@@ -278,9 +289,10 @@ class DirectDebitBatch(Document):
         ET.SubElement(grp_hdr, "NbOfTxs").text = str(self.entry_count)
         ET.SubElement(grp_hdr, "CtrlSum").text = str(self.total_amount)
         
-        # Initiating Party (Creditor)
+        # Initiating Party (Creditor) - use account holder name if available
         init_party = ET.SubElement(grp_hdr, "InitgPty")
-        ET.SubElement(init_party, "Nm").text = company.name
+        initiating_party_name = getattr(settings, "company_account_holder", None) or company.name
+        ET.SubElement(init_party, "Nm").text = initiating_party_name
         
         # Payment Information
         pmt_inf = ET.SubElement(cstmr_drct_dbt_initn, "PmtInf")
@@ -301,9 +313,10 @@ class DirectDebitBatch(Document):
         # Requested Collection Date
         ET.SubElement(pmt_inf, "ReqdColltnDt").text = getdate(self.batch_date).strftime("%Y-%m-%d")
         
-        # Creditor
+        # Creditor - use account holder name if available
         cdtr = ET.SubElement(pmt_inf, "Cdtr")
-        ET.SubElement(cdtr, "Nm").text = company.name
+        creditor_name = getattr(settings, "company_account_holder", None) or company.name
+        ET.SubElement(cdtr, "Nm").text = creditor_name
         
         # Creditor Account (Company's IBAN)
         company_iban = getattr(settings, "company_iban", None) or "NL43INGB0123456789"  # Fall back to a placeholder

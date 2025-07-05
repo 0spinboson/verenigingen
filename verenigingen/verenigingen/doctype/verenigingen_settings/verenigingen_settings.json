@@ -17,8 +17,11 @@
   "last_member_history_refresh",
   "financial_settings_section",
   "company_iban",
+  "company_account_holder",
   "company_bic",
   "creditor_id",
+  "company_name",
+  "support_email",
   "creation_user",
   "application_settings_section",
   "enable_income_calculator",
@@ -108,22 +111,40 @@
    "label": "Tax Exempt for Contributions and Donations"
   },
   {
-   "description": "IBAN for direct debit collections",
+   "description": "Bank account number (IBAN) where direct debit payments will be collected. Example: NL91ABNA0417164300",
    "fieldname": "company_iban",
    "fieldtype": "Data",
    "label": "Company IBAN"
   },
   {
-   "description": "BIC code for company's bank",
-   "fieldname": "company_bic",
+   "description": "Legal name of the account holder as registered with the bank. This name will appear on member bank statements.",
+   "fieldname": "company_account_holder",
    "fieldtype": "Data",
-   "label": "Company BIC/SWIFT"
+   "label": "Bank Account Holder Name"
   },
   {
-   "description": "Dutch Incassant ID for direct debit collections",
+   "description": "Bank Identifier Code (BIC/SWIFT). Optional - can be automatically derived from Dutch IBANs. Example: ABNANL2A",
+   "fieldname": "company_bic",
+   "fieldtype": "Data",
+   "label": "Company BIC/SWIFT (Optional)"
+  },
+  {
+   "description": "SEPA Creditor Identifier (Incassant ID) issued by your bank for direct debit authorization. Format: NL##ZZZ############ Example: NL13ZZZ123456780000",
    "fieldname": "creditor_id",
    "fieldtype": "Data",
-   "label": "Creditor ID"
+   "label": "SEPA Creditor ID (Incassant ID)"
+  },
+  {
+   "description": "Organization name as it should appear in SEPA communications and member notifications",
+   "fieldname": "company_name",
+   "fieldtype": "Data",
+   "label": "Company Name"
+  },
+  {
+   "description": "Support email address for member inquiries about payments and mandates",
+   "fieldname": "support_email",
+   "fieldtype": "Data",
+   "label": "Support Email"
   },
   {
    "default": "EXEMPT_MEMBERSHIP",

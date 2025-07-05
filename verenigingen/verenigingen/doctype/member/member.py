@@ -180,8 +180,13 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
             "backend_members": backend_members[:2] if backend_members else []  # Show first 2 for debugging
         }
     
+    
     def after_save(self):
         """Execute after saving the document"""
+        # Note: IBAN history creation is handled in two ways:
+        # 1. For application members: During application approval in membership_application_review.py
+        # 2. For directly created members: Should be created manually after member creation
+        
         # Create user account for manually created members (non-application members)
         # Application members get user accounts created during the approval process
         if not self.is_application_member() and not self.user and self.email:
@@ -227,7 +232,9 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
 
     def is_application_member(self):
         """Check if this member was created through the application process"""
-        return bool(getattr(self, 'application_id', None))
+        # Check if application_id exists and is not empty
+        app_id = getattr(self, 'application_id', None)
+        return bool(app_id and app_id.strip() if isinstance(app_id, str) else app_id)
     
     def should_have_member_id(self):
         """Check if this member should have a member ID assigned"""
@@ -611,6 +618,9 @@ class Member(Document, PaymentMixin, SEPAMandateMixin, ChapterMixin, Termination
     
     def validate(self):
         """Validate document data"""
+        # Note: Initial IBAN history for directly created members should be handled manually
+        # after creation, or through the application approval process for application members
+        
         self.validate_name()
         self.update_full_name()
         self.update_membership_status()

@@ -130,6 +130,11 @@ def check_sepa_mandate_discrepancies():
     frappe.logger().info("Starting scheduled SEPA mandate discrepancy check")
     
     try:
+        # First check company SEPA settings
+        company_settings_status = _check_company_sepa_settings()
+        if company_settings_status:
+            frappe.logger().warning(f"SEPA Settings Issue: {company_settings_status}")
+        
         # Find members with SEPA Direct Debit or SEPA Direct Debit payment method
         members_with_direct_debit = frappe.get_all(
             "Member",
@@ -390,12 +395,15 @@ def _create_discrepancy_log(results):
     )
     
     if significant_issues > 0:
+        # Check for company IBAN/account settings
+        company_settings_warning = _check_company_sepa_settings()
+        
         # Create an Error Log entry for manual review
         log_message = f"""SEPA Mandate Discrepancy Check Results:
 
 Total Members Checked: {results['total_checked']}
 Auto-Fixed Issues: {len(results['auto_fixed'])}
-
+{company_settings_warning}
 MANUAL REVIEW NEEDED:
 - Missing Mandates: {len(results['missing_mandates'])}
 - IBAN Mismatches: {len(results['iban_mismatches'])} 
@@ -416,6 +424,39 @@ Errors:
 """
         
         frappe.log_error(log_message, "SEPA Mandate Discrepancies - Manual Review Required")
+
+
+def _check_company_sepa_settings():
+    """Check if company SEPA settings are configured"""
+    try:
+        settings = frappe.get_single("Verenigingen Settings")
+        missing_settings = []
+        
+        # Check required SEPA settings
+        if not getattr(settings, 'company_iban', None):
+            missing_settings.append("Company IBAN")
+        if not getattr(settings, 'company_account_holder', None):
+            missing_settings.append("Bank Account Holder Name")
+        if not getattr(settings, 'creditor_id', None):
+            missing_settings.append("SEPA Creditor ID (Incassant ID)")
+        if not getattr(settings, 'company_name', None):
+            missing_settings.append("Company Name")
+        # BIC is optional as it can be derived from IBAN
+        
+        if missing_settings:
+            settings_list = "\n".join(f"- {setting}" for setting in missing_settings)
+            return f"""
+⚠️ WARNING: Missing Company SEPA Settings!
+The following settings are required for SEPA processing but are not configured:
+{settings_list}
+
+Please configure these in Verenigingen Settings before processing SEPA mandates.
+Without these settings, direct debit batches cannot be created.
+Note: BIC/SWIFT is optional as it can be automatically derived from Dutch IBANs.
+"""
+        return ""
+    except Exception as e:
+        return f"\n⚠️ WARNING: Could not check company SEPA settings: {str(e)}\n"
 
 
 def _format_issue_list(issues, fields):

@@ -75,6 +75,27 @@ def approve_membership_application(member_name, membership_type=None, chapter=No
     
     member.save()
     
+    # Create initial IBAN history if member has IBAN
+    if hasattr(member, 'iban') and member.iban:
+        try:
+            frappe.db.insert({
+                'doctype': 'Member IBAN History',
+                'parent': member.name,
+                'parenttype': 'Member',
+                'parentfield': 'iban_history',
+                'iban': member.iban,
+                'bic': getattr(member, 'bic', None),
+                'bank_account_name': getattr(member, 'bank_account_name', None),
+                'from_date': today(),
+                'is_active': 1,
+                'changed_by': frappe.session.user,
+                'change_reason': 'Other'
+            })
+            frappe.logger().info(f"Created initial IBAN history for approved member {member.name}")
+        except Exception as e:
+            frappe.logger().error(f"Error creating IBAN history for {member.name}: {str(e)}")
+            # Don't fail the approval process due to IBAN history error
+    
     # Create membership record
     membership = frappe.get_doc({
         "doctype": "Membership",

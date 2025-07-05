@@ -56,6 +56,8 @@
   "payment_reference",
   "credit_card_number",
   "column_break_31",
+  "iban_history_section",
+  "iban_history",
   "membership_status",
   "sepa_mandates_section",
   "sepa_mandates",
@@ -132,6 +134,20 @@
    "label": "Member ID",
    "read_only_depends_on": "eval:!doc.__islocal",
    "unique": 1
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.iban",
+   "fieldname": "iban_history_section",
+   "fieldtype": "Section Break",
+   "label": "IBAN History"
+  },
+  {
+   "fieldname": "iban_history",
+   "fieldtype": "Table",
+   "label": "IBAN History",
+   "options": "Member IBAN History",
+   "read_only": 1
   },
   {
    "depends_on": "eval:doc.name",
