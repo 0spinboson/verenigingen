@@ -319,10 +319,6 @@ function add_consolidated_view_buttons(frm) {
         }, __('View'));
     }
     
-    // Termination history
-    frm.add_custom_button(__('Termination History'), function() {
-        TerminationUtils.show_termination_history(frm.doc.name);
-    }, __('View'));
 }
 
 function add_administrative_buttons(frm) {
@@ -488,13 +484,7 @@ function add_volunteer_view_buttons(frm) {
                     frappe.set_route('Form', 'Volunteer', volunteer.name);
                 }, __('View'));
                 
-                frm.add_custom_button(__('Volunteer Activities'), function() {
-                    VolunteerUtils.show_volunteer_activities(volunteer.name);
-                }, __('View'));
                 
-                frm.add_custom_button(__('Volunteer Assignments'), function() {
-                    VolunteerUtils.show_volunteer_assignments(volunteer.name);
-                }, __('View'));
             }
         }
     });

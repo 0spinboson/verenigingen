@@ -2790,6 +2790,74 @@ def create_donor_from_member(member_name):
             "message": _("Failed to create donor record: {0}").format(str(e))
         }
     
+    def load_volunteer_assignment_history(self):
+        """Load volunteer assignment history from linked volunteer record"""
+        try:
+            # Clear existing volunteer assignment history
+            self.volunteer_assignment_history = []
+            
+            # Get linked volunteer record
+            volunteer = frappe.db.get_value("Volunteer", {"member": self.name}, "name")
+            if not volunteer:
+                return
+                
+            volunteer_doc = frappe.get_doc("Volunteer", volunteer)
+            
+            # Copy assignment history from volunteer to member
+            for assignment in volunteer_doc.assignment_history or []:
+                self.append("volunteer_assignment_history", {
+                    "assignment_type": assignment.assignment_type,
+                    "reference_doctype": assignment.reference_doctype,
+                    "reference_name": assignment.reference_name,
+                    "role": assignment.role,
+                    "start_date": assignment.start_date,
+                    "end_date": assignment.end_date,
+                    "status": assignment.status,
+                    "title": assignment.get("title", "")
+                })
+                
+        except Exception as e:
+            frappe.log_error(f"Error loading volunteer assignment history for member {self.name}: {str(e)}")
+            
+    def load_volunteer_details_html(self):
+        """Load volunteer details HTML for display"""
+        try:
+            # Get linked volunteer record
+            volunteer = frappe.db.get_value("Volunteer", {"member": self.name}, "name")
+            if not volunteer:
+                self.volunteer_details_html = '<div class="text-muted">No volunteer record linked</div>'
+                return
+                
+            volunteer_doc = frappe.get_doc("Volunteer", volunteer)
+            
+            # Build HTML content
+            html_parts = []
+            html_parts.append('<div class="volunteer-details">')
+            html_parts.append(f'<p><strong>Volunteer ID:</strong> {volunteer}</p>')
+            html_parts.append(f'<p><strong>Volunteer Name:</strong> {volunteer_doc.volunteer_name}</p>')
+            
+            if volunteer_doc.start_date:
+                html_parts.append(f'<p><strong>Start Date:</strong> {frappe.utils.format_date(volunteer_doc.start_date)}</p>')
+                
+            if volunteer_doc.status:
+                status_color = {
+                    "Active": "success",
+                    "Inactive": "secondary",
+                    "New": "info"
+                }.get(volunteer_doc.status, "secondary")
+                html_parts.append(f'<p><strong>Status:</strong> <span class="badge badge-{status_color}">{volunteer_doc.status}</span></p>')
+                
+            # Add link to volunteer record
+            html_parts.append(f'<p><a href="/app/volunteer/{volunteer}" class="btn btn-sm btn-default">View Volunteer Record</a></p>')
+            
+            html_parts.append('</div>')
+            
+            self.volunteer_details_html = '\n'.join(html_parts)
+            
+        except Exception as e:
+            frappe.log_error(f"Error loading volunteer details HTML for member {self.name}: {str(e)}")
+            self.volunteer_details_html = f'<div class="text-danger">Error loading volunteer details: {str(e)}</div>'
+    
     @frappe.whitelist()
     def debug_address_members(self):
         """Debug method to test address members functionality"""

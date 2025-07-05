@@ -828,6 +828,68 @@ class BoardManager(BaseManager):
                     "end_date": member_to_remove.to_date
                 }
             )
+            
+        # Handle deleted board members (existed in old doc but not in new)
+        self.handle_board_member_deletions(old_doc)
+
+    def handle_board_member_deletions(self, old_doc):
+        """
+        Handle board members that were deleted from the chapter
+
+        Args:
+            old_doc: Previous version of the chapter document
+        """
+        if not old_doc:
+            return
+
+        # Get current board member identifiers
+        current_board_members = set()
+        for bm in self.chapter_doc.board_members or []:
+            if bm.volunteer and bm.name:
+                current_board_members.add(bm.name)
+
+        # Check for deleted board members
+        for old_board_member in old_doc.board_members or []:
+            if (old_board_member.name and 
+                old_board_member.name not in current_board_members and
+                old_board_member.is_active and 
+                old_board_member.volunteer):
+                
+                # Board member was deleted - update histories
+                end_date = today()
+                
+                # Update volunteer assignment history
+                self.update_volunteer_assignment_history(
+                    old_board_member.volunteer,
+                    old_board_member.chapter_role,
+                    old_board_member.from_date,
+                    end_date
+                )
+                
+                # Update chapter membership history for the associated member
+                try:
+                    volunteer_doc = frappe.get_doc("Volunteer", old_board_member.volunteer)
+                    if volunteer_doc.member:
+                        ChapterMembershipHistoryManager.complete_membership_history(
+                            member_id=volunteer_doc.member,
+                            chapter_name=self.chapter_name,
+                            assignment_type="Board Member",
+                            start_date=old_board_member.from_date,
+                            end_date=end_date,
+                            reason=f"Removed from board (row deleted)"
+                        )
+                except Exception as e:
+                    frappe.log_error(f"Error updating chapter membership history for deleted board member: {str(e)}")
+                
+                self.log_action(
+                    "Board member deleted from chapter",
+                    {
+                        "volunteer": old_board_member.volunteer,
+                        "volunteer_name": old_board_member.volunteer_name,
+                        "role": old_board_member.chapter_role,
+                        "end_date": end_date
+                    }
+                )
 
     def handle_board_member_additions(self, old_doc):
         """
@@ -847,14 +909,15 @@ class BoardManager(BaseManager):
                     )
             return
 
-        # Create lookup for old board members
-        old_board_member_volunteers = {bm.volunteer for bm in old_doc.board_members if bm.volunteer and bm.is_active}
+        # Create lookup for old board members (volunteer + role combination)
+        old_board_member_keys = {(bm.volunteer, bm.chapter_role) for bm in old_doc.board_members if bm.volunteer and bm.is_active}
 
-        # Check for new active board members
+        # Check for new active board members (truly new, not role changes)
         for board_member in self.chapter_doc.board_members or []:
+            current_key = (board_member.volunteer, board_member.chapter_role)
             if (board_member.is_active and 
                 board_member.volunteer and 
-                board_member.volunteer not in old_board_member_volunteers):
+                current_key not in old_board_member_keys):
 
                 # Add volunteer assignment history
                 self.add_volunteer_assignment_history(

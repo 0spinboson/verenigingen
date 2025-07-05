@@ -495,6 +495,10 @@ class Chapter(WebsiteGenerator):
             # Handle board member changes
             self.board_manager.handle_board_member_changes(old_doc)
             self.board_manager.handle_board_member_additions(old_doc)
+            
+            # Handle regular member changes
+            self.member_manager.handle_member_changes(old_doc)
+            self.member_manager.handle_member_additions(old_doc)
     
     def _clear_manager_caches(self):
         """Clear all manager caches"""

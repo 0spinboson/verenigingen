@@ -330,9 +330,44 @@ fixtures = [
         "filters": [
             ["name", "in", [
                 "Verenigingen Administrator",
+                "Verenigingen Manager",
+                "Verenigingen Staff",
                 "Governance Auditor", 
                 "Chapter Board Member",
-                "Verenigingen Member"
+                "Verenigingen Member",
+                "Volunteer"
+            ]]
+        ]
+    },
+    
+    # Role Profiles
+    {
+        "doctype": "Role Profile",
+        "filters": [
+            ["name", "in", [
+                "Verenigingen Member",
+                "Verenigingen Volunteer",
+                "Verenigingen Team Leader",
+                "Verenigingen Chapter Board",
+                "Verenigingen Treasurer",
+                "Verenigingen Chapter Administrator",
+                "Verenigingen Manager",
+                "Verenigingen System Administrator",
+                "Verenigingen Auditor"
+            ]]
+        ]
+    },
+    
+    # Module Profiles
+    {
+        "doctype": "Module Profile",
+        "filters": [
+            ["name", "in", [
+                "Verenigingen Basic Access",
+                "Verenigingen Volunteer Access",
+                "Verenigingen Financial Access",
+                "Verenigingen Management Access",
+                "Verenigingen Audit Access"
             ]]
         ]
     },

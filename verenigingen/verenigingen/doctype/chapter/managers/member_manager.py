@@ -762,3 +762,157 @@ class MemberManager(BaseManager):
             
         except Exception:
             return []
+    
+    def handle_member_changes(self, old_doc):
+        """
+        Handle member changes between document versions
+        
+        Args:
+            old_doc: Previous version of the chapter document
+        """
+        if not old_doc:
+            return
+            
+        # Create lookup for old members
+        old_members = {m.name: m for m in old_doc.members if m.name}
+        
+        # Check each current member for changes
+        for member in self.chapter_doc.members or []:
+            if not member.name:
+                continue
+                
+            old_member = old_members.get(member.name)
+            if not old_member:
+                continue
+                
+            # Check if member was disabled
+            if old_member.enabled and not member.enabled:
+                # Member was disabled - update history
+                ChapterMembershipHistoryManager.complete_membership_history(
+                    member_id=member.member,
+                    chapter_name=self.chapter_name,
+                    assignment_type="Member",
+                    start_date=member.chapter_join_date or member.creation,
+                    end_date=today(),
+                    reason=member.leave_reason or "Membership disabled"
+                )
+                
+                self.log_action(
+                    "Member disabled",
+                    {
+                        "member": member.member,
+                        "member_name": member.member_name,
+                        "reason": member.leave_reason
+                    }
+                )
+                
+            # Check if member was re-enabled
+            elif not old_member.enabled and member.enabled:
+                # Member was re-enabled - add new history entry
+                ChapterMembershipHistoryManager.add_membership_history(
+                    member_id=member.member,
+                    chapter_name=self.chapter_name,
+                    assignment_type="Member",
+                    start_date=today(),
+                    reason="Membership re-enabled"
+                )
+                
+                self.log_action(
+                    "Member re-enabled",
+                    {
+                        "member": member.member,
+                        "member_name": member.member_name
+                    }
+                )
+        
+        # Handle deleted members
+        self.handle_member_deletions(old_doc)
+    
+    def handle_member_deletions(self, old_doc):
+        """
+        Handle members that were deleted from the chapter
+        
+        Args:
+            old_doc: Previous version of the chapter document
+        """
+        if not old_doc:
+            return
+            
+        # Get current member identifiers
+        current_members = set()
+        for m in self.chapter_doc.members or []:
+            if m.member and m.name:
+                current_members.add(m.name)
+                
+        # Check for deleted members
+        for old_member in old_doc.members or []:
+            if (old_member.name and 
+                old_member.name not in current_members and
+                old_member.enabled and
+                old_member.member):
+                
+                # Member was deleted - update history
+                ChapterMembershipHistoryManager.complete_membership_history(
+                    member_id=old_member.member,
+                    chapter_name=self.chapter_name,
+                    assignment_type="Member",
+                    start_date=old_member.chapter_join_date or old_member.creation,
+                    end_date=today(),
+                    reason="Removed from chapter (row deleted)"
+                )
+                
+                self.log_action(
+                    "Member deleted from chapter",
+                    {
+                        "member": old_member.member,
+                        "member_name": old_member.member_name,
+                        "end_date": today()
+                    }
+                )
+    
+    def handle_member_additions(self, old_doc):
+        """
+        Handle new member additions
+        
+        Args:
+            old_doc: Previous version of the chapter document
+        """
+        if not old_doc:
+            # For new chapters, add all enabled members to history
+            for member in self.chapter_doc.members or []:
+                if member.enabled and member.member:
+                    ChapterMembershipHistoryManager.add_membership_history(
+                        member_id=member.member,
+                        chapter_name=self.chapter_name,
+                        assignment_type="Member",
+                        start_date=member.chapter_join_date or today(),
+                        reason="Added to chapter"
+                    )
+            return
+            
+        # Create lookup for old members
+        old_member_ids = {m.member for m in old_doc.members if m.member and m.enabled}
+        
+        # Check for new members
+        for member in self.chapter_doc.members or []:
+            if (member.enabled and 
+                member.member and 
+                member.member not in old_member_ids):
+                
+                # New member added - create history entry
+                ChapterMembershipHistoryManager.add_membership_history(
+                    member_id=member.member,
+                    chapter_name=self.chapter_name,
+                    assignment_type="Member",
+                    start_date=member.chapter_join_date or today(),
+                    reason="Added to chapter"
+                )
+                
+                self.log_action(
+                    "Member added to chapter",
+                    {
+                        "member": member.member,
+                        "member_name": member.member_name,
+                        "join_date": member.chapter_join_date or today()
+                    }
+                )

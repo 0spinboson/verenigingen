@@ -651,28 +651,6 @@ function add_volunteer_buttons(frm) {
         }, __('Actions'));
     }
     
-    // Add button to view existing volunteer record if any (original implementation)
-    if (!frm.custom_buttons[__('View Volunteer')]) {
-        frm.add_custom_button(__('View Volunteer'), function() {
-            frappe.call({
-                method: 'frappe.client.get_list',
-                args: {
-                    doctype: 'Volunteer',
-                    filters: {
-                        'member': frm.doc.name
-                    },
-                    fields: ['name']
-                },
-                callback: function(r) {
-                    if (r.message && r.message.length > 0) {
-                        frappe.set_route('Form', 'Volunteer', r.message[0].name);
-                    } else {
-                        frappe.msgprint(__('No volunteer record found for this member. Please create one first.'));
-                    }
-                }
-            });
-        }, __('View'));
-    }
 }
 
 function add_user_buttons(frm) {
@@ -727,12 +705,6 @@ function add_termination_buttons(frm) {
                 }
                 
                 
-                // Add view termination history button
-                frm.add_custom_button(__('Termination History'), function() {
-                    if (window.TerminationUtils) {
-                        TerminationUtils.show_termination_history(frm.doc.name);
-                    }
-                }, __('View'));
             }
         },
         error: function(r) {

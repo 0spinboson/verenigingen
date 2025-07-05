@@ -21,9 +21,16 @@ def map_payment_method(payment_method):
         "sepa_direct_debit": "SEPA Direct Debit",
         "credit_card": "Credit Card",
         "cash": "Cash",
-        "other": "Other"
+        "other": "Other",
+        # Also handle case where we receive the display values directly
+        "Bank Transfer": "Bank Transfer",
+        "SEPA Direct Debit": "SEPA Direct Debit",
+        "Credit Card": "Credit Card",
+        "Cash": "Cash",
+        "Other": "Other"
     }
-    return payment_method_map.get(payment_method, payment_method)
+    # Default to Bank Transfer if no match found
+    return payment_method_map.get(payment_method, "Bank Transfer")
 
 
 def generate_application_id():
